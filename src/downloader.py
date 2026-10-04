@@ -4,8 +4,22 @@ import copy
 import os
 import re
 import subprocess
+import sys
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def use_bundled_ffmpeg():
+    """Make the app's own ffmpeg findable by name.
+
+    Some parts of yt-dlp (like downloading only part of a video for Trim)
+    look for a program called "ffmpeg" instead of using ffmpeg_location.
+    """
+    folder = os.path.join(os.path.dirname(sys.executable), "ffmpeg")
+    exe = os.path.join(folder, "ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+    if os.path.isfile(exe):
+        os.environ["IMAGEIO_FFMPEG_EXE"] = exe  # imageio-ffmpeg uses it too
+        os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
 
 
 def _js_runtimes():

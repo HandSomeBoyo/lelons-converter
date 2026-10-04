@@ -26,6 +26,11 @@ echo "==> Installing yt-dlp, ffmpeg and deno into it"
   --platform win_amd64 --python-version "${PYTHON_VERSION%.*}" --implementation cp --only-binary=:all: \
   "yt-dlp[default]" imageio-ffmpeg deno
 
+echo "==> Moving ffmpeg to runtime\\ffmpeg\\ffmpeg.exe"
+# yt-dlp looks for a program named exactly "ffmpeg" when downloading part of a video.
+mkdir -p "$STAGE/runtime/ffmpeg"
+mv "$STAGE"/runtime/Lib/site-packages/imageio_ffmpeg/binaries/ffmpeg-*.exe "$STAGE/runtime/ffmpeg/ffmpeg.exe"
+
 echo "==> Trimming things the app doesn't need"
 R="$STAGE/runtime"
 rm -rf "$R/include" "$R/libs" "$R/Lib/test" "$R/Lib/idlelib" "$R/Lib/turtledemo" "$R/Lib/tkinter" "$R/Lib/ensurepip"

@@ -29,6 +29,8 @@ import settings  # noqa: E402
 import waveform  # noqa: E402
 from version import VERSION  # noqa: E402
 
+downloader.use_bundled_ffmpeg()
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(APP_DIR, "ui")
 ICON_CANDIDATES = [os.path.join(APP_DIR, "icon.png"), os.path.join(APP_DIR, "..", "assets", "icon.png")]
