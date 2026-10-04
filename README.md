@@ -51,7 +51,7 @@ Lelons Converter/
 │       ├── index.html   layout
 │       ├── style.css    colors and styling
 │       ├── app.js       what the buttons do
-│       └── fonts/       the Montserrat and Inter fonts
+│       └── fonts/       the Space Grotesk and Inter fonts
 ├── assets/              app icon (icon.ico for Windows, icon.png for the window)
 ├── installer/           recipe for the Setup.exe installer
 ├── build/build.sh       builds the Setup.exe from all of the above

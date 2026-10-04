@@ -201,11 +201,7 @@ function drawWave() {
   if (!editor.peaks) return;
   const bar = 3, gap = 1, count = Math.floor(width / (bar + gap));
   const middle = height / 2, peaks = editor.peaks;
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "#8ab8ff");
-  gradient.addColorStop(0.5, "#2f7bff");
-  gradient.addColorStop(1, "#8ab8ff");
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = "#d9d5cc";
   for (let i = 0; i < count; i++) {
     // the loudest moment in the stretch of sound this bar covers
     const from = Math.floor((i / count) * peaks.length), to = Math.max(from + 1, Math.floor(((i + 1) / count) * peaks.length));
@@ -362,6 +358,7 @@ function renderJob(el, job) {
         <div class="line"><span class="badge"></span><span class="msg"></span></div>
         <div class="bar"><div></div></div>
       </div>
+      <div class="pct"></div>
       <div class="actions"></div>`;
     el.dataset.id = job.id;
   }
@@ -377,6 +374,8 @@ function renderJob(el, job) {
   bar.hidden = job.status !== "active";
   bar.classList.toggle("indeterminate", !job.progress || job.progress >= 100);
   bar.firstElementChild.style.width = job.progress && job.progress < 100 ? job.progress + "%" : "";
+  el.querySelector(".pct").textContent =
+    job.status === "active" && job.progress && job.progress < 100 ? Math.floor(job.progress) + "%" : "";
 
   const actions = el.querySelector(".actions");
   const wanted = { queued: ["remove"], active: [], done: ["folder", "remove"], error: ["retry", "remove"] }[job.status];
