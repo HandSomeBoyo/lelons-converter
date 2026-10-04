@@ -1,8 +1,8 @@
-"""The waveform for the trim editor: a small copy of the audio plus its loudness.
+"""The trim editor's media: a small copy of the audio (or video) plus its loudness.
 
-The audio is downloaded in YouTube's smallest audio quality (it's only for
-finding the right spot), kept in a temporary folder while the app runs, and
-played in the trim editor so you can hear where you're cutting.
+It's downloaded in a low quality (it's only for finding the right spot), kept
+in a temporary folder while the app runs, and played in the trim editor so
+you can hear, and for MP4s see, where you're cutting.
 """
 
 import array
@@ -20,7 +20,7 @@ FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter")
 BARS = 1200  # how many loudness values the editor draws
 
 _lock = threading.Lock()
-_cache = {}  # url -> result
+_cache = {}  # (url, video) -> result
 _files = set()  # file names the window may play
 
 
@@ -28,22 +28,24 @@ def key_for(url):
     return hashlib.sha1(url.encode()).hexdigest()[:16]
 
 
-def get(url, info):
-    """Returns {"peaks", "duration", "audio"} for a looked-up video (may take a while)."""
+def get(url, info, video=False):
+    """Returns {"peaks", "duration", "media"} for a looked-up video (may take a while)."""
     with _lock:  # one at a time, and only once per video
-        if url not in _cache:
-            _cache[url] = _build(url, info)
-        return _cache[url]
+        if (url, video) not in _cache:
+            _cache[url, video] = _build(url, info, video)
+        return _cache[url, video]
 
 
-def _build(url, info):
+def _build(url, info, video):
     import imageio_ffmpeg
     import yt_dlp
 
     os.makedirs(FOLDER, exist_ok=True)
     options = {
-        "format": "worstaudio[abr>=40]/worstaudio/bestaudio/worst",
-        "outtmpl": os.path.join(FOLDER, key_for(url) + ".%(ext)s"),
+        # Many YouTube videos also have dubbed audio in other languages.
+        # "lang" first in the sort order means the video's own language wins.
+        "format_sort": ["lang", "+abr"] if not video else ["lang"],
+        "outtmpl": os.path.join(FOLDER, key_for(url) + ("-video" if video else "") + ".%(ext)s"),
         "ffmpeg_location": imageio_ffmpeg.get_ffmpeg_exe(),
         "js_runtimes": downloader._js_runtimes(),
         "noplaylist": True,
@@ -51,6 +53,13 @@ def _build(url, info):
         "no_warnings": True,
         "noprogress": True,
     }
+    if video:
+        # Small and in a format Edge can play: H.264 + AAC if YouTube has it.
+        options["format"] = ("bv*[height<=360][vcodec^=avc1]+ba[acodec^=mp4a]/18/"
+                             "bv*[height<=360]+ba/b[height<=480]/bv*+ba/b")
+        options["merge_output_format"] = "mp4"
+    else:
+        options["format"] = "ba[abr>=40]/ba/b"
     with yt_dlp.YoutubeDL(options) as ydl:
         result = ydl.process_ie_result(copy.deepcopy(info), download=True)
     path = ((result or {}).get("requested_downloads") or [{}])[0].get("filepath")
@@ -81,7 +90,7 @@ def _build(url, info):
         # Square root makes quiet parts easier to see.
         "peaks": [round((p / loudest) ** 0.5, 3) for p in peaks],
         "duration": len(samples) / rate,
-        "audio": "/media/" + name,
+        "media": "/media/" + name,
     }
 
 

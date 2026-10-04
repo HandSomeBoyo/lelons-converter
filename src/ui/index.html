@@ -98,6 +98,10 @@
   <div class="dialog trim-dialog" role="dialog" aria-labelledby="trimHeading">
     <h2 id="trimHeading">Trim</h2>
     <p class="sub" id="trimSub">Drag the lines to where the part you want starts and ends.</p>
+    <div class="video-box" id="videoBox" hidden>
+      <video id="trimVideo" playsinline preload="auto"></video>
+      <div class="video-time" id="videoTime"></div>
+    </div>
     <div class="wave" id="wave">
       <canvas id="waveCanvas"></canvas>
       <div class="shade" id="shadeLeft"></div>

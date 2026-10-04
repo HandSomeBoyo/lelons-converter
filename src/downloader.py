@@ -47,6 +47,7 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         options["download_ranges"] = download_range_func(None, [tuple(trim)])
     if fmt == "mp3":
         options["format"] = "bestaudio/best"
+        options["format_sort"] = ["lang"]  # the video's own audio, not a dubbed one
         options["postprocessors"] = [to_jpg, {
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -65,7 +66,8 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
             # YouTube only has 2K/4K in newer formats (VP9/AV1), which still go in the MP4.
             preferred = ""
         options["format"] = f"{preferred}bv*{h}+ba/b{h}/bv*+ba/b"
-        options["format_sort"] = ["res", "fps", "br"]
+        # "lang" first: the video's own audio, not a dubbed one in another language
+        options["format_sort"] = ["lang", "res", "fps", "br"]
         options["merge_output_format"] = "mp4"
         options["postprocessors"] = [to_jpg, *cover_art]
         if trim:

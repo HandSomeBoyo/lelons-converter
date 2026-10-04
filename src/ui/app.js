@@ -83,7 +83,8 @@ $("url").addEventListener("input", () => {
 let trim = null; // the part to keep, {start, end} in seconds, or null for all of it
 const waves = new Map(); // url -> waveform from the app, so it only loads once
 const editor = { url: "", duration: 0, peaks: null, start: 0, end: 0, dragging: null, raf: 0 };
-const audio = $("trimAudio");
+// What plays in the editor: the video for MP4s (so you can see where you are), else just the sound.
+let player = $("trimAudio");
 
 // "1:20", "1:02:03", "80" or "1:20.5" -> seconds, or null if it isn't a time
 function parseTime(text) {
@@ -113,18 +114,25 @@ function clearTrim() {
 
 async function openTrim() {
   const url = previewUrl;
+  const video = format === "mp4";
   Object.assign(editor, { url, duration: previewSeconds, peaks: null });
+  stopPlaying();
+  player = video ? $("trimVideo") : $("trimAudio");
+  $("videoBox").hidden = !video;
+  document.querySelector(".trim-dialog").classList.toggle("video-mode", video);
   editor.start = trim ? trim.start : 0;
   editor.end = trim ? trim.end : previewSeconds;
   $("trimModal").hidden = false;
   $("trimSub").textContent = $("previewTitle").textContent;
   $("trimPlay").disabled = true;
   layOut();
-  let wave = waves.get(url);
+  const key = (video ? "video:" : "audio:") + url;
+  let wave = waves.get(key);
   if (!wave) {
-    waveMessage("loading", "Loading the sound of the video...");
-    wave = await api("/api/waveform", { url }).catch(() => ({ ok: false, error: "Couldn't load the sound." }));
-    if (wave.ok) waves.set(url, wave);
+    waveMessage("loading", video ? "Loading the video..." : "Loading the sound of the video...");
+    wave = await api("/api/waveform", { url, video })
+      .catch(() => ({ ok: false, error: video ? "Couldn't load the video." : "Couldn't load the sound." }));
+    if (wave.ok) waves.set(key, wave);
   }
   if (editor.url !== url || $("trimModal").hidden) return; // closed or changed meanwhile
   if (!wave.ok) {
@@ -136,10 +144,23 @@ async function openTrim() {
   editor.peaks = wave.peaks;
   editor.duration = wave.duration;
   if (wasWhole || editor.end > editor.duration) editor.end = editor.duration;
-  audio.src = wave.audio;
+  if (player.getAttribute("src") !== wave.media) player.src = wave.media;
   $("trimPlay").disabled = false;
   layOut();
+  showFrame(editor.start);
 }
+
+// Show the video at a moment, e.g. where a line was dragged to.
+function showFrame(seconds) {
+  if (player !== $("trimVideo") || !player.paused || !player.getAttribute("src")) return;
+  player.currentTime = Math.min(seconds, Math.max(0, editor.duration - 0.05));
+}
+
+function showVideoTime() {
+  $("videoTime").textContent = clock(player.currentTime);
+}
+$("trimVideo").addEventListener("timeupdate", showVideoTime);
+$("trimVideo").addEventListener("seeked", showVideoTime);
 
 function closeTrim() {
   stopPlaying();
@@ -217,14 +238,17 @@ $("wave").addEventListener("pointerdown", (e) => {
   if (editor.start === editor.end) editor.dragging = t < editor.start ? "start" : "end";
   $("wave").setPointerCapture(e.pointerId);
   setLine(editor.dragging, t);
+  showFrame(editor[editor.dragging]);
 });
 $("wave").addEventListener("pointermove", (e) => {
-  if (editor.dragging) setLine(editor.dragging, timeAt(e.clientX));
+  if (!editor.dragging) return;
+  setLine(editor.dragging, timeAt(e.clientX));
+  showFrame(editor[editor.dragging]);
 });
 $("wave").addEventListener("pointerup", () => {
   if (!editor.dragging) return;
   // While playing, jump to the line that was moved so you hear the new spot.
-  if (!audio.paused) audio.currentTime = editor.dragging === "start" ? editor.start : Math.max(editor.start, editor.end - 2);
+  if (!player.paused) player.currentTime = editor.dragging === "start" ? editor.start : Math.max(editor.start, editor.end - 2);
   editor.dragging = null;
 });
 
@@ -237,37 +261,42 @@ $("wave").addEventListener("pointerup", () => {
     const ok = t !== null && t <= editor.duration
       && (which === "start" ? t <= editor.end - MIN_LENGTH : t >= editor.start + MIN_LENGTH);
     input.classList.toggle("bad", !ok);
-    if (ok) setLine(which, t);
+    if (ok) {
+      setLine(which, t);
+      showFrame(editor[which]);
+    }
   });
   input.addEventListener("blur", () => { if (!input.classList.contains("bad")) layOut(); });
 });
 
 function stopPlaying() {
-  audio.pause();
+  player.pause();
   cancelAnimationFrame(editor.raf);
   $("trimPlay").classList.remove("playing");
   $("playhead").hidden = true;
 }
 
 function followPlayhead() {
-  if (audio.currentTime >= editor.end) {
+  if (player.currentTime >= editor.end) {
     stopPlaying();
     return;
   }
   $("playhead").hidden = false;
-  $("playhead").style.left = (audio.currentTime / editor.duration) * 100 + "%";
+  $("playhead").style.left = (player.currentTime / editor.duration) * 100 + "%";
   editor.raf = requestAnimationFrame(followPlayhead);
 }
 
 $("trimPlay").addEventListener("click", () => {
-  if (!audio.paused) return stopPlaying();
-  if (audio.currentTime < editor.start || audio.currentTime >= editor.end - 0.05) audio.currentTime = editor.start;
-  audio.play().then(() => {
+  if (!player.paused) return stopPlaying();
+  if (player.currentTime < editor.start || player.currentTime >= editor.end - 0.05) player.currentTime = editor.start;
+  player.play().then(() => {
     $("trimPlay").classList.add("playing");
     followPlayhead();
   }).catch(() => { $("trimLength").textContent = "Couldn't play the sound, but trimming still works."; });
 });
-audio.addEventListener("ended", stopPlaying);
+$("trimAudio").addEventListener("ended", stopPlaying);
+$("trimVideo").addEventListener("ended", stopPlaying);
+$("trimVideo").addEventListener("click", () => { if (!$("trimPlay").disabled) $("trimPlay").click(); });
 
 $("trimReset").addEventListener("click", () => {
   editor.start = 0;

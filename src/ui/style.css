@@ -217,6 +217,18 @@ main { width: 100%; max-width: 760px; margin: auto 0; text-align: center; }
 .update-dialog .dialog-actions .spacer { display: none; }
 .update-dialog .dialog-actions { justify-content: center; }
 
+.modal { overflow-y: auto; }
+.video-box {
+  position: relative; margin: 18px auto 0; width: fit-content; max-width: 100%; border-radius: 14px;
+  overflow: hidden; background: #000; line-height: 0;
+}
+.video-box[hidden] { display: none; }
+.video-box video { cursor: pointer; display: block; height: 270px; max-width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.video-time {
+  position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 6px; line-height: 1.4;
+  background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.video-mode .wave { height: 110px; margin-top: 14px; }
 .wave {
   position: relative; height: 150px; margin-top: 20px; border-radius: 14px; overflow: hidden;
   background: rgba(10, 14, 24, 0.7); border: 1px solid var(--line); cursor: pointer; touch-action: none;

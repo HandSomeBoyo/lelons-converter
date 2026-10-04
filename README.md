@@ -21,7 +21,8 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
 
 To save only part of a video, click **Trim** under the preview. Drag the
 yellow Start and End lines on the waveform (or type the times), press play to
-hear your pick, then click **Done**.
+hear your pick, then click **Done**. For MP4s the video plays above the
+waveform, and dragging a line shows that moment of the video.
 
 MP3s get the video's thumbnail as cover art, plus the song title and artist,
 so they look right in music apps.

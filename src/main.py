@@ -259,7 +259,8 @@ class Handler(BaseHTTPRequestHandler):
             url = str(data.get("url", "")).strip()
             try:
                 queue.lookup(url)
-                self.send_json({"ok": True, **waveform.get(url, queue.info_cache[url][1])})
+                media = waveform.get(url, queue.info_cache[url][1], bool(data.get("video")))
+                self.send_json({"ok": True, **media})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
         elif self.path == "/api/convert":
