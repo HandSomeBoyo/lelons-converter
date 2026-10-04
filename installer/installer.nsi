@@ -3,6 +3,7 @@
 
 Unicode true
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 
 !define APP_NAME "Lelons Converter"
 !ifndef APP_VERSION
@@ -42,6 +43,7 @@ VIAddVersionKey "LegalCopyright" "${APP_PUBLISHER}"
 !define MUI_FINISHPAGE_RUN_FUNCTION OpenApp
 !define MUI_FINISHPAGE_RUN_TEXT "Open ${APP_NAME} now"
 
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipWelcomeWhenUpdating
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -53,7 +55,26 @@ Function OpenApp
   Exec '"${RUN_EXE}" ${RUN_ARGS}'
 FunctionEnd
 
+; The app starts the installer with /update when it updates itself.
+Function SkipWelcomeWhenUpdating
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/update" $1
+  IfErrors +2
+  Abort
+FunctionEnd
+
+; Files of a running app can't be replaced, so close the app first.
+; Only Python processes started from this app's folder are closed.
+!macro CloseRunningApp
+  System::Call 'kernel32::SetEnvironmentVariable(t "LELONS_DIR", t "$INSTDIR")'
+  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
+  Pop $0
+  Sleep 800
+!macroend
+
 Section "Install"
+  !insertmacro CloseRunningApp
   ; Clear out an older version first so no stale files are left behind.
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\runtime"
@@ -78,6 +99,7 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  !insertmacro CloseRunningApp
   Delete "$DESKTOP\${APP_NAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
   RMDir /r "$INSTDIR"

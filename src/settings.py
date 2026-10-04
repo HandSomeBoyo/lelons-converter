@@ -29,6 +29,7 @@ def load():
         pass
     if not os.path.isdir(settings.get("folder") or ""):
         settings["folder"] = DEFAULT_FOLDER
+    settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
     for fmt in QUALITIES:
         if not is_valid_quality(fmt, settings.get(f"quality_{fmt}")):
             settings[f"quality_{fmt}"] = DEFAULT_QUALITY[fmt]

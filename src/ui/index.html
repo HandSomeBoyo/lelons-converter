@@ -26,12 +26,6 @@
 
   <p class="tagline">Convert YouTube videos to MP3 or MP4.</p>
 
-  <div class="banner" id="banner">
-    <div class="text" id="bannerText"></div>
-    <div class="bar" id="bannerBar" hidden><div></div></div>
-    <button class="small-button" id="installUpdate">Update now</button>
-  </div>
-
   <section class="card">
     <div class="options">
     <div class="toggle" id="toggle">
@@ -69,10 +63,10 @@
         <div class="meta"><span id="previewMeta"></span><button type="button" class="link-button trim-toggle" id="trimToggle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg>
           Trim</button></div>
-        <div class="trim" id="trim" hidden>
-          From <input id="trimStart" placeholder="0:00" autocomplete="off" spellcheck="false" aria-label="Start time">
-          to <input id="trimEnd" autocomplete="off" spellcheck="false" aria-label="End time">
-          <button type="button" class="icon-button" id="trimClose" title="Don't trim">
+        <div class="trim-chip" id="trimChip" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg>
+          <button type="button" class="link-button" id="trimEdit" title="Change the trim"></button>
+          <button type="button" class="icon-button" id="trimClear" title="Don't trim">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
@@ -82,7 +76,9 @@
 
   <div class="footer">
     <span>Saving to <strong id="folder">Downloads</strong> · <button id="change">Change</button></span>
-    <span><span id="version"></span> · <button id="update">Update downloader</button></span>
+    <span><span id="version"></span> ·
+      <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Auto-update</label> ·
+      <button id="checkNow">Check for updates</button></span>
   </div>
 
   <div class="notice" id="notice"></div>
@@ -96,6 +92,55 @@
   </section>
 
 </main>
+
+<!-- Trim editor: drag the two lines on the waveform to pick the part to keep -->
+<div class="modal" id="trimModal" hidden>
+  <div class="dialog trim-dialog" role="dialog" aria-labelledby="trimHeading">
+    <h2 id="trimHeading">Trim</h2>
+    <p class="sub" id="trimSub">Drag the lines to where the part you want starts and ends.</p>
+    <div class="wave" id="wave">
+      <canvas id="waveCanvas"></canvas>
+      <div class="shade" id="shadeLeft"></div>
+      <div class="shade" id="shadeRight"></div>
+      <div class="handle" id="handleStart"><span>Start</span></div>
+      <div class="handle" id="handleEnd"><span>End</span></div>
+      <div class="playhead" id="playhead" hidden></div>
+      <div class="wave-message" id="waveMessage"></div>
+    </div>
+    <div class="ruler"><span>0:00</span><span id="rulerEnd"></span></div>
+    <div class="trim-controls">
+      <label>Start <input id="trimStart" autocomplete="off" spellcheck="false"></label>
+      <button type="button" class="play-button" id="trimPlay" title="Play the part you picked">
+        <svg class="play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        <svg class="pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
+      <label>End <input id="trimEnd" autocomplete="off" spellcheck="false"></label>
+    </div>
+    <p class="trim-length" id="trimLength"></p>
+    <div class="dialog-actions">
+      <button type="button" class="link-button" id="trimReset">Select all</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="trimCancel">Cancel</button>
+      <button type="button" class="small-button" id="trimDone">Done</button>
+    </div>
+  </div>
+</div>
+<audio id="trimAudio" preload="auto"></audio>
+
+<!-- Update popup -->
+<div class="modal" id="updateModal" hidden>
+  <div class="dialog update-dialog" role="dialog" aria-labelledby="updateHeading">
+    <img src="/icon.png" alt="" class="update-icon">
+    <h2 id="updateHeading">Update available</h2>
+    <p class="sub" id="updateText"></p>
+    <div class="bar" id="updateBar" hidden><div></div></div>
+    <div class="dialog-actions" id="updateActions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="updateLater">Later</button>
+      <button type="button" class="small-button" id="updateInstall">Install update</button>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>

@@ -19,14 +19,15 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
 2. Pick MP3 or MP4 and a quality.
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
 
-To save only part of a video, click **Trim** under the preview and type the
-start and end, like `1:20` and `2:05`.
+To save only part of a video, click **Trim** under the preview. Drag the
+yellow Start and End lines on the waveform (or type the times), press play to
+hear your pick, then click **Done**.
 
 MP3s get the video's thumbnail as cover art, plus the song title and artist,
 so they look right in music apps.
 
-If downloads stop working, click **Update downloader** and reopen the app.
-YouTube changes things now and then, and the update usually fixes it.
+If downloads stop working, click **Check for updates**. YouTube changes
+things now and then, and a newer downloader usually fixes it.
 
 Only download videos you're allowed to save (your own, Creative Commons, or
 where the creator allows it).
@@ -40,7 +41,8 @@ Lelons Converter/
 │   ├── main.py          starts the app, opens the window, handles button clicks
 │   ├── downloader.py    the downloading and converting (uses yt-dlp)
 │   ├── jobs.py          the download queue (one video at a time)
-│   ├── updater.py       checks for a new version of the app
+│   ├── updater.py       keeps the app and the downloader up to date
+│   ├── waveform.py      the sound picture for the trim editor
 │   ├── version.py       the app's version number
 │   ├── settings.py      remembers your save folder and quality choices
 │   ├── folder_picker.py the Windows "Select Folder" window
@@ -68,9 +70,14 @@ with its own copy of Python in `runtime\` and the app's code in `app\`. Your set
 
 ## Updates
 
-When the app opens, it checks the GitHub repository named in `src/version.py`
-for a newer release. If it finds one, it shows an "Update now" button that
-downloads the new installer and opens it.
+With **Auto-update** ticked (it is unless you untick it), the app checks for
+updates every time it opens. **Check for updates** checks right away.
+
+- **The app:** it looks at the GitHub repository named in `src/version.py`
+  for a newer release. If there is one, a popup offers to install it. The
+  installer closes the running app, updates it and opens it again.
+- **The downloader (yt-dlp):** newer versions are downloaded from PyPI into
+  `%LOCALAPPDATA%\LelonsConverter\yt-dlp` and used from the next start.
 
 To publish a new version: raise `VERSION` in `src/version.py`, build the
 installer, then create a GitHub Release tagged like `v1.3.0` with

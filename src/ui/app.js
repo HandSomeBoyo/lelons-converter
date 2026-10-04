@@ -49,14 +49,14 @@ function showPreview(kind, title, meta, thumbnail) {
 
 function hidePreview() {
   clearTimeout(previewTimer);
-  closeTrim();
+  clearTrim();
   $("preview").className = "preview";
   previewUrl = "";
 }
 
 async function lookUp(url) {
   previewUrl = url;
-  closeTrim();
+  clearTrim();
   previewSeconds = 0;
   showPreview("loading", "Looking up video...", "", "");
   const res = await api("/api/info", { url }).catch(() => ({ ok: false, error: "Couldn't look up that link." }));
@@ -65,7 +65,6 @@ async function lookUp(url) {
     const p = res.preview;
     showPreview("", p.title, [p.channel, p.duration].filter(Boolean).join(" · "), p.thumbnail);
     previewSeconds = p.seconds || 0;
-    $("trimEnd").placeholder = p.duration || "end";
   } else {
     showPreview("error", res.error, "Check the link and try again.", "");
   }
@@ -79,69 +78,248 @@ $("url").addEventListener("input", () => {
   previewTimer = setTimeout(() => lookUp(url), 400);
 });
 
-// ---- trim: download only part of the video
+// ---- trim editor: a waveform with a start line and an end line
 
-// "1:20", "1:02:03" or "80" -> seconds, or null if it isn't a time
+let trim = null; // the part to keep, {start, end} in seconds, or null for all of it
+const waves = new Map(); // url -> waveform from the app, so it only loads once
+const editor = { url: "", duration: 0, peaks: null, start: 0, end: 0, dragging: null, raf: 0 };
+const audio = $("trimAudio");
+
+// "1:20", "1:02:03", "80" or "1:20.5" -> seconds, or null if it isn't a time
 function parseTime(text) {
   if (!/^\d+(:\d{1,2}){0,2}(\.\d+)?$/.test(text)) return null;
   return text.split(":").reduce((total, part) => total * 60 + Number(part), 0);
 }
 
-function openTrim() {
-  $("trim").hidden = false;
-  $("trimToggle").classList.add("open");
-  $("trimStart").focus();
+// 80.46 -> "1:20.5"
+function clock(seconds, tenths = true) {
+  const t = Math.max(0, tenths ? Math.round(seconds * 10) / 10 : Math.floor(seconds));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  let sec = tenths ? s.toFixed(1) : String(Math.floor(s));
+  if (s < 10) sec = "0" + sec;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+function showTrimChip() {
+  $("trimChip").hidden = !trim;
+  $("trimToggle").classList.toggle("hidden", !!trim);
+  if (trim) $("trimEdit").textContent = `Keeping ${clock(trim.start)} to ${clock(trim.end)}`;
+}
+
+function clearTrim() {
+  trim = null;
+  showTrimChip();
+}
+
+async function openTrim() {
+  const url = previewUrl;
+  Object.assign(editor, { url, duration: previewSeconds, peaks: null });
+  editor.start = trim ? trim.start : 0;
+  editor.end = trim ? trim.end : previewSeconds;
+  $("trimModal").hidden = false;
+  $("trimSub").textContent = $("previewTitle").textContent;
+  $("trimPlay").disabled = true;
+  layOut();
+  let wave = waves.get(url);
+  if (!wave) {
+    waveMessage("loading", "Loading the sound of the video...");
+    wave = await api("/api/waveform", { url }).catch(() => ({ ok: false, error: "Couldn't load the sound." }));
+    if (wave.ok) waves.set(url, wave);
+  }
+  if (editor.url !== url || $("trimModal").hidden) return; // closed or changed meanwhile
+  if (!wave.ok) {
+    waveMessage("error", wave.error + " You can still type the times below.");
+    return;
+  }
+  waveMessage("", "");
+  const wasWhole = editor.end >= editor.duration - 0.05;
+  editor.peaks = wave.peaks;
+  editor.duration = wave.duration;
+  if (wasWhole || editor.end > editor.duration) editor.end = editor.duration;
+  audio.src = wave.audio;
+  $("trimPlay").disabled = false;
+  layOut();
 }
 
 function closeTrim() {
-  $("trim").hidden = true;
-  $("trimToggle").classList.remove("open");
-  $("trimStart").value = $("trimEnd").value = "";
-  $("trimStart").classList.remove("bad");
-  $("trimEnd").classList.remove("bad");
+  stopPlaying();
+  $("trimModal").hidden = true;
+  editor.url = "";
 }
 
-// Returns {start, end} to send, {} for no trim, or null if the times are wrong.
-function readTrim() {
-  if ($("trim").hidden) return {};
-  const start = $("trimStart").value.trim(), end = $("trimEnd").value.trim();
-  const s = start ? parseTime(start) : 0, e = end ? parseTime(end) : previewSeconds || null;
-  const badStart = s === null || (previewSeconds && s >= previewSeconds);
-  const badEnd = (end && e === null) || (e !== null && s !== null && e <= s);
-  $("trimStart").classList.toggle("bad", !!badStart);
-  $("trimEnd").classList.toggle("bad", !!badEnd);
-  if (badStart || badEnd) return null;
-  return { start, end };
+function waveMessage(kind, text) {
+  $("waveMessage").className = "wave-message " + kind;
+  $("waveMessage").textContent = text;
 }
 
+// Draw the waveform and put the lines, shading and times where they belong.
+function layOut() {
+  const d = editor.duration || 1;
+  const startPct = (editor.start / d) * 100, endPct = (editor.end / d) * 100;
+  $("handleStart").style.left = startPct + "%";
+  $("handleEnd").style.left = endPct + "%";
+  $("shadeLeft").style.cssText = `left:0;width:${startPct}%`;
+  $("shadeRight").style.cssText = `left:${endPct}%;right:0`;
+  $("rulerEnd").textContent = editor.duration ? clock(editor.duration, false) : "";
+  if (document.activeElement !== $("trimStart")) $("trimStart").value = clock(editor.start);
+  if (document.activeElement !== $("trimEnd")) $("trimEnd").value = clock(editor.end);
+  $("trimLength").textContent = editor.duration
+    ? `Keeping ${clock(editor.end - editor.start)} of ${clock(editor.duration, false)}` : "";
+  drawWave();
+}
+
+function drawWave() {
+  const canvas = $("waveCanvas");
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth, height = canvas.clientHeight;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0, 0, width, height);
+  if (!editor.peaks) return;
+  const bar = 3, gap = 1, count = Math.floor(width / (bar + gap));
+  const middle = height / 2, peaks = editor.peaks;
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "#8ab8ff");
+  gradient.addColorStop(0.5, "#2f7bff");
+  gradient.addColorStop(1, "#8ab8ff");
+  ctx.fillStyle = gradient;
+  for (let i = 0; i < count; i++) {
+    // the loudest moment in the stretch of sound this bar covers
+    const from = Math.floor((i / count) * peaks.length), to = Math.max(from + 1, Math.floor(((i + 1) / count) * peaks.length));
+    let peak = 0;
+    for (let j = from; j < to; j++) peak = Math.max(peak, peaks[j]);
+    const h = Math.max(2, peak * (height - 16));
+    ctx.fillRect(i * (bar + gap), middle - h / 2, bar, h);
+  }
+}
+
+const MIN_LENGTH = 0.5;
+
+function setLine(which, seconds) {
+  const d = editor.duration;
+  if (which === "start") editor.start = Math.min(Math.max(0, seconds), editor.end - MIN_LENGTH);
+  else editor.end = Math.max(Math.min(d, seconds), editor.start + MIN_LENGTH);
+  layOut();
+}
+
+function timeAt(clientX) {
+  const box = $("wave").getBoundingClientRect();
+  return Math.min(Math.max(0, (clientX - box.left) / box.width), 1) * editor.duration;
+}
+
+// Click or drag anywhere on the waveform: the nearest line moves there.
+$("wave").addEventListener("pointerdown", (e) => {
+  if (!editor.duration) return;
+  const t = timeAt(e.clientX);
+  editor.dragging = Math.abs(t - editor.start) <= Math.abs(t - editor.end) ? "start" : "end";
+  if (editor.start === editor.end) editor.dragging = t < editor.start ? "start" : "end";
+  $("wave").setPointerCapture(e.pointerId);
+  setLine(editor.dragging, t);
+});
+$("wave").addEventListener("pointermove", (e) => {
+  if (editor.dragging) setLine(editor.dragging, timeAt(e.clientX));
+});
+$("wave").addEventListener("pointerup", () => {
+  if (!editor.dragging) return;
+  // While playing, jump to the line that was moved so you hear the new spot.
+  if (!audio.paused) audio.currentTime = editor.dragging === "start" ? editor.start : Math.max(editor.start, editor.end - 2);
+  editor.dragging = null;
+});
+
+["trimStart", "trimEnd"].forEach((id) => {
+  const input = $(id), which = id === "trimStart" ? "start" : "end";
+  input.addEventListener("input", () => input.classList.remove("bad"));
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
+  input.addEventListener("change", () => {
+    const t = parseTime(input.value.trim());
+    const ok = t !== null && t <= editor.duration
+      && (which === "start" ? t <= editor.end - MIN_LENGTH : t >= editor.start + MIN_LENGTH);
+    input.classList.toggle("bad", !ok);
+    if (ok) setLine(which, t);
+  });
+  input.addEventListener("blur", () => { if (!input.classList.contains("bad")) layOut(); });
+});
+
+function stopPlaying() {
+  audio.pause();
+  cancelAnimationFrame(editor.raf);
+  $("trimPlay").classList.remove("playing");
+  $("playhead").hidden = true;
+}
+
+function followPlayhead() {
+  if (audio.currentTime >= editor.end) {
+    stopPlaying();
+    return;
+  }
+  $("playhead").hidden = false;
+  $("playhead").style.left = (audio.currentTime / editor.duration) * 100 + "%";
+  editor.raf = requestAnimationFrame(followPlayhead);
+}
+
+$("trimPlay").addEventListener("click", () => {
+  if (!audio.paused) return stopPlaying();
+  if (audio.currentTime < editor.start || audio.currentTime >= editor.end - 0.05) audio.currentTime = editor.start;
+  audio.play().then(() => {
+    $("trimPlay").classList.add("playing");
+    followPlayhead();
+  }).catch(() => { $("trimLength").textContent = "Couldn't play the sound, but trimming still works."; });
+});
+audio.addEventListener("ended", stopPlaying);
+
+$("trimReset").addEventListener("click", () => {
+  editor.start = 0;
+  editor.end = editor.duration;
+  layOut();
+});
+$("trimCancel").addEventListener("click", closeTrim);
+$("trimDone").addEventListener("click", () => {
+  const whole = editor.start <= 0.05 && editor.end >= editor.duration - 0.05;
+  trim = whole || !editor.duration ? null : { start: editor.start, end: editor.end };
+  showTrimChip();
+  closeTrim();
+});
 $("trimToggle").addEventListener("click", openTrim);
-$("trimClose").addEventListener("click", closeTrim);
-["trimStart", "trimEnd"].forEach((id) => $(id).addEventListener("input", () => $(id).classList.remove("bad")));
+$("trimEdit").addEventListener("click", openTrim);
+$("trimClear").addEventListener("click", clearTrim);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("trimModal").hidden) closeTrim();
+  if (e.key === " " && !$("trimModal").hidden && e.target.tagName !== "INPUT") {
+    e.preventDefault();
+    $("trimPlay").click();
+  }
+});
+window.addEventListener("resize", () => { if (!$("trimModal").hidden) drawWave(); });
 
 // ---- adding to the queue
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const url = $("url").value.trim();
-  const trim = readTrim();
-  if (!trim) {
-    $("notice").className = "notice error";
-    $("notice").textContent = "Check the trim times, like 1:20 to 2:05.";
-    return;
-  }
+  const part = trim ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
   $("url").value = "";
   hidePreview();
   $("url").focus();
-  const res = await api("/api/convert", { url, format, ...trim });
+  const res = await api("/api/convert", { url, format, ...part });
   $("notice").className = res.ok ? "notice" : "notice error";
   $("notice").textContent = res.ok ? "" : res.error;
   refresh();
 });
 
 $("change").addEventListener("click", async () => render(await api("/api/pick-folder", {})));
-$("update").addEventListener("click", () => api("/api/update", {}).then(refresh));
+$("checkNow").addEventListener("click", () => {
+  dismissedUpdate = null;
+  api("/api/check-updates", {}).then(refresh);
+});
+$("autoUpdate").addEventListener("change", async () => render(await api("/api/auto-update", { on: $("autoUpdate").checked })));
 $("clear").addEventListener("click", () => api("/api/clear", {}).then(refresh));
-$("installUpdate").addEventListener("click", () => api("/api/install-app-update", {}).then(refresh));
+$("updateInstall").addEventListener("click", () => api("/api/install-app-update", {}).then(refresh));
+$("updateLater").addEventListener("click", () => {
+  dismissedUpdate = $("updateModal").dataset.version;
+  $("updateModal").hidden = true;
+});
 
 // ---- drawing the window from the app's state
 
@@ -204,18 +382,34 @@ function renderQueue(jobs) {
   existing.forEach((el) => el.remove());
 }
 
-function renderUpdateBanner(s) {
-  const banner = $("banner");
-  banner.classList.toggle("show", !!s.appUpdate);
-  if (!s.appUpdate) return;
+// The popup that offers a new version of the app.
+let dismissedUpdate = null;
+let closing = false;
+
+function renderUpdatePopup(s) {
+  const update = s.appUpdate;
+  const modal = $("updateModal");
   const installing = s.appUpdateProgress !== null;
-  $("bannerText").innerHTML = installing
-    ? (s.appUpdateProgress >= 100 ? "Opening the installer..." : "Downloading the update...")
-    : `<strong>Version ${s.appUpdate.version} is available.</strong> You have ${s.version}.`;
-  $("installUpdate").hidden = installing;
-  $("bannerBar").hidden = !installing;
-  $("bannerBar").firstElementChild.style.width = installing ? s.appUpdateProgress + "%" : "";
-  if (installing && s.appUpdateProgress >= 100) setTimeout(() => window.close(), 1500);
+  modal.hidden = !update || (!installing && dismissedUpdate === update.version);
+  if (modal.hidden) return;
+  modal.dataset.version = update.version;
+  $("updateActions").hidden = installing;
+  $("updateBar").hidden = !installing;
+  $("updateBar").firstElementChild.style.width = installing ? s.appUpdateProgress + "%" : "";
+  if (!installing) {
+    $("updateHeading").textContent = "Update available";
+    $("updateText").textContent = `Version ${update.version} of Lelons Converter is ready to install. You have ${s.version}.`;
+  } else if (s.appUpdateProgress < 100) {
+    $("updateHeading").textContent = "Updating...";
+    $("updateText").textContent = "Downloading the new version.";
+  } else {
+    $("updateHeading").textContent = "Almost done";
+    $("updateText").textContent = "The installer is opening. Click Install, and the app opens again when it's finished.";
+    if (!closing) {
+      closing = true;
+      setTimeout(() => window.close(), 2500);
+    }
+  }
 }
 
 function render(s) {
@@ -229,7 +423,8 @@ function render(s) {
     $("quality").value = s.quality[format];
     shownQuality = key;
   }
-  $("update").disabled = s.updating;
+  $("checkNow").disabled = s.checking;
+  $("autoUpdate").checked = s.autoUpdate;
   if (s.notice) {
     $("notice").className = "notice " + s.notice.kind;
     $("notice").textContent = s.notice.text;
@@ -237,7 +432,7 @@ function render(s) {
     $("notice").textContent = "";
   }
   renderQueue(s.jobs);
-  renderUpdateBanner(s);
+  renderUpdatePopup(s);
 }
 
 async function refresh() {

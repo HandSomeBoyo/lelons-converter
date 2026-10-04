@@ -1,10 +1,9 @@
-"""Downloads and converts videos with yt-dlp, and keeps yt-dlp up to date."""
+"""Downloads and converts videos with yt-dlp."""
 
 import copy
 import os
 import re
 import subprocess
-import sys
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -169,14 +168,3 @@ def download(info, folder, fmt, quality, on_progress, trim=None):
         result = ydl.process_ie_result(info, download=True)
     downloads = (result or {}).get("requested_downloads") or [{}]
     return downloads[0].get("filepath") or ""
-
-
-def update_yt_dlp():
-    """YouTube changes often; a newer yt-dlp is the usual fix when downloads break."""
-    python = os.path.join(os.path.dirname(sys.executable), "python.exe")
-    if not os.path.isfile(python):
-        python = sys.executable
-    subprocess.run(
-        [python, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check", "yt-dlp[default]"],
-        check=True, capture_output=True, creationflags=NO_WINDOW,
-    )

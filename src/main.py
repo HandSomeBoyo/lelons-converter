@@ -8,6 +8,7 @@ page talks to, and does the downloading with yt-dlp.
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,11 +18,16 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import downloader
-import jobs
-import settings
 import updater
-from version import VERSION
+
+# Before anything loads yt-dlp: use a newer one if one was downloaded.
+YT_DLP_VERSION = updater.use_newest_yt_dlp()
+
+import downloader  # noqa: E402
+import jobs  # noqa: E402
+import settings  # noqa: E402
+import waveform  # noqa: E402
+from version import VERSION  # noqa: E402
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(APP_DIR, "ui")
@@ -49,7 +55,8 @@ class State:
         self.quality = {fmt: saved[f"quality_{fmt}"] for fmt in settings.QUALITIES}
         # A message under the card: {"kind": "info"|"error"|"done", "text": ...}
         self.notice = None
-        self.updating = False
+        self.auto_update = saved["auto_update"]
+        self.checking = False
         self.app_update = None  # newer version info, once found
         self.app_update_progress = None
         self.last_ping = time.time()
@@ -70,7 +77,8 @@ class State:
                 "quality": dict(self.quality),
                 "qualities": settings.QUALITIES,
                 "notice": self.notice,
-                "updating": self.updating,
+                "autoUpdate": self.auto_update,
+                "checking": self.checking,
                 "appUpdate": self.app_update,
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
@@ -78,7 +86,7 @@ class State:
 
     @property
     def busy(self):
-        return self.updating or self.app_update_progress is not None or queue.busy
+        return self.checking or self.app_update_progress is not None or queue.busy
 
 
 queue = jobs.Queue()
@@ -93,21 +101,36 @@ def quality_label(fmt, quality):
     return next((label for value, label in settings.QUALITIES[fmt] if value == quality), quality)
 
 
-def update_downloader():
-    state.set(updating=True, notice={"kind": "info", "text": "Updating the downloader..."})
-    try:
-        downloader.update_yt_dlp()
-    except Exception as e:
-        state.set(updating=False, notice={"kind": "error", "text": f"Update failed. Check your internet connection. ({e})"})
+def check_for_updates(manual=False):
+    """Look for a new version of the app (shown as a popup) and of the downloader."""
+    if state.checking:
         return
-    state.set(updating=False, notice={"kind": "done", "text": "Updated. Close and reopen the app to use the new version."})
-
-
-def check_for_app_update():
+    state.set(checking=True)
+    if manual:
+        state.set(notice={"kind": "info", "text": "Checking for updates..."})
+    failed = False
     try:
         state.set(app_update=updater.check())
     except Exception:
-        pass  # offline or GitHub unreachable; try again next time the app opens
+        failed = True  # offline or GitHub unreachable
+    new_downloader = None
+    if not state.app_update:  # an app update brings a new downloader anyway
+        try:
+            new_downloader = updater.update_yt_dlp(YT_DLP_VERSION)
+        except Exception:
+            failed = True
+    state.set(checking=False)
+    if not manual or state.app_update:
+        if manual:
+            state.set(notice=None)
+        return
+    if failed:
+        text, kind = "Couldn't check for updates. Check your internet connection.", "error"
+    else:
+        text, kind = f"You have the newest version ({VERSION}).", "done"
+        if new_downloader:
+            text += " The downloader got an update too, which is used from the next time you open the app."
+    state.set(notice={"kind": kind, "text": text})
 
 
 def install_app_update():
@@ -168,10 +191,48 @@ class Handler(BaseHTTPRequestHandler):
             content_type += "; charset=utf-8"
         self.send_body(body, content_type)
 
+    def send_media(self, path):
+        """Audio for the trim editor. Supports byte ranges so the player can jump around."""
+        size = os.path.getsize(path)
+        start, end = 0, size - 1
+        match = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range", ""))
+        if match and (match[1] or match[2]):
+            if match[1]:
+                start = int(match[1])
+                end = min(int(match[2]), size - 1) if match[2] else size - 1
+            else:  # "bytes=-500": the last 500 bytes
+                start = max(0, size - int(match[2]))
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        else:
+            self.send_response(200)
+        content_type = {".webm": "audio/webm", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".opus": "audio/ogg"}
+        self.send_header("Content-Type", content_type.get(os.path.splitext(path)[1], "application/octet-stream"))
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start)
+            left = end - start + 1
+            try:
+                while left > 0 and (chunk := f.read(min(256 * 1024, left))):
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the player only wanted part of it
+
     def do_GET(self):
         if self.path == "/api/state":
             state.set(last_ping=time.time())
             return self.send_json(state.snapshot())
+        if self.path.startswith("/media/"):
+            path = waveform.file_path(self.path[len("/media/"):])
+            return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path == "/icon.png":
             icon = next((p for p in ICON_CANDIDATES if os.path.isfile(p)), None)
             return self.send_file(icon) if icon else self.send_error(404)
@@ -192,6 +253,13 @@ class Handler(BaseHTTPRequestHandler):
             url = str(data.get("url", "")).strip()
             try:
                 self.send_json({"ok": True, "preview": queue.lookup(url)})
+            except Exception as e:
+                self.send_json({"ok": False, "error": downloader.friendly_error(e)})
+        elif self.path == "/api/waveform":
+            url = str(data.get("url", "")).strip()
+            try:
+                queue.lookup(url)
+                self.send_json({"ok": True, **waveform.get(url, queue.info_cache[url][1])})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
         elif self.path == "/api/convert":
@@ -247,9 +315,16 @@ class Handler(BaseHTTPRequestHandler):
             if hasattr(os, "startfile"):
                 os.startfile(state.folder)
             self.send_json({"ok": True})
-        elif self.path == "/api/update":
-            if not state.updating:
-                start_background(update_downloader)
+        elif self.path == "/api/check-updates":
+            start_background(check_for_updates, True)
+            self.send_json({"ok": True})
+        elif self.path == "/api/auto-update":
+            state.set(auto_update=bool(data.get("on")))
+            settings.save(auto_update=state.auto_update)
+            self.send_json(state.snapshot())
+        elif self.path == "/api/quit":
+            # A different version of the app was started and needs this one gone.
+            state.set(quit=True)
             self.send_json({"ok": True})
         elif self.path == "/api/install-app-update":
             if state.app_update_progress is None:
@@ -293,10 +368,24 @@ def already_running_url():
     try:
         with open(PORT_FILE) as f:
             url = f"http://127.0.0.1:{int(f.read().strip())}/"
-        with urllib.request.urlopen(url + "api/state", timeout=1):
-            return url
+        with urllib.request.urlopen(url + "api/state", timeout=2) as response:
+            running = json.load(response).get("version")
     except (OSError, ValueError):
         return None
+    if running == VERSION:
+        return url
+    # The app was updated but the old version is still running in the
+    # background. Close it and start the new one instead.
+    try:
+        request = urllib.request.Request(url + "api/quit", data=b"{}", method="POST")
+        urllib.request.urlopen(request, timeout=2).close()
+    except OSError:
+        pass
+    for _ in range(20):
+        if not os.path.exists(PORT_FILE):
+            break
+        time.sleep(0.25)
+    return None
 
 
 # ---------------------------------------------------------------- main
@@ -316,7 +405,8 @@ def main():
     open_window(f"http://127.0.0.1:{server.server_port}/")
     state.set(last_ping=time.time() + 30)  # give the window time to open
     start_background(downloader.warm_up)
-    start_background(check_for_app_update)
+    if state.auto_update:
+        start_background(check_for_updates)
 
     # Quit once the window is closed (the page says bye and stops checking in).
     # Minimized windows check in rarely, so the plain-silence timeout is long.
@@ -333,6 +423,7 @@ def main():
         os.remove(PORT_FILE)
     except OSError:
         pass
+    waveform.clean_up()
 
 
 if __name__ == "__main__":
