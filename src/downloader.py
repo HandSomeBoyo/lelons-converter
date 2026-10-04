@@ -15,11 +15,15 @@ def _js_runtimes():
     return {"deno": {"path": deno.find_deno_bin()}}
 
 
-def build_options(folder, fmt, quality, on_progress):
+def build_options(folder, fmt, quality, on_progress, trim=None):
     import imageio_ffmpeg
 
+    name = "%(title)s"
+    if trim:
+        # Windows file names can't have ":", so 1:20 is written 1m20s
+        name += " ({}-{})".format(*(f"{int(t) // 60}m{int(t) % 60:02d}s" for t in trim))
     options = {
-        "outtmpl": os.path.join(folder, "%(title)s.%(ext)s"),
+        "outtmpl": os.path.join(folder, name + ".%(ext)s"),
         "noplaylist": True,
         "ffmpeg_location": imageio_ffmpeg.get_ffmpeg_exe(),
         "js_runtimes": _js_runtimes(),
@@ -29,14 +33,30 @@ def build_options(folder, fmt, quality, on_progress):
         "noprogress": True,
         # Download several pieces of a video at once where YouTube allows it.
         "concurrent_fragment_downloads": 4,
+        # Put the thumbnail in the file as cover art, plus the title and artist.
+        "writethumbnail": True,
     }
+    cover_art = [
+        {"key": "FFmpegMetadata", "add_metadata": True},
+        {"key": "EmbedThumbnail", "already_have_thumbnail": False},
+    ]
+    # Cover art has to be a JPG; YouTube's thumbnails are usually WebP.
+    to_jpg = {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
+    if trim:
+        from yt_dlp.utils import download_range_func
+
+        options["download_ranges"] = download_range_func(None, [tuple(trim)])
     if fmt == "mp3":
         options["format"] = "bestaudio/best"
-        options["postprocessors"] = [{
+        options["postprocessors"] = [to_jpg, {
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": quality,
-        }]
+        }, *cover_art]
+        # Album art is square, so cut the middle out of the wide thumbnail.
+        options["postprocessor_args"] = {
+            "thumbnailsconvertor+ffmpeg_o": ["-c:v", "mjpeg", "-vf", r"crop=min(iw\,ih):min(iw\,ih)"],
+        }
     else:
         h = f"[height<={quality}]"
         if int(quality) <= 1080:
@@ -48,6 +68,10 @@ def build_options(folder, fmt, quality, on_progress):
         options["format"] = f"{preferred}bv*{h}+ba/b{h}/bv*+ba/b"
         options["format_sort"] = ["res", "fps", "br"]
         options["merge_output_format"] = "mp4"
+        options["postprocessors"] = [to_jpg, *cover_art]
+        if trim:
+            # Cut exactly where asked instead of at the nearest keyframe (takes longer).
+            options["force_keyframes_at_cuts"] = True
     return options
 
 
@@ -95,6 +119,7 @@ def preview_of(info):
         "channel": info.get("channel") or info.get("uploader") or "",
         "duration": info.get("duration_string") or format_duration(info.get("duration")),
         "thumbnail": thumbnail or "",
+        "seconds": int(info.get("duration") or 0),
     }
 
 
@@ -106,12 +131,42 @@ def format_duration(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-def download(info, folder, fmt, quality, on_progress):
+def parse_time(text):
+    """ "1:20", "1:02:03" or "80" -> seconds. None if it isn't a time."""
+    text = str(text or "").strip()
+    if not re.fullmatch(r"\d+(:\d{1,2}){0,2}(\.\d+)?", text):
+        return None
+    seconds = 0.0
+    for part in text.split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def song_info(info):
+    """Fill in artist and song title, so MP3s look right in music apps."""
+    if info.get("artist") or info.get("artists"):
+        return
+    title = info.get("track") or info.get("title") or ""
+    # Music videos are usually called "Artist - Song (Official Video)".
+    match = re.match(r"^(.+?)\s+[-\u2013\u2014]\s+(.+)$", title)
+    if match:
+        artist, track = match.groups()
+    else:
+        artist, track = info.get("channel") or info.get("uploader") or "", title
+    track = re.sub(r"\s*[(\[][^)\]]*\b(official|lyrics?|audio|video|visuali[sz]er|hd|4k|mv)\b[^)\]]*[)\]]",
+                   "", track, flags=re.I).strip() or title
+    info["artists"] = [re.sub(r" - Topic$", "", artist).strip()]
+    info["track"] = track
+
+
+def download(info, folder, fmt, quality, on_progress, trim=None):
     """Download a video looked up with fetch_info. Returns the saved file's path."""
     import yt_dlp
 
-    with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress)) as ydl:
-        result = ydl.process_ie_result(copy.deepcopy(info), download=True)
+    info = copy.deepcopy(info)
+    song_info(info)
+    with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim)) as ydl:
+        result = ydl.process_ie_result(info, download=True)
     downloads = (result or {}).get("requested_downloads") or [{}]
     return downloads[0].get("filepath") or ""
 

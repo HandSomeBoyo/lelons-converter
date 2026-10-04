@@ -32,12 +32,13 @@ class Queue:
 
     # ---- changing the queue
 
-    def add(self, url, fmt, quality, quality_label, folder):
+    def add(self, url, fmt, quality, quality_label, folder, trim=None):
         cached = self.info_cache.get(url)
-        preview = cached[2] if cached else {"title": url, "channel": "", "duration": "", "thumbnail": ""}
+        preview = cached[2] if cached else {"title": url, "channel": "", "duration": "", "thumbnail": "", "seconds": 0}
         job = {
             "id": next(self.ids), "url": url, "format": fmt, "quality": quality,
-            "qualityLabel": quality_label, "folder": folder, "file": "",
+            "qualityLabel": quality_label, "folder": folder, "file": "", "trim": trim,
+            "trimLabel": " to ".join(downloader.format_duration(t) or "0:00" for t in trim) if trim else "",
             "status": "queued", "progress": 0, "message": "Waiting...", **preview,
         }
         with self.lock:
@@ -95,7 +96,7 @@ class Queue:
                 percent = d["downloaded_bytes"] * 100 / total if total else 0
                 self._update(job, progress=percent, message=f"Downloading... {percent:.0f}%")
             elif d["status"] == "finished":
-                self._update(job, progress=100, message="Converting...")
+                self._update(job, progress=100, message="Converting and adding cover art...")
 
         try:
             cached = self.info_cache.get(job["url"])
@@ -104,7 +105,8 @@ class Queue:
                 cached = self.info_cache[job["url"]]
             self._update(job, **cached[2])
             self._update(job, message="Starting download...")
-            path = downloader.download(cached[1], job["folder"], job["format"], job["quality"], on_progress)
+            path = downloader.download(cached[1], job["folder"], job["format"], job["quality"],
+                                       on_progress, job["trim"])
         except Exception as e:
             self._update(job, status="error", message=downloader.friendly_error(e))
             return

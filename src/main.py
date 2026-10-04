@@ -199,8 +199,22 @@ class Handler(BaseHTTPRequestHandler):
             fmt = "mp4" if data.get("format") == "mp4" else "mp3"
             if not url:
                 return self.send_json({"ok": False, "error": "Paste a YouTube link first."})
+            trim = None
+            if data.get("start") or data.get("end"):
+                start = downloader.parse_time(data.get("start") or "0")
+                end = downloader.parse_time(data.get("end")) if data.get("end") else None
+                try:
+                    length = queue.lookup(url).get("seconds") or 0
+                except Exception:
+                    length = 0  # the download will report what's wrong with the link
+                if end is None and length:
+                    end = length
+                if start is None or end is None or end <= start:
+                    return self.send_json({"ok": False, "error": "Check the trim times, like 1:20 to 2:05."})
+                if not (start <= 0 and length and end >= length):  # the whole video isn't a trim
+                    trim = [start, min(end, length) if length else end]
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), state.folder)
+            queue.add(url, fmt, quality, quality_label(fmt, quality), state.folder, trim)
             state.set(notice=None)
             self.send_json({"ok": True})
         elif self.path == "/api/remove":

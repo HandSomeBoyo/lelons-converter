@@ -64,9 +64,18 @@
 
     <div class="preview" id="preview">
       <div class="thumb" id="previewThumb"></div>
-      <div>
+      <div class="info">
         <div class="title clamp" id="previewTitle"></div>
-        <div class="meta" id="previewMeta"></div>
+        <div class="meta"><span id="previewMeta"></span><button type="button" class="link-button trim-toggle" id="trimToggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg>
+          Trim</button></div>
+        <div class="trim" id="trim" hidden>
+          From <input id="trimStart" placeholder="0:00" autocomplete="off" spellcheck="false" aria-label="Start time">
+          to <input id="trimEnd" autocomplete="off" spellcheck="false" aria-label="End time">
+          <button type="button" class="icon-button" id="trimClose" title="Don't trim">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   </section>

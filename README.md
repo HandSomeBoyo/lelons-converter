@@ -19,6 +19,12 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
 2. Pick MP3 or MP4 and a quality.
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
 
+To save only part of a video, click **Trim** under the preview and type the
+start and end, like `1:20` and `2:05`.
+
+MP3s get the video's thumbnail as cover art, plus the song title and artist,
+so they look right in music apps.
+
 If downloads stop working, click **Update downloader** and reopen the app.
 YouTube changes things now and then, and the update usually fixes it.
 

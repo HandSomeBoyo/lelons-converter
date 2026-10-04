@@ -3,6 +3,7 @@ let format = "mp3";
 let shownQuality = "";
 let previewUrl = "";
 let previewTimer = null;
+let previewSeconds = 0;
 
 const ICONS = {
   remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -48,18 +49,23 @@ function showPreview(kind, title, meta, thumbnail) {
 
 function hidePreview() {
   clearTimeout(previewTimer);
+  closeTrim();
   $("preview").className = "preview";
   previewUrl = "";
 }
 
 async function lookUp(url) {
   previewUrl = url;
+  closeTrim();
+  previewSeconds = 0;
   showPreview("loading", "Looking up video...", "", "");
   const res = await api("/api/info", { url }).catch(() => ({ ok: false, error: "Couldn't look up that link." }));
   if (previewUrl !== url) return; // the link changed while we were waiting
   if (res.ok) {
     const p = res.preview;
     showPreview("", p.title, [p.channel, p.duration].filter(Boolean).join(" · "), p.thumbnail);
+    previewSeconds = p.seconds || 0;
+    $("trimEnd").placeholder = p.duration || "end";
   } else {
     showPreview("error", res.error, "Check the link and try again.", "");
   }
@@ -73,15 +79,60 @@ $("url").addEventListener("input", () => {
   previewTimer = setTimeout(() => lookUp(url), 400);
 });
 
+// ---- trim: download only part of the video
+
+// "1:20", "1:02:03" or "80" -> seconds, or null if it isn't a time
+function parseTime(text) {
+  if (!/^\d+(:\d{1,2}){0,2}(\.\d+)?$/.test(text)) return null;
+  return text.split(":").reduce((total, part) => total * 60 + Number(part), 0);
+}
+
+function openTrim() {
+  $("trim").hidden = false;
+  $("trimToggle").classList.add("open");
+  $("trimStart").focus();
+}
+
+function closeTrim() {
+  $("trim").hidden = true;
+  $("trimToggle").classList.remove("open");
+  $("trimStart").value = $("trimEnd").value = "";
+  $("trimStart").classList.remove("bad");
+  $("trimEnd").classList.remove("bad");
+}
+
+// Returns {start, end} to send, {} for no trim, or null if the times are wrong.
+function readTrim() {
+  if ($("trim").hidden) return {};
+  const start = $("trimStart").value.trim(), end = $("trimEnd").value.trim();
+  const s = start ? parseTime(start) : 0, e = end ? parseTime(end) : previewSeconds || null;
+  const badStart = s === null || (previewSeconds && s >= previewSeconds);
+  const badEnd = (end && e === null) || (e !== null && s !== null && e <= s);
+  $("trimStart").classList.toggle("bad", !!badStart);
+  $("trimEnd").classList.toggle("bad", !!badEnd);
+  if (badStart || badEnd) return null;
+  return { start, end };
+}
+
+$("trimToggle").addEventListener("click", openTrim);
+$("trimClose").addEventListener("click", closeTrim);
+["trimStart", "trimEnd"].forEach((id) => $(id).addEventListener("input", () => $(id).classList.remove("bad")));
+
 // ---- adding to the queue
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const url = $("url").value.trim();
+  const trim = readTrim();
+  if (!trim) {
+    $("notice").className = "notice error";
+    $("notice").textContent = "Check the trim times, like 1:20 to 2:05.";
+    return;
+  }
   $("url").value = "";
   hidePreview();
   $("url").focus();
-  const res = await api("/api/convert", { url, format });
+  const res = await api("/api/convert", { url, format, ...trim });
   $("notice").className = res.ok ? "notice" : "notice error";
   $("notice").textContent = res.ok ? "" : res.error;
   refresh();
@@ -111,7 +162,8 @@ function renderJob(el, job) {
   el.querySelector(".thumb").style.backgroundImage = job.thumbnail ? `url("${job.thumbnail}")` : "";
   el.querySelector(".title").textContent = job.title;
   el.querySelector(".title").title = job.title;
-  el.querySelector(".badge").textContent = `${job.format.toUpperCase()} · ${job.qualityLabel.replace(/ \(.*\)/, "")}`;
+  el.querySelector(".badge").textContent = [job.format.toUpperCase(), job.qualityLabel.replace(/ \(.*\)/, ""), job.trimLabel]
+    .filter(Boolean).join(" · ");
   el.querySelector(".msg").textContent = job.message;
 
   const bar = el.querySelector(".bar");
