@@ -27,6 +27,12 @@ waveform, and dragging a line shows that moment of the video.
 MP3s get the video's thumbnail as cover art, plus the song title and artist,
 so they look right in music apps.
 
+The **Images** tab changes pictures. Drop one or more images into the box (or
+click **choose files**), then pick a format (PNG, JPG, WEBP, GIF, BMP, ICO or
+PDF), a size, and if you like turn, mirror, crop to a square or make it black
+and white. Click **Convert** and the new files are saved next to your
+downloads. Your original pictures aren't changed.
+
 If downloads stop working, click **Check for updates**. YouTube changes
 things now and then, and a newer downloader usually fixes it.
 
@@ -44,6 +50,7 @@ Lelons Converter/
 │   ├── jobs.py          the download queue (one video at a time)
 │   ├── updater.py       keeps the app and the downloader up to date
 │   ├── waveform.py      the sound picture for the trim editor
+│   ├── images.py        the Images tab's converting (uses Pillow)
 │   ├── version.py       the app's version number
 │   ├── settings.py      remembers your save folder and quality choices
 │   ├── folder_picker.py the Windows "Select Folder" window
@@ -51,6 +58,7 @@ Lelons Converter/
 │       ├── index.html   layout
 │       ├── style.css    colors and styling
 │       ├── app.js       what the buttons do
+│       ├── images.js    what the Images tab's buttons do
 │       └── fonts/       the Space Grotesk and Inter fonts
 ├── assets/              app icon (icon.ico for Windows, icon.png for the window)
 ├── installer/           recipe for the Setup.exe installer

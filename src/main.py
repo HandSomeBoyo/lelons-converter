@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +25,7 @@ import updater
 YT_DLP_VERSION = updater.use_newest_yt_dlp()
 
 import downloader  # noqa: E402
+import images  # noqa: E402
 import jobs  # noqa: E402
 import settings  # noqa: E402
 import waveform  # noqa: E402
@@ -235,6 +237,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/image/"):
+            path = images.thumbnail_path(self.path[len("/image/"):])
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path == "/icon.png":
             icon = next((p for p in ICON_CANDIDATES if os.path.isfile(p)), None)
             return self.send_file(icon) if icon else self.send_error(404)
@@ -246,6 +251,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
+        if self.path == "/api/image-add":  # the body is the picture itself
+            if length > images.MAX_BYTES:
+                return self.send_json({"ok": False, "error": "That file is too big."})
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "image")
+            try:
+                return self.send_json({"ok": True, "image": images.add(os.path.basename(name), self.rfile.read(length))})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
         try:
             data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
@@ -301,6 +314,19 @@ class Handler(BaseHTTPRequestHandler):
             job = queue.find(data.get("id"))
             if job:
                 show_in_folder(job["file"])
+            self.send_json({"ok": True})
+        elif self.path == "/api/image-convert":
+            try:
+                made = images.convert(str(data.get("id")), data.get("options") or {}, state.folder)
+                self.send_json({"ok": True, **made})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't save this picture."})
+        elif self.path == "/api/image-remove":
+            images.remove(str(data.get("id")))
+            self.send_json({"ok": True})
+        elif self.path == "/api/image-show":
+            if images.was_made(data.get("path")):
+                show_in_folder(data["path"])
             self.send_json({"ok": True})
         elif self.path == "/api/quality":
             fmt, quality = data.get("format"), str(data.get("quality"))
@@ -427,6 +453,7 @@ def main():
     except OSError:
         pass
     waveform.clean_up()
+    images.clean_up()
 
 
 if __name__ == "__main__":
