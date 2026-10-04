@@ -9,6 +9,14 @@ import downloader
 
 INFO_TTL = 30 * 60  # download links from a lookup stay valid for a while, not forever
 
+# What the download list says during each step after downloading.
+STEPS = {
+    "Merger": "Putting the video and sound together...",
+    "ExtractAudio": "Converting to MP3...",
+    "Cut": "Cutting out your part...",
+    "Metadata": "Adding the title and cover art...",
+}
+
 
 class Queue:
     def __init__(self):
@@ -96,7 +104,9 @@ class Queue:
                 percent = d["downloaded_bytes"] * 100 / total if total else 0
                 self._update(job, progress=percent, message=f"Downloading... {percent:.0f}%")
             elif d["status"] == "finished":
-                self._update(job, progress=100, message="Converting and adding cover art...")
+                self._update(job, progress=100, message="Converting...")
+            elif d["status"] == "step" and d["step"] in STEPS:
+                self._update(job, progress=100, message=STEPS[d["step"]])
 
         try:
             cached = self.info_cache.get(job["url"])

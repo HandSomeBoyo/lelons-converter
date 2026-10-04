@@ -41,6 +41,8 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         "ffmpeg_location": imageio_ffmpeg.get_ffmpeg_exe(),
         "js_runtimes": _js_runtimes(),
         "progress_hooks": [on_progress],
+        # Also tell on_progress which step comes next (merging, cutting, ...).
+        "postprocessor_hooks": [lambda d: d["status"] == "started" and on_progress({"status": "step", "step": d["postprocessor"]})],
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
@@ -49,16 +51,9 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         # Put the thumbnail in the file as cover art, plus the title and artist.
         "writethumbnail": True,
     }
-    cover_art = [
-        {"key": "FFmpegMetadata", "add_metadata": True},
-        {"key": "EmbedThumbnail", "already_have_thumbnail": False},
-    ]
     # Cover art has to be a JPG; YouTube's thumbnails are usually WebP.
+    # (The cover art itself is added in download(), after any trimming.)
     to_jpg = {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
-    if trim:
-        from yt_dlp.utils import download_range_func
-
-        options["download_ranges"] = download_range_func(None, [tuple(trim)])
     if fmt == "mp3":
         options["format"] = "bestaudio/best"
         options["format_sort"] = ["lang"]  # the video's own audio, not a dubbed one
@@ -66,7 +61,7 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": quality,
-        }, *cover_art]
+        }]
         # Album art is square, so cut the middle out of the wide thumbnail.
         options["postprocessor_args"] = {
             "thumbnailsconvertor+ffmpeg_o": ["-c:v", "mjpeg", "-vf", r"crop=min(iw\,ih):min(iw\,ih)"],
@@ -83,11 +78,43 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         # "lang" first: the video's own audio, not a dubbed one in another language
         options["format_sort"] = ["lang", "res", "fps", "br"]
         options["merge_output_format"] = "mp4"
-        options["postprocessors"] = [to_jpg, *cover_art]
-        if trim:
-            # Cut exactly where asked instead of at the nearest keyframe (takes longer).
-            options["force_keyframes_at_cuts"] = True
+        options["postprocessors"] = [to_jpg]
     return options
+
+
+def _cut_step(ydl, fmt, trim):
+    """A yt-dlp step that keeps only the trimmed part of the downloaded file.
+
+    The whole video is downloaded first and then cut here on the PC. Letting
+    ffmpeg cut while downloading from YouTube gave files that some players
+    couldn't skip around in.
+    """
+    from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+    from yt_dlp.utils import prepend_extension
+
+    class CutPP(FFmpegPostProcessor):
+        def run(self, info):
+            path = info["filepath"]
+            temp = prepend_extension(path, "cut")
+            start, end = trim
+            if fmt == "mp3":
+                codecs = ["-c:a", "copy"]  # MP3 can be cut without converting it again
+            else:
+                # Re-encode so the video starts exactly at the cut, with clean
+                # timestamps, in H.264 + AAC that every Windows player handles.
+                # A keyframe every 2 seconds makes skipping around in players quick.
+                codecs = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                          "-force_key_frames", "expr:gte(t,n_forced*2)",
+                          "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
+            self.real_run_ffmpeg(
+                [(path, ["-ss", f"{start:.3f}", "-to", f"{end:.3f}"])],
+                [(temp, ["-map", "0:v:0?", "-map", "0:a:0?", "-dn", "-sn", *codecs,
+                         "-avoid_negative_ts", "make_zero"])],
+            )
+            os.replace(temp, path)
+            return [], info
+
+    return CutPP(ydl)
 
 
 def warm_up():
@@ -180,7 +207,14 @@ def download(info, folder, fmt, quality, on_progress, trim=None):
 
     info = copy.deepcopy(info)
     song_info(info)
+    from yt_dlp.postprocessor import EmbedThumbnailPP, FFmpegMetadataPP
+
     with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim)) as ydl:
+        if trim:
+            ydl.add_post_processor(_cut_step(ydl, fmt, trim))
+        # Title, artist and cover art go in last, so trimming can't drop them.
+        ydl.add_post_processor(FFmpegMetadataPP(ydl, add_metadata=True))
+        ydl.add_post_processor(EmbedThumbnailPP(ydl, already_have_thumbnail=False))
         result = ydl.process_ie_result(info, download=True)
     downloads = (result or {}).get("requested_downloads") or [{}]
     return downloads[0].get("filepath") or ""
