@@ -15,6 +15,7 @@ let sfxLoading = false;
 let sfxError = "";
 let sfxPlaying = null; // id of the sound playing
 const sfxSure = new Set(); // sounds whose bin was clicked once
+const sfxDragReady = new Set(); // sounds with a copy ready to drag into other apps
 const sfxNotes = new Map(); // id -> {text, kind, path}: "Saved as ..." under a sound
 let sfxLastLoad = 0;
 
@@ -254,6 +255,15 @@ function sfxRow(sound) {
   const el = document.createElement("div");
   el.className = "sound" + (sfxPlaying === sound.id ? " playing" : "");
   el.dataset.id = sound.id;
+  // Drag a sound straight into another app. Its kept copy is fetched as soon as the mouse is over it.
+  setDrag(el, { kind: "sound", url: sound.url, name: sound.name });
+  el.title = DRAG_HINT;
+  el.addEventListener("mouseenter", () => {
+    if (sfxDragReady.has(sound.url)) return;
+    sfxDragReady.add(sound.url);
+    api("/api/drag-ready", { url: sound.url, name: sound.name }).then((res) => { if (!res.ok) sfxDragReady.delete(sound.url); })
+      .catch(() => sfxDragReady.delete(sound.url));
+  });
   el.innerHTML = `
     <button class="play" title="Play"></button>
     <div class="sound-info">

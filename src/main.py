@@ -203,6 +203,36 @@ def show_in_folder(path):
         open_folder(os.path.dirname(path) or state.folder)
 
 
+def start_drag(path):
+    """Drag a finished file out of the app into another one (the mouse is held on it now)."""
+    if not path or not os.path.isfile(path):
+        raise ValueError("That file isn't there anymore.")
+    if os.name != "nt":
+        raise ValueError("Dragging files out only works on Windows.")
+    import dragout
+    if not appwindow.drag(path):
+        dragout.drag_on_new_thread(path)
+
+
+def drag_path(data):
+    """Which file the page wants to drag. Only files the app made itself."""
+    kind = data.get("kind")
+    if kind == "job":
+        job = queue.find(data.get("id"))
+        return job and job["status"] == "done" and job["file"]
+    if kind == "history":
+        item = history.find(str(data.get("id")))
+        return item and item.get("file")
+    if kind == "file":
+        item = local_files.find(data.get("id"))
+        return item and item["out"]
+    if kind == "image":
+        return images.was_made(data.get("path")) and data["path"]
+    if kind == "sound":
+        return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
+    return None
+
+
 def open_folder(folder):
     if hasattr(os, "startfile") and os.path.isdir(folder):
         os.startfile(folder)
@@ -602,6 +632,18 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/clear":
             queue.clear_finished()
             self.send_json({"ok": True})
+        elif self.path == "/api/drag":
+            try:
+                start_drag(drag_path(data))
+                self.send_json({"ok": True})
+            except (ValueError, sfx.Error) as e:
+                self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/drag-ready":  # the mouse is over a library sound: have it ready to drag
+            try:
+                sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
+                self.send_json({"ok": True})
+            except sfx.Error as e:
+                self.send_json({"ok": False, "error": str(e)})
         elif self.path == "/api/show-file":
             job = queue.find(data.get("id"))
             if job:

@@ -198,6 +198,9 @@ function fileRow(el, file) {
       <div class="actions"></div>`;
   }
   el.className = "image-row file-row " + file.status + (file.id && !fits(file, fileOptions.format) ? " skipped" : "");
+  const draggable = file.status === "done" && file.canShow;
+  setDrag(el, draggable ? { kind: "file", id: file.id } : null);
+  el.title = draggable ? DRAG_HINT : "";
   const pic = el.querySelector(".pic");
   const picKind = file.thumb || (file.status === "loading" ? "" : "music");
   if (pic.dataset.kind !== picKind) {

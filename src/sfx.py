@@ -7,6 +7,7 @@ only keeps the login token.
 """
 
 import array
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,7 @@ CATEGORIES = {"sfx": "SFX", "music": "Music", "memes": "Memes", "ambience": "Amb
 MAX_BYTES = 10 * 1024 * 1024  # the storage refuses bigger files
 FOLDER = os.path.join(waveform.FOLDER, "sfx")  # deleted when the app closes
 PEAKS_FILE = os.path.join(settings.DATA_DIR, "sfx-waveforms.json")
+DRAG_DIR = os.path.join(settings.DATA_DIR, "Library sounds")  # sounds dragged into other apps
 BARS = 72  # bars in each sound's little waveform
 UPLOAD_KINDS = [
     ("Sounds and videos", ";".join("*." + e for e in (
@@ -202,6 +204,7 @@ class Library:
         self.lock = threading.Lock()
         self.uploads = {}  # id -> a sound being prepared or uploaded
         self.ids = 0
+        self.drag_lock = threading.Lock()
         self.saved = set()  # files downloaded from the library (allowed for "show in folder")
 
     # ---- who you are
@@ -359,6 +362,31 @@ class Library:
                 os.remove(temp)
             raise Error("Couldn't download that sound. Check your internet connection.") from None
         self.saved.add(os.path.normcase(path))
+        return path
+
+    def drag_copy(self, url, name):
+        """A copy of a sound to drag into another app, kept for good (video editors keep
+        pointing at the file). Downloaded once; later drags reuse it."""
+        if not url.startswith(version.SFX_URL.rstrip("/") + "/storage/"):
+            raise Error("That isn't a sound from the library.")
+        stem = re.sub(r'[\\/:*?"<>|]+', "", _clean_name(name)).strip(". ") or "sound"
+        folder = os.path.join(DRAG_DIR, hashlib.sha1(url.encode()).hexdigest()[:12])
+        path = os.path.join(folder, stem + ".mp3")
+        if os.path.isfile(path):
+            return path
+        with self.drag_lock:
+            if not os.path.isfile(path):
+                os.makedirs(folder, exist_ok=True)
+                temp = path + ".part"
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as response, open(temp, "wb") as out:
+                        while chunk := response.read(256 * 1024):
+                            out.write(chunk)
+                    os.replace(temp, path)
+                except (urllib.error.URLError, OSError):
+                    if os.path.exists(temp):
+                        os.remove(temp)
+                    raise Error("Couldn't download that sound. Check your internet connection.") from None
         return path
 
     # ---- uploading

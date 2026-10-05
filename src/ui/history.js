@@ -44,6 +44,10 @@ function historyRow(item) {
       <div class="line"><span class="badge"></span><span class="msg"></span></div>
     </div>
     <div class="actions"></div>`;
+  if (item.exists) {
+    setDrag(el, { kind: "history", id: item.id });
+    el.title = DRAG_HINT;
+  }
   el.querySelector(".thumb").style.backgroundImage = item.thumbnail ? `url("${item.thumbnail}")` : "";
   el.querySelector(".title").textContent = el.querySelector(".title").title = item.title || item.url;
   el.querySelector(".badge").textContent = [(item.format || "").toUpperCase(), (item.qualityLabel || "").replace(/ \(.*\)/, ""), item.trimLabel]

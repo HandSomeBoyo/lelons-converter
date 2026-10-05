@@ -58,6 +58,12 @@ and delete them. **Viewers** can listen and download. New accounts start as
 viewers. The sounds are kept in a free Supabase project; `sfx/setup.sql` sets
 it up.
 
+**Drag and drop into other apps:** grab any finished download, converted file,
+picture, history item or Library sound and drop it straight into DaVinci
+Resolve, Premiere, a Discord chat or a folder, just like dragging a file out of
+File Explorer. Library sounds you drag are kept in
+`%LOCALAPPDATA%\LelonsConverter\Library sounds` so your editor can always find them.
+
 The **History** tab lists everything you've downloaded, newest first. Search
 it, open the folder a file is in, or click **Download again** to get the same
 thing again (handy if you deleted it or want it in another folder).

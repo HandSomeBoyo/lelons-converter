@@ -26,6 +26,7 @@ E_NOINTERFACE = 0x80004002 - 0x100000000
 WM_DESTROY, WM_SIZE, WM_MOVE, WM_ACTIVATE, WM_CLOSE = 0x0002, 0x0005, 0x0003, 0x0006, 0x0010
 WM_SETICON, WM_APP = 0x0080, 0x8000
 WM_SHOW = WM_APP + 1  # "come to the front", from another thread
+WM_DRAG = WM_APP + 2  # "drag this file out of the window", from another thread
 
 _lock = threading.Lock()
 _window = None  # the open Window, if there is one
@@ -59,6 +60,19 @@ def show(url, data_folder, icon, on_closed, placement=None):
         window.cancel()  # taking far too long: the app uses Edge instead, so don't show this one later
         return False
     return window.ok
+
+
+def drag(path):
+    """Start dragging a file out of the window (the mouse button is held on it right now).
+
+    Returns False if there's no window of ours to do it from.
+    """
+    window = _window
+    if not (window and window.alive and window.hwnd):
+        return False
+    window.drag_path = path
+    window.user32.PostMessageW(window.hwnd, WM_DRAG, 0, 0)
+    return True
 
 
 def close():
@@ -177,6 +191,7 @@ class Window:
         self.cancelled = False
         self.webview = None
         self.hwnd = None
+        self.drag_path = None
         self.controller = None
         self.environment = None
         self.ok = False
@@ -258,6 +273,7 @@ class Window:
         gdi32.CreateSolidBrush.restype = wintypes.HANDLE
 
         ctypes.windll.ole32.CoInitializeEx(None, 2)  # COINIT_APARTMENTTHREADED: WebView2 needs it
+        ctypes.windll.ole32.OleInitialize(None)  # for dragging files out of the window
         try:  # sharp text on high-resolution screens
             user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # per monitor v2
         except (AttributeError, OSError):
@@ -423,6 +439,15 @@ class Window:
             _method(self.controller, 23)()  # NotifyParentWindowPositionChanged
         elif message == WM_ACTIVATE and self.controller and wparam & 0xFFFF:
             _method(self.controller, 12, ctypes.c_int)(0)
+        elif message == WM_DRAG:
+            path, self.drag_path = self.drag_path, None
+            if path:
+                try:
+                    import dragout
+                    dragout.drag(path, hwnd)  # Windows runs the drag here until it's dropped
+                except Exception:
+                    pass
+            return 0
         elif message == WM_SHOW:
             if self.user32.IsIconic(hwnd):
                 self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE

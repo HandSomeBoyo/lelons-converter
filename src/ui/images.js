@@ -182,6 +182,8 @@ function renderImageRow(el, item) {
       <div class="actions"></div>`;
   }
   el.className = "image-row " + item.status;
+  setDrag(el, item.status === "done" && item.path ? { kind: "image", path: item.path } : null);
+  el.title = item.status === "done" && item.path ? DRAG_HINT : "";
   const o = imageOptions;
   const img = el.querySelector("img");
   if (item.thumb && img.getAttribute("src") !== item.thumb) img.src = item.thumb;

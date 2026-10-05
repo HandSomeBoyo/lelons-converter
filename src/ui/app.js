@@ -19,6 +19,25 @@ async function api(path, body) {
   return res.json();
 }
 
+// ---- dragging finished files out, straight into DaVinci Resolve, Premiere, a folder...
+
+const DRAG_HINT = "Drag this into DaVinci Resolve, Premiere or any folder";
+
+// what: the file the app should drag ({kind, id} etc.), or null when there's nothing to drag yet.
+function setDrag(el, what) {
+  el._drag = what;
+  el.draggable = !!what;
+  el.classList.toggle("can-drag", !!what);
+}
+
+// The page only notices the drag starting; Windows does the real one, like dragging out of Explorer.
+document.addEventListener("dragstart", (e) => {
+  const el = e.target.closest && e.target.closest(".can-drag");
+  if (!el || !el._drag) return;
+  e.preventDefault();
+  api("/api/drag", el._drag).then((res) => { if (res && !res.ok) alert(res.error); }).catch(() => {});
+});
+
 // ---- format toggle and quality
 
 const AUDIO_FORMATS = ["mp3", "m4a", "wav", "flac"];
@@ -643,6 +662,8 @@ function renderJob(el, job) {
     el.dataset.id = job.id;
   }
   el.className = "job " + job.status;
+  setDrag(el, job.status === "done" ? { kind: "job", id: job.id } : null);
+  el.title = job.status === "done" ? DRAG_HINT : "";
   el.querySelector(".thumb").style.backgroundImage = job.thumbnail ? `url("${job.thumbnail}")` : "";
   el.querySelector(".title").textContent = job.title;
   el.querySelector(".title").title = job.title;
@@ -679,6 +700,7 @@ function renderJob(el, job) {
 function renderQueue(jobs) {
   $("queue").classList.toggle("show", jobs.length > 0);
   $("clear").hidden = !jobs.some((j) => j.status === "done" || j.status === "error");
+  $("dragTip").hidden = !jobs.some((j) => j.status === "done");
   const list = $("jobs");
   const existing = new Map([...list.children].map((el) => [el.dataset.id, el]));
   const ordered = [...jobs].reverse(); // newest on top
