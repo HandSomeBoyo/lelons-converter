@@ -42,13 +42,18 @@ times, or nudge them with -1s and +1s. **Play my part** plays just your pick.
 Then click **Done**. For MP4s and GIFs the video plays above
 the waveform, and dragging a line shows that moment of the video.
 
-The **SFX** tab is a sound library you share with your friends. Type the
-friend code once, then play, search and download everyone's sounds by
-category (SFX, Music, Memes, Ambience, Other), or click **Upload a sound** to
-add your own (any sound or video file, trimmed if you like, up to 10 MB).
-Each sound shows its waveform; click it to play from that spot. You can delete
-your own sounds; whoever has the owner code can delete any.
-The sounds are kept in a free Supabase project; `sfx/setup.sql` sets it up.
+The **Library** tab is a sound library you share with your friends. Everyone
+makes an account with just a username and password, then plays, searches and
+downloads the sounds by category (SFX, Music, Memes, Ambience, Other). Each
+sound shows its waveform (click it to play from that spot) and who uploaded it.
+Click your name to change your profile picture or password.
+
+Accounts have roles. The **Owner** (the username set in `sfx/setup.sql`) gets a
+People menu to see every account, change roles and remove people. **Admins**
+can upload sounds (any sound or video file, trimmed if you like, up to 10 MB)
+and delete them. **Viewers** can listen and download. New accounts start as
+viewers. The sounds are kept in a free Supabase project; `sfx/setup.sql` sets
+it up.
 
 The **History** tab lists everything you've downloaded, newest first. Search
 it, open the folder a file is in, or click **Download again** to get the same

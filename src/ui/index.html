@@ -21,7 +21,7 @@
     <button class="active" data-tab="video">Video</button>
     <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
-    <button data-tab="sfx">SFX</button>
+    <button data-tab="sfx">Library</button>
     <button data-tab="history">History</button>
   </nav>
 
@@ -154,22 +154,52 @@
   </section>
 
   <section class="tab-page" id="sfxTab" hidden>
-    <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
-
-    <div class="sfx-join" id="sfxJoin" hidden>
-      <p class="sfx-lead" id="sfxJoinText">Type the friend code you got to hear everyone's sounds and add your own.</p>
-      <form class="row" id="sfxJoinForm">
-        <label class="input"><input id="sfxCode" placeholder="Friend code" autocomplete="off" spellcheck="false"></label>
-        <button class="convert" type="submit" id="sfxJoinButton">Join</button>
-      </form>
-      <div class="sfx-owner-row">
-        <button type="button" class="link" id="sfxOwnerToggle">I have an owner code</button>
-        <label class="input sfx-owner" id="sfxOwnerBox" hidden><input id="sfxOwnerCode" placeholder="Owner code (lets you delete any sound)" autocomplete="off" spellcheck="false"></label>
+    <div class="lib-head">
+      <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
+      <div class="lib-me" id="libMe" hidden>
+        <button type="button" class="lib-me-button" id="libMeButton" aria-haspopup="menu">
+          <span class="avatar" id="libMeAvatar"></span>
+          <span class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="lib-menu" id="libMenu" role="menu" hidden>
+          <button type="button" id="libPeopleOpen" hidden>People and roles</button>
+          <button type="button" id="libPicture">Change profile picture</button>
+          <button type="button" id="libPictureRemove" hidden>Remove profile picture</button>
+          <button type="button" id="libPasswordOpen">Change password</button>
+          <button type="button" id="libLogout">Log out</button>
+        </div>
+        <input type="file" id="libPictureInput" accept="image/*" hidden>
       </div>
-      <p class="sfx-error" id="sfxJoinError"></p>
+    </div>
+
+    <div class="lib-login" id="libLogin" hidden>
+      <div class="lib-login-card">
+        <div class="lib-login-tabs">
+          <button type="button" class="active" data-mode="login">Log in</button>
+          <button type="button" data-mode="signup">Create account</button>
+        </div>
+        <form id="libLoginForm">
+          <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+          <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
+          <p class="sfx-error" id="libLoginError"></p>
+          <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
+        </form>
+        <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
+      </div>
     </div>
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
+
+    <div class="lib-people" id="libPeople" hidden>
+      <div class="queue-head">
+        <h2>People</h2>
+        <button type="button" class="link" id="libPeopleClose">Back to the sounds</button>
+      </div>
+      <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
+      <p class="sfx-error" id="libPeopleError"></p>
+      <div id="libPeopleList"></div>
+    </div>
 
     <div id="sfxMain" hidden>
       <div class="history-tools">
@@ -183,7 +213,6 @@
       <div class="upload-list" id="sfxUploads"></div>
       <p class="history-empty" id="sfxEmpty"></p>
       <div class="sound-list" id="sfxList"></div>
-      <p class="sfx-foot" id="sfxFoot"></p>
     </div>
   </section>
 
@@ -285,11 +314,28 @@
 
 <!-- Trim editor: play to the spot you want and press "Set start here" / "Set end here",
      or drag the yellow lines. Clicking the waveform only moves the white playhead. -->
+<!-- Library: change password -->
+<div class="modal" id="libPasswordModal" hidden>
+  <div class="dialog lib-password-dialog" role="dialog" aria-labelledby="libPasswordHeading">
+    <h2 id="libPasswordHeading">Change password</h2>
+    <form id="libPasswordForm">
+      <label class="lib-field"><span>Current password</span><input id="libOldPassword" type="password" autocomplete="current-password"></label>
+      <label class="lib-field"><span>New password</span><input id="libNewPassword" type="password" autocomplete="new-password"></label>
+      <p class="sfx-error" id="libPasswordError"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="libPasswordCancel">Cancel</button>
+        <button type="submit" class="small-button">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- SFX: upload a sound -->
 <div class="modal" id="sfxModal" hidden>
   <div class="dialog sfx-dialog" role="dialog" aria-labelledby="sfxHeading">
     <h2 id="sfxHeading">Upload a sound</h2>
-    <p class="sub">Everyone with the friend code can hear and download it. Up to 10 MB (about 7 minutes).</p>
+    <p class="sub">Everyone in the library can hear and download it. Up to 10 MB (about 7 minutes).</p>
     <label class="dropzone compact" id="sfxDrop">
       <input type="file" id="sfxFileInput" accept="audio/*,video/*" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
@@ -309,10 +355,7 @@
         <span class="opt-label">Category</span>
         <div class="chips" id="sfxCategory"></div>
       </div>
-      <div class="opt-row">
-        <span class="opt-label">You</span>
-        <label class="input sfx-field"><input id="sfxUploader" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Your name (shown with the sound)"></label>
-      </div>
+
     </div>
     <p class="sfx-error" id="sfxUploadError"></p>
     <div class="dialog-actions">

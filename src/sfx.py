@@ -1,16 +1,15 @@
-"""The SFX tab: sounds and music shared by everyone who has the friend code.
+"""The Library tab: sounds and music shared with friends, who log in with an account.
 
-The sounds live in a Supabase project (see sfx/setup.sql): a list of sounds
-in its database and the MP3 files in its storage. The friend code is checked
-by the database; it also decides the (secret) folder the files go in.
+Everything lives in a Supabase project (see sfx/setup.sql): accounts, roles
+and the list of sounds in its database, the MP3s and profile pictures in its
+storage. The database checks who may do what (owner, admin or viewer); the app
+only keeps the login token.
 """
 
 import array
-import hashlib
 import json
 import os
 import re
-import secrets
 import subprocess
 import threading
 import urllib.error
@@ -41,16 +40,12 @@ class Error(Exception):
     """Something went wrong; the message is shown as it is."""
 
 
+class LoggedOut(Error):
+    """The login token isn't valid anymore: the page shows the log in screen."""
+
+
 def configured():
     return bool(version.SFX_URL and version.SFX_KEY)
-
-
-def code_hash(code):
-    return hashlib.sha256(("lelons:" + code.strip(" ").lower()).encode()).hexdigest()
-
-
-def folder_for(code):
-    return hashlib.sha256(("folder:" + code_hash(code)).encode()).hexdigest()[:32]
 
 
 def public_url(path):
@@ -60,11 +55,20 @@ def public_url(path):
 # ---------------------------------------------------------------- talking to Supabase
 
 FRIENDLY = {
-    "code": "That friend code isn't right.",
-    "daily": "You've uploaded 100 sounds today. That's the limit, try again tomorrow.",
-    "full": "The sound library is full. Delete some old sounds first.",
-    "denied": "You can only delete sounds you uploaded.",
+    "daily": "You've uploaded a lot today. That's the limit, try again tomorrow.",
+    "full": "The library is full. Delete some old sounds first.",
+    "denied": "Your account isn't allowed to do that. Ask the owner.",
+    "gone": "Someone already deleted that sound.",
+    # what log in and create account can answer
+    "username": "Usernames are 3 to 20 letters or numbers (dots, dashes and _ are fine too).",
+    "password": "Passwords need at least 6 characters.",
+    "taken": "That username is taken. Pick another one.",
+    "wrong": "Wrong username or password.",
+    "wrong_password": "That's not your current password.",
+    "locked": "Too many wrong tries. Wait 2 minutes and try again.",
+    "too_many": "The library has as many accounts as it can take.",
 }
+ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
 
 def _headers():
@@ -91,11 +95,13 @@ def _request(method, path, body=None, content_type="application/json", timeout=3
         if not isinstance(details, dict):
             details = {}
         hint = details.get("hint") or ""
+        if hint == "login":
+            raise LoggedOut("You were logged out. Log in again.") from None
         if hint in FRIENDLY:
             raise Error(FRIENDLY[hint]) from None
         message = details.get("message") or details.get("error") or ""
         if "exceeded the maximum allowed size" in message or e.code == 413:
-            raise Error("That sound is too big. Sounds can be up to 10 MB.") from None
+            raise Error("That file is too big. Sounds can be up to 10 MB.") from None
         raise Error(f"The sound library said no ({e.code}{': ' + message[:120] if message else ''}).") from None
     except (urllib.error.URLError, OSError):
         raise Error("Couldn't reach the sound library. Check your internet connection.") from None
@@ -197,60 +203,123 @@ class Library:
 
     # ---- who you are
 
-    def me(self):
-        """A secret id for this PC: sounds uploaded with it can be deleted by it."""
-        saved = settings.load()
-        if not saved.get("sfx_me"):
-            settings.save(sfx_me=secrets.token_hex(16))
-            saved = settings.load()
-        return saved["sfx_me"]
+    def _token(self):
+        token = settings.load().get("library_token")
+        if not token:
+            raise LoggedOut("Log in first.")
+        return token
+
+    def _user(self, account):
+        return {**account, "roleName": ROLES.get(account["role"], "Viewer"),
+                "avatarUrl": public_url(account["avatar"]) if account.get("avatar") else "",
+                "canUpload": account["role"] in ("owner", "admin"), "isOwner": account["role"] == "owner"}
 
     def account(self):
-        saved = settings.load()
-        return {"configured": configured(), "joined": bool(saved.get("sfx_code")), "owner": bool(saved.get("sfx_owner")),
-                "name": saved.get("sfx_name") or "", "categories": CATEGORIES}
+        """Who's logged in (asks Supabase), or None."""
+        base = {"configured": configured(), "categories": CATEGORIES, "roles": ROLES}
+        if not configured() or not settings.load().get("library_token"):
+            return {**base, "user": None}
+        try:
+            return {**base, "user": self._user(_rpc("lelons_me", token=self._token()))}
+        except LoggedOut:
+            settings.save(library_token="")
+            return {**base, "user": None}
 
-    def join(self, code, owner_code=""):
-        code = str(code or "").strip()
-        if not code:
-            raise Error("Type the friend code first.")
-        result = _rpc("lelons_check", code=code, owner_code=str(owner_code or "").strip())
-        owner = bool(result and result.get("owner"))
-        if owner_code and not owner:
-            raise Error("That owner code isn't right.")
-        settings.save(sfx_code=code, **({"sfx_owner": str(owner_code).strip()} if owner else {}))
+    def _logged_in(self, result):
+        if not result or not result.get("ok"):
+            raise Error(FRIENDLY.get((result or {}).get("error"), "That didn't work. Try again."))
+        settings.save(library_token=result["token"])
         return self.account()
 
-    def leave(self):
-        settings.save(sfx_code="", sfx_owner="")
+    def signup(self, username, password):
+        return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or "")))
 
-    def set_name(self, name):
-        settings.save(sfx_name=_clean_name(name, 40))
+    def login(self, username, password):
+        return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or "")))
 
-    def _code(self):
-        code = settings.load().get("sfx_code")
-        if not code:
-            raise Error("Type the friend code first.")
-        return code
+    def logout(self):
+        token = settings.load().get("library_token")
+        settings.save(library_token="")
+        if token:
+            try:
+                _rpc("lelons_logout", token=token)
+            except Error:
+                pass
+
+    def change_password(self, old, new):
+        result = _rpc("lelons_password", token=self._token(), old_password=str(old or ""), new_password=str(new or ""))
+        if not result or not result.get("ok"):
+            error = (result or {}).get("error")
+            raise Error(FRIENDLY["wrong_password" if error == "wrong" else error] if error in FRIENDLY or error == "wrong"
+                        else "That didn't work. Try again.")
+
+    def _put_file(self, kind, data, content_type):
+        """Upload a file with a ticket from the database. Returns its path in storage."""
+        path = _rpc("lelons_ticket", token=self._token(), kind=kind)
+        _request("POST", f"/storage/v1/object/{BUCKET}/{path}", data, content_type, timeout=300)
+        return path
+
+    def _remove_file(self, path):
+        if path:
+            try:  # the file itself; nothing uses it anymore either way
+                _request("DELETE", f"/storage/v1/object/{BUCKET}/{urllib.parse.quote(path)}")
+            except Error:
+                pass
+
+    def set_picture(self, data):
+        """A new profile picture from an image file's bytes: cut to a square and made small."""
+        import io
+
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
+                out = io.BytesIO()
+                im.save(out, "JPEG", quality=88)
+        except (OSError, ValueError, Image.DecompressionBombError):
+            raise Error("That isn't a picture the app can open.") from None
+        path = self._put_file("avatar", out.getvalue(), "image/jpeg")
+        try:
+            old = _rpc("lelons_set_avatar", token=self._token(), file=path)
+        except Error:
+            self._remove_file(path)
+            raise
+        self._remove_file(old)
+        return self.account()
+
+    def remove_picture(self):
+        self._remove_file(_rpc("lelons_set_avatar", token=self._token(), file=None))
+        return self.account()
+
+    # ---- the owner's People menu
+
+    def people(self):
+        return [{**self._user(person), "created_at": person["created_at"], "last_seen": person["last_seen"],
+                 "sounds": person["sounds"], "me": person["me"]}
+                for person in _rpc("lelons_accounts", token=self._token()) or []]
+
+    def set_role(self, account_id, role):
+        if role not in ("admin", "viewer"):
+            raise Error("Pick Admin or Viewer.")
+        _rpc("lelons_set_role", token=self._token(), account_id=str(account_id), new_role=role)
+
+    def remove_person(self, account_id):
+        self._remove_file(_rpc("lelons_remove_account", token=self._token(), account_id=str(account_id)))
 
     # ---- the list
 
     def sounds(self):
-        rows = _rpc("lelons_list", code=self._code(), me=self.me()) or []
+        rows = _rpc("lelons_list", token=self._token()) or []
         with waveforms.lock:
             known = waveforms._load()
             return [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+                     "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
                      "peaks": known.get(row["path"])} for row in rows]
 
     def delete(self, sound_id):
-        saved = settings.load()
-        path = _rpc("lelons_delete", code=self._code(), me=self.me(), owner_code=saved.get("sfx_owner") or "",
-                    sound_id=str(sound_id))
-        if path:
-            try:  # the file itself; the sound is already gone from the list either way
-                _request("DELETE", f"/storage/v1/object/{BUCKET}/{urllib.parse.quote(path)}")
-            except Error:
-                pass
+        self._remove_file(_rpc("lelons_delete", token=self._token(), sound_id=str(sound_id)))
 
     def download(self, url, name, folder):
         """Save a sound from the library in folder. Returns the file's path."""
@@ -341,7 +410,7 @@ class Library:
             raise Error("Give the sound a name.")
         if category not in CATEGORIES:
             raise Error("Pick a category.")
-        code = self._code()
+        token = self._token()
         with self.lock:
             item = self.uploads.get(str(upload_id))
             if not item:
@@ -349,13 +418,13 @@ class Library:
             if item["status"] == "uploading":
                 return
             item.update(status="uploading", message="Getting it ready...", progress=0, name=name)
-        threading.Thread(target=self._upload, args=(item, code, category, trim), daemon=True).start()
+        threading.Thread(target=self._upload, args=(item, token, category, trim), daemon=True).start()
 
     def _set(self, item, **changes):
         with self.lock:
             item.update(changes)
 
-    def _upload(self, item, code, category, trim):
+    def _upload(self, item, token, category, trim):
         seconds = (trim[1] - trim[0]) if trim else item["seconds"]
         # As good as fits in 10 MB (most sounds are short, so 192 kbps).
         kbps = min(192, int(MAX_BYTES * 0.95 * 8 / max(seconds, 1) / 1000))
@@ -371,19 +440,10 @@ class Library:
             if size > MAX_BYTES:
                 raise Error("That sound is too big. Trim it shorter.")
             self._set(item, progress=0, message="Uploading...")
-            path = f"{folder_for(code)}/{uuid.uuid4().hex}.mp3"
             with open(mp3, "rb") as f:
-                _request("POST", f"/storage/v1/object/{BUCKET}/{path}", f.read(), "audio/mpeg", timeout=300)
-            try:
-                _rpc("lelons_add", code=code, me=self.me(), sound_name=item["name"], sound_category=category,
-                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size,
-                     uploader_name=settings.load().get("sfx_name") or "")
-            except Error:
-                try:
-                    _request("DELETE", f"/storage/v1/object/{BUCKET}/{path}")
-                except Error:
-                    pass
-                raise
+                path = self._put_file("sound", f.read(), "audio/mpeg")
+            _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
+                 file=path, sound_seconds=round(seconds, 2), sound_bytes=size)
             waveforms.remember(path, peaks)
         except Exception as e:
             message = str(e) if isinstance(e, Error) else "Couldn't make an MP3 out of that file."

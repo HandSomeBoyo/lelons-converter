@@ -359,14 +359,41 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if action == "account":
                 result = {"account": library.account()}
-            elif action == "join":
-                result = {"account": library.join(data.get("code"), data.get("ownerCode") or "")}
-            elif action == "leave":
-                library.leave()
+            elif action == "signup":
+                result = {"account": library.signup(data.get("username"), data.get("password"))}
+            elif action == "login":
+                result = {"account": library.login(data.get("username"), data.get("password"))}
+            elif action == "logout":
+                library.logout()
                 result = {"account": library.account()}
-            elif action == "name":
-                library.set_name(data.get("name"))
-                result = {"account": library.account()}
+            elif action == "password":
+                library.change_password(data.get("old"), data.get("new"))
+                result = {}
+            elif action == "picture-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a picture", [
+                        ("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp"), ("All files", "*.*")])
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if not paths:
+                    return self.send_json({"ok": True, "account": None})
+                if os.path.getsize(paths[0]) > 30 * 1024 * 1024:
+                    raise sfx.Error("That picture is too big.")
+                with open(paths[0], "rb") as f:
+                    result = {"account": library.set_picture(f.read())}
+            elif action == "picture-remove":
+                result = {"account": library.remove_picture()}
+            elif action == "people":
+                result = {"people": library.people()}
+            elif action == "role":
+                library.set_role(data.get("id"), data.get("role"))
+                result = {"people": library.people()}
+            elif action == "remove-person":
+                library.remove_person(data.get("id"))
+                result = {"people": library.people()}
             elif action == "list":
                 result = {"sounds": library.sounds()}
             elif action == "peaks":
@@ -411,7 +438,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self.send_error(404)
         except sfx.Error as e:
-            return self.send_json({"ok": False, "error": str(e)})
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't open that file."})
         self.send_json({"ok": True, **result})
 
     def handle_post(self):
@@ -434,6 +463,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/sfx-picture":  # the body is the new profile picture
+            if length > 30 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                return self.send_json({"ok": True, "account": sfx.library.set_picture(self.rfile.read(length))})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/image-add":  # the body is the picture itself
             if length > images.MAX_BYTES:
                 return self.send_json({"ok": False, "error": "That file is too big."})

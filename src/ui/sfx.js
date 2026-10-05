@@ -1,4 +1,4 @@
-// The SFX tab: sounds and music shared by everyone with the friend code.
+// The Library tab: sounds and music shared with friends, who log in with an account.
 // Uses $, api(), clock(), openTrim(), ICONS from app.js, showTab() and sizeText() from images.js.
 
 const SFX_ICONS = {
@@ -27,24 +27,72 @@ function sfxAgo(when) {
   return new Date(when).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 }
 
-// ---- joining
+// ---- accounts
+
+// A round profile picture, or the first letter of the name on a colour.
+function avatarEl(url, name, cls = "") {
+  const el = document.createElement("span");
+  el.className = "avatar " + cls;
+  const letter = () => {
+    const hue = [...(name || "?")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+    el.style.background = `hsl(${hue} 45% 38%)`;
+    el.textContent = (name || "?")[0].toUpperCase();
+  };
+  if (url) {
+    const img = document.createElement("img");
+    img.alt = "";
+    img.onerror = letter;  // picture gone or offline: show their letter
+    img.src = url;
+    el.append(img);
+  } else {
+    letter();
+  }
+  return el;
+}
+
+const sfxUser = () => sfxAccount && sfxAccount.user;
 
 async function openSfx() {
   sfxPeaksFailed.clear();
   if (!sfxAccount) {
     const res = await api("/api/sfx-account", {}).catch(() => null);
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+      $("sfxNotSetUp").hidden = false;
+      $("sfxNotSetUp").textContent = (res && res.error) || "Couldn't reach the library. Check your internet connection.";
+      return;
+    }
     sfxAccount = res.account;
   }
   drawSfxAccount();
-  if (sfxAccount.joined && Date.now() - sfxLastLoad > 5000) loadSfx();
+  if (sfxUser() && Date.now() - sfxLastLoad > 5000) loadSfx();
+}
+
+function setSfxAccount(account) {
+  const was = sfxUser() && sfxUser().id;
+  sfxAccount = account;
+  if (!sfxUser() || sfxUser().id !== was) {
+    sfxSounds = [];
+    $("sfxList").replaceChildren();
+    closePeople();
+  }
+  drawSfxAccount();
+}
+
+// Something said the login ran out: back to the log in screen.
+function sfxLoggedOut(res) {
+  if (!res || !res.loggedOut) return false;
+  setSfxAccount({ ...sfxAccount, user: null });
+  $("libLoginError").textContent = res.error;
+  return true;
 }
 
 function drawSfxAccount() {
   const a = sfxAccount;
+  const user = a.user;
   $("sfxNotSetUp").hidden = a.configured;
-  $("sfxJoin").hidden = !a.configured || a.joined;
-  $("sfxMain").hidden = !a.configured || !a.joined;
+  $("libLogin").hidden = !a.configured || !!user;
+  $("sfxMain").hidden = !a.configured || !user || !$("libPeople").hidden;
+  $("libMe").hidden = !user;
   if (!$("sfxCategory").children.length) {
     for (const [value, label] of Object.entries(a.categories)) {
       const b = document.createElement("button");
@@ -55,43 +103,188 @@ function drawSfxAccount() {
       $("sfxCategory").append(b);
     }
   }
-  $("sfxFoot").innerHTML = "";
-  $("sfxFoot").append(a.owner ? "You're the owner, so you can delete any sound. · " : "");
-  const leave = document.createElement("button");
-  leave.className = "link";
-  leave.textContent = "Change friend code";
-  leave.onclick = async () => {
-    const res = await api("/api/sfx-leave", {});
-    sfxAccount = res.account;
-    sfxSounds = [];
-    $("sfxList").replaceChildren();
-    $("sfxCode").value = "";
-    drawSfxAccount();
-  };
-  $("sfxFoot").append(leave);
+  if (!user) return;
+  $("libMeAvatar").replaceWith(Object.assign(avatarEl(user.avatarUrl, user.username), { id: "libMeAvatar" }));
+  $("libMeName").textContent = user.username;
+  $("libMeRole").textContent = user.roleName;
+  $("libMeRole").className = "role role-" + user.role;
+  $("libPeopleOpen").hidden = !user.isOwner;
+  $("libPictureRemove").hidden = !user.avatar;
+  $("sfxUploadOpen").hidden = !user.canUpload;
 }
 
-$("sfxOwnerToggle").addEventListener("click", () => {
-  $("sfxOwnerBox").hidden = false;
-  $("sfxOwnerToggle").hidden = true;
-  $("sfxOwnerCode").focus();
-});
+// ---- log in / create account
 
-$("sfxJoinForm").addEventListener("submit", async (e) => {
+let loginMode = "login";
+document.querySelectorAll(".lib-login-tabs button").forEach((b) => b.addEventListener("click", () => {
+  loginMode = b.dataset.mode;
+  document.querySelectorAll(".lib-login-tabs button").forEach((x) => x.classList.toggle("active", x === b));
+  $("libLoginButton").textContent = loginMode === "login" ? "Log in" : "Create account";
+  $("libPassword").autocomplete = loginMode === "login" ? "current-password" : "new-password";
+  $("libLoginHint").textContent = loginMode === "login" ? "Log in to hear everyone's sounds."
+    : "Pick a username and a password (at least 6 characters). New accounts can listen and download; the owner can let you upload.";
+  $("libLoginError").textContent = "";
+  $("libUsername").focus();
+}));
+
+$("libLoginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  $("sfxJoinButton").disabled = true;
-  $("sfxJoinError").textContent = "";
-  const res = await api("/api/sfx-join", { code: $("sfxCode").value, ownerCode: $("sfxOwnerCode").value })
+  $("libLoginButton").disabled = true;
+  $("libLoginError").textContent = "";
+  const res = await api("/api/sfx-" + loginMode, { username: $("libUsername").value, password: $("libPassword").value })
     .catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
-  $("sfxJoinButton").disabled = false;
+  $("libLoginButton").disabled = false;
   if (!res.ok) {
-    $("sfxJoinError").textContent = res.error;
+    $("libLoginError").textContent = res.error;
     return;
   }
-  sfxAccount = res.account;
-  drawSfxAccount();
+  $("libPassword").value = "";
+  setSfxAccount(res.account);
   loadSfx();
 });
+
+// ---- your account menu
+
+function closeMenu() { $("libMenu").hidden = true; }
+$("libMeButton").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("libMenu").hidden = !$("libMenu").hidden;
+});
+document.addEventListener("click", (e) => { if (!$("libMe").contains(e.target)) closeMenu(); });
+
+$("libLogout").addEventListener("click", async () => {
+  closeMenu();
+  stopSfx();
+  const res = await api("/api/sfx-logout", {});
+  if (res.ok) setSfxAccount(res.account);
+});
+
+async function sendPicture(promise) {
+  $("libMeName").textContent = "Saving picture...";
+  const res = await promise.catch(() => ({ ok: false, error: "Couldn't save the picture." }));
+  if (sfxLoggedOut(res)) return;
+  if (res.ok && res.account) setSfxAccount(res.account);
+  else drawSfxAccount();
+  if (!res.ok) alert(res.error);
+  else if (res.account) loadSfx(); // your sounds show the new picture
+}
+
+$("libPicture").addEventListener("click", async () => {
+  closeMenu();
+  const res = await api("/api/sfx-picture-pick", {}).catch(() => ({ ok: false, fallback: true }));
+  if (res.fallback) return $("libPictureInput").click(); // not on Windows: the browser's own picker
+  sendPicture(Promise.resolve(res));
+});
+$("libPictureInput").addEventListener("change", () => {
+  const file = $("libPictureInput").files[0];
+  $("libPictureInput").value = "";
+  if (file) sendPicture(fetch("/api/sfx-picture", { method: "POST", body: file }).then((r) => r.json()));
+});
+$("libPictureRemove").addEventListener("click", () => {
+  closeMenu();
+  sendPicture(api("/api/sfx-picture-remove", {}));
+});
+
+$("libPasswordOpen").addEventListener("click", () => {
+  closeMenu();
+  $("libPasswordModal").hidden = false;
+  $("libPasswordError").textContent = "";
+  $("libOldPassword").value = $("libNewPassword").value = "";
+  $("libOldPassword").focus();
+});
+$("libPasswordCancel").addEventListener("click", () => { $("libPasswordModal").hidden = true; });
+$("libPasswordForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const res = await api("/api/sfx-password", { old: $("libOldPassword").value, new: $("libNewPassword").value })
+    .catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
+  if (sfxLoggedOut(res)) return ($("libPasswordModal").hidden = true);
+  if (!res.ok) return ($("libPasswordError").textContent = res.error);
+  $("libPasswordModal").hidden = true;
+});
+
+// ---- People (only the owner)
+
+let people = [];
+const peopleSure = new Set();
+
+function closePeople() {
+  $("libPeople").hidden = true;
+  if (sfxAccount) $("sfxMain").hidden = !sfxUser();
+}
+
+$("libPeopleOpen").addEventListener("click", async () => {
+  closeMenu();
+  $("libPeople").hidden = false;
+  $("sfxMain").hidden = true;
+  $("libPeopleList").textContent = "Loading...";
+  loadPeople(api("/api/sfx-people", {}));
+});
+$("libPeopleClose").addEventListener("click", closePeople);
+
+async function loadPeople(request) {
+  const res = await request.catch(() => ({ ok: false, error: "Couldn't load the accounts." }));
+  if (sfxLoggedOut(res)) return;
+  $("libPeopleError").textContent = res.ok ? "" : res.error;
+  if (res.ok) people = res.people;
+  drawPeople();
+}
+
+function drawPeople() {
+  $("libPeopleList").replaceChildren(...people.map((person) => {
+    const el = document.createElement("div");
+    el.className = "person";
+    el.innerHTML = `<div class="person-info"><b></b><span></span></div><div class="person-role"></div><div class="actions"></div>`;
+    el.prepend(avatarEl(person.avatarUrl, person.username, "big"));
+    el.querySelector("b").textContent = person.username + (person.me ? " (you)" : "");
+    el.querySelector(".person-info span").textContent = [
+      "Joined " + sfxAgo(person.created_at),
+      person.sounds ? `${person.sounds} sound${person.sounds === 1 ? "" : "s"}` : "",
+      person.last_seen ? "seen " + sfxAgo(person.last_seen) : "",
+    ].filter(Boolean).join(" · ");
+    const roleBox = el.querySelector(".person-role");
+    if (person.role === "owner") {
+      roleBox.innerHTML = '<span class="role role-owner">Owner</span>';
+    } else {
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      for (const role of ["admin", "viewer"]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = sfxAccount.roles[role];
+        b.className = person.role === role ? "active" : "";
+        b.onclick = () => {
+          if (person.role === role) return;
+          person.role = role;
+          drawPeople();
+          loadPeople(api("/api/sfx-role", { id: person.id, role }));
+        };
+        chips.append(b);
+      }
+      roleBox.append(chips);
+      const remove = document.createElement("button");
+      remove.className = "icon-button";
+      remove.innerHTML = SFX_ICONS.trash;
+      remove.title = peopleSure.has(person.id) ? "Click again to remove the account" : "Remove this account (their sounds stay)";
+      if (peopleSure.has(person.id)) remove.style.color = "var(--red)";
+      remove.onclick = () => {
+        if (!peopleSure.has(person.id)) {
+          peopleSure.add(person.id);
+          $("libPeopleError").textContent = `Click the bin again to remove ${person.username}. Their sounds stay.`;
+          drawPeople();
+          setTimeout(() => { if (peopleSure.delete(person.id)) { $("libPeopleError").textContent = ""; drawPeople(); } }, 4000);
+          return;
+        }
+        peopleSure.delete(person.id);
+        $("libPeopleError").textContent = "";
+        people = people.filter((p) => p.id !== person.id);
+        drawPeople();
+        loadPeople(api("/api/sfx-remove-person", { id: person.id }));
+      };
+      el.querySelector(".actions").append(remove);
+    }
+    return el;
+  }));
+}
 
 // ---- the list
 
@@ -109,11 +302,7 @@ async function loadSfx() {
   if (res.ok) {
     sfxSounds = res.sounds;
     sfxError = "";
-  } else if (/friend code/.test(res.error)) {
-    // The code was changed: ask for the new one.
-    sfxAccount = { ...sfxAccount, joined: false };
-    drawSfxAccount();
-    $("sfxJoinError").textContent = "The friend code changed. Ask for the new one.";
+  } else if (sfxLoggedOut(res)) {
     return;
   } else {
     sfxError = res.error;
@@ -176,7 +365,17 @@ function sfxRow(sound) {
     const cat = document.createElement("span");
     cat.className = "cat cat-" + sound.category;
     cat.textContent = sound.categoryName;
-    meta.append(cat, [sound.uploader ? "by " + sound.uploader : "", sfxAgo(sound.created_at)].filter(Boolean).join(" · "));
+    meta.append(cat);
+    if (sound.uploader) {
+      const by = document.createElement("span");
+      by.className = "by";
+      by.append("Uploaded by ", avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
+      const name = document.createElement("b");
+      name.textContent = sound.uploader;
+      by.append(name);
+      meta.append(" · ", by);
+    }
+    meta.append(" · " + sfxAgo(sound.created_at));
   }
   const wave = el.querySelector(".sound-wave");
   drawSoundWave(wave, sound);
@@ -207,9 +406,9 @@ function sfxRow(sound) {
       : { text: res.error, kind: "bad" });
     drawSfx();
   });
-  if (sound.mine || sfxAccount.owner) {
+  if (sfxUser() && sfxUser().canUpload) {
     // Deleting needs a second click, so it can't happen by accident.
-    const bin = add(SFX_ICONS.trash, sound.mine ? "Delete your sound" : "Delete (you're the owner)", async () => {
+    const bin = add(SFX_ICONS.trash, "Delete this sound for everyone", async () => {
       if (!sfxSure.has(sound.id)) {
         sfxSure.add(sound.id);
         sfxNotes.set(sound.id, { text: "Click the bin again to delete it for everyone.", kind: "bad" });
@@ -340,7 +539,6 @@ function pickUploadCategory(value) {
 function openSfxUpload() {
   $("sfxModal").hidden = false;
   $("sfxUploadError").textContent = "";
-  $("sfxUploader").value = sfxAccount.name || "";
   pickUploadCategory(sfxCategory !== "all" ? sfxCategory : sfxUploadCategory);
   drawSfxFile();
 }
@@ -391,7 +589,7 @@ async function addSfxFile(file) {
 // Called by images.js for files dropped on the window.
 function sfxTakesDrop(files) {
   if ($("sfxModal").hidden && $("sfxTab").hidden) return false;
-  if (!sfxAccount || !sfxAccount.joined) return false;
+  if (!sfxUser() || !sfxUser().canUpload) return false;
   if ($("sfxModal").hidden) openSfxUpload();
   addSfxFile(files[0]);
   return true;
@@ -439,17 +637,13 @@ $("sfxSend").addEventListener("click", async () => {
     $("sfxUploadError").textContent = "Give the sound a name.";
     return $("sfxName").focus();
   }
-  const uploader = $("sfxUploader").value.trim();
-  if (uploader !== (sfxAccount.name || "")) {
-    const saved = await api("/api/sfx-name", { name: uploader });
-    if (saved.ok) sfxAccount = saved.account;
-  }
   $("sfxSend").disabled = true;
   const res = await api("/api/sfx-upload", {
     id: sfxFile.id, name, category: sfxUploadCategory,
     start: sfxPart ? sfxPart.start : null, end: sfxPart ? sfxPart.end : null,
   }).catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
   $("sfxSend").disabled = false;
+  if (sfxLoggedOut(res)) return ($("sfxModal").hidden = true);
   if (!res.ok) {
     $("sfxUploadError").textContent = res.error;
     return;
@@ -488,13 +682,13 @@ function renderSfxUploads(list) {
   }));
   // A sound finished uploading: show it in the list.
   const done = list.filter((i) => i.status === "done").map((i) => i.id);
-  if (done.some((id) => !sfxDoneSeen.has(id)) && sfxAccount && sfxAccount.joined) loadSfx();
+  if (done.some((id) => !sfxDoneSeen.has(id)) && sfxUser()) loadSfx();
   sfxDoneSeen = new Set(done);
 }
 
 // New sounds from friends show up while the tab is open.
 setInterval(() => {
-  if (!$("sfxTab").hidden && sfxAccount && sfxAccount.joined && !document.hidden) loadSfx();
+  if (!$("sfxTab").hidden && sfxUser() && $("libPeople").hidden && !document.hidden) loadSfx();
 }, 60000);
 
 if (!$("sfxTab").hidden) openSfx();
