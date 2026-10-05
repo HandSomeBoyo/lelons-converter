@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.23.0", items: [
+    "A new Home page! It's the first tab now.",
+    "Live subscriber counters for all our YouTube channels, plus the total. The numbers roll up when they change.",
+    "The newest uploads from our channels: watch them, or convert them in one click.",
+    "See who's online, the newest sounds in the Library and the latest chat messages, right on Home.",
+    "Your own stats (files converted, minutes, favorite format) and your recent downloads, ready to drag into your editor.",
+    "Paste a link on Home and it starts converting right away.",
+  ] },
   { version: "1.22.0", items: [
     "Make the whole app bigger or smaller: Settings, Size. Or hold Ctrl and scroll, or press Ctrl and + or -. Ctrl and 0 goes back to normal.",
     "You can always see who uploaded a sound in the Library now, even in a small window.",

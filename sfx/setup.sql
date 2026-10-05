@@ -13,6 +13,7 @@ create schema if not exists lelons;
 --    app with "Create account" if you haven't yet). Upper/lower case doesn't matter.
 create table if not exists lelons.config (id int primary key default 1 check (id = 1));
 alter table lelons.config add column if not exists owner_username text;
+alter table lelons.config add column if not exists channels text[];  -- the YouTube channels on the Home page (1.23.0; empty: the app's own list)
 alter table lelons.config drop column if exists friend_hash;  -- (from the friend-code version)
 alter table lelons.config drop column if exists owner_hash;
 insert into lelons.config (id, owner_username) values (1, lower(btrim('CHANGE-ME-your-username')))
@@ -759,6 +760,63 @@ begin
   return picture;
 end $$;
 
+-- ---- the Home page (1.23.0)
+
+-- The channels, plus (when logged in) the newest sounds and the newest chat messages to everyone.
+create or replace function public.lelons_home(token text default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts;
+begin
+  if coalesce(token, '') <> '' then
+    begin
+      me := lelons.who(token);
+    exception when others then
+      me := null;
+    end;
+  end if;
+  return json_build_object(
+    'channels', (select to_json(c.channels) from lelons.config c),
+    'logged_in', me.id is not null,
+    'is_owner', coalesce(me.role = 'owner', false),
+    'sounds', case when me.id is null then '[]'::json else coalesce((
+      select json_agg(json_build_object('id', x.id, 'name', x.name, 'category', x.category, 'path', x.path,
+                                        'seconds', x.seconds, 'created_at', x.created_at,
+                                        'uploader', x.by_name, 'uploader_avatar', x.avatar) order by x.created_at desc)
+      from (select s.id, s.name, s.category, s.path, s.seconds, s.created_at,
+                   coalesce(a.username, s.uploader) as by_name, a.avatar from lelons.sounds s
+            left join lelons.accounts a on a.id = s.uploader_id order by s.created_at desc limit 4) x), '[]'::json) end,
+    'chat', case when me.id is null then '[]'::json else coalesce((
+      select json_agg(json_build_object('id', m.id, 'message', m.message, 'created_at', m.created_at,
+                                        'username', a.username, 'avatar', a.avatar,
+                                        'sound_name', s.name, 'file_name', m.file_name) order by m.id)
+      from (select * from lelons.chat c where c.to_id is null order by c.id desc limit 3) m
+      join lelons.accounts a on a.id = m.account_id
+      left join lelons.sounds s on s.id = m.sound_id), '[]'::json) end);
+end $$;
+
+-- The owner picks the channels shown on everyone's Home page (an empty list goes back to the app's own list).
+create or replace function public.lelons_set_channels(token text, urls text[])
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  link text;
+begin
+  if me.role <> 'owner' then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  if coalesce(array_length(urls, 1), 0) > 12 then
+    return json_build_object('ok', false, 'error', 'many');
+  end if;
+  foreach link in array coalesce(urls, '{}') loop
+    if link !~ '^https://www\.youtube\.com/(@[^/?#\s]{1,100}|channel/UC[A-Za-z0-9_-]{22}|c/[^/?#\s]{1,100}|user/[^/?#\s]{1,100})$' then
+      return json_build_object('ok', false, 'error', 'channel');
+    end if;
+  end loop;
+  update lelons.config set channels = case when coalesce(array_length(urls, 1), 0) = 0 then null else urls end;
+  return json_build_object('ok', true);
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -773,7 +831,8 @@ begin
     'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',
     'lelons_feedback_set(text, uuid, boolean, boolean)', 'lelons_ping(text, text)', 'lelons_bye(text)',
     'lelons_chat_send(text, text, text, uuid, text, text, real)', 'lelons_chat_list(text, bigint, text)',
-    'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)'] loop
+    'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
+    'lelons_home(text)', 'lelons_set_channels(text, text[])'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

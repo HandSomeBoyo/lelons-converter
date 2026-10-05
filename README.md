@@ -79,6 +79,11 @@ sounds) or to send them a **private message**.
 Paste **many links at once** (one per line, or with spaces) and the app looks
 them all up and lists them like a playlist, so you can convert them together.
 
+**Home** (the first tab) shows the crew's YouTube channels with live subscriber
+counters and their newest uploads, who's online, the newest Library sounds, the
+latest chat messages, your own stats and your recent downloads. Paste a link there
+to convert it right away. The Owner can change the channels with "Change channels".
+
 **Settings** (at the bottom): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
 videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or

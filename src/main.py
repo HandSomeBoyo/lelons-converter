@@ -30,6 +30,7 @@ import clips  # noqa: E402
 import downloader  # noqa: E402
 import files  # noqa: E402
 import history  # noqa: E402
+import home  # noqa: E402
 import images  # noqa: E402
 import jobs  # noqa: E402
 import media  # noqa: E402
@@ -69,7 +70,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -269,6 +270,36 @@ def pick_folder(current):
 
 
 # ---------------------------------------------------------------- web server
+
+def home_page():
+    """Everything on the Home page."""
+    crew, error = None, ""
+    if sfx.configured():
+        try:
+            crew = sfx.library.home()
+        except sfx.Error as e:
+            error = str(e)
+    links = (crew or {}).get("channels") or version_channels()
+    recent = [i for i in history.items() if i["exists"]][:5]
+    return {
+        "ok": True,
+        "channels": [home.channel(url) for url in links],
+        "channelLinks": links,
+        "canEditChannels": bool(crew and crew["isOwner"]),
+        "loggedIn": bool(crew and crew["loggedIn"]),
+        "sounds": (crew or {}).get("sounds") or [],
+        "chat": (crew or {}).get("chat") or [],
+        "crewError": error,
+        "online": sfx.presence.get(),
+        "stats": history.stats(),
+        "recent": recent,
+    }
+
+
+def version_channels():
+    import version
+    return list(version.CHANNELS)
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -670,6 +701,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/history-remove":
             history.remove(str(data.get("id")))
+            self.send_json({"ok": True})
+        elif self.path == "/api/home":
+            self.send_json(home_page())
+        elif self.path == "/api/home-channels":  # the owner changes the channels on everyone's Home page
+            links = [home.normalize(t) for t in data.get("channels") or [] if str(t).strip()]
+            if None in links:
+                return self.send_json({"ok": False, "error": "One of those isn't a YouTube channel link."})
+            try:
+                sfx.library.set_channels(list(dict.fromkeys(links)))
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            self.send_json({"ok": True, **home_page()})
+        elif self.path == "/api/open-youtube":  # Watch on the Home page
+            url = str(data.get("url") or "")
+            if re.fullmatch(r"https://www\.youtube\.com/(watch\?v=[\w-]{11}|@[^/?#\s]+|channel/[\w-]+|c/[^/?#\s]+|user/[^/?#\s]+)", url):
+                webbrowser.open(url)
             self.send_json({"ok": True})
         elif self.path == "/api/history-clear":
             history.clear()

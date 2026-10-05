@@ -19,14 +19,17 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const name of ["video", "files", "images", "sfx", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "video", "files", "images", "sfx", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
   if (tab === "sfx" && typeof openSfx === "function") openSfx();
   if (tab === "account" && typeof openAccount === "function") openAccount();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-if (["files", "images", "sfx", "history"].includes(loadPref("tab"))) showTab(loadPref("tab"));
+// The app opens on the tab used last; after the update that added Home, on Home once.
+if (["video", "files", "images", "sfx", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 

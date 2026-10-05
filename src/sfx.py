@@ -405,6 +405,36 @@ class Library:
         result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
         return result
 
+    # ---- the Home page
+
+    def home(self):
+        """The channels the owner picked (None: the app's own list), and when logged in the newest
+        sounds and chat messages."""
+        token = settings.load().get("library_token") or None
+        result = _rpc("lelons_home", token=token) or {}
+        if token and not result.get("logged_in"):
+            settings.save(library_token="")
+            presence.poke()
+
+        def pictured(picture):
+            return public_url(picture) if picture else ""
+
+        return {
+            "channels": result.get("channels"),
+            "loggedIn": bool(result.get("logged_in")),
+            "isOwner": bool(result.get("is_owner")),
+            "sounds": [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+                        "uploaderAvatar": pictured(row.get("uploader_avatar"))}
+                       for row in result.get("sounds") or []],
+            "chat": [{**m, "avatarUrl": pictured(m.get("avatar"))} for m in result.get("chat") or []],
+        }
+
+    def set_channels(self, urls):
+        result = _rpc("lelons_set_channels", token=self._token(), urls=list(urls))
+        if not result or not result.get("ok"):
+            raise Error({"many": "That's a lot of channels. 12 is the most."}.get((result or {}).get("error"),
+                        "One of those isn't a YouTube channel link."))
+
     def favorite(self, sound_id, starred):
         _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))
 

@@ -9,6 +9,7 @@ import uuid
 import settings
 
 HISTORY_FILE = os.path.join(settings.DATA_DIR, "history.json")
+STATS_FILE = os.path.join(settings.DATA_DIR, "stats.json")
 KEEP = 300  # newest downloads kept
 KEYS = ("url", "title", "channel", "duration", "seconds", "thumbnail", "format", "quality",
         "qualityLabel", "trim", "trimLabel", "file")
@@ -51,6 +52,67 @@ def add_job(job):
         items.insert(0, item)
         del items[KEEP:]
         _save()
+    count(item.get("format"), _length(item))
+
+
+# ---- your stats on the Home page: everything ever converted (the history only keeps the newest)
+
+_stats = None
+
+
+def _length(item):
+    trim = item.get("trim")
+    try:
+        if isinstance(trim, (list, tuple)) and len(trim) == 2:
+            return max(0.0, float(trim[1]) - float(trim[0]))
+        return max(0.0, float(item.get("seconds") or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _load_stats():
+    global _stats
+    if _stats is None:
+        try:
+            with open(STATS_FILE, encoding="utf-8") as f:
+                saved = json.load(f)
+            _stats = {"files": int(saved["files"]), "seconds": float(saved["seconds"]),
+                      "formats": {str(k): int(v) for k, v in dict(saved["formats"]).items()}}
+        except (OSError, ValueError, TypeError, KeyError):
+            # The first time: start from what the history remembers.
+            _stats = {"files": 0, "seconds": 0.0, "formats": {}}
+            for item in _load():
+                _add(item.get("format"), _length(item))
+    return _stats
+
+
+def _add(fmt, seconds):
+    _stats["files"] += 1
+    _stats["seconds"] += seconds or 0
+    if fmt:
+        _stats["formats"][fmt] = _stats["formats"].get(fmt, 0) + 1
+
+
+def count(fmt, seconds):
+    """One more file converted (in the Video or the Files tab)."""
+    with _lock:
+        _load_stats()
+        _add(str(fmt or "").lower(), seconds)
+        try:
+            os.makedirs(settings.DATA_DIR, exist_ok=True)
+            with open(STATS_FILE + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(_stats, f)
+            os.replace(STATS_FILE + ".tmp", STATS_FILE)
+        except OSError:
+            pass
+
+
+def stats():
+    with _lock:
+        found = _load_stats()
+        top = max(found["formats"].items(), key=lambda kv: kv[1])[0] if found["formats"] else ""
+        return {"files": found["files"], "seconds": round(found["seconds"]), "top": top,
+                "topCount": found["formats"].get(top, 0)}
 
 
 def items():

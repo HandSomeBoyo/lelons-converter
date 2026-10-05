@@ -12,6 +12,7 @@ import shutil
 import tempfile
 import threading
 
+import history
 import media
 import names
 
@@ -196,6 +197,8 @@ class Files:
                 self._update(item, status="error", progress=0, message=message)
             else:
                 self._update(item, status="done", progress=100, out=path, message=message)
+                trim = item["job"]["trim"]
+                history.count(item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
 
     def _run(self, item):
         job = item["job"]

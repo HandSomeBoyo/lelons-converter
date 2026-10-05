@@ -1135,3 +1135,121 @@ button, .convert, .small-button, .ghost-button, .outline-button, .toggle button,
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ---------------------------------------------------------------- Home (1.23.0) */
+.home-paste { margin-bottom: 8px; }
+.home-section { margin-top: 44px; }
+.home-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.home-head h2 { margin: 0; font: 700 22px var(--head); letter-spacing: -.4px; }
+.home-sub { margin: 26px 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.home-muted { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+/* the rolling numbers */
+.roll { display: inline-flex; font-variant-numeric: tabular-nums; line-height: 1; height: 1em; overflow: hidden; }
+.roll-digit { display: inline-block; height: 1em; overflow: hidden; }
+.roll-digit > span { display: flex; flex-direction: column; transition: transform 1.1s var(--ease); will-change: transform; }
+.roll-digit i { font-style: normal; height: 1em; line-height: 1; display: block; }
+.roll-sep { display: inline-block; }
+
+.home-total { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.roll.big { font: 700 clamp(44px, 6vw, 64px) var(--head); letter-spacing: -1.5px; color: var(--accent); }
+.home-total-note { color: var(--muted); font-size: 15px; }
+
+.channel-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.channel-card {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 14px; padding: 16px;
+  border-radius: var(--r); background: var(--panel); min-width: 0;
+  animation: rise-in .5s var(--ease-out) both;
+  transition: transform .45s var(--spring), background-color .25s var(--ease), box-shadow .3s var(--ease);
+}
+.channel-card:hover { transform: translateY(-2px); background: var(--panel2); box-shadow: var(--shadow); }
+.channel-card:active { transform: scale(.98); }
+.channel-card:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.channel-card > .channel-face { display: flex; }
+.channel-name { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.channel-name b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.channel-name small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.channel-subs { display: flex; flex-direction: column; gap: 4px; }
+.channel-subs .roll { font: 700 28px var(--head); letter-spacing: -.5px; }
+.channel-subs small { color: var(--muted); font-size: 12px; }
+.channel-card.loading .channel-subs .roll { animation: pulse 1.2s ease-in-out infinite; }
+.channel-card.failed { opacity: .6; }
+
+.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; grid-template-rows: auto auto; gap: 12px; }
+.upload-card {
+  display: flex; gap: 14px; padding: 10px; border-radius: var(--r); background: var(--panel); min-width: 0;
+  animation: rise-in .5s var(--ease-out) both;
+}
+.upload-card.hero { grid-row: span 2; flex-direction: column; padding: 0; overflow: hidden; }
+.upload-thumb { position: relative; flex: none; width: 112px; align-self: flex-start; aspect-ratio: 16 / 9; border-radius: var(--r-sm); overflow: hidden; background: var(--panel2); }
+.upload-card.hero .upload-thumb { width: 100%; border-radius: 0; }
+.upload-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .8s var(--ease); }
+.upload-card:hover .upload-thumb img { transform: scale(1.04); }
+.upload-length { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 600; color: #fff; background: rgba(0, 0, 0, .7); }
+.upload-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.upload-card.hero .upload-body { padding: 14px 16px 16px; }
+.upload-title { font-size: 14.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.upload-card.hero .upload-title { font-size: 17px; }
+.upload-meta { color: var(--muted); font-size: 12.5px; }
+.upload-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+.upload-card:not(.hero) .upload-actions button { padding: 6px 12px; font-size: 12.5px; }
+
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.home-card { padding: 16px 18px 18px; border-radius: var(--r); background: var(--panel); min-width: 0; animation: rise-in .5s var(--ease-out) both; }
+.home-card.wide { grid-column: 1 / -1; }
+.home-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.home-card-head h3 { margin: 0; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.home-out { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.home-out p { margin: 0; color: var(--muted); }
+.home-out .lib-out-buttons { margin: 0; }
+
+.home-online { display: flex; flex-wrap: wrap; gap: 14px; }
+.home-person { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 58px; transition: transform .4s var(--spring); }
+.home-person:hover { transform: translateY(-2px); }
+.home-person > span:last-child { font-size: 12px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-person .avatar { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--green); }
+
+.home-sounds { display: flex; flex-direction: column; gap: 6px; }
+.home-sounds .chat-sound { max-width: none; margin: 0; }
+.home-sounds .chat-sound .info { flex: 1; }
+.home-sounds .chat-sound .info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.home-chat { display: flex; flex-direction: column; gap: 10px; }
+.home-chat-msg { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.home-chat-msg .avatar.tiny { width: 24px; height: 24px; font-size: 11px; flex: none; }
+.home-chat-msg div { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+.home-chat-msg b { margin-right: 8px; }
+.home-chat-msg small { flex: none; color: var(--muted); font-size: 12px; }
+
+.home-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+.home-stats div { padding: 16px 18px; border-radius: var(--r); background: var(--panel); display: flex; flex-direction: column; gap: 4px; min-width: 0; animation: rise-in .5s var(--ease-out) both; }
+.home-stats b { font: 700 28px var(--head); letter-spacing: -.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-stats span { color: var(--muted); font-size: 13px; }
+.home-stats div:nth-child(2) { animation-delay: 60ms; }
+.home-stats div:nth-child(3) { animation-delay: 120ms; }
+
+.home-files { display: flex; flex-direction: column; gap: 4px; }
+.home-file { display: flex; align-items: center; gap: 12px; padding: 6px; margin: 0 -6px; border-radius: var(--r-sm); transition: background-color .25s var(--ease); }
+.home-file:hover { background: var(--panel2); }
+.home-file-thumb { flex: none; width: 64px; aspect-ratio: 16 / 9; border-radius: var(--r-xs); background: var(--panel2) center / cover; }
+.home-file .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-file .info b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-file .info span { font-size: 12px; color: var(--muted); }
+
+.small-dialog { max-width: 520px; }
+.channels-text {
+  all: unset; box-sizing: border-box; display: block; width: 100%; margin-top: 16px; padding: 12px 14px; border-radius: var(--r-sm);
+  font: 13.5px/1.6 ui-monospace, Consolas, monospace; white-space: pre; overflow-x: auto; background: var(--bg);
+  color: var(--text); user-select: text; caret-color: var(--accent); resize: vertical; min-height: 130px;
+}
+.channels-text:focus { box-shadow: 0 0 0 2px var(--accent); }
+
+@media (max-width: 760px) {
+  .upload-grid, .home-grid { grid-template-columns: 1fr; }
+  .channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .upload-card.hero { grid-row: auto; }
+  .home-stats b { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-digit > span { transition: none; }
+}

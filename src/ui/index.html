@@ -56,14 +56,81 @@
   </header>
 
   <nav class="tabs" id="tabs">
-    <button class="active" data-tab="video">Video</button>
+    <button class="active" data-tab="home">Home</button>
+    <button data-tab="video">Video</button>
     <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
     <button data-tab="sfx">Library</button>
     <button data-tab="history">History</button>
   </nav>
 
-  <section class="tab-page" id="videoTab">
+  <section class="tab-page" id="homeTab">
+    <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
+
+    <form class="row home-paste" id="homeForm">
+      <label class="input">
+        <input id="homeUrl" placeholder="Paste a link to convert it right away" autocomplete="off" spellcheck="false">
+      </label>
+      <button class="convert" type="submit">
+        <span>Convert</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+
+    <div class="home-section">
+      <div class="home-head">
+        <h2>Our channels</h2>
+        <button type="button" class="link" id="homeEditChannels" hidden>Change channels</button>
+      </div>
+      <div class="home-total">
+        <span class="roll big" id="homeTotal"></span>
+        <span class="home-total-note" id="homeTotalNote">Looking at the channels...</span>
+      </div>
+      <div class="channel-grid" id="homeChannels"></div>
+      <h3 class="home-sub" id="homeUploadsHead" hidden>Newest uploads</h3>
+      <div class="upload-grid" id="homeUploads"></div>
+    </div>
+
+    <div class="home-section">
+      <div class="home-head"><h2>The crew</h2></div>
+      <div class="home-card home-out" id="homeCrewOut" hidden>
+        <p>Log in to see who's online, the newest sounds and what people are saying.</p>
+        <div class="lib-out-buttons">
+          <button type="button" class="small-button" id="homeLogin">Log in</button>
+          <button type="button" class="outline-button" id="homeSignup">Create account</button>
+        </div>
+      </div>
+      <div class="home-grid" id="homeCrewGrid" hidden>
+        <div class="home-card">
+          <div class="home-card-head"><h3><i class="online-dot"></i><span id="homeOnlineCount">Online</span></h3></div>
+          <div class="home-online" id="homeOnline"></div>
+          <p class="home-muted" id="homeOnlineMore" hidden></p>
+        </div>
+        <div class="home-card">
+          <div class="home-card-head"><h3>New in the Library</h3><button type="button" class="link" id="homeAllSounds">See all</button></div>
+          <p class="home-muted" id="homeSoundsEmpty" hidden>No sounds yet.</p>
+          <div class="home-sounds" id="homeSounds"></div>
+        </div>
+        <div class="home-card wide">
+          <div class="home-card-head"><h3>Live chat</h3><button type="button" class="link" id="homeOpenChat">Open the chat</button></div>
+          <p class="home-muted" id="homeChatEmpty" hidden>Nobody said anything yet. Say hi!</p>
+          <div class="home-chat" id="homeChat"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-section">
+      <div class="home-head"><h2>You</h2></div>
+      <div class="home-stats" id="homeStats"></div>
+      <div class="home-card">
+        <div class="home-card-head"><h3>Recent downloads</h3><button type="button" class="link" id="homeAllHistory">See all</button></div>
+        <p class="home-muted" id="homeRecentEmpty" hidden>Nothing yet. Paste a link above to get started.</p>
+        <div class="home-files" id="homeRecent"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="videoTab" hidden>
   <h1 class="headline">Paste a link.<br><em>Get the file.</em></h1>
 
   <form class="row" id="form">
@@ -601,6 +668,20 @@
   </form>
 </aside>
 
+<div class="modal" id="channelsModal" hidden>
+  <div class="dialog small-dialog" role="dialog" aria-labelledby="channelsTitle">
+    <h2 id="channelsTitle">Our channels</h2>
+    <p class="sub">One YouTube channel link per line. Everyone sees these on their Home page.</p>
+    <textarea class="channels-text" id="channelsText" rows="6" spellcheck="false" placeholder="https://www.youtube.com/@yourchannel"></textarea>
+    <p class="acct-note" id="channelsNote"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="outline-button" id="channelsCancel">Cancel</button>
+      <button type="button" class="small-button" id="channelsSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="profileModal" hidden>
   <div class="dialog profile-dialog" role="dialog" aria-labelledby="profileName">
     <div class="profile-top">
@@ -692,6 +773,7 @@
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
 <script src="profile.js"></script>
+<script src="home.js"></script>
 <script src="settings.js"></script>
 </body>
 </html>
