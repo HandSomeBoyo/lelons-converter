@@ -75,7 +75,7 @@ function drawInbox() {
     $("inboxList").innerHTML = '<p class="acct-help inbox-empty">Nothing yet. When friends use "Send feedback", it shows up here.</p>';
     return;
   }
-  $("inboxList").replaceChildren(...inbox.map((item) => {
+  setChildren($("inboxList"), inbox.map((item) => {
     const el = document.createElement("div");
     el.className = "inbox-item" + (item.done ? " done" : "");
     el.innerHTML = `<div class="inbox-main"><div class="inbox-head"><b></b><span class="inbox-kind"></span><span class="inbox-when"></span></div>

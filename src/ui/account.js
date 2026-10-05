@@ -143,7 +143,7 @@ async function loadPeople(request) {
 }
 
 function drawPeople() {
-  $("libPeopleList").replaceChildren(...people.map((person) => {
+  setChildren($("libPeopleList"), people.map((person) => {
     const el = document.createElement("div");
     el.className = "person";
     el.innerHTML = `<div class="person-info"><b></b><span></span></div><div class="person-role"></div><div class="actions"></div>`;

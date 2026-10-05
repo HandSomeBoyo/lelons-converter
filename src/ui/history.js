@@ -97,7 +97,7 @@ function drawHistory() {
     return words.every((w) => text.includes(w));
   });
   const list = $("historyList");
-  list.replaceChildren(...shown.slice(0, 300).map(historyRow));
+  setChildren(list, shown.slice(0, 300).map(historyRow));
   $("historyClear").hidden = !historyItems.length;
   $("historyEmpty").hidden = shown.length > 0;
   $("historyEmpty").textContent = historyItems.length

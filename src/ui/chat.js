@@ -53,7 +53,7 @@ function drawOnline() {
   if (!onlineInfo) return box.replaceChildren();
   const people = onlineInfo.people || [];
   const others = Math.max(0, onlineInfo.online - people.length);
-  box.replaceChildren(...people.slice(0, 12).map(personChip));
+  setChildren(box, people.slice(0, 12).map(personChip));
   const rest = others + Math.max(0, people.length - 12);
   if (rest || !people.length) {
     box.append(document.createTextNode(people.length ? `+ ${rest} more` : `${onlineInfo.online} online`));
@@ -183,7 +183,7 @@ function drawConvos() {
   }
   // A private chat you just started (no messages yet).
   if (chatWith && !names.has(chatWith)) list.push(chip(chatWith, chatWith, ""));
-  box.replaceChildren(...list);
+  setChildren(box, list);
   const head = $("chatPrivateHead");
   head.hidden = !chatWith;
   if (chatWith) {
@@ -465,7 +465,7 @@ function drawChat(force) {
     rows.push(el);
     last = m;
   }
-  list.replaceChildren(...rows);
+  setChildren(list, rows);
   if (atBottom || force === "bottom") list.scrollTop = list.scrollHeight;
 }
 
@@ -581,7 +581,7 @@ function suggestNames() {
   const found = knownNames().filter((n) => n.toLowerCase().startsWith(typed)).slice(0, 6);
   if (!found.length) return void (box.hidden = true);
   suggestPick = Math.min(suggestPick, found.length - 1);
-  box.replaceChildren(...found.map((name, i) => {
+  setChildren(box, found.map((name, i) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = i === suggestPick ? "active" : "";

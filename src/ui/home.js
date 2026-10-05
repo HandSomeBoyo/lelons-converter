@@ -51,7 +51,7 @@ function rollNumber(el, value) {
   el.setAttribute("aria-label", text);
   const chars = [...text];
   const old = [...el.children];
-  el.replaceChildren(...chars.map((c, i) => {
+  setChildren(el, chars.map((c, i) => {
     if (!/\d/.test(c)) return Object.assign(document.createElement("span"), { className: "roll-sep", textContent: c });
     let cell = old[old.length - (chars.length - i)]; // the same place, counted from the right
     const fresh = !cell || cell.className !== "roll-digit";
@@ -141,7 +141,7 @@ function drawUploads() {
   const top = all.slice(0, 3);
   $("homeUploadsHead").hidden = !top.length;
   const box = $("homeUploads");
-  box.replaceChildren(...top.map((u, i) => {
+  setChildren(box, top.map((u, i) => {
     const el = document.createElement("div");
     el.className = "upload-card" + (i === 0 ? " hero" : "");
     el.innerHTML = `<div class="upload-thumb"><img alt="" loading="lazy"><span class="upload-length"></span></div>
@@ -171,7 +171,7 @@ function drawCrew() {
   const people = online.people || [];
   const others = Math.max(0, (online.online || 0) - people.length);
   $("homeOnlineCount").textContent = online.online ? `${online.online} online` : "Nobody online";
-  $("homeOnline").replaceChildren(...people.map((p) => {
+  setChildren($("homeOnline"), people.map((p) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "home-person";
@@ -188,7 +188,7 @@ function drawHomeSounds() {
   const d = homeData;
   if (!d || !d.loggedIn) return;
   $("homeSoundsEmpty").hidden = d.sounds.length > 0;
-  $("homeSounds").replaceChildren(...d.sounds.map((s) => {
+  setChildren($("homeSounds"), d.sounds.map((s) => {
     const row = document.createElement("div");
     row.className = "chat-sound" + (homePlaying === s.id ? " playing" : "");
     setDrag(row, { kind: "sound", url: s.url, name: s.name });
@@ -224,7 +224,7 @@ function drawHomeChat() {
   const d = homeData;
   if (!d || !d.loggedIn) return;
   $("homeChatEmpty").hidden = d.chat.length > 0;
-  $("homeChat").replaceChildren(...d.chat.map((m) => {
+  setChildren($("homeChat"), d.chat.map((m) => {
     const row = document.createElement("div");
     row.className = "home-chat-msg";
     const text = document.createElement("div");
@@ -245,7 +245,7 @@ function drawStats() {
     [minutes >= 600 ? Math.round(minutes / 60).toLocaleString() + " h" : minutes.toLocaleString() + " min", "of sound and video"],
     [s.top ? s.top.toUpperCase() : "–", s.top ? `your favorite (${s.topCount}×)` : "your favorite format"],
   ];
-  $("homeStats").replaceChildren(...boxes.map(([value, label]) => {
+  setChildren($("homeStats"), boxes.map(([value, label]) => {
     const box = document.createElement("div");
     box.append(Object.assign(document.createElement("b"), { textContent: value }),
       Object.assign(document.createElement("span"), { textContent: label }));
@@ -256,7 +256,7 @@ function drawStats() {
 function drawRecent() {
   const items = homeData.recent;
   $("homeRecentEmpty").hidden = items.length > 0;
-  $("homeRecent").replaceChildren(...items.map((item) => {
+  setChildren($("homeRecent"), items.map((item) => {
     const row = document.createElement("div");
     row.className = "home-file";
     setDrag(row, { kind: "history", id: item.id });

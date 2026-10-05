@@ -89,7 +89,7 @@ function drawStatsBoard(series) {
   rows.sort((a, b) => byGain ? (b.gained ?? -Infinity) - (a.gained ?? -Infinity) || (b.subscribers || 0) - (a.subscribers || 0)
     : (b.subscribers || 0) - (a.subscribers || 0));
   $("statsBoardNote").textContent = byGain ? (statsDays >= 3650 ? "most subscribers gained" : `most gained in ${statsDays} days`) : "most subscribers";
-  $("statsBoard").replaceChildren(...rows.map((r, i) => {
+  setChildren($("statsBoard"), rows.map((r, i) => {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "stats-row" + (r.loading ? " loading" : "");
@@ -114,7 +114,7 @@ function drawStatsChart(series) {
   const box = $("statsChart");
   const lines = series.filter((s) => s.points.length);
   const all = lines.flatMap((s) => s.points);
-  $("statsLegend").replaceChildren(...lines.map((s) => {
+  setChildren($("statsLegend"), lines.map((s) => {
     const item = document.createElement("span");
     item.innerHTML = `<i style="background:${s.color}"></i>`;
     item.append(s.name);
@@ -201,7 +201,7 @@ function drawStatsTop(series) {
   videos.sort((a, b) => b.views - a.views);
   const top = videos.slice(0, 5);
   $("statsTopEmpty").hidden = top.length > 0;
-  $("statsTop").replaceChildren(...top.map((v, i) => statsBar(v.title, v.channel, v.views, top[0].views, v.color, i,
+  setChildren($("statsTop"), top.map((v, i) => statsBar(v.title, v.channel, v.views, top[0].views, v.color, i,
     () => api("/api/open-youtube", { url: v.url }))));
 }
 
@@ -210,7 +210,7 @@ function drawStatsUploads(series) {
   const counts = series.map((s) => ({ ...s, count: (s.videos || []).filter((v) => v.when && v.when >= since).length }));
   counts.sort((a, b) => b.count - a.count);
   const max = Math.max(1, ...counts.map((c) => c.count));
-  $("statsUploads").replaceChildren(...counts.map((c, i) => statsBar(c.name, c.loading ? "Loading..." : c.count === 1 ? "video" : "videos",
+  setChildren($("statsUploads"), counts.map((c, i) => statsBar(c.name, c.loading ? "Loading..." : c.count === 1 ? "video" : "videos",
     c.count, max, c.color, i)));
 }
 

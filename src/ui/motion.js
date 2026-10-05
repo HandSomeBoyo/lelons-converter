@@ -5,6 +5,21 @@
 // hiding first plays the closing animation (class "leaving") and only then really hides them.
 // Reading el.hidden gives the new value straight away, so the rest of the app doesn't notice.
 
+// Like el.replaceChildren(...nodes), but nodes already in place stay put, and the old ones only go
+// once the new ones are in. replaceChildren empties the list first: with a button in it focused,
+// the browser lays out the empty page and the window jumps to the top.
+function setChildren(parent, nodes, ...more) {
+  nodes = [...nodes, ...more].map((n) => typeof n === "string" ? document.createTextNode(n) : n);
+  const keep = new Set(nodes);
+  let at = parent.firstChild;
+  for (const node of nodes) {
+    while (at && !keep.has(at)) at = at.nextSibling; // old ones are skipped here, removed below
+    if (at === node) { at = at.nextSibling; continue; }
+    parent.insertBefore(node, at);
+  }
+  for (const child of [...parent.childNodes]) if (!keep.has(child)) child.remove();
+}
+
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const LEAVE_MS = 220;
 

@@ -40,7 +40,7 @@ async function openProfile(username) {
   seen.className = p.online ? "online" : "";
   seen.textContent = p.me ? "This is you" : p.online ? "Online now" : p.last_seen ? "Last online " + sfxAgo(p.last_seen) : "Not online for a while";
   const since = new Date(p.created_at).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
-  $("profileStats").replaceChildren(...[
+  setChildren($("profileStats"), [
     [p.sounds, p.sounds === 1 ? "sound uploaded" : "sounds uploaded"],
     [p.messages, p.messages === 1 ? "chat message" : "chat messages"],
     [since, "member since"],
@@ -62,7 +62,7 @@ async function openProfile(username) {
 function drawProfileSounds() {
   const p = profileShown;
   if (!p || !p.recent) return;
-  $("profileSounds").replaceChildren(...p.recent.map((s) => {
+  setChildren($("profileSounds"), p.recent.map((s) => {
     const row = document.createElement("div");
     row.className = "chat-sound" + (profilePlaying === s.id ? " playing" : "");
     setDrag(row, { kind: "sound", url: s.url, name: s.name });

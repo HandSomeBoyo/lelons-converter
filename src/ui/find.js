@@ -8,6 +8,7 @@ let findPage = 1;
 let findResults = [];
 let findMore = false;
 let findBusy = false;
+let findLoadingMore = false;
 let findError = "";
 let findPlaying = null;
 let findTimer = null;
@@ -40,10 +41,12 @@ async function runFind(more = false) {
     findResults = []; findMore = false; findError = ""; findQuery = "";
     return drawFind();
   }
+  if (more && findBusy) return;
   const asked = ++findAsked;
   findBusy = true;
+  findLoadingMore = more;
   findError = "";
-  if (!more) { findQuery = query; findPage = 1; findResults = []; }
+  if (!more) findQuery = query;
   drawFind();
   const res = await api("/api/find-search", { query, source: findSource, page: more ? findPage + 1 : 1 })
     .catch(() => ({ ok: false, error: "Couldn't reach the app." }));
@@ -51,9 +54,12 @@ async function runFind(more = false) {
   findBusy = false;
   if (!res.ok) {
     findError = res.error;
+    if (!more) findResults = [];
   } else {
     findPage = res.page;
-    findResults = more ? findResults.concat(res.results) : res.results;
+    const have = new Set(more ? findResults.map((r) => r.id) : []);
+    findResults = more ? findResults.concat(res.results.filter((r) => !have.has(r.id))) : res.results;
+    if (!more) $("findList").scrollTop = 0;
     findMore = res.more;
   }
   drawFind();
@@ -68,24 +74,20 @@ function drawFindSource() {
   $("findInput").placeholder = findSource === "memes" ? "Search meme sounds, like bruh or vine boom" : "Search sound effects, like whoosh, door or explosion";
 }
 
-function drawFind() {
-  const list = $("findList");
-  const can = sfxUser() && sfxUser().canUpload;
-  $("findState").textContent = findError || (findBusy && !findResults.length ? "Searching..."
-    : findQuery && !findResults.length ? "Nothing found. Try other words." : !findQuery ? (findSource === "memes"
-      ? "Meme sounds come from Myinstants."
-      : "Free sound effects from Freesound and more (Creative Commons). Check the license before using one in a video.") : "");
-  $("findState").className = "find-state" + (findError ? " bad" : "");
-  list.replaceChildren(...findResults.map((r, i) => {
-    const row = document.createElement("div");
-    row.className = "find-row" + (findPlaying === r.id ? " playing" : "");
+// Rows are made once per sound and then only updated, so playing one or loading more doesn't
+// redraw (and re-animate) the whole list.
+const findRows = new Map(); // id -> row element
+
+function findRow(r, i) {
+  let row = findRows.get(r.id);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "find-row";
     row.style.animationDelay = Math.min(i % PER_FIND_PAGE, 12) * 30 + "ms";
-    const play = document.createElement("button");
-    play.type = "button";
-    play.className = "play";
-    play.innerHTML = findPlaying === r.id ? SFX_ICONS.pause : SFX_ICONS.play;
-    play.title = findPlaying === r.id ? "Stop" : "Listen";
-    play.onclick = () => {
+    row.innerHTML = `<button type="button" class="play"></button><div class="find-info"><b></b><small></small></div>
+      <div class="find-actions"><button type="button" class="icon-button" title="Download as MP3">${SFX_ICONS.download}</button></div>`;
+    row.querySelector("b").textContent = row.querySelector("b").title = r.title;
+    row.querySelector(".play").onclick = () => {
       if (findPlaying === r.id) {
         findAudio.pause();
         findPlaying = null;
@@ -97,23 +99,7 @@ function drawFind() {
       }
       drawFind();
     };
-    const info = document.createElement("div");
-    info.className = "find-info";
-    const title = Object.assign(document.createElement("b"), { textContent: r.title, title: r.title });
-    const note = findNotes.get(r.id);
-    const meta = document.createElement("small");
-    meta.className = note ? "note " + note.kind : "";
-    meta.textContent = note ? note.text
-      : [r.seconds ? clock(r.seconds, false) : "", r.creator ? "by " + r.creator : "", r.license, r.site].filter(Boolean).join(" · ");
-    info.append(title, meta);
-    const actions = document.createElement("div");
-    actions.className = "find-actions";
-    const save = document.createElement("button");
-    save.type = "button";
-    save.className = "icon-button";
-    save.title = "Download as MP3";
-    save.innerHTML = SFX_ICONS.download;
-    save.onclick = async () => {
+    row.querySelector(".icon-button").onclick = async () => {
       const folder = await whereToSave();
       if (!folder) return;
       findNotes.set(r.id, { text: "Downloading...", kind: "" });
@@ -122,36 +108,62 @@ function drawFind() {
       findNotes.set(r.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path } : { text: res.error, kind: "bad" });
       drawFind();
     };
-    actions.append(save);
-    if (can) {
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "outline-button find-add";
-      add.textContent = "Add to Library";
-      add.onclick = async () => {
-        add.disabled = true;
-        findNotes.set(r.id, { text: "Getting it ready...", kind: "" });
-        drawFind();
-        const res = await api("/api/find-add", { id: r.id }).catch(() => ({ ok: false, error: "Couldn't download it." }));
-        if (!res.ok) {
-          findNotes.set(r.id, { text: res.error, kind: "bad" });
-          return drawFind();
-        }
-        findNotes.delete(r.id);
-        closeFind();
-        openSfxUpload();
-        pickUploadCategory(findSource === "memes" ? "memes" : "sfx");
-        $("sfxName").dataset.auto = "1";
-        useSfxFile(res.file);
-      };
-      actions.append(add);
-    }
-    row.append(play, info, actions);
-    return row;
-  }));
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "outline-button find-add";
+    add.textContent = "Add to Library";
+    add.onclick = async () => {
+      add.disabled = true;
+      findNotes.set(r.id, { text: "Getting it ready...", kind: "" });
+      drawFind();
+      const res = await api("/api/find-add", { id: r.id }).catch(() => ({ ok: false, error: "Couldn't download it." }));
+      add.disabled = false;
+      if (!res.ok) {
+        findNotes.set(r.id, { text: res.error, kind: "bad" });
+        return drawFind();
+      }
+      findNotes.delete(r.id);
+      drawFind();
+      closeFind();
+      openSfxUpload();
+      pickUploadCategory(findSource === "memes" ? "memes" : "sfx");
+      $("sfxName").dataset.auto = "1";
+      useSfxFile(res.file);
+    };
+    row.querySelector(".find-actions").append(add);
+    findRows.set(r.id, row);
+  }
+  const playing = findPlaying === r.id;
+  row.classList.toggle("playing", playing);
+  const play = row.querySelector(".play");
+  if (play.dataset.on !== String(playing)) {
+    play.dataset.on = String(playing);
+    play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
+    play.title = playing ? "Stop" : "Listen";
+  }
+  const note = findNotes.get(r.id);
+  const meta = row.querySelector("small");
+  meta.className = note ? "note " + note.kind : "";
+  meta.textContent = note ? note.text
+    : [r.seconds ? clock(r.seconds, false) : "", r.creator ? "by " + r.creator : "", r.license, r.site].filter(Boolean).join(" · ");
+  row.querySelector(".find-add").hidden = !(sfxUser() && sfxUser().canUpload);
+  return row;
+}
+
+function drawFind() {
+  const list = $("findList");
+  $("findState").textContent = findError || (findBusy && !findResults.length ? "Searching..."
+    : findQuery && !findResults.length && !findBusy ? "Nothing found. Try other words." : !findQuery ? (findSource === "memes"
+      ? "Meme sounds come from Myinstants."
+      : "Free sound effects from Freesound and more (Creative Commons). Check the license before using one in a video.") : "");
+  $("findState").className = "find-state" + (findError ? " bad" : "");
+  // While a new search runs, the old results stay (a bit faded) instead of the list going blank.
+  list.classList.toggle("stale", findBusy && !findLoadingMore);
+  setChildren(list, findResults.map(findRow));
+  for (const id of findRows.keys()) if (!findResults.some((r) => r.id === id)) findRows.delete(id);
   $("findMore").hidden = !findMore || !findResults.length;
   $("findMore").disabled = findBusy;
-  $("findMore").textContent = findBusy && findResults.length ? "Loading..." : "Show more";
+  $("findMore").textContent = findBusy && findLoadingMore ? "Loading..." : "Show more";
   $("findSpinner").hidden = !findBusy;
 }
 const PER_FIND_PAGE = 20;
@@ -172,8 +184,8 @@ document.querySelectorAll("#findSources button").forEach((b) => b.addEventListen
   if (findSource === b.dataset.source) return;
   findSource = b.dataset.source;
   drawFindSource();
-  findResults = [];
   findNotes.clear();
+  if ($("findInput").value.trim().length < 2) findResults = [];
   if ($("findInput").value.trim().length >= 2) runFind();
   else drawFind();
 }));

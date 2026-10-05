@@ -138,7 +138,7 @@ function closeTour() {
 }
 
 function drawTourBars() {
-  $("tourBars").replaceChildren(...TOUR.map((scene, i) => {
+  setChildren($("tourBars"), TOUR.map((scene, i) => {
     const b = document.createElement("button");
     b.type = "button";
     b.title = scene.title;

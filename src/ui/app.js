@@ -128,8 +128,7 @@ function showPlaylist(list, keep = false) {
     if (!keep) list.entries.forEach((e) => { if (!e.note) picked.add(e.url); });
     $("playlistMeta").textContent = list.batch ? `${list.links} links` + (list.looking ? " · looking them up..." : "")
       : [`${list.entries.length} videos`, list.channel].filter(Boolean).join(" · ");
-    const rows = $("playlistList");
-    rows.innerHTML = "";
+    const rows = [];
     list.entries.forEach((entry, i) => {
       const row = document.createElement("label");
       row.className = "playlist-row";
@@ -148,8 +147,9 @@ function showPlaylist(list, keep = false) {
         if (e.target.checked) picked.add(entry.url); else picked.delete(entry.url);
         updatePlaylistBits();
       });
-      rows.append(row);
+      rows.push(row);
     });
+    setChildren($("playlistList"), rows);
   }
   updatePlaylistBits();
   showFormatExtras();

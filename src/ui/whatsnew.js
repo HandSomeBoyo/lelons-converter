@@ -95,7 +95,7 @@ function newerThan(a, b) {
 }
 
 function showWhatsNew(entries, sub) {
-  $("whatsNewList").replaceChildren(...entries.map((entry) => {
+  setChildren($("whatsNewList"), entries.map((entry) => {
     const block = document.createElement("section");
     const head = document.createElement("h3");
     head.textContent = "Version " + entry.version;

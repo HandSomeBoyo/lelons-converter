@@ -1642,3 +1642,5 @@ button.stats-bar:hover .stats-bar-track { background: var(--line2); }
   .stats-row { grid-template-columns: 22px 32px minmax(0, 1fr) 60px; }
   .stats-spark { display: none; }
 }
+.find-list { transition: opacity .25s var(--ease); }
+.find-list.stale { opacity: .45; }

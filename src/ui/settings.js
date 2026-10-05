@@ -16,7 +16,7 @@ function drawSettings() {
   $("setChatSound").checked = loadPref("chatSound") !== false;
   document.querySelectorAll("#themePicks button").forEach((b) => b.classList.toggle("active", b.dataset.theme === appSettings.theme));
   const light = appSettings.theme === "light";
-  $("accentPicks").replaceChildren(...Object.keys(ACCENT_COLORS).map((name) => {
+  setChildren($("accentPicks"), Object.keys(ACCENT_COLORS).map((name) => {
     const b = document.createElement("button");
     b.type = "button";
     b.title = ACCENT_NAMES[name];
@@ -37,7 +37,7 @@ function syncSettings(s) {
     saveMode: s.saveMode || "ask", folder: s.folder, folderName: s.folderName };
   // At the top: where things go.
   const asks = appSettings.saveMode !== "folder";
-  $("whereText").replaceChildren(...(asks ? [document.createTextNode("Asks where to save")]
+  setChildren($("whereText"), (asks ? [document.createTextNode("Asks where to save")]
     : [document.createTextNode("Saving to "), Object.assign(document.createElement("strong"), { textContent: s.folderName, title: s.folder })]));
   applyTheme(s.theme, s.accent);
   applyZoom(appSettings.zoom, !!s.nativeZoom);
@@ -86,7 +86,7 @@ document.querySelectorAll("#themePicks button").forEach((b) => b.addEventListene
 function drawSize() {
   const zoom = appSettings.zoom;
   $("sizeValue").textContent = Math.round(zoom * 100) + "%";
-  $("sizeTrack").replaceChildren(...ZOOMS.map((z) => {
+  setChildren($("sizeTrack"), ZOOMS.map((z) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "size-dot" + (Math.abs(z - zoom) < 0.01 ? " active" : "") + (z === 1 ? " normal" : "");

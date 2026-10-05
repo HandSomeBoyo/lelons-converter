@@ -265,7 +265,7 @@ function drawSfxSide() {
   $("sfxBrowse").replaceChildren(
     sideButton("All sounds", counts.all, sfxCategory === "all", pick("all"), "side-all"),
     sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip"));
-  $("sfxCats").replaceChildren(...Object.entries(sfxAccount.categories).map(([value, label]) =>
+  setChildren($("sfxCats"), Object.entries(sfxAccount.categories).map(([value, label]) =>
     sideButton(label, counts[value] || 0, sfxCategory === value, pick(value), "cat-" + value)));
   if (sfxUploader && sfxSounds.length && !people.has(sfxUploader)) sfxUploader = "";
   const names = [...people.keys()].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" }));
@@ -299,13 +299,28 @@ const sfxRows = new Map(); // id -> {el, sig}
 
 function rowFor(sound) {
   const note = sfxNotes.get(sound.id);
-  const sig = [sound.name, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0, sfxPlaying === sound.id,
+  const sig = [sound.name, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
     note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload].join("|");
   const kept = sfxRows.get(sound.id);
   if (kept && kept.sig === sig && kept.sound === sound) return kept.el;
   const el = sfxRow(sound);
   sfxRows.set(sound.id, { el, sig, sound });
   return el;
+}
+
+// Playing or not is changed on the row itself (no new row), so the list stays still.
+function markSfxPlaying(el, sound) {
+  const playing = sfxPlaying === sound.id;
+  if (el.classList.contains("playing") === playing && el.dataset.marked) return;
+  el.dataset.marked = "1";
+  el.classList.toggle("playing", playing);
+  const play = el.querySelector(".play");
+  play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
+  play.title = playing ? "Stop" : "Play";
+  if (!playing) {
+    el.querySelectorAll(".bars i.on").forEach((bar) => bar.classList.remove("on"));
+    el.querySelector(".time").textContent = clock(sound.seconds, false);
+  }
 }
 
 // Only this person's sounds (from their profile).
@@ -324,7 +339,11 @@ function drawSfx() {
     (sfxCategory === "favorites" && s.favorite)) && (!sfxUploader || s.uploader === sfxUploader) &&
     words.every((w) => `${s.name} ${s.uploader} ${s.categoryName}`.toLowerCase().includes(w)));
   shown.sort(SORTS[sfxSort] || SORTS.favorites);
-  const rows = shown.slice(0, sfxLimit).map(rowFor);
+  const rows = shown.slice(0, sfxLimit).map((sound) => {
+    const el = rowFor(sound);
+    markSfxPlaying(el, sound);
+    return el;
+  });
   if (shown.length > sfxLimit) {
     const more = document.createElement("button");
     more.type = "button";
@@ -333,7 +352,7 @@ function drawSfx() {
     more.onclick = () => { sfxLimit += 200; drawSfx(); };
     rows.push(more);
   }
-  $("sfxList").replaceChildren(...rows);
+  setChildren($("sfxList"), rows);
   for (const id of sfxRows.keys()) if (!sfxSounds.some((s) => s.id === id)) sfxRows.delete(id);
   const what = sfxCategory === "all" ? "All sounds" : sfxCategory === "favorites" ? "Favorites"
     : sfxAccount.categories[sfxCategory] || "Sounds";
@@ -718,7 +737,7 @@ function renderSfxUploads(list) {
   if (sig === sfxUploadsDrawn) return;
   sfxUploadsDrawn = sig;
   const box = $("sfxUploads");
-  box.replaceChildren(...list.map((item) => {
+  setChildren(box, list.map((item) => {
     const el = document.createElement("div");
     el.className = "upload-strip " + item.status;
     el.innerHTML = `<div class="up-text"><b></b><span></span></div><div class="bar"><div></div></div>`;
@@ -766,7 +785,7 @@ function openEditSound(sound) {
 }
 function drawEditCats() {
   const cats = (sfxAccount && sfxAccount.categories) || {};
-  $("editSoundCats").replaceChildren(...Object.entries(cats).map(([value, label]) => {
+  setChildren($("editSoundCats"), Object.entries(cats).map(([value, label]) => {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
