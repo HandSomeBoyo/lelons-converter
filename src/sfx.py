@@ -252,12 +252,14 @@ class Library:
             return {**base, "user": self._user(_rpc("lelons_me", token=self._token()))}
         except LoggedOut:
             settings.save(library_token="")
+            presence.poke()
             return {**base, "user": None}
 
     def _logged_in(self, result):
         if not result or not result.get("ok"):
             raise Error(FRIENDLY.get((result or {}).get("error"), "That didn't work. Try again."))
         settings.save(library_token=result["token"])
+        presence.poke()
         return self.account()
 
     def signup(self, username, password):
@@ -269,6 +271,7 @@ class Library:
     def logout(self):
         token = settings.load().get("library_token")
         settings.save(library_token="")
+        presence.poke()
         if token:
             try:
                 _rpc("lelons_logout", token=token)
@@ -310,6 +313,33 @@ class Library:
              remove=bool(remove))
         return self.feedback()
 
+    # ---- the live chat
+
+    def chat(self, after=0):
+        """Messages newer than after (0: the newest 100), and who's online."""
+        try:
+            after = max(0, int(after or 0))
+        except (TypeError, ValueError):
+            after = 0
+        result = _rpc("lelons_chat_list", token=self._token(), after=after) or {}
+        messages = [{**m, "avatarUrl": public_url(m["avatar"]) if m.get("avatar") else ""}
+                    for m in result.get("messages") or []]
+        online = presence.remember(result.get("online"))
+        return {"messages": messages, "online": online}
+
+    def chat_send(self, message):
+        result = _rpc("lelons_chat_send", token=self._token(), message=str(message or ""))
+        if not result or not result.get("ok"):
+            raise Error({
+                "short": "Write something first.",
+                "long": "That's a bit long. Keep it under 500 letters.",
+                "slow": "Slow down a little! Wait a few seconds.",
+                "daily": "You've sent a lot today. Try again tomorrow.",
+            }.get((result or {}).get("error"), "That didn't send. Try again."))
+
+    def chat_delete(self, message_id):
+        _rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id))
+
     def favorite(self, sound_id, starred):
         _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))
 
@@ -322,6 +352,7 @@ class Library:
                         else "That didn't work. Try again.")
         self._remove_file(result.get("avatar"))
         settings.save(library_token="")
+        presence.poke()
         return self.account()
 
     def _put_file(self, kind, data, content_type):
@@ -579,6 +610,73 @@ class Library:
 
 
 library = Library()
+
+
+class Presence:
+    """Tells the library this app is open (every minute), and keeps how many are online."""
+
+    EVERY = 60
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.online = None  # {"online": n, "people": [...]}, or None if it isn't known
+        self.wake = threading.Event()
+        self.started = False
+
+    def client_id(self):
+        saved = settings.load().get("client_id")
+        if not (isinstance(saved, str) and re.fullmatch(r"[0-9a-f]{32}", saved)):
+            saved = uuid.uuid4().hex  # a random number for this PC; it says nothing about who you are
+            settings.save(client_id=saved)
+        return saved
+
+    def remember(self, online):
+        if isinstance(online, dict) and "online" in online:
+            people = [{**p, "avatarUrl": public_url(p["avatar"]) if p.get("avatar") else ""}
+                      for p in online.get("people") or []]
+            with self.lock:
+                self.online = {"online": int(online["online"]), "people": people}
+        return self.get()
+
+    def get(self):
+        with self.lock:
+            return self.online
+
+    def start(self):
+        if self.started or not configured():
+            return
+        self.started = True
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def poke(self):
+        """Logged in or out: say so now instead of in a minute."""
+        self.wake.set()
+
+    def _loop(self):
+        failed = 0
+        while True:
+            try:
+                token = settings.load().get("library_token") or ""
+                self.remember(_rpc("lelons_ping", client_id=self.client_id(), token=token))
+                failed = 0
+            except Exception:
+                failed += 1
+                if failed >= 3:  # offline (or the library isn't set up for this yet)
+                    with self.lock:
+                        self.online = None
+            self.wake.wait(self.EVERY)
+            self.wake.clear()
+
+    def bye(self):
+        if not self.started:
+            return
+        try:
+            _request("POST", "/rest/v1/rpc/lelons_bye", {"client_id": self.client_id()}, timeout=3)
+        except Exception:
+            pass
+
+
+presence = Presence()
 
 
 def clean_drag_copies():

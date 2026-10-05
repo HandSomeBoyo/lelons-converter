@@ -26,6 +26,10 @@ QUALITIES = {
 DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossless", "mp4": "1080", "gif": "480"}
 
 
+THEMES = ("dark", "black", "light")
+ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green")
+
+
 def is_valid_quality(fmt, quality):
     return fmt in QUALITIES and quality in [value for value, _ in QUALITIES[fmt]]
 
@@ -41,6 +45,11 @@ def load():
         settings["folder"] = DEFAULT_FOLDER
     settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
     settings["normalize"] = settings.get("normalize") is True  # "Even out volume", off unless turned on
+    settings["hardware"] = settings.get("hardware") is not False  # graphics card for videos and the window
+    if settings.get("theme") not in THEMES:
+        settings["theme"] = "dark"
+    if settings.get("accent") not in ACCENTS:
+        settings["accent"] = "yellow"
     for fmt in QUALITIES:
         if not is_valid_quality(fmt, settings.get(f"quality_{fmt}")):
             settings[f"quality_{fmt}"] = DEFAULT_QUALITY[fmt]

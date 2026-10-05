@@ -69,6 +69,9 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions")  # what the page may remember
+page_pref_lock = threading.Lock()
+
 class State:
     """Everything the window shows. The page polls it a few times a second."""
 
@@ -82,6 +85,9 @@ class State:
         self.auto_update = saved["auto_update"]
         self.seen_version = saved.get("seen_version") or ""  # the last version whose "What's new" was shown
         self.normalize = saved["normalize"]
+        self.hardware = saved["hardware"]
+        self.theme = saved["theme"]
+        self.accent = saved["accent"]
         self.checking = False
         self.installing = False
         self.app_update = None  # newer version info, once found
@@ -107,6 +113,10 @@ class State:
                 "autoUpdate": self.auto_update,
                 "seenVersion": self.seen_version,
                 "normalize": self.normalize,
+                "hardware": self.hardware,
+                "theme": self.theme,
+                "accent": self.accent,
+                "online": sfx.presence.get(),
                 "checking": self.checking,
                 "appUpdate": self.app_update,
                 "appUpdateProgress": self.app_update_progress,
@@ -304,6 +314,11 @@ class Handler(BaseHTTPRequestHandler):
     def send_file(self, path, cookie=False):
         with open(path, "rb") as f:
             body = f.read()
+        if os.path.basename(path) == "index.html":
+            # What the page remembers (see ui/theme.js), plus the theme, so it shows the right colors at once.
+            saved = {**(settings.load().get("page") or {}), "theme": state.theme, "accent": state.accent}
+            text = json.dumps(saved).replace("<", "\\u003c")
+            body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};</script>".encode())
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
         self.send_body(body, content_type, cookie)
 
@@ -445,6 +460,14 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"feedback": library.feedback()}
             elif action == "feedback-set":
                 result = {"feedback": library.set_feedback(data.get("id"), data.get("done"), data.get("remove"))}
+            elif action == "chat":
+                result = library.chat(data.get("after"))
+            elif action == "chat-send":
+                library.chat_send(data.get("message"))
+                result = library.chat(data.get("after"))
+            elif action == "chat-delete":
+                library.chat_delete(data.get("id"))
+                result = {}
             elif action == "favorite":
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}
@@ -739,6 +762,25 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/check-updates":
             start_background(check_for_updates, True)
             self.send_json({"ok": True})
+        elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
+            key, value = data.get("key"), data.get("value")
+            if key in PAGE_PREFS and len(json.dumps(value)) < 4000:
+                with page_pref_lock:
+                    saved = settings.load().get("page") or {}
+                    settings.save(page={**saved, key: value})
+            self.send_json({"ok": True})
+        elif self.path == "/api/settings":  # the Settings window
+            changes = {}
+            if "hardware" in data:
+                changes["hardware"] = bool(data["hardware"])
+                media.use_gpu(changes["hardware"])
+            if data.get("theme") in settings.THEMES:
+                changes["theme"] = data["theme"]
+            if data.get("accent") in settings.ACCENTS:
+                changes["accent"] = data["accent"]
+            state.set(**changes)
+            settings.save(**changes)
+            self.send_json(state.snapshot())
         elif self.path == "/api/seen-version":  # "What's new" was shown for this version
             state.set(seen_version=VERSION)
             settings.save(seen_version=VERSION)
@@ -838,6 +880,7 @@ def open_edge(url):
         f"--user-data-dir={os.path.join(settings.DATA_DIR, 'window')}",
         "--no-first-run",
         "--no-default-browser-check",
+        *([] if state.hardware else ["--disable-gpu"]),
     ])
 
 
@@ -916,7 +959,11 @@ def main():
     with open(PORT_FILE, "w") as f:
         f.write(f"{server.server_port} {TOKEN}")
 
+    media.use_gpu(state.hardware)
+    if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--disable-gpu"
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
+    sfx.presence.start()
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
     start_background(warm_up)
     if state.auto_update:
@@ -943,6 +990,7 @@ def main():
     except OSError:
         pass
     appwindow.close()
+    sfx.presence.bye()  # not "online" any more
     windows.stop_helpers()  # ffmpeg can keep running after the app if it isn't told to stop
     clean_up()
 

@@ -100,6 +100,22 @@ create table if not exists lelons.favorites (
   primary key (account_id, sound_id)
 );
 
+-- Who has the app open right now (each app sends a "still here" every minute).
+create table if not exists lelons.presence (
+  client_id text primary key check (client_id ~ '^[0-9a-f]{32}$'),
+  account_id uuid references lelons.accounts (id) on delete cascade,
+  seen_at timestamptz not null default now()
+);
+
+-- The live chat.
+create table if not exists lelons.chat (
+  id bigint generated always as identity primary key,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  message text not null check (length(message) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_by_account on lelons.chat (account_id, created_at);
+
 alter table lelons.config enable row level security;
 alter table lelons.accounts enable row level security;
 alter table lelons.sessions enable row level security;
@@ -107,6 +123,8 @@ alter table lelons.tickets enable row level security;
 alter table lelons.sounds enable row level security;
 alter table lelons.feedback enable row level security;
 alter table lelons.favorites enable row level security;
+alter table lelons.presence enable row level security;
+alter table lelons.chat enable row level security;
 revoke all on all tables in schema lelons from anon, authenticated;
 
 -- ---- helpers (not reachable from the app directly)
@@ -316,6 +334,89 @@ begin
   end if;
 end $$;
 
+-- ---- online and the live chat
+
+-- "This app is open" (and who's logged in to it). Returns how many are online.
+-- Works logged out too: then the app only counts, nobody's name shows.
+create or replace function public.lelons_ping(client_id text, token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me uuid;
+begin
+  if coalesce(client_id, '') !~ '^[0-9a-f]{32}$' then
+    raise exception 'bad id';
+  end if;
+  select s.account_id into me from lelons.sessions s
+  where s.token_hash = lelons.hash(coalesce(token, '')) and s.last_used > now() - interval '90 days';
+  insert into lelons.presence (client_id, account_id, seen_at) values (client_id, me, now())
+  on conflict on constraint presence_pkey do update set account_id = excluded.account_id, seen_at = now();
+  delete from lelons.presence p where p.seen_at < now() - interval '10 minutes';
+  return lelons.online_json();
+end $$;
+
+-- The app closed: stop counting it.
+create or replace function public.lelons_bye(client_id text)
+returns void language sql security definer set search_path = '' as
+  $$ delete from lelons.presence p where p.client_id = lelons_bye.client_id $$;
+
+create or replace function lelons.online_json() returns json
+  language sql stable security definer set search_path = '' as $$
+  select json_build_object(
+    'online', (select count(*) from lelons.presence p where p.seen_at > now() - interval '150 seconds'),
+    'people', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'role', a.role)
+                                        order by lower(a.username))
+                        from lelons.accounts a where a.id in (select p.account_id from lelons.presence p
+                                                              where p.seen_at > now() - interval '150 seconds')), '[]'::json))
+$$;
+
+-- Send a chat message (everyone with an account can chat).
+create or replace function public.lelons_chat_send(token text, message text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  text_in text := btrim(coalesce(message, ''));
+begin
+  if length(text_in) < 1 then
+    return json_build_object('ok', false, 'error', 'short');
+  end if;
+  if length(text_in) > 500 then
+    return json_build_object('ok', false, 'error', 'long');
+  end if;
+  if (select count(*) from lelons.chat c where c.account_id = me.id and c.created_at > now() - interval '10 seconds') >= 5 then
+    return json_build_object('ok', false, 'error', 'slow');
+  end if;
+  if (select count(*) from lelons.chat c where c.account_id = me.id and c.created_at > now() - interval '1 day') >= 1000 then
+    return json_build_object('ok', false, 'error', 'daily');
+  end if;
+  insert into lelons.chat (account_id, message) values (me.id, text_in);
+  -- Only the newest 2000 messages are kept.
+  delete from lelons.chat c where c.id < (select min(x.id) from (select id from lelons.chat order by id desc limit 2000) x);
+  return json_build_object('ok', true);
+end $$;
+
+-- Messages newer than "after" (0: the newest 100), oldest first, plus who's online.
+create or replace function public.lelons_chat_list(token text, after bigint)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return json_build_object('online', lelons.online_json(), 'messages', coalesce((
+    select json_agg(json_build_object('id', m.id, 'message', m.message, 'created_at', m.created_at,
+                                      'username', a.username, 'avatar', a.avatar, 'role', a.role,
+                                      'mine', m.account_id = me.id) order by m.id)
+    from (select * from lelons.chat c where c.id > coalesce(after, 0) order by c.id desc limit 100) m
+    join lelons.accounts a on a.id = m.account_id), '[]'::json));
+end $$;
+
+-- Delete a message: your own, or anyone's if you're the owner or an admin.
+create or replace function public.lelons_chat_delete(token text, message_id bigint)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  delete from lelons.chat c where c.id = message_id and (c.account_id = me.id or me.role in ('owner', 'admin'));
+end $$;
+
 -- Star or unstar a sound, just for you.
 create or replace function public.lelons_favorite(token text, sound_id uuid, starred boolean)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -517,7 +618,8 @@ begin
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
     'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)',
     'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',
-    'lelons_feedback_set(text, uuid, boolean, boolean)'] loop
+    'lelons_feedback_set(text, uuid, boolean, boolean)', 'lelons_ping(text, text)', 'lelons_bye(text)',
+    'lelons_chat_send(text, text)', 'lelons_chat_list(text, bigint)', 'lelons_chat_delete(text, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="stylesheet" href="style.css">
+<!--SAVED-->
+<script src="theme.js"></script>
 </head>
 <body>
 <main>
@@ -16,6 +18,9 @@
     </div>
     <div class="top-right">
       <div class="where">Saving to <strong id="folder">Downloads</strong> · <button class="link" id="change">Change</button></div>
+      <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
+        <i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b>
+      </button>
       <div class="account" id="libMe" hidden>
         <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
           <span class="avatar account-empty" id="libMeAvatar"></span>
@@ -404,7 +409,7 @@
   </section>
 
   <footer class="footer">
-    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button></span>
+    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button> · <button class="link" id="settingsOpen">Settings</button></span>
     <span>
       <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label> ·
       <button class="link" id="checkNow">Check for updates</button>
@@ -566,6 +571,56 @@
   </div>
 </div>
 
+<!-- Live chat: a panel on the right side -->
+<aside class="chat-panel" id="chatPanel" hidden aria-labelledby="chatHeading">
+  <div class="chat-head">
+    <div class="chat-title">
+      <h3 id="chatHeading">Live chat</h3>
+      <div class="chat-online" id="chatOnline"></div>
+    </div>
+    <button type="button" class="icon-button" id="chatClose" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="chat-out" id="chatOut" hidden>
+    <p>Log in to chat with everyone.</p>
+    <button type="button" class="small-button" id="chatLogin">Log in</button>
+  </div>
+  <div class="chat-list" id="chatList"></div>
+  <p class="chat-note" id="chatNote"></p>
+  <form class="chat-form" id="chatForm" autocomplete="off">
+    <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
+    <button type="submit" class="small-button" id="chatSend" title="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+</aside>
+
+<div class="modal" id="settingsModal" hidden>
+  <div class="dialog settings-dialog" role="dialog" aria-labelledby="settingsHeading">
+    <h2 id="settingsHeading">Settings</h2>
+    <section class="set-block">
+      <h3>Hardware acceleration</h3>
+      <label class="check"><input type="checkbox" id="setHardware"> Use my graphics card</label>
+      <p class="set-help">Makes videos several times faster and keeps the window smooth. Turn it off if videos
+        come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
+    </section>
+    <section class="set-block">
+      <h3>Theme</h3>
+      <div class="theme-picks" id="themePicks">
+        <button type="button" data-theme="dark"><span class="theme-sample dark"><i></i><b></b></span>Dark</button>
+        <button type="button" data-theme="black"><span class="theme-sample black"><i></i><b></b></span>Black</button>
+        <button type="button" data-theme="light"><span class="theme-sample light"><i></i><b></b></span>Light</button>
+      </div>
+    </section>
+    <section class="set-block">
+      <h3>Color</h3>
+      <div class="accent-picks" id="accentPicks"></div>
+    </section>
+    <div class="dialog-actions"><span class="spacer"></span><button type="button" class="small-button" id="settingsClose">Done</button></div>
+  </div>
+</div>
+
 <div class="modal" id="whatsNewModal" hidden>
   <div class="dialog whats-new-dialog" role="dialog" aria-labelledby="whatsNewHeading">
     <img src="/icon.png" alt="" class="update-icon">
@@ -589,5 +644,7 @@
 <script src="account.js"></script>
 <script src="whatsnew.js"></script>
 <script src="feedback.js"></script>
+<script src="chat.js"></script>
+<script src="settings.js"></script>
 </body>
 </html>

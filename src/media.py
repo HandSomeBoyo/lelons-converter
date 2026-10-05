@@ -87,9 +87,20 @@ def _gpu_pixels(name):
     return "nv12" if name in ("h264_qsv", "h264_amf") else "yuv420p"
 
 
+_gpu_allowed = True
+
+
+def use_gpu(on):
+    """The Hardware acceleration setting: off means videos are always made by the processor."""
+    global _gpu_allowed
+    _gpu_allowed = bool(on)
+
+
 def gpu_encoder():
-    """The graphics card's video maker if this PC has one that works, else ""."""
+    """The graphics card's video maker if this PC has one that works (and it's allowed), else ""."""
     global _gpu
+    if not _gpu_allowed:
+        return ""
     with _gpu_lock:
         if _gpu is None:
             _gpu = ""

@@ -86,6 +86,7 @@ function setSfxAccount(account) {
     $("sfxList").replaceChildren();
   }
   drawSfxAccount();
+  if (typeof chatAccountChanged === "function") chatAccountChanged();
 }
 
 // Something said the login ran out: back to the log in screen.
@@ -232,7 +233,7 @@ async function loadSfx() {
 let sfxUploader = ""; // only sounds from this person ("" = everyone)
 let sfxSort = "favorites";
 let sfxLimit = 200; // rows drawn at once; "Show more" draws more
-try { sfxSort = localStorage.getItem("sfxSort") || sfxSort; } catch (e) { /* not important */ }
+sfxSort = loadPref("sfxSort") || sfxSort;
 $("sfxSort").value = sfxSort;
 if (!$("sfxSort").value) $("sfxSort").value = sfxSort = "favorites";
 
@@ -286,7 +287,7 @@ const SORTS = {
 
 $("sfxSort").addEventListener("change", () => {
   sfxSort = $("sfxSort").value;
-  try { localStorage.setItem("sfxSort", sfxSort); } catch (e) { /* not important */ }
+  savePref("sfxSort", sfxSort);
   drawSfx();
 });
 

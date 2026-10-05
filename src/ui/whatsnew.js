@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.20.0", items: [
+    "Live chat! Click \"online\" at the top right to chat with everyone who has an account.",
+    "See how many people have the app open right now, and who.",
+    "Themes: pick Dark, Black or Light, and your own color, in Settings (at the bottom).",
+    "A Hardware acceleration switch in Settings. It's on by default; turn it off if videos come out broken or the app looks glitchy.",
+    "The app now remembers your last tab, your Library sort and your Files and Images options after you close it.",
+  ] },
   { version: "1.19.0", items: [
     "Send feedback: found a bug or want something added? Click \"Send feedback\" at the bottom (or in the account menu) and write to the owner.",
     "A new Library layout: All sounds, Favorites, the categories and who uploaded them are in a panel on the left.",

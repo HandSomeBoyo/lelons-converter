@@ -7,12 +7,12 @@ let imageOptions = { ...DEFAULT_IMAGE_OPTIONS };
 let converting = false;
 
 try {
-  const saved = JSON.parse(localStorage.getItem("imageOptions") || "{}");
+  const saved = loadPref("imageOptions") || {};
   for (const key of ["format", "size", "quality", "square", "gray"]) if (key in saved) imageOptions[key] = saved[key];
 } catch (e) { /* nothing saved */ }
 
 function saveImageOptions() {
-  try { localStorage.setItem("imageOptions", JSON.stringify(imageOptions)); } catch (e) { /* not important */ }
+  savePref("imageOptions", imageOptions);
 }
 
 // ---- tabs
@@ -23,10 +23,10 @@ function showTab(tab) {
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
   if (tab === "sfx" && typeof openSfx === "function") openSfx();
   if (tab === "account" && typeof openAccount === "function") openAccount();
-  try { localStorage.setItem("tab", tab); } catch (e) { /* not important */ }
+  if (loadPref("tab") !== tab) savePref("tab", tab);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-try { if (["files", "images", "sfx", "history"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
+if (["files", "images", "sfx", "history"].includes(loadPref("tab"))) showTab(loadPref("tab"));
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 

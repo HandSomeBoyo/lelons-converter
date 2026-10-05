@@ -67,6 +67,15 @@ panel on the left picks what you see: all sounds, your favorites, a category,
 or one person's uploads. **Sort** lists them favorites first, newest, oldest,
 by name, by length or by uploader.
 
+**Live chat:** the "online" button at the top right shows how many people have
+the app open right now. Click it to chat with everyone who has an account. Your
+own messages (and, for the Owner and Admins, anyone's) can be deleted.
+
+**Settings** (at the bottom): **Hardware acceleration** (on by default) uses
+your graphics card to make videos faster and draw the window. Turn it off if
+videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or
+Light) and an accent color too.
+
 **Send feedback** (at the bottom of the app, or in the account menu) lets anyone
 with an account report a bug or ask for something new. The Owner reads them in
 **Feedback inbox** in the account menu and can mark them done or delete them.

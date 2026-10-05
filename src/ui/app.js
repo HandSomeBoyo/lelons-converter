@@ -390,7 +390,7 @@ function drawWave() {
   if (!editor.peaks) return;
   const bar = 3, gap = 1, count = Math.floor(width / (bar + gap));
   const middle = height / 2, peaks = editor.peaks;
-  ctx.fillStyle = "#d9d5cc";
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--wave").trim() || "#d9d5cc";
   for (let i = 0; i < count; i++) {
     // the loudest moment in the stretch of sound this bar covers
     const from = Math.floor((i / count) * peaks.length), to = Math.max(from + 1, Math.floor(((i + 1) / count) * peaks.length));
@@ -779,6 +779,8 @@ function render(s) {
   if (typeof renderHistoryVersion === "function") renderHistoryVersion(s.historyVersion);
   if (typeof renderSfxUploads === "function") renderSfxUploads(s.sfxUploads);
   renderUpdatePopup(s);
+  if (typeof syncSettings === "function") syncSettings(s);
+  if (typeof renderOnline === "function") renderOnline(s.online);
 }
 
 let failedChecks = 0;

@@ -12,7 +12,7 @@ const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480" };
 
 let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false };
 try {
-  const saved = JSON.parse(localStorage.getItem("fileOptions") || "{}");
+  const saved = loadPref("fileOptions") || {};
   fileOptions = { ...fileOptions, ...saved, quality: { ...FILE_DEFAULTS, ...(saved.quality || {}) } };
 } catch (e) { /* nothing saved */ }
 
@@ -23,7 +23,7 @@ let fileError = ""; // shown under the options until they're changed
 
 function saveFileOptions() {
   fileError = "";
-  try { localStorage.setItem("fileOptions", JSON.stringify(fileOptions)); } catch (e) { /* not important */ }
+  savePref("fileOptions", fileOptions);
 }
 
 // ---- adding files
