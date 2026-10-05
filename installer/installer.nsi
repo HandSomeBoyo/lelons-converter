@@ -67,10 +67,11 @@ Function SkipWelcomeWhenUpdating
 FunctionEnd
 
 ; Files of a running app can't be replaced, so close the app first.
-; Only programs started from this app's folder are closed.
+; Only programs started from this app's folder, or using a file from it
+; (like WebView2Loader.dll), are closed.
 !macro CloseRunningApp
   System::Call 'kernel32::SetEnvironmentVariable(t "LELONS_DIR", t "$INSTDIR")'
-  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,'Lelons Converter',ffmpeg,deno -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
+  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "$$d = $$env:LELONS_DIR + '\'; Get-Process -ErrorAction SilentlyContinue | Where-Object { try { ($$_.Path -and $$_.Path.StartsWith($$d, 'OrdinalIgnoreCase')) -or ($$_.Modules | Where-Object { $$_.FileName -and $$_.FileName.StartsWith($$d, 'OrdinalIgnoreCase') }) } catch { $$false } } | Stop-Process -Force -ErrorAction SilentlyContinue"`
   Pop $0
   Sleep 800
 !macroend
@@ -78,8 +79,22 @@ FunctionEnd
 Section "Install"
   !insertmacro CloseRunningApp
   ; Clear out an older version first so no stale files are left behind.
+  ; If something still holds a file (an app that's slow to close), close it again and wait a bit.
+  StrCpy $1 0
+  clear_old:
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\runtime"
+  IfFileExists "$INSTDIR\app\*.*" still_there
+  IfFileExists "$INSTDIR\runtime\*.*" still_there
+  Goto cleared
+  still_there:
+  IntOp $1 $1 + 1
+  IntCmp $1 6 cleared
+  DetailPrint "Waiting for Lelons Converter to close..."
+  !insertmacro CloseRunningApp
+  Sleep 1500
+  Goto clear_old
+  cleared:
   Delete "$INSTDIR\${APP_NAME}.exe"
 
   SetOutPath "$INSTDIR"
