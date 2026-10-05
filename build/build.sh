@@ -35,7 +35,10 @@ mv "$STAGE"/runtime/Lib/site-packages/imageio_ffmpeg/binaries/ffmpeg-*.exe "$STA
 
 echo "==> Trimming things the app doesn't need"
 R="$STAGE/runtime"
-rm -rf "$R/include" "$R/libs" "$R/Lib/test" "$R/Lib/idlelib" "$R/Lib/turtledemo" "$R/Lib/tkinter" "$R/Lib/ensurepip"
+rm -rf "$R/include" "$R/libs" "$R/Lib/test" "$R/Lib/idlelib" "$R/Lib/turtledemo" "$R/Lib/tkinter" "$R/Lib/ensurepip" \
+  "$R/Lib/venv" "$R/Lib/pydoc_data" "$R/Lib/site-packages/share"
+# pip isn't used: the app downloads yt-dlp updates itself.
+rm -rf "$R"/Lib/site-packages/pip "$R"/Lib/site-packages/pip-*.dist-info
 find "$R" -name "__pycache__" -type d -prune -exec rm -rf {} +
 # pip --target puts Linux-style launch scripts in bin/; only deno.exe is needed.
 find "$R/Lib/site-packages/bin" -type f ! -name "deno.exe" -delete
@@ -71,13 +74,8 @@ EXE="$STAGE/runtime/Lelons Converter.exe"
   --set-version-string InternalName "Lelons Converter" \
   --set-version-string OriginalFilename "Lelons Converter.exe" | cat
 
-# Python turns code into a faster-loading form the first time it runs it,
-# which made the app's first start slow. Do that now instead, with the
-# bundled Windows Python running under Wine.
-echo "==> Precompiling Python code"
-# (Wine needs an open stdin, so feed it one.)
-{ yes 2>/dev/null || true; } | WINEDEBUG=-all "$WINE" "$STAGE/runtime/python.exe" -E -s -m compileall -q -j 0 \
-  --invalidation-mode unchecked-hash "$STAGE/runtime/Lib" "$STAGE/app" >/dev/null
+# (Python code is turned into its faster-loading form by the installer, on
+# the PC itself, which keeps the download smaller. See installer.nsi.)
 
 echo "==> Making the installer"
 (cd "$ROOT/installer" && makensis -V2 -DAPP_VERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$ROOT/dist/Lelons Converter Setup.exe" installer.nsi)

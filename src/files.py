@@ -24,7 +24,11 @@ PICK_KINDS = [
     ("All files", "*.*"),
 ]
 PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "thumb",
-          "status", "progress", "message", "trimLabel", "run")
+          "status", "progress", "message", "trimLabel", "run", "cancel")
+
+
+class Stopped(Exception):
+    pass
 
 
 def _clock(seconds):
@@ -83,7 +87,7 @@ class Files:
             "seconds": found["duration"], "video": found["video"], "audio": found["audio"],
             "width": found["width"], "height": found["height"],
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
-            "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0,
+            "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
         }
         with self.lock:
             self.items.append(item)
@@ -106,6 +110,15 @@ class Files:
                         os.remove(path)
                     except OSError:
                         pass
+
+    def cancel(self, file_id):
+        """Stop converting a file. A waiting one stops right away, a running one in a moment."""
+        with self.lock:
+            for item in self.items:
+                if item["id"] == str(file_id) and item["status"] == "queued":
+                    item.update(status="error", progress=0, message="Stopped.")
+                elif item["id"] == str(file_id) and item["status"] == "active":
+                    item.update(cancel=True, message="Stopping...")
 
     def clear(self):
         for item in self.snapshot():
@@ -151,7 +164,8 @@ class Files:
                 trim = None
                 try:
                     start, end = float(pick.get("start")), float(pick.get("end"))
-                    if 0 <= start < end and not (start <= 0.05 and end >= item["seconds"] - 0.05):
+                    whole = start <= 0.05 and end >= item["seconds"] - 0.05 and fmt != "gif"
+                    if 0 <= start < end and not whole:
                         trim = (start, min(end, item["seconds"] or end))
                 except (TypeError, ValueError):
                     pass
@@ -170,12 +184,15 @@ class Files:
                 while not any(i["status"] == "queued" for i in self.items):
                     self.wake.wait()
                 item = next(i for i in self.items if i["status"] == "queued")
-                item.update(status="active", message="Starting...")
+                item.update(status="active", message="Starting...", cancel=False)
             try:
                 path = self._run(item)
                 message = f"Saved as {os.path.basename(path)} · {os.path.getsize(path) / 1e6:.1f} MB"
             except Exception as e:
-                message = str(e) if isinstance(e, (ValueError, OSError)) else "Converting didn't work."
+                if item.get("cancel"):
+                    message = "Stopped."
+                else:
+                    message = str(e) if isinstance(e, (ValueError, OSError)) else "Converting didn't work."
                 self._update(item, status="error", progress=0, message=message)
             else:
                 self._update(item, status="done", progress=100, out=path, message=message)
@@ -200,6 +217,8 @@ class Files:
         verb = {"gif": "Making the GIF", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
 
         def progress(percent):
+            if item.get("cancel"):
+                raise Stopped()  # stops ffmpeg
             self._update(item, progress=percent, message=f"{verb}... {percent:.0f}%")
 
         progress(0)

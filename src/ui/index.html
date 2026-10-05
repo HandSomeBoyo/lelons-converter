@@ -21,6 +21,7 @@
     <button class="active" data-tab="video">Video</button>
     <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
+    <button data-tab="history">History</button>
   </nav>
 
   <section class="tab-page" id="videoTab">
@@ -149,6 +150,19 @@
         </button>
       </div>
     </div>
+  </section>
+
+  <section class="tab-page" id="historyTab" hidden>
+    <h1 class="headline">Everything you got.<br><em>Get it again.</em></h1>
+    <div class="history-tools">
+      <label class="input history-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="historySearch" placeholder="Search your downloads" autocomplete="off" spellcheck="false">
+      </label>
+      <button type="button" class="link" id="historyClear" hidden>Clear history</button>
+    </div>
+    <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you download in the Video tab shows up here.</p>
+    <div class="jobs history-list" id="historyList"></div>
   </section>
 
   <section class="tab-page" id="imagesTab" hidden>
@@ -313,5 +327,6 @@
 <script src="app.js"></script>
 <script src="images.js"></script>
 <script src="files.js"></script>
+<script src="history.js"></script>
 </body>
 </html>

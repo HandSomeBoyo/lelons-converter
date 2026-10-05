@@ -8,6 +8,7 @@ let previewSeconds = 0;
 const ICONS = {
   remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>',
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
 };
 
@@ -46,6 +47,7 @@ document.querySelectorAll("#toggle button").forEach((btn) => {
     format = btn.dataset.format;
     document.querySelectorAll("#toggle button").forEach((b) => b.classList.toggle("active", b === btn));
     showFormatExtras();
+    if (previewSeconds && $("preview").classList.contains("show")) prefetchWave(previewUrl, previewSeconds);
     refresh();
   });
 });
@@ -155,6 +157,7 @@ async function lookUp(url) {
     showPreview("", p.title, [p.channel, p.duration].filter(Boolean).join(" · "), p.thumbnail);
     previewSeconds = p.seconds || 0;
     $("wholePlaylist").hidden = !playlistIdIn(url);
+    prefetchWave(url, previewSeconds);
   } else {
     showPlaylist(null);
     showPreview("error", res.error, "Check the link and try again.", "");
@@ -172,7 +175,32 @@ $("url").addEventListener("input", () => {
 // ---- trim editor: a waveform with a start line and an end line
 
 let trim = null; // the part to keep, {start, end} in seconds, or null for all of it
-const waves = new Map(); // url -> waveform from the app, so it only loads once
+const waves = new Map(); // url -> waveform from the app (or the request still loading), so it only loads once
+
+function loadWave(key, request, video, prefetch = false) {
+  if (!waves.has(key)) {
+    const loading = api("/api/waveform", { ...request, video, prefetch })
+      .catch(() => ({ ok: false, error: video ? "Couldn't load the video." : "Couldn't load the sound." }));
+    loading.prefetch = prefetch;
+    waves.set(key, loading);
+    loading.then((wave) => {
+      if (waves.get(key) !== loading) return;
+      if (wave.ok) waves.set(key, wave);
+      else waves.delete(key); // try again next time
+    });
+  }
+  return waves.get(key);
+}
+
+// Load the trim editor's sound (or video) right after a lookup, so Trim opens
+// straight away. Only for shorter videos: long ones would download a lot for nothing.
+const PREFETCH_SECONDS = 20 * 60;
+function prefetchWave(url, seconds) {
+  if (!seconds || seconds > PREFETCH_SECONDS) return;
+  const video = isVideoFormat(format);
+  if (video && seconds > PREFETCH_SECONDS / 2) return;
+  loadWave((video ? "video:" : "audio:") + url, { url }, video, true);
+}
 // pos: where the white playhead is. stopAt: where playing stops ("Play my part" stops at the end line).
 const editor = { url: "", duration: 0, peaks: null, start: 0, end: 0, pos: 0, dragging: null, raf: 0, stopAt: null };
 // What plays in the editor: the video for MP4s (so you can see where you are), else just the sound.
@@ -225,11 +253,12 @@ async function openTrim(source) {
   setPlayable(false);
   layOut();
   let wave = waves.get(key);
-  if (!wave) {
+  if (!wave || wave instanceof Promise) {
     waveMessage("loading", video ? "Loading the video..." : "Loading the sound...");
-    wave = await api("/api/waveform", { ...source.request, video })
-      .catch(() => ({ ok: false, error: video ? "Couldn't load the video." : "Couldn't load the sound." }));
-    if (wave.ok) waves.set(key, wave);
+    const wasPrefetch = wave && wave.prefetch;
+    wave = await loadWave(key, source.request, video);
+    // Loading it ahead of time didn't work: try once more now that it's needed.
+    if (!wave.ok && wasPrefetch && editor.url === key) wave = await loadWave(key, source.request, video);
   }
   if (editor.url !== key || $("trimModal").hidden) return; // closed or changed meanwhile
   if (!wave.ok) {
@@ -531,7 +560,8 @@ $("trimDone").addEventListener("click", () => {
   if (max && editor.end - editor.start > max + 0.05) {
     return warn(`That's ${clock(editor.end - editor.start)}. GIFs can be up to ${max} seconds, so move the lines closer together.`);
   }
-  const whole = editor.start <= 0.05 && editor.end >= editor.duration - 0.05;
+  // (A GIF without a part picked would be the first 10 seconds, so a GIF of all of it keeps the part.)
+  const whole = editor.start <= 0.05 && editor.end >= editor.duration - 0.05 && !(trimSource && trimSource.maxLength);
   const part = whole || !editor.duration ? null : { start: editor.start, end: editor.end };
   const source = trimSource;
   closeTrim();
@@ -628,12 +658,12 @@ function renderJob(el, job) {
     job.status === "active" && job.progress && job.progress < 100 ? Math.floor(job.progress) + "%" : "";
 
   const actions = el.querySelector(".actions");
-  const wanted = { queued: ["remove"], active: [], done: ["folder", "remove"], error: ["retry", "remove"] }[job.status];
+  const wanted = { queued: ["remove"], active: job.cancel ? [] : ["stop"], done: ["folder", "remove"], error: ["retry", "remove"] }[job.status];
   if (actions.dataset.kind !== wanted.join()) {
     actions.dataset.kind = wanted.join();
     actions.innerHTML = "";
-    const titles = { remove: "Remove from list", retry: "Try again", folder: "Show in folder" };
-    const routes = { remove: "/api/remove", retry: "/api/retry", folder: "/api/show-file" };
+    const titles = { remove: "Remove from list", retry: "Try again", folder: "Show in folder", stop: "Stop this download" };
+    const routes = { remove: "/api/remove", retry: "/api/retry", folder: "/api/show-file", stop: "/api/cancel" };
     for (const kind of wanted) {
       const b = document.createElement("button");
       b.className = "icon-button";
@@ -716,6 +746,7 @@ function render(s) {
   }
   renderQueue(s.jobs);
   if (typeof renderFiles === "function") renderFiles(s.files);
+  if (typeof renderHistoryVersion === "function") renderHistoryVersion(s.historyVersion);
   renderUpdatePopup(s);
 }
 
@@ -735,4 +766,5 @@ async function refresh() {
 showFormatExtras();
 refresh();
 setInterval(refresh, 500);
-window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye"));
+// (The token from the address: a goodbye message can't carry the window's cookie when it closes.)
+window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye?t=" + encodeURIComponent(new URLSearchParams(location.search).get("t") || "")));

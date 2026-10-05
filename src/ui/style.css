@@ -441,3 +441,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .options { flex-wrap: wrap; align-items: center; }
 .file-row.skipped .pic, .file-row.skipped .title { opacity: .45; }
 .file-row.skipped .msg { color: var(--muted); }
+
+/* History tab */
+.history-tools { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
+.history-search { height: 44px; gap: 10px; color: var(--muted); }
+.history-search svg { width: 16px; height: 16px; flex: none; }
+.history-search input { font-size: 14px; }
+.history-tools .link { font-size: 13px; white-space: nowrap; }
+.history-empty { color: var(--muted); font-size: 14px; margin: 18px 0; }
+.history-empty[hidden] { display: none; }
+.history-list .job .msg.gone { color: var(--red); }
+.history-list .again { height: 30px; padding: 0 12px; font-size: 13px; white-space: nowrap; }

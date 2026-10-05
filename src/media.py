@@ -55,10 +55,15 @@ def run(args, seconds, on_progress=None):
     reader = threading.Thread(target=lambda: errors.extend(process.stderr.read().decode("utf-8", "replace").splitlines()),
                               daemon=True)
     reader.start()
-    for line in process.stdout:
-        match = re.match(rb"out_time_(?:us|ms)=(\d+)", line)
-        if match and seconds and on_progress:
-            on_progress(min(99.0, int(match[1]) / 1e6 / seconds * 100))
+    try:
+        for line in process.stdout:
+            match = re.match(rb"out_time_(?:us|ms)=(\d+)", line)
+            if match and seconds and on_progress:
+                on_progress(min(99.0, int(match[1]) / 1e6 / seconds * 100))
+    except BaseException:  # on_progress asked to stop
+        process.kill()
+        process.wait()
+        raise
     process.wait()
     reader.join()
     if process.returncode != 0:

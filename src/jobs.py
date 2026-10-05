@@ -10,6 +10,7 @@ import downloader
 INFO_TTL = 30 * 60  # download links from a lookup stay valid for a while, not forever
 INFO_KEEP = 100  # looked-up videos kept at most (each can be big)
 WORKERS = 3  # downloads at the same time
+STOPPED = "Stopped."
 
 # What the download list says during each step after downloading.
 STEPS = {
@@ -24,7 +25,8 @@ STEPS = {
 
 
 class Queue:
-    def __init__(self):
+    def __init__(self, on_done=None):
+        self.on_done = on_done  # called with each finished download
         self.lock = threading.Lock()
         self.wake = threading.Condition(self.lock)
         self.jobs = []
@@ -88,8 +90,19 @@ class Queue:
         with self.lock:
             for job in self.jobs:
                 if job["id"] == job_id and job["status"] == "error":
-                    job.update(status="queued", progress=0, message="Waiting...")
+                    job.update(status="queued", progress=0, message="Waiting...", cancel=False)
                     self.wake.notify()
+
+    def cancel(self, job_id):
+        """Stop a download. A waiting one stops right away, a running one at its next step."""
+        with self.lock:
+            for job in self.jobs:
+                if job["id"] != job_id:
+                    continue
+                if job["status"] == "queued":
+                    job.update(status="error", progress=0, message=STOPPED)
+                elif job["status"] == "active":
+                    job.update(cancel=True, message="Stopping...")
 
     def clear_finished(self):
         with self.lock:
@@ -123,8 +136,14 @@ class Queue:
                 job.update(status="active", message="Getting video info...")
             self._run(job)
 
+    def _stop_if_asked(self, job):
+        if job.get("cancel"):
+            from yt_dlp.utils import DownloadCancelled
+            raise DownloadCancelled()
+
     def _run(self, job):
         def on_progress(d):
+            self._stop_if_asked(job)  # raising here stops yt-dlp and ffmpeg
             if d["status"] == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
                 percent = d["downloaded_bytes"] * 100 / total if total else 0
@@ -145,11 +164,20 @@ class Queue:
             if preview.get("playlist"):
                 raise ValueError("That's a playlist. Pick the videos you want from the list.")
             self._update(job, **{k: v for k, v in preview.items() if k in ("title", "channel", "duration", "thumbnail", "seconds")})
+            self._stop_if_asked(job)
             self._update(job, message="Starting download...")
             path = downloader.download(info, job["folder"], job["format"], job["quality"],
                                        on_progress, job["trim"], job["normalize"])
         except Exception as e:
-            self._update(job, status="error", message=downloader.friendly_error(e))
+            self._update(job, status="error", cancel=False,
+                         message=STOPPED if job.get("cancel") else downloader.friendly_error(e))
             return
+        if job.get("cancel"):  # stopped right at the end: keep the file anyway, it's finished
+            self._update(job, cancel=False)
         self._update(job, status="done", progress=100, file=path,
                      message=f"Saved as {os.path.basename(path)}" if path else "Saved")
+        if self.on_done:
+            try:
+                self.on_done(dict(job))
+            except Exception:
+                pass

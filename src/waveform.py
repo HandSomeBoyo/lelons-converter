@@ -20,8 +20,10 @@ import media
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter")
 BARS = 1200  # how many loudness values the editor draws
 
-_lock = threading.Lock()
+_guard = threading.Lock()
+_locks = {}  # one lock per video, so different videos can load at the same time
 _cache = {}  # (url, video) -> result
+_waiting = 0  # trim editors waiting for their sound or video
 _files = set()  # file names the window may play
 
 
@@ -29,12 +31,32 @@ def key_for(url):
     return hashlib.sha1(url.encode()).hexdigest()[:16]
 
 
-def get(url, info, video=False):
-    """Returns {"peaks", "duration", "media"} for a looked-up video (may take a while)."""
-    with _lock:  # one at a time, and only once per video
-        if (url, video) not in _cache:
-            _cache[url, video] = _build(url, info, video)
-        return _cache[url, video]
+def _once(key, build, prefetch=False):
+    """build()'s result for key, made only once even if asked for twice at the same time."""
+    global _waiting
+    with _guard:
+        if key in _cache:
+            return _cache[key]
+        lock = _locks.setdefault(key, threading.Lock())
+        if not prefetch:
+            _waiting += 1
+    try:
+        with lock:
+            if key not in _cache:
+                _cache[key] = build()
+            return _cache[key]
+    finally:
+        if not prefetch:
+            with _guard:
+                _waiting -= 1
+
+
+def get(url, info, video=False, prefetch=False):
+    """Returns {"peaks", "duration", "media"} for a looked-up video (may take a while).
+
+    prefetch: loaded ahead of time, before the trim editor is opened.
+    """
+    return _once((url, video), lambda: _build(url, info, video), prefetch)
 
 
 def _build(url, info, video):
@@ -72,24 +94,24 @@ def _build(url, info, video):
 
 def get_local(file_id, source, video=False):
     """The same for a file from the PC. A small copy is made that the window can surely play."""
-    with _lock:
-        key = ("file", file_id), video
-        if key not in _cache:
-            os.makedirs(FOLDER, exist_ok=True)
-            found = media.probe(source)
-            target = os.path.join(FOLDER, f"file-{file_id}" + ("-video.mp4" if video else ".m4a"))
-            if video:
-                if not found["video"]:
-                    raise OSError("This file has no video in it.")
-                media.run(["-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=-2:'min(360,ih)'",
-                           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p",
-                           "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", target], found["duration"])
-            else:
-                if not found["audio"]:
-                    raise OSError("This file has no sound to show.")
-                media.run(["-i", source, "-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", "128k", target], found["duration"])
-            _cache[key] = _result(target, found["duration"])
-        return _cache[key]
+    return _once((("file", file_id), video), lambda: _build_local(file_id, source, video))
+
+
+def _build_local(file_id, source, video):
+    os.makedirs(FOLDER, exist_ok=True)
+    found = media.probe(source)
+    target = os.path.join(FOLDER, f"file-{file_id}" + ("-video.mp4" if video else ".m4a"))
+    if video:
+        if not found["video"]:
+            raise OSError("This file has no video in it.")
+        media.run(["-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=-2:'min(360,ih)'",
+                   "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", target], found["duration"])
+    else:
+        if not found["audio"]:
+            raise OSError("This file has no sound to show.")
+        media.run(["-i", source, "-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", "128k", target], found["duration"])
+    return _result(target, found["duration"])
 
 
 def _result(path, duration):
@@ -124,8 +146,8 @@ def _result(path, duration):
 
 
 def busy():
-    """True while a trim editor's sound or video is being made."""
-    return _lock.locked()
+    """True while a trim editor is waiting for its sound or video."""
+    return _waiting > 0
 
 
 def file_path(name):

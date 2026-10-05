@@ -73,6 +73,7 @@ def download_and_run(url, version, on_progress):
             done += len(chunk)
             if total:
                 on_progress(done * 100 / total)
+    on_progress(100)
     os.replace(path + ".part", path)
     # /update makes the installer skip its welcome page.
     subprocess.Popen([path, "/update"], close_fds=True)
@@ -97,7 +98,12 @@ def _bundled_folder():
 
 
 def use_newest_yt_dlp():
-    """Call before yt-dlp is imported: picks a downloaded newer yt-dlp if there is one."""
+    """Call before yt-dlp is imported: picks a downloaded newer yt-dlp if there is one.
+
+    Older downloads are deleted later by tidy_yt_dlp(), once it's sure no other
+    copy of the app is running (and maybe using them).
+    """
+    global _in_use
     bundled = _bundled_folder()
     best_version = _version_in(bundled) if bundled else "0"
     best = None
@@ -107,16 +113,28 @@ def use_newest_yt_dlp():
         names = []
     for name in names:
         folder = os.path.join(YT_DLP_DIR, name)
-        version = _version_in(folder)
+        version = None if name.endswith(".part") else _version_in(folder)  # .part: still downloading
         if version and parse_version(version) > parse_version(best_version):
             best, best_version = folder, version
     if best:
         sys.path.insert(0, best)
-    for name in names:  # tidy up older downloads
-        folder = os.path.join(YT_DLP_DIR, name)
-        if folder != best:
-            shutil.rmtree(folder, ignore_errors=True)
+    _in_use = best
     return best_version
+
+
+_in_use = None
+
+
+def tidy_yt_dlp():
+    """Delete downloaded yt-dlp versions this app isn't using."""
+    try:
+        names = os.listdir(YT_DLP_DIR)
+    except OSError:
+        return
+    for name in names:
+        folder = os.path.join(YT_DLP_DIR, name)
+        if folder != _in_use:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def _download_wheel(package, version, into):

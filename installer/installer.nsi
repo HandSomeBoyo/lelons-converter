@@ -24,7 +24,8 @@ Name "${APP_NAME}"
 OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 RequestExecutionLevel user
-SetCompressor lzma
+SetCompressor /SOLID lzma
+SetCompressorDictSize 64
 BrandingText "${APP_NAME} ${APP_VERSION}"
 ShowInstDetails show
 
@@ -83,6 +84,16 @@ Section "Install"
 
   SetOutPath "$INSTDIR"
   File /r "${STAGE}/*.*"
+  ; Left over from testing a fix on one PC.
+  RMDir /r "$INSTDIR\pycache_backup"
+  RMDir /r "$INSTDIR\pycache_backup2"
+
+  ; Python turns its code into a faster-loading form the first time it runs
+  ; it, which would make the app's first start slow. Do it now instead.
+  ; (Done here rather than shipped, so the download is smaller.)
+  DetailPrint "Getting the app ready (this takes a few seconds)..."
+  nsExec::Exec '"$INSTDIR\runtime\python.exe" -E -s -m compileall -q -j 0 --invalidation-mode unchecked-hash "$INSTDIR\runtime\Lib" "$INSTDIR\app"'
+  Pop $0
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "${RUN_EXE}" '${RUN_ARGS}' "${RUN_ICON}"

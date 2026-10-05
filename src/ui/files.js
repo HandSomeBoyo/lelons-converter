@@ -177,6 +177,7 @@ $("fileConvert").addEventListener("click", async () => {
 // ---- drawing
 
 const FILE_ICONS = {
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>',
   remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
@@ -260,17 +261,18 @@ function fileRow(el, file) {
   el.querySelector(".pct").textContent = file.status === "active" && file.progress ? Math.floor(file.progress) + "%" : "";
 
   const actions = el.querySelector(".actions");
-  const wanted = file.status === "active" ? [] : file.canShow && file.status === "done" ? ["folder", "remove"] : ["remove"];
+  const wanted = file.status === "active" ? (file.cancel ? [] : ["stop"]) : file.status === "queued" && file.id ? ["stop"] : file.canShow && file.status === "done" ? ["folder", "remove"] : ["remove"];
   if (actions.dataset.kind !== wanted.join()) {
     actions.dataset.kind = wanted.join();
     actions.innerHTML = "";
     for (const kind of wanted) {
       const b = document.createElement("button");
       b.className = "icon-button";
-      b.title = kind === "folder" ? "Show in folder" : "Remove from list";
+      b.title = { folder: "Show in folder", stop: "Stop converting" }[kind] || "Remove from list";
       b.innerHTML = FILE_ICONS[kind];
       b.onclick = () => {
         if (kind === "folder") return api("/api/file-show", { id: file.id });
+        if (kind === "stop") return api("/api/file-cancel", { id: file.id }).then(refresh);
         if (!file.id) {
           if (file.stop) file.stop.abort();
           const index = uploads.indexOf(file);

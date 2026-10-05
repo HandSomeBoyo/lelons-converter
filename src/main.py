@@ -28,6 +28,7 @@ YT_DLP_VERSION = updater.use_newest_yt_dlp()
 
 import downloader  # noqa: E402
 import files  # noqa: E402
+import history  # noqa: E402
 import images  # noqa: E402
 import jobs  # noqa: E402
 import media  # noqa: E402
@@ -107,6 +108,7 @@ class State:
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
                 "files": local_files.snapshot(),
+                "historyVersion": history.version,
             }
 
     @property
@@ -126,9 +128,16 @@ class State:
             return True
 
 
-queue = jobs.Queue()
+queue = jobs.Queue(on_done=history.add_job)
+page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()
 state = State()
+
+
+def warm_up():
+    """Get the downloader ready. Waits for the window to show first, so it doesn't slow that down."""
+    page_loaded.wait(timeout=8)
+    downloader.warm_up()
 
 
 def start_background(work, *args):
@@ -221,6 +230,10 @@ class Handler(BaseHTTPRequestHandler):
             return False
         if secrets.compare_digest(self.headers.get("X-Lelons-Token") or "", TOKEN):
             return True
+        # The page's goodbye message can't carry a header, so it puts the token in the address.
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        if secrets.compare_digest(query.get("t", [""])[0], TOKEN):
+            return True
         cookie = f"lelons{port}="
         for part in (self.headers.get("Cookie") or "").split(";"):
             part = part.strip()
@@ -301,7 +314,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.refuse()
         if self.path == "/api/state":
             state.set(last_ping=time.time())
+            page_loaded.set()
             return self.send_json(state.snapshot())
+        if self.path == "/api/history":
+            return self.send_json({"items": history.items(), "version": history.version})
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -324,6 +340,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return self.refuse()
+        self.path = urllib.parse.urlsplit(self.path).path
         try:
             self.handle_post()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -375,7 +392,7 @@ class Handler(BaseHTTPRequestHandler):
             url = str(data.get("url", "")).strip()
             try:
                 info, _ = queue.lookup(url, fresh=True)
-                wave = waveform.get(url, info, bool(data.get("video")))
+                wave = waveform.get(url, info, bool(data.get("video")), bool(data.get("prefetch")))
                 self.send_json({"ok": True, **wave})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
@@ -396,7 +413,8 @@ class Handler(BaseHTTPRequestHandler):
                     end = length
                 if start is None or end is None or end <= start:
                     return self.send_json({"ok": False, "error": "Check the trim times, like 1:20 to 2:05."})
-                if not (start <= 0 and length and end >= length):  # the whole video isn't a trim
+                # The whole video isn't a trim. (For a GIF it is: no trim means the first 10 seconds.)
+                if fmt == "gif" or not (start <= 0 and length and end >= length):
                     trim = [start, min(end, length) if length else end]
             if fmt == "gif":
                 if trim and trim[1] - trim[0] > media.GIF_MAX_SECONDS + 0.05:
@@ -428,6 +446,32 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(state.snapshot())
         elif self.path == "/api/remove":
             queue.remove(data.get("id"))
+            self.send_json({"ok": True})
+        elif self.path == "/api/history-again":
+            item = history.find(str(data.get("id")))
+            if not item or item.get("format") not in settings.QUALITIES:
+                return self.send_json({"ok": False, "error": "That download isn't in the list anymore."})
+            fmt, quality = item["format"], str(item.get("quality"))
+            if not settings.is_valid_quality(fmt, quality):
+                quality = state.quality.get(fmt) or settings.DEFAULT_QUALITY[fmt]
+            trim = item.get("trim")
+            trim = (float(trim[0]), float(trim[1])) if isinstance(trim, list) and len(trim) == 2 else None
+            queue.add(item["url"], fmt, quality, quality_label(fmt, quality), state.folder, trim,
+                      state.normalize, preview=item)
+            self.send_json({"ok": True})
+        elif self.path == "/api/history-show":
+            item = history.find(str(data.get("id")))
+            if item:
+                show_in_folder(item.get("file") or "")
+            self.send_json({"ok": True})
+        elif self.path == "/api/history-remove":
+            history.remove(str(data.get("id")))
+            self.send_json({"ok": True})
+        elif self.path == "/api/history-clear":
+            history.clear()
+            self.send_json({"ok": True})
+        elif self.path == "/api/cancel":
+            queue.cancel(data.get("id"))
             self.send_json({"ok": True})
         elif self.path == "/api/retry":
             queue.retry(data.get("id"))
@@ -464,6 +508,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/file-remove":
             local_files.remove(data.get("id"))
+            self.send_json({"ok": True})
+        elif self.path == "/api/file-cancel":
+            local_files.cancel(data.get("id"))
             self.send_json({"ok": True})
         elif self.path == "/api/files-clear":
             local_files.clear()
@@ -509,7 +556,9 @@ class Handler(BaseHTTPRequestHandler):
             settings.save(auto_update=state.auto_update)
             self.send_json(state.snapshot())
         elif self.path == "/api/show-window":
-            # The app was started again while it's open.
+            # The app was started again while it's open. (Maybe its window was
+            # just closed: don't quit while the new one opens.)
+            state.set(last_ping=time.time(), closed_at=None)
             open_window(f"http://127.0.0.1:{self.server.server_port}/?t={TOKEN}")
             self.send_json({"ok": True})
         elif self.path == "/api/quit":
@@ -541,26 +590,47 @@ def find_edge():
     return shutil.which("msedge")
 
 
+# Written while the app's own window opens. If opening it ever crashed the app,
+# the file is still there at the next start: then Edge is used from then on.
+WINDOW_STARTING = os.path.join(settings.DATA_DIR, "window-starting")
+_window_lock = threading.Lock()  # one window opening at a time
+
+
+def check_window_crash():
+    """Call once at startup."""
+    if os.path.exists(WINDOW_STARTING):
+        settings.save(own_window=False)
+        try:
+            os.remove(WINDOW_STARTING)
+        except OSError:
+            pass
+
+
+def window_closed(placement):
+    if placement:
+        settings.save(window=placement)
+    state.set(closed_at=time.time())
+
+
 def open_window(url):
     """Show the app's window (or bring it to the front if it's open)."""
-    # If opening the window ever crashed the app, this file is left behind:
-    # then use Edge from now on, so the app still opens.
-    starting = os.path.join(settings.DATA_DIR, "window-starting")
-    if os.path.exists(starting):
-        settings.save(own_window=False)
-        os.remove(starting)
-    if settings.load().get("own_window", True):
-        os.makedirs(settings.DATA_DIR, exist_ok=True)
-        with open(starting, "w"):
-            pass
-        try:
-            shown = appwindow.show(url, os.path.join(settings.DATA_DIR, "webview"), WINDOW_ICON,
-                                   on_closed=lambda: state.set(closed_at=time.time()))
-        finally:
-            os.remove(starting)
-        if shown:
-            return
-    open_edge(url)  # no WebView2 on this PC
+    shown = False
+    saved = settings.load()
+    if saved.get("own_window", True):
+        with _window_lock:
+            os.makedirs(settings.DATA_DIR, exist_ok=True)
+            with open(WINDOW_STARTING, "w"):
+                pass
+            try:
+                shown = appwindow.show(url, os.path.join(settings.DATA_DIR, "webview"), WINDOW_ICON,
+                                       on_closed=window_closed, placement=saved.get("window"))
+            finally:
+                try:
+                    os.remove(WINDOW_STARTING)
+                except OSError:
+                    pass
+    if not shown:
+        open_edge(url)  # no WebView2 on this PC
 
 
 def open_edge(url):
@@ -642,6 +712,8 @@ def main():
     # Left over from a time the app didn't close properly (the PC turned off, say).
     clean_up()
     names.remove_leftovers(state.folder)
+    updater.tidy_yt_dlp()  # before the update check can start downloading a new one
+    check_window_crash()
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -650,8 +722,8 @@ def main():
         f.write(f"{server.server_port} {TOKEN}")
 
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
-    state.set(last_ping=time.time() + 30)  # give the window time to open
-    start_background(downloader.warm_up)
+    state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
+    start_background(warm_up)
     if state.auto_update:
         start_background(check_for_updates)
 
@@ -675,6 +747,7 @@ def main():
         os.remove(PORT_FILE)
     except OSError:
         pass
+    appwindow.close()
     windows.stop_helpers()  # ffmpeg can keep running after the app if it isn't told to stop
     clean_up()
 

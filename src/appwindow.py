@@ -39,22 +39,34 @@ def _loader_path():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "WebView2Loader.dll")
 
 
-def show(url, data_folder, icon, on_closed):
+def show(url, data_folder, icon, on_closed, placement=None):
     """Open the window showing url (or bring the open one to the front).
 
-    Returns False if WebView2 can't be used. on_closed() is called once the window is gone.
+    Returns False if WebView2 can't be used. on_closed(placement) is called once
+    the window is gone, with where it was ([left, top, right, bottom, maximized])
+    so it can open there next time (pass that back as placement).
     """
     global _window
     if not available():
         return False
     with _lock:
-        if _window and (_window.alive or not _window.started.is_set()):
+        if _window and (_window.alive or not (_window.started.is_set() or _window.cancelled)):
             _window.show()  # open, or opening right now
             return True
-        window = _window = Window(url, data_folder, icon, on_closed)
+        window = _window = Window(url, data_folder, icon, on_closed, placement)
     window.thread.start()
-    window.started.wait(60)
+    if not window.started.wait(60):
+        window.cancel()  # taking far too long: the app uses Edge instead, so don't show this one later
+        return False
     return window.ok
+
+
+def close():
+    """Close the window (when the app quits) and wait a moment for it to go."""
+    window = _window
+    if window and window.alive and window.hwnd:
+        window.user32.PostMessageW(window.hwnd, WM_CLOSE, 0, 0)
+        window.thread.join(3)
 
 
 # ---------------------------------------------------------------- COM plumbing
@@ -135,7 +147,16 @@ class WNDCLASSEXW(ctypes.Structure):
                 ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR), ("hIconSm", wintypes.HANDLE)]
 
 
+class WINDOWPLACEMENT(ctypes.Structure):
+    _fields_ = [("length", wintypes.UINT), ("flags", wintypes.UINT), ("showCmd", wintypes.UINT),
+                ("ptMinPosition", wintypes.POINT), ("ptMaxPosition", wintypes.POINT),
+                ("rcNormalPosition", wintypes.RECT)]
+
+
 _windows = {}  # hwnd -> Window, for the one window procedure all windows share
+# Every COM callback object ever handed to WebView2. Never freed: WebView2 may
+# still hold one after its window is gone, and they're tiny.
+_handlers = []
 
 
 @WNDPROC
@@ -150,15 +171,18 @@ def _window_procedure(hwnd, message, wparam, lparam):
 
 
 class Window:
-    def __init__(self, url, data_folder, icon, on_closed):
+    def __init__(self, url, data_folder, icon, on_closed, placement=None):
         self.url, self.data_folder, self.icon, self.on_closed = url, data_folder, icon, on_closed
+        self.placement = placement
+        self.cancelled = False
+        self.webview = None
         self.hwnd = None
         self.controller = None
         self.environment = None
         self.ok = False
         self.alive = False
         self.started = threading.Event()  # set once it's showing the page, or failed
-        self.handlers = []  # kept here so Python doesn't free them while WebView2 uses them
+        self.handlers = _handlers  # kept so Python doesn't free them while WebView2 uses them
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     # ---- from other threads
@@ -166,6 +190,11 @@ class Window:
     def show(self):
         if self.hwnd:
             self.user32.PostMessageW(self.hwnd, WM_SHOW, 0, 0)
+
+    def cancel(self):
+        self.cancelled = True
+        if self.hwnd:
+            self.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
 
     # ---- the window's own thread
 
@@ -181,7 +210,19 @@ class Window:
             self.user32.DispatchMessageW(ctypes.byref(message))
         self.alive = False
         if self.ok:
-            self.on_closed()
+            self.on_closed(self.closed_at)
+
+    def _guarded(self, callback):
+        """A WebView2 callback that, if anything in it goes wrong, gives up on the window
+        (so the app opens Edge instead of waiting with a window that never shows)."""
+        def run(*args):
+            try:
+                return callback(*args)
+            except Exception:
+                self._fail()
+                self.user32.PostQuitMessage(0)
+                return S_OK
+        return run
 
     def _fail(self):
         self.ok = False
@@ -236,6 +277,7 @@ class Window:
         user32.RegisterClassExW(ctypes.byref(cls))  # fails harmlessly when already registered
 
         width, height = (int(n * scale) for n in SIZE)
+        self.closed_at = None
         self.hwnd = user32.CreateWindowExW(0, "LelonsConverterWindow", TITLE, 0x00CF0000 | 0x02000000,
                                            # WS_OVERLAPPEDWINDOW, and WS_CLIPCHILDREN so the window
                                            # doesn't paint its background over the page
@@ -244,6 +286,7 @@ class Window:
         if not self.hwnd:
             raise OSError("no window")
         _windows[self.hwnd] = self
+        self._restore_placement()
         for kind, handle in ((1, big), (0, small)):  # ICON_BIG, ICON_SMALL
             if handle:
                 user32.SendMessageW(self.hwnd, WM_SETICON, kind, handle)
@@ -257,7 +300,7 @@ class Window:
         create = loader.CreateCoreWebView2EnvironmentWithOptions
         create.restype = HRESULT
         create.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.c_void_p, ctypes.c_void_p]
-        handler = Handler(ENVIRONMENT_DONE, self._environment_ready, with_result=True)
+        handler = Handler(ENVIRONMENT_DONE, self._guarded(self._environment_ready), with_result=True)
         self.handlers.append(handler)
         os.makedirs(self.data_folder, exist_ok=True)
         if create(None, self.data_folder, None, handler.pointer) != S_OK:
@@ -270,7 +313,7 @@ class Window:
             return S_OK
         _method(environment, 1)()  # AddRef: keep it while the window is open
         self.environment = environment
-        handler = Handler(CONTROLLER_DONE, self._controller_ready, with_result=True)
+        handler = Handler(CONTROLLER_DONE, self._guarded(self._controller_ready), with_result=True)
         self.handlers.append(handler)
         result = _method(environment, 3, wintypes.HWND, ctypes.c_void_p)(self.hwnd, handler.pointer)
         if result != S_OK:
@@ -279,7 +322,7 @@ class Window:
         return S_OK
 
     def _controller_ready(self, this, error, controller):
-        if error != S_OK or not controller:
+        if error != S_OK or not controller or self.cancelled:
             self._fail()
             self.user32.PostQuitMessage(0)
             return S_OK
@@ -318,13 +361,40 @@ class Window:
 
         self._fit()
         _method(self.webview, 5, wintypes.LPCWSTR)(self.url)  # Navigate
-        self.user32.ShowWindow(self.hwnd, 1)  # SW_SHOWNORMAL
+        self.user32.ShowWindow(self.hwnd, 3 if self.maximized else 1)  # SW_SHOWMAXIMIZED / SW_SHOWNORMAL
         self.user32.SetForegroundWindow(self.hwnd)
         _method(controller, 4, wintypes.BOOL)(True)  # put_IsVisible
         _method(controller, 12, ctypes.c_int)(0)  # MoveFocus: typing goes to the page
         self.ok = self.alive = True
         self.started.set()
         return S_OK
+
+    def _restore_placement(self):
+        """Put the window where it was last time, if that's still on a screen."""
+        self.maximized = False
+        try:
+            left, top, right, bottom, maximized = (int(n) for n in self.placement)
+        except (TypeError, ValueError):
+            return
+        rect = wintypes.RECT(left, top, right, bottom)
+        if right - left < 400 or bottom - top < 300:
+            return
+        monitor = ctypes.windll.user32.MonitorFromRect
+        monitor.restype = wintypes.HANDLE
+        monitor.argtypes = [ctypes.POINTER(wintypes.RECT), wintypes.DWORD]
+        if not monitor(ctypes.byref(rect), 0):  # MONITOR_DEFAULTTONULL: not on any screen now
+            return
+        place = WINDOWPLACEMENT(length=ctypes.sizeof(WINDOWPLACEMENT), showCmd=0, rcNormalPosition=rect)  # SW_HIDE
+        ctypes.windll.user32.SetWindowPlacement(wintypes.HWND(self.hwnd), ctypes.byref(place))
+        self.maximized = bool(maximized)
+
+    def _remember_placement(self, hwnd):
+        place = WINDOWPLACEMENT(length=ctypes.sizeof(WINDOWPLACEMENT))
+        if ctypes.windll.user32.GetWindowPlacement(wintypes.HWND(hwnd), ctypes.byref(place)):
+            r = place.rcNormalPosition
+            # 3: maximized now. 2 (WPF_RESTORETOMAXIMIZED): minimized from maximized.
+            maximized = place.showCmd == 3 or (place.showCmd == 2 and place.flags & 2)
+            self.closed_at = [r.left, r.top, r.right, r.bottom, int(bool(maximized))]
 
     def _close_requested(self, this, sender, args):
         self.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
@@ -359,9 +429,14 @@ class Window:
             self.user32.SetForegroundWindow(hwnd)
             return 0
         elif message == WM_DESTROY:
+            if self.ok:
+                self._remember_placement(hwnd)
             if self.controller:
                 controller, self.controller = self.controller, None
                 _method(controller, 24)()  # Close
+                if self.webview:
+                    _method(self.webview, 2)()  # Release (get_CoreWebView2 gave us a reference)
+                    self.webview = None
                 _method(controller, 2)()  # Release
             if self.environment:
                 _method(self.environment, 2)()

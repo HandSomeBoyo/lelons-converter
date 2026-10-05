@@ -25,7 +25,8 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
      seconds unless you pick a part)
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
    Up to 3 videos download at the same time. A file never replaces one with the
-   same name; it's saved as "name (2)" instead.
+   same name; it's saved as "name (2)" instead. The square button next to a
+   download stops it.
 
 **Even out volume** (for the music formats) makes quiet and loud songs about
 equally loud.
@@ -40,6 +41,10 @@ here** at the right moments. You can also drag the yellow lines, type the
 times, or nudge them with -1s and +1s. **Play my part** plays just your pick.
 Then click **Done**. For MP4s and GIFs the video plays above
 the waveform, and dragging a line shows that moment of the video.
+
+The **History** tab lists everything you've downloaded, newest first. Search
+it, open the folder a file is in, or click **Download again** to get the same
+thing again (handy if you deleted it or want it in another folder).
 
 MP3s, M4As and FLACs get the video's thumbnail as cover art, plus the song
 title and artist, so they look right in music apps.
@@ -99,14 +104,16 @@ Lelons Converter/
 
 ## How it works
 
-The window is a Microsoft Edge app window, which every Windows PC already has.
-`main.py` runs a small server on your own computer that only the window can
+The window is the app's own window with a WebView2 page inside (WebView2 is
+part of Windows, the same thing Edge uses), so Task Manager shows "Lelons
+Converter". It opens where you left it last time. If WebView2 is missing, an
+Edge app window is used instead. `main.py` runs a small server on your own computer that only the window can
 talk to. When you click Convert, it uses yt-dlp to download the video and
 ffmpeg to turn it into MP3 or MP4.
 
 When installed, the app lives in `%LOCALAPPDATA%\Programs\Lelons Converter`
 with its own copy of Python in `runtime\` and the app's code in `app\`. Your settings are in
-`%LOCALAPPDATA%\LelonsConverter`.
+`%LOCALAPPDATA%\LelonsConverter` (the download history is `history.json` there).
 
 ## Updates
 

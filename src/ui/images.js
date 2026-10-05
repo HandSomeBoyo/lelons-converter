@@ -19,11 +19,12 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const name of ["video", "files", "images"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["video", "files", "images", "history"]) $(name + "Tab").hidden = tab !== name;
+  if (tab === "history" && typeof loadHistory === "function") loadHistory();
   try { localStorage.setItem("tab", tab); } catch (e) { /* not important */ }
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-try { if (["files", "images"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
+try { if (["files", "images", "history"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 
