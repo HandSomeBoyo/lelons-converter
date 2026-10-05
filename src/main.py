@@ -369,6 +369,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"account": library.account()}
             elif action == "list":
                 result = {"sounds": library.sounds()}
+            elif action == "peaks":
+                result = {"peaks": sfx.waveforms.get(str(data.get("path") or ""))}
             elif action == "delete":
                 library.delete(data.get("id"))
                 result = {}

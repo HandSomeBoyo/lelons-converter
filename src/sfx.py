@@ -5,11 +5,13 @@ in its database and the MP3 files in its storage. The friend code is checked
 by the database; it also decides the (secret) folder the files go in.
 """
 
+import array
 import hashlib
 import json
 import os
 import re
 import secrets
+import subprocess
 import threading
 import urllib.error
 import urllib.parse
@@ -26,6 +28,8 @@ BUCKET = "lelons-sounds"
 CATEGORIES = {"sfx": "SFX", "music": "Music", "memes": "Memes", "ambience": "Ambience", "other": "Other"}
 MAX_BYTES = 10 * 1024 * 1024  # the storage refuses bigger files
 FOLDER = os.path.join(waveform.FOLDER, "sfx")  # deleted when the app closes
+PEAKS_FILE = os.path.join(settings.DATA_DIR, "sfx-waveforms.json")
+BARS = 72  # bars in each sound's little waveform
 UPLOAD_KINDS = [
     ("Sounds and videos", ";".join("*." + e for e in (
         "mp3 m4a wav flac ogg opus wma aac aiff aif amr mp4 mkv mov avi wmv webm m4v".split()))),
@@ -104,6 +108,82 @@ def _rpc(name, **args):
 
 # ---------------------------------------------------------------- the library
 
+def _peaks_of(path):
+    """BARS loudness values (0 to 1) for drawing a sound."""
+    pcm = subprocess.run([media.ffmpeg(), "-v", "error", "-i", path, "-ac", "1", "-ar", "4000", "-f", "s16le", "-"],
+                         capture_output=True, creationflags=media.NO_WINDOW).stdout
+    samples = array.array("h")
+    samples.frombytes(pcm[: len(pcm) // 2 * 2])
+    if not samples:
+        return [0] * BARS
+    step = len(samples) / BARS
+    peaks = []
+    for i in range(BARS):
+        chunk = samples[int(i * step):max(int((i + 1) * step), int(i * step) + 1)]
+        peaks.append(max(max(chunk), -min(chunk)) if chunk else 0)
+    loudest = max(peaks) or 1
+    return [round((p / loudest) ** 0.6, 2) for p in peaks]  # quiet parts stay visible
+
+
+class Waveforms:
+    """Each library sound's waveform, made once (downloads the sound) and kept on the PC."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.busy = threading.Semaphore(2)  # sounds downloaded at the same time
+        self.known = None
+
+    def _load(self):
+        if self.known is None:
+            try:
+                with open(PEAKS_FILE, encoding="utf-8") as f:
+                    self.known = json.load(f)
+            except (OSError, ValueError):
+                self.known = {}
+        return self.known
+
+    def remember(self, path, peaks):
+        with self.lock:
+            known = self._load()
+            known[path] = peaks
+            while len(known) > 5000:
+                del known[next(iter(known))]
+            try:
+                os.makedirs(settings.DATA_DIR, exist_ok=True)
+                with open(PEAKS_FILE + ".new", "w", encoding="utf-8") as f:
+                    json.dump(known, f)
+                os.replace(PEAKS_FILE + ".new", PEAKS_FILE)
+            except OSError:
+                pass
+
+    def get(self, path):
+        with self.lock:
+            found = self._load().get(path)
+        if found:
+            return found
+        with self.busy:
+            with self.lock:
+                found = self._load().get(path)
+            if found:
+                return found
+            os.makedirs(FOLDER, exist_ok=True)
+            temp = os.path.join(FOLDER, f"wave-{uuid.uuid4().hex[:8]}.mp3")
+            try:
+                with urllib.request.urlopen(public_url(path), timeout=60) as response, open(temp, "wb") as out:
+                    out.write(response.read(MAX_BYTES + 1))
+                peaks = _peaks_of(temp)
+            except (urllib.error.URLError, OSError):
+                raise Error("Couldn't load the waveform.") from None
+            finally:
+                if os.path.exists(temp):
+                    os.remove(temp)
+        self.remember(path, peaks)
+        return peaks
+
+
+waveforms = Waveforms()
+
+
 def _clean_name(text, limit=80):
     return re.sub(r"\s+", " ", str(text or "")).strip()[:limit]
 
@@ -157,8 +237,10 @@ class Library:
 
     def sounds(self):
         rows = _rpc("lelons_list", code=self._code(), me=self.me()) or []
-        return [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other")}
-                for row in rows]
+        with waveforms.lock:
+            known = waveforms._load()
+            return [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+                     "peaks": known.get(row["path"])} for row in rows]
 
     def delete(self, sound_id):
         saved = settings.load()
@@ -285,6 +367,7 @@ class Library:
             media.convert_audio(item["path"], mp3, "mp3", str(kbps), trim, False, seconds,
                                 lambda p: self._set(item, progress=p, message=f"Getting it ready... {p:.0f}%"))
             size = os.path.getsize(mp3)
+            peaks = _peaks_of(mp3)
             if size > MAX_BYTES:
                 raise Error("That sound is too big. Trim it shorter.")
             self._set(item, progress=0, message="Uploading...")
@@ -301,6 +384,7 @@ class Library:
                 except Error:
                     pass
                 raise
+            waveforms.remember(path, peaks)
         except Exception as e:
             message = str(e) if isinstance(e, Error) else "Couldn't make an MP3 out of that file."
             self._set(item, status="error", message=message)

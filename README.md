@@ -46,7 +46,8 @@ The **SFX** tab is a sound library you share with your friends. Type the
 friend code once, then play, search and download everyone's sounds by
 category (SFX, Music, Memes, Ambience, Other), or click **Upload a sound** to
 add your own (any sound or video file, trimmed if you like, up to 10 MB).
-You can delete your own sounds; whoever has the owner code can delete any.
+Each sound shows its waveform; click it to play from that spot. You can delete
+your own sounds; whoever has the owner code can delete any.
 The sounds are kept in a free Supabase project; `sfx/setup.sql` sets it up.
 
 The **History** tab lists everything you've downloaded, newest first. Search

@@ -30,6 +30,7 @@ function sfxAgo(when) {
 // ---- joining
 
 async function openSfx() {
+  sfxPeaksFailed.clear();
   if (!sfxAccount) {
     const res = await api("/api/sfx-account", {}).catch(() => null);
     if (!res || !res.ok) return;
@@ -130,6 +131,7 @@ function drawSfxCategories() {
     b.type = "button";
     b.className = sfxCategory === value ? "active" : "";
     b.innerHTML = `<span></span><span class="count">${counts[value] || 0}</span>`;
+    if (value !== "all") b.classList.add("cat-" + value);
     b.firstChild.textContent = label;
     b.onclick = () => { sfxCategory = value; drawSfx(); };
     cats.append(b);
@@ -151,26 +153,38 @@ function drawSfx() {
 
 function sfxRow(sound) {
   const el = document.createElement("div");
-  el.className = "job sound" + (sfxPlaying === sound.id ? " playing" : "");
+  el.className = "sound" + (sfxPlaying === sound.id ? " playing" : "");
   el.dataset.id = sound.id;
   el.innerHTML = `
     <button class="play" title="Play"></button>
-    <div class="body">
+    <div class="sound-info">
       <div class="title"></div>
-      <div class="line"><span class="badge"></span><span class="msg"></span></div>
-      <div class="bar" hidden><div></div></div>
+      <div class="meta"></div>
     </div>
+    <div class="sound-wave" title="Click to play from here"><div class="bars"></div><span class="time"></span></div>
     <div class="actions"></div>`;
   const play = el.querySelector(".play");
   play.innerHTML = sfxPlaying === sound.id ? SFX_ICONS.pause : SFX_ICONS.play;
   play.onclick = () => playSfx(sound);
   el.querySelector(".title").textContent = el.querySelector(".title").title = sound.name;
-  el.querySelector(".badge").textContent = sound.categoryName;
-  const msg = el.querySelector(".msg");
+  const meta = el.querySelector(".meta");
   const note = sfxNotes.get(sound.id);
-  msg.textContent = note ? note.text
-    : [clock(sound.seconds, false), sound.uploader ? "by " + sound.uploader : "", sfxAgo(sound.created_at)].filter(Boolean).join(" · ");
-  if (note) msg.className = "msg " + note.kind;
+  if (note) {
+    meta.textContent = note.text;
+    meta.className = "meta " + note.kind;
+  } else {
+    const cat = document.createElement("span");
+    cat.className = "cat cat-" + sound.category;
+    cat.textContent = sound.categoryName;
+    meta.append(cat, [sound.uploader ? "by " + sound.uploader : "", sfxAgo(sound.created_at)].filter(Boolean).join(" · "));
+  }
+  const wave = el.querySelector(".sound-wave");
+  drawSoundWave(wave, sound);
+  wave.querySelector(".time").textContent = clock(sound.seconds, false);
+  wave.onclick = (e) => {
+    const box = wave.querySelector(".bars").getBoundingClientRect();
+    playSfx(sound, Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
+  };
 
   const actions = el.querySelector(".actions");
   const add = (icon, title, onclick) => {
@@ -231,15 +245,23 @@ $("sfxSearch").addEventListener("input", drawSfx);
 
 const sfxAudio = $("sfxAudio");
 
-function playSfx(sound) {
-  if (sfxPlaying === sound.id) return stopSfx();
-  sfxPlaying = sound.id;
-  sfxAudio.src = sound.url;
+function playSfx(sound, from = null) {
+  if (sfxPlaying === sound.id && from === null) return stopSfx();
+  const start = () => {
+    if (from !== null && sfxAudio.duration) sfxAudio.currentTime = from * sfxAudio.duration;
+  };
+  if (sfxPlaying !== sound.id) {
+    sfxPlaying = sound.id;
+    sfxAudio.src = sound.url;
+    if (from !== null) sfxAudio.addEventListener("loadedmetadata", start, { once: true });
+    drawSfx();
+  } else {
+    start();
+  }
   sfxAudio.play().catch(() => {
     sfxNotes.set(sound.id, { text: "Couldn't play it. Check your internet connection.", kind: "bad" });
     stopSfx();
   });
-  drawSfx();
 }
 
 function stopSfx() {
@@ -252,10 +274,57 @@ sfxAudio.addEventListener("ended", stopSfx);
 sfxAudio.addEventListener("timeupdate", () => {
   const row = sfxPlaying && $("sfxList").querySelector(`[data-id="${sfxPlaying}"]`);
   if (!row || !sfxAudio.duration) return;
-  const bar = row.querySelector(".bar");
-  bar.hidden = false;
-  bar.firstElementChild.style.width = (sfxAudio.currentTime / sfxAudio.duration) * 100 + "%";
+  const done = sfxAudio.currentTime / sfxAudio.duration;
+  const bars = row.querySelectorAll(".bars i");
+  bars.forEach((bar, i) => bar.classList.toggle("on", i / bars.length < done));
+  row.querySelector(".time").textContent = clock(sfxAudio.currentTime, false);
 });
+
+// ---- waveforms (made by the app the first time a sound is shown, then remembered)
+
+const sfxPeaks = new Map(); // path -> peaks
+const sfxPeaksWanted = [];
+const sfxPeaksFailed = new Set(); // not tried again until the tab is opened again
+let sfxPeaksBusy = 0;
+
+function drawSoundWave(wave, sound) {
+  const peaks = sound.peaks || sfxPeaks.get(sound.path);
+  const bars = wave.querySelector(".bars");
+  const count = 72;
+  for (let i = 0; i < count; i++) {
+    const bar = document.createElement("i");
+    bar.style.height = peaks ? Math.max(8, peaks[i] * 100) + "%" : "8%";
+    bars.append(bar);
+  }
+  wave.classList.toggle("loading", !peaks);
+  if (!peaks && !sfxPeaksWanted.includes(sound.path) && !sfxPeaksFailed.has(sound.path)) {
+    sfxPeaksWanted.push(sound.path);
+    fetchPeaks();
+  }
+}
+
+async function fetchPeaks() {
+  while (sfxPeaksBusy < 2 && sfxPeaksWanted.length) {
+    const path = sfxPeaksWanted.shift();
+    sfxPeaksBusy++;
+    api("/api/sfx-peaks", { path }).catch(() => ({ ok: false })).then((res) => {
+      sfxPeaksBusy--;
+      if (!res.ok) sfxPeaksFailed.add(path);
+      if (res.ok) {
+        sfxPeaks.set(path, res.peaks);
+        for (const sound of sfxSounds) if (sound.path === path) sound.peaks = res.peaks;
+        for (const sound of sfxSounds.filter((s) => s.path === path)) {
+          const row = $("sfxList").querySelector(`[data-id="${sound.id}"]`);
+          if (!row) continue;
+          const wave = row.querySelector(".sound-wave");
+          wave.querySelector(".bars").replaceChildren();
+          drawSoundWave(wave, sound);
+        }
+      }
+      fetchPeaks();
+    });
+  }
+}
 
 // ---- uploading
 
@@ -399,16 +468,10 @@ function renderSfxUploads(list) {
   const box = $("sfxUploads");
   box.replaceChildren(...list.map((item) => {
     const el = document.createElement("div");
-    el.className = "job " + (item.status === "uploading" ? "active" : item.status);
-    el.innerHTML = `
-      <div class="body">
-        <div class="title"></div>
-        <div class="line"><span class="badge">Upload</span><span class="msg"></span></div>
-        <div class="bar"><div></div></div>
-      </div>
-      <div class="actions"></div>`;
-    el.querySelector(".title").textContent = item.name;
-    el.querySelector(".msg").textContent = item.message;
+    el.className = "upload-strip " + item.status;
+    el.innerHTML = `<div class="up-text"><b></b><span></span></div><div class="bar"><div></div></div>`;
+    el.querySelector("b").textContent = item.name;
+    el.querySelector("span").textContent = item.message;
     const bar = el.querySelector(".bar");
     bar.hidden = item.status !== "uploading";
     bar.classList.toggle("indeterminate", !item.progress || item.progress >= 100);
@@ -419,7 +482,7 @@ function renderSfxUploads(list) {
       b.title = "Hide";
       b.innerHTML = ICONS.remove;
       b.onclick = () => api("/api/sfx-forget", { id: item.id });
-      el.querySelector(".actions").append(b);
+      el.querySelector(".up-text").append(b);
     }
     return el;
   }));
