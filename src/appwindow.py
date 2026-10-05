@@ -236,7 +236,9 @@ class Window:
         user32.RegisterClassExW(ctypes.byref(cls))  # fails harmlessly when already registered
 
         width, height = (int(n * scale) for n in SIZE)
-        self.hwnd = user32.CreateWindowExW(0, "LelonsConverterWindow", TITLE, 0x00CF0000,  # WS_OVERLAPPEDWINDOW
+        self.hwnd = user32.CreateWindowExW(0, "LelonsConverterWindow", TITLE, 0x00CF0000 | 0x02000000,
+                                           # WS_OVERLAPPEDWINDOW, and WS_CLIPCHILDREN so the window
+                                           # doesn't paint its background over the page
                                            -0x80000000, -0x80000000, width, height,  # CW_USEDEFAULT: Windows picks the spot
                                            None, None, instance, None)
         if not self.hwnd:
@@ -318,6 +320,7 @@ class Window:
         _method(self.webview, 5, wintypes.LPCWSTR)(self.url)  # Navigate
         self.user32.ShowWindow(self.hwnd, 1)  # SW_SHOWNORMAL
         self.user32.SetForegroundWindow(self.hwnd)
+        _method(controller, 4, wintypes.BOOL)(True)  # put_IsVisible
         _method(controller, 12, ctypes.c_int)(0)  # MoveFocus: typing goes to the page
         self.ok = self.alive = True
         self.started.set()
