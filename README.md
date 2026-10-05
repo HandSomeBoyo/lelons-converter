@@ -46,11 +46,13 @@ The **Library** tab is a sound library you share with your friends. Everyone
 makes an account with just a username and password (the round account button
 at the top right), then plays, searches and downloads the sounds by category
 (SFX, Music, Memes, Ambience, Other). Each sound shows its waveform (click it
-to play from that spot) and who uploaded it. The account button is also where
-you change your profile picture or password, or log out.
+to play from that spot) and who uploaded it. Click it and pick **Manage account**
+to open your Account page: change your profile picture, username or password,
+log out, or delete your account.
 
-Accounts have roles. The **Owner** (the username set in `sfx/setup.sql`) gets a
-People menu to see every account, change roles and remove people. **Admins**
+Accounts have roles. The **Owner** (the username set in `sfx/setup.sql`) also gets
+People and roles on the Account page, to see every account, change roles and
+remove people. **Admins**
 can upload sounds (any sound or video file, trimmed if you like, up to 10 MB)
 and delete them. **Viewers** can listen and download. New accounts start as
 viewers. The sounds are kept in a free Supabase project; `sfx/setup.sql` sets

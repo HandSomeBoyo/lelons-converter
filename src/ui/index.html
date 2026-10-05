@@ -26,10 +26,8 @@
             <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
           </div>
           <div class="lib-menu" id="libMenuItems" hidden>
+            <button type="button" id="libAccountOpen">Manage account</button>
             <button type="button" id="libPeopleOpen" hidden>People and roles</button>
-            <button type="button" id="libPicture">Change profile picture</button>
-            <button type="button" id="libPictureRemove" hidden>Remove profile picture</button>
-            <button type="button" id="libPasswordOpen">Change password</button>
             <button type="button" id="libLogout">Log out</button>
           </div>
           <div class="lib-login" id="libLogin" hidden>
@@ -46,7 +44,6 @@
             <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
           </div>
         </div>
-        <input type="file" id="libPictureInput" accept="image/*" hidden>
       </div>
     </div>
   </header>
@@ -203,16 +200,6 @@
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
-    <div class="lib-people" id="libPeople" hidden>
-      <div class="queue-head">
-        <h2>People</h2>
-        <button type="button" class="link" id="libPeopleClose">Back to the sounds</button>
-      </div>
-      <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
-      <p class="sfx-error" id="libPeopleError"></p>
-      <div id="libPeopleList"></div>
-    </div>
-
     <div id="sfxMain" hidden>
       <div class="history-tools">
         <label class="input history-search">
@@ -225,6 +212,75 @@
       <div class="upload-list" id="sfxUploads"></div>
       <p class="history-empty" id="sfxEmpty"></p>
       <div class="sound-list" id="sfxList"></div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="accountTab" hidden>
+    <h1 class="headline">Your account.<br><em>Make it yours.</em></h1>
+
+    <div class="acct-out" id="acctLoggedOut" hidden>
+      <p>You're not logged in.</p>
+      <div class="lib-out-buttons">
+        <button type="button" class="convert" id="acctOutLogin">Log in</button>
+        <button type="button" class="small-button" id="acctOutSignup">Create account</button>
+      </div>
+    </div>
+
+    <div class="acct" id="acctMain" hidden>
+      <div class="acct-card acct-profile">
+        <span class="avatar huge" id="acctAvatar"></span>
+        <div class="acct-who">
+          <b id="acctName"></b>
+          <span class="role" id="acctRole"></span>
+          <span class="acct-since" id="acctSince"></span>
+        </div>
+        <div class="acct-picture-buttons">
+          <button type="button" class="small-button" id="acctPicture">Change picture</button>
+          <button type="button" class="link" id="acctPictureRemove" hidden>Remove</button>
+        </div>
+        <input type="file" id="acctPictureInput" accept="image/*" hidden>
+      </div>
+
+      <form class="acct-card" id="acctNameForm">
+        <h2>Username</h2>
+        <p class="acct-help">This is the name everyone sees next to your sounds. 3 to 20 letters or numbers.</p>
+        <div class="acct-row">
+          <label class="lib-field"><input id="acctUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+          <button type="submit" class="small-button" id="acctNameSave">Save</button>
+        </div>
+        <p class="acct-note" id="acctNameNote"></p>
+      </form>
+
+      <form class="acct-card" id="acctPasswordForm">
+        <h2>Password</h2>
+        <p class="acct-help">At least 6 characters. Other computers you're logged in on get logged out.</p>
+        <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
+        <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password"></label>
+        <button type="submit" class="small-button">Change password</button>
+        <p class="acct-note" id="acctPasswordNote"></p>
+      </form>
+
+      <div class="acct-card" id="libPeople" hidden>
+        <h2>People and roles</h2>
+        <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
+        <p class="sfx-error" id="libPeopleError"></p>
+        <div id="libPeopleList"></div>
+      </div>
+
+      <div class="acct-card acct-end">
+        <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+        <div id="acctDeleteBox">
+          <button type="button" class="link acct-delete-open" id="acctDeleteOpen">Delete my account</button>
+          <form id="acctDeleteForm" hidden>
+            <p class="acct-help">This deletes your account for good. Your sounds stay in the library. Type your password to be sure.</p>
+            <div class="acct-row">
+              <label class="lib-field"><input id="acctDeletePassword" type="password" autocomplete="current-password" placeholder="Your password"></label>
+              <button type="submit" class="small-button acct-danger">Delete</button>
+            </div>
+            <p class="acct-note" id="acctDeleteNote"></p>
+          </form>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -327,22 +383,6 @@
 <!-- Trim editor: play to the spot you want and press "Set start here" / "Set end here",
      or drag the yellow lines. Clicking the waveform only moves the white playhead. -->
 <!-- Library: change password -->
-<div class="modal" id="libPasswordModal" hidden>
-  <div class="dialog lib-password-dialog" role="dialog" aria-labelledby="libPasswordHeading">
-    <h2 id="libPasswordHeading">Change password</h2>
-    <form id="libPasswordForm">
-      <label class="lib-field"><span>Current password</span><input id="libOldPassword" type="password" autocomplete="current-password"></label>
-      <label class="lib-field"><span>New password</span><input id="libNewPassword" type="password" autocomplete="new-password"></label>
-      <p class="sfx-error" id="libPasswordError"></p>
-      <div class="dialog-actions">
-        <span class="spacer"></span>
-        <button type="button" class="ghost-button" id="libPasswordCancel">Cancel</button>
-        <button type="submit" class="small-button">Save</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- SFX: upload a sound -->
 <div class="modal" id="sfxModal" hidden>
   <div class="dialog sfx-dialog" role="dialog" aria-labelledby="sfxHeading">
@@ -458,5 +498,6 @@
 <script src="files.js"></script>
 <script src="history.js"></script>
 <script src="sfx.js"></script>
+<script src="account.js"></script>
 </body>
 </html>

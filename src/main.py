@@ -369,6 +369,10 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "password":
                 library.change_password(data.get("old"), data.get("new"))
                 result = {}
+            elif action == "rename":
+                result = {"account": library.rename(data.get("username"))}
+            elif action == "delete-me":
+                result = {"account": library.delete_me(data.get("password"))}
             elif action == "picture-pick":
                 if os.name != "nt":
                     return self.send_json({"ok": False, "fallback": True})

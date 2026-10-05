@@ -67,6 +67,7 @@ FRIENDLY = {
     "wrong_password": "That's not your current password.",
     "locked": "Too many wrong tries. Wait 2 minutes and try again.",
     "too_many": "The library has as many accounts as it can take.",
+    "owner": "The owner's account can't be deleted.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
@@ -102,6 +103,8 @@ def _request(method, path, body=None, content_type="application/json", timeout=3
         message = details.get("message") or details.get("error") or ""
         if "exceeded the maximum allowed size" in message or e.code == 413:
             raise Error("That file is too big. Sounds can be up to 10 MB.") from None
+        if e.code == 404 and (details.get("code") == "PGRST202" or "function" in message):
+            raise Error("The library needs its newest setup. The owner has to run the new setup.sql in Supabase.") from None
         raise Error(f"The sound library said no ({e.code}{': ' + message[:120] if message else ''}).") from None
     except (urllib.error.URLError, OSError):
         raise Error("Couldn't reach the sound library. Check your internet connection.") from None
@@ -252,6 +255,24 @@ class Library:
             error = (result or {}).get("error")
             raise Error(FRIENDLY["wrong_password" if error == "wrong" else error] if error in FRIENDLY or error == "wrong"
                         else "That didn't work. Try again.")
+
+    def rename(self, username):
+        result = _rpc("lelons_rename", token=self._token(), new_username=str(username or ""))
+        if not result or not result.get("ok"):
+            error = (result or {}).get("error")
+            raise Error(FRIENDLY.get(error, "That didn't work. Try again."))
+        return self.account()
+
+    def delete_me(self, password):
+        """Deletes your own account (your sounds stay) and logs you out."""
+        result = _rpc("lelons_delete_me", token=self._token(), password=str(password or ""))
+        if not result or not result.get("ok"):
+            error = (result or {}).get("error")
+            raise Error(FRIENDLY["wrong_password" if error == "wrong" else error] if error in FRIENDLY or error == "wrong"
+                        else "That didn't work. Try again.")
+        self._remove_file(result.get("avatar"))
+        settings.save(library_token="")
+        return self.account()
 
     def _put_file(self, kind, data, content_type):
         """Upload a file with a ticket from the database. Returns its path in storage."""

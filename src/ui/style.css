@@ -596,10 +596,35 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .lib-login-submit { width: 100%; box-sizing: border-box; justify-content: center; height: 48px; margin-top: 6px; }
 .lib-login-submit:disabled { opacity: .5; }
 .lib-login-hint { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
-.lib-password-dialog { max-width: 420px; }
-.lib-password-dialog form { margin-top: 18px; }
+/* The Account page */
+.avatar.huge { width: 88px; height: 88px; font-size: 34px; }
+.acct, .acct-out { max-width: 640px; }
+.acct-out { padding: 22px 24px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
+.acct-out p { margin: 0; }
+.acct-card { padding: 20px 22px; margin-bottom: 14px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
+.acct-card h2 { margin: 0 0 4px; font: 600 16px var(--head); }
+.acct-help { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+.acct-profile { display: flex; align-items: center; gap: 18px; }
+.acct-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.acct-who b { font: 700 22px var(--head); overflow: hidden; text-overflow: ellipsis; }
+.acct-since { font-size: 13px; color: var(--muted); }
+.acct-picture-buttons { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: none; }
+.acct-card .small-button { height: 40px; padding: 0 16px; }
+.acct-card .small-button:disabled { opacity: .5; }
+.acct-row { display: flex; gap: 10px; align-items: flex-start; }
+.acct-row .lib-field { flex: 1; margin-bottom: 0; }
+.acct-row .small-button { height: 44px; }
+.acct-note { margin: 10px 0 0; min-height: 0; font-size: 13px; color: var(--red); }
+.acct-note:empty { display: none; }
+.acct-note.good { color: var(--green, #5fd38d); }
+.acct-end { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.acct-delete-open { color: var(--red); font-size: 13px; }
+.acct-end form { width: 100%; }
+.acct-card .small-button.acct-logout, .acct-card .small-button.acct-danger { background: transparent; color: var(--text); border: 1px solid var(--line2); }
+.acct-card .small-button.acct-logout:hover { border-color: var(--text); }
+.acct-card .small-button.acct-danger { color: var(--red); border-color: var(--red); }
+#libPeople .person:first-of-type { border-top: 0; }
 
-.lib-people[hidden] { display: none; }
 .lib-people-help { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
 .lib-people-help b { color: var(--text); font-weight: 600; }
 .person { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }

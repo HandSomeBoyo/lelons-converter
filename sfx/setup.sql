@@ -16,7 +16,9 @@ alter table lelons.config add column if not exists owner_username text;
 alter table lelons.config drop column if exists friend_hash;  -- (from the friend-code version)
 alter table lelons.config drop column if exists owner_hash;
 insert into lelons.config (id, owner_username) values (1, lower(btrim('CHANGE-ME-your-username')))
-on conflict (id) do update set owner_username = excluded.owner_username;
+on conflict (id) do update set owner_username = case  -- left as CHANGE-ME: keep the owner you set before
+  when excluded.owner_username = 'change-me-your-username' then lelons.config.owner_username
+  else excluded.owner_username end;
 
 -- 2. Everything below sets up accounts, sounds and where the files go.
 
@@ -104,7 +106,9 @@ end $$;
 
 create or replace function lelons.account_json(a lelons.accounts) returns json
   language sql stable set search_path = '' as
-  $$ select json_build_object('id', a.id, 'username', a.username, 'role', a.role, 'avatar', a.avatar) $$;
+  $$ select json_build_object('id', a.id, 'username', a.username, 'role', a.role, 'avatar', a.avatar,
+                             'created_at', a.created_at,
+                             'sounds', (select count(*) from lelons.sounds s where s.uploader_id = a.id)) $$;
 
 create or replace function lelons.new_session(account uuid) returns text
   language plpgsql security definer set search_path = '' as $$
@@ -345,6 +349,44 @@ begin
   update lelons.accounts a set role = new_role where a.id = account_id and a.role <> 'owner';
 end $$;
 
+create or replace function public.lelons_rename(token text, new_username text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  name text := btrim(coalesce(new_username, ''));
+begin
+  if name !~ '^[A-Za-z0-9_.-]{3,20}$' then
+    return json_build_object('ok', false, 'error', 'username');
+  end if;
+  if exists (select 1 from lelons.accounts a where lower(a.username) = lower(name) and a.id <> me.id) then
+    return json_build_object('ok', false, 'error', 'taken');
+  end if;
+  update lelons.accounts a set username = name where a.id = me.id returning * into me;
+  if me.role = 'owner' then  -- the owner's new name stays the owner's (and nobody can take the old one to become owner)
+    update lelons.config set owner_username = lower(name);
+  end if;
+  return json_build_object('ok', true, 'account', lelons.account_json(me));
+end $$;
+
+-- Deletes your own account (your sounds stay). The owner can't.
+create or replace function public.lelons_delete_me(token text, password text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if me.role = 'owner' then
+    return json_build_object('ok', false, 'error', 'owner');
+  end if;
+  if extensions.crypt(coalesce(password, ''), me.pass_hash) <> me.pass_hash then
+    return json_build_object('ok', false, 'error', 'wrong');
+  end if;
+  delete from lelons.accounts a where a.id = me.id;
+  if me.avatar is not null then
+    perform lelons.delete_ticket(me.avatar);
+  end if;
+  return json_build_object('ok', true, 'avatar', me.avatar);
+end $$;
+
 -- Removes an account (its sounds stay). Returns its picture's file, if any, for the app to delete.
 create or replace function public.lelons_remove_account(token text, account_id uuid)
 returns text language plpgsql security definer set search_path = '' as $$
@@ -371,7 +413,8 @@ begin
   foreach f in array array['lelons_signup(text, text)', 'lelons_login(text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
     'lelons_add(text, text, text, text, real, int)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
-    'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)'] loop
+    'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
+    'lelons_rename(text, text)', 'lelons_delete_me(text, text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

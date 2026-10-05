@@ -19,9 +19,10 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const name of ["video", "files", "images", "sfx", "history"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["video", "files", "images", "sfx", "history", "account"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
   if (tab === "sfx" && typeof openSfx === "function") openSfx();
+  if (tab === "account" && typeof openAccount === "function") openAccount();
   try { localStorage.setItem("tab", tab); } catch (e) { /* not important */ }
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
