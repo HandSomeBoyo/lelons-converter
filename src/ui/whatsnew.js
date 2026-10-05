@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.21.0", items: [
+    "Send Library sounds in the chat with the new chat button on a sound, or a trimmed clip with \"Send to chat\" in the trim editor. Others can play them or drag them into their editor.",
+    "React to messages with emojis, and @mention people (type @ to pick a name). Mentions light up and ding.",
+    "Private messages: click someone's name, then \"Send a message\". Only you two can see it.",
+    "Profiles: click a name or picture to see someone's role, when they were last online, and their newest sounds.",
+    "Paste a bunch of links at once (or a few playlists) and convert them all in one go.",
+    "A soft ding for new messages. You can turn it off in Settings.",
+  ] },
   { version: "1.20.0", items: [
     "Live chat! Click \"online\" at the top right to chat with everyone who has an account.",
     "See how many people have the app open right now, and who.",

@@ -7,6 +7,7 @@ const SFX_ICONS = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   starOn: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
 };
 
@@ -264,7 +265,7 @@ function drawSfxSide() {
     sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip"));
   $("sfxCats").replaceChildren(...Object.entries(sfxAccount.categories).map(([value, label]) =>
     sideButton(label, counts[value] || 0, sfxCategory === value, pick(value), "cat-" + value)));
-  if (sfxUploader && !people.has(sfxUploader)) sfxUploader = "";
+  if (sfxUploader && sfxSounds.length && !people.has(sfxUploader)) sfxUploader = "";
   const names = [...people.keys()].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" }));
   $("sfxPeople").replaceChildren(
     sideButton("Everyone", counts.all, !sfxUploader, () => { sfxUploader = ""; }),
@@ -303,6 +304,14 @@ function rowFor(sound) {
   const el = sfxRow(sound);
   sfxRows.set(sound.id, { el, sig, sound });
   return el;
+}
+
+// Only this person's sounds (from their profile).
+function showUploader(name) {
+  sfxUploader = name;
+  sfxCategory = "all";
+  sfxLimit = 200;
+  drawSfx();
 }
 
 function drawSfx() {
@@ -380,7 +389,10 @@ function sfxRow(sound) {
       by.className = "by";
       by.append("Uploaded by ", avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
       const name = document.createElement("b");
+      name.className = "by-name";
       name.textContent = sound.uploader;
+      name.title = "See " + sound.uploader + "'s profile";
+      name.onclick = (e) => { e.stopPropagation(); openProfile(sound.uploader); };
       by.append(name);
       meta.append(" · ", by);
     }
@@ -430,6 +442,7 @@ function sfxRow(sound) {
       : { text: res.error, kind: "bad" });
     drawSfx();
   });
+  add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } }));
   if (sfxUser() && sfxUser().canUpload) {
     // Deleting needs a second click, so it can't happen by accident.
     const bin = add(SFX_ICONS.trash, "Delete this sound for everyone", async () => {

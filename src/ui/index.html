@@ -68,7 +68,7 @@
 
   <form class="row" id="form">
     <label class="input">
-      <input id="url" placeholder="Paste a link from YouTube, TikTok, SoundCloud and more" autocomplete="off" spellcheck="false" autofocus>
+      <input id="url" placeholder="Paste a link (or a bunch at once) from YouTube, TikTok and more" autocomplete="off" spellcheck="false" autofocus>
     </label>
     <button class="convert" id="convert" type="submit">
       <span id="convertText">Convert</span>
@@ -514,6 +514,7 @@
         <svg class="clip-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>
         <span class="clip-text"><b id="clipTitle"></b><span id="clipInfo"></span></span>
       </div>
+      <button type="button" class="ghost-button clip-share" id="clipShare" hidden title="Send this clip's sound in the live chat">Send to chat</button>
     </div>
     <p class="trim-help" id="trimHelp">Play it and press <b>Set start here</b> and <b>Set end here</b> at the right moments. Or drag the yellow lines.</p>
     <div class="dialog-actions">
@@ -582,12 +583,16 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
+  <div class="chat-convos" id="chatConvos"></div>
+  <div class="chat-private-head" id="chatPrivateHead" hidden></div>
   <div class="chat-out" id="chatOut" hidden>
     <p>Log in to chat with everyone.</p>
     <button type="button" class="small-button" id="chatLogin">Log in</button>
   </div>
   <div class="chat-list" id="chatList"></div>
   <p class="chat-note" id="chatNote"></p>
+  <div class="chat-attach" id="chatAttach" hidden></div>
+  <div class="chat-suggest" id="chatSuggest" hidden></div>
   <form class="chat-form" id="chatForm" autocomplete="off">
     <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
     <button type="submit" class="small-button" id="chatSend" title="Send">
@@ -595,6 +600,28 @@
     </button>
   </form>
 </aside>
+
+<div class="modal" id="profileModal" hidden>
+  <div class="dialog profile-dialog" role="dialog" aria-labelledby="profileName">
+    <div class="profile-top">
+      <span id="profileAvatar"></span>
+      <div class="profile-text">
+        <h2 id="profileName"></h2>
+        <div class="profile-sub"><span class="role" id="profileRole"></span><span id="profileSeen"></span></div>
+      </div>
+    </div>
+    <div class="profile-stats" id="profileStats"></div>
+    <h3 class="profile-h" id="profileSoundsHead">Newest sounds</h3>
+    <div class="profile-sounds" id="profileSounds"></div>
+    <p class="acct-note" id="profileNote"></p>
+    <div class="dialog-actions">
+      <button type="button" class="ghost-button" id="profileAll">See all their sounds</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="profileClose">Close</button>
+      <button type="button" class="small-button" id="profileMessage">Send a message</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="settingsModal" hidden>
   <div class="dialog settings-dialog" role="dialog" aria-labelledby="settingsHeading">
@@ -604,6 +631,10 @@
       <label class="check"><input type="checkbox" id="setHardware"> Use my graphics card</label>
       <p class="set-help">Makes videos several times faster and keeps the window smooth. Turn it off if videos
         come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
+    </section>
+    <section class="set-block">
+      <h3>Chat</h3>
+      <label class="check"><input type="checkbox" id="setChatSound"> Play a sound for new messages</label>
     </section>
     <section class="set-block">
       <h3>Theme</h3>
@@ -645,6 +676,7 @@
 <script src="whatsnew.js"></script>
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
+<script src="profile.js"></script>
 <script src="settings.js"></script>
 </body>
 </html>

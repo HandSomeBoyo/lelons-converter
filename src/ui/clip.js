@@ -78,12 +78,15 @@ async function pollClip() {
 function showClip(clip) {
   const idle = clip.status === "idle";
   $("clipMake").hidden = !idle;
+  if (idle) $("clipShare").hidden = true;
   $("clipChip").hidden = idle;
   if (idle) return;
   const ready = clip.status === "ready";
   const chip = $("clipChip");
   chip.className = "clip-chip " + clip.status;
   setDrag(chip, ready ? { kind: "clip", key: clipKey } : null);
+  // (GIFs have no sound to send.)
+  $("clipShare").hidden = !ready || !sfxUser() || trimSource.clip().format === "gif";
   chip.title = ready ? DRAG_HINT : "";
   $("clipBar").style.width = clip.status === "working" && clip.progress ? clip.progress + "%" : "0";
   if (ready) {
@@ -100,4 +103,7 @@ function showClip(clip) {
 }
 
 $("clipMake").addEventListener("click", startClip);
+$("clipShare").addEventListener("click", () => {
+  shareToChat({ clip: clipKey, name: $("clipInfo").textContent.split(" · ").slice(1).join(" · ") || "Clip" });
+});
 $("clipChip").addEventListener("click", () => { if ($("clipChip").classList.contains("error")) sendClip(); });

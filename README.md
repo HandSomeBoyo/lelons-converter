@@ -71,6 +71,14 @@ by name, by length or by uploader.
 the app open right now. Click it to chat with everyone who has an account. Your
 own messages (and, for the Owner and Admins, anyone's) can be deleted.
 
+In the chat you can send Library sounds (the chat button on a sound) and clips
+from the trim editor (**Send to chat**), react with emojis, and @mention people.
+Click a name or picture to see their **profile** (role, last online, newest
+sounds) or to send them a **private message**.
+
+Paste **many links at once** (one per line, or with spaces) and the app looks
+them all up and lists them like a playlist, so you can convert them together.
+
 **Settings** (at the bottom): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
 videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or

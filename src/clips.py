@@ -82,6 +82,15 @@ class Clips:
             _keep(clip["path"])
             return clip["path"]
 
+    def for_sending(self, key):
+        """(path, name, seconds) of the finished clip, to send in the chat."""
+        with self.lock:
+            clip = self.clips.get(str(key))
+            if not clip or clip["status"] != "ready" or not os.path.isfile(clip["path"]):
+                return None
+            start, end = clip["made"]["trim"]
+            return clip["path"], os.path.splitext(os.path.basename(clip["path"]))[0], end - start
+
     def _public(self, clip):
         return {"status": clip["status"], "message": clip["message"], "progress": clip["progress"],
                 "fileName": os.path.basename(clip["path"]) if clip["status"] == "ready" else "",

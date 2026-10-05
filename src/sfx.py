@@ -71,6 +71,7 @@ FRIENDLY = {
     "wrong_password": "That's not your current password.",
     "locked": "Too many wrong tries. Wait 2 minutes and try again.",
     "too_many": "The library has as many accounts as it can take.",
+    "nobody": "There's no account with that name any more.",
     "owner": "The owner's account can't be deleted.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
@@ -315,30 +316,94 @@ class Library:
 
     # ---- the live chat
 
-    def chat(self, after=0):
-        """Messages newer than after (0: the newest 100), and who's online."""
+    def chat(self, after=0, with_user=None):
+        """One conversation: the chat with everyone, or the private chat with with_user.
+        Messages newer than after (0: the newest 100), recent reactions, your private chats, who's online."""
         try:
             after = max(0, int(after or 0))
         except (TypeError, ValueError):
             after = 0
-        result = _rpc("lelons_chat_list", token=self._token(), after=after) or {}
-        messages = [{**m, "avatarUrl": public_url(m["avatar"]) if m.get("avatar") else ""}
-                    for m in result.get("messages") or []]
-        online = presence.remember(result.get("online"))
-        return {"messages": messages, "online": online}
+        result = _rpc("lelons_chat_list", token=self._token(), after=after,
+                      with_user=str(with_user) if with_user else None) or {}
 
-    def chat_send(self, message):
-        result = _rpc("lelons_chat_send", token=self._token(), message=str(message or ""))
+        def pictured(row):
+            return {**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""}
+
+        messages = []
+        for m in result.get("messages") or []:
+            m = pictured(m)
+            if m.get("sound"):
+                m["sound"] = {**m["sound"], "url": public_url(m["sound"]["path"])}
+            if m.get("file"):
+                m["fileUrl"] = public_url(m["file"])
+            messages.append(m)
+        return {"messages": messages, "recent": result.get("recent") or [],
+                "private": [pictured(p) for p in result.get("private") or []],
+                "everyoneLast": result.get("everyone_last") or 0,
+                "names": result.get("names") or [],
+                "online": presence.remember(result.get("online"))}
+
+    def chat_send(self, message, to_user=None, sound_id=None, clip=None):
+        """clip: (path, name, seconds) of a trim editor clip to send along (its sound, as an MP3)."""
+        extra = {}
+        if clip:
+            extra = self._chat_clip(*clip)
+        try:
+            result = _rpc("lelons_chat_send", token=self._token(), message=str(message or ""),
+                          to_user=str(to_user) if to_user else None, sound=str(sound_id) if sound_id else None,
+                          **extra)
+        except Exception:
+            if extra:
+                self._remove_file(extra["file"])
+            raise
         if not result or not result.get("ok"):
+            if extra:
+                self._remove_file(extra["file"])
             raise Error({
                 "short": "Write something first.",
                 "long": "That's a bit long. Keep it under 500 letters.",
                 "slow": "Slow down a little! Wait a few seconds.",
                 "daily": "You've sent a lot today. Try again tomorrow.",
+                "nobody": "That person doesn't have an account any more.",
+                "yourself": "You can't send a private message to yourself.",
+                "gone": "Someone deleted that sound.",
             }.get((result or {}).get("error"), "That didn't send. Try again."))
 
+    def _chat_clip(self, path, name, seconds):
+        """Upload a clip's sound for the chat. Returns what lelons_chat_send needs."""
+        found = media.probe(path)
+        if not found["audio"]:
+            raise Error("That clip has no sound in it (GIFs don't), so it can't go in the chat.")
+        seconds = seconds or found["duration"]
+        kbps = min(192, int(MAX_BYTES * 0.95 * 8 / max(seconds, 1) / 1000))
+        if kbps < 48:
+            raise Error("That clip is too long to send. Keep it under about 20 minutes.")
+        os.makedirs(FOLDER, exist_ok=True)
+        mp3 = os.path.join(FOLDER, f"chat-{uuid.uuid4().hex[:8]}.mp3")
+        try:
+            media.convert_audio(path, mp3, "mp3", str(kbps), None, False, seconds, lambda p: None)
+            if os.path.getsize(mp3) > MAX_BYTES:
+                raise Error("That clip is too big to send. Make it shorter.")
+            with open(mp3, "rb") as f:
+                file = self._put_file("chat", f.read(), "audio/mpeg")
+        except (OSError, RuntimeError) as e:
+            raise Error("Couldn't send that clip. Check your internet connection.") from e
+        finally:
+            if os.path.exists(mp3):
+                os.remove(mp3)
+        return {"file": file, "file_name": _clean_name(name, 120), "file_seconds": round(seconds, 2)}
+
+    def chat_react(self, message_id, emoji, on):
+        _rpc("lelons_chat_react", token=self._token(), message_id=int(message_id), emoji=str(emoji), on_off=bool(on))
+
     def chat_delete(self, message_id):
-        _rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id))
+        self._remove_file(_rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id)))
+
+    def profile(self, username):
+        result = _rpc("lelons_profile", token=self._token(), username=str(username or ""))
+        result["avatarUrl"] = public_url(result["avatar"]) if result.get("avatar") else ""
+        result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
+        return result
 
     def favorite(self, sound_id, starred):
         _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))

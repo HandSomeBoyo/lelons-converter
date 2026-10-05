@@ -69,7 +69,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -461,13 +461,23 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "feedback-set":
                 result = {"feedback": library.set_feedback(data.get("id"), data.get("done"), data.get("remove"))}
             elif action == "chat":
-                result = library.chat(data.get("after"))
+                result = library.chat(data.get("after"), data.get("with"))
             elif action == "chat-send":
-                library.chat_send(data.get("message"))
-                result = library.chat(data.get("after"))
+                clip = None
+                if data.get("clip"):
+                    clip = clip_maker.for_sending(data["clip"])
+                    if not clip:
+                        raise sfx.Error("Make the clip first.")
+                library.chat_send(data.get("message"), data.get("with"), data.get("sound"), clip)
+                result = library.chat(data.get("after"), data.get("with"))
+            elif action == "chat-react":
+                library.chat_react(data.get("id"), data.get("emoji"), data.get("on"))
+                result = {}
             elif action == "chat-delete":
                 library.chat_delete(data.get("id"))
                 result = {}
+            elif action == "profile":
+                result = {"profile": library.profile(data.get("username"))}
             elif action == "favorite":
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}

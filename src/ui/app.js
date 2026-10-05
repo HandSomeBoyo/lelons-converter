@@ -112,25 +112,32 @@ $("wholePlaylist").addEventListener("click", () => {
   lookUp($("url").value);
 });
 
-function showPlaylist(list) {
+// keep: redrawing the same list (links still being looked up): keep what's picked.
+function showPlaylist(list, keep = false) {
   playlist = list;
-  picked.clear();
+  if (!keep) picked.clear();
   $("playlist").hidden = !list;
   $("preview").classList.toggle("is-playlist", !!list);
   if (list) {
-    list.entries.forEach((e) => picked.add(e.url));
-    $("playlistMeta").textContent = [`${list.entries.length} videos`, list.channel].filter(Boolean).join(" · ");
+    if (!keep) list.entries.forEach((e) => { if (!e.note) picked.add(e.url); });
+    $("playlistMeta").textContent = list.batch ? `${list.links} links` + (list.looking ? " · looking them up..." : "")
+      : [`${list.entries.length} videos`, list.channel].filter(Boolean).join(" · ");
     const rows = $("playlistList");
     rows.innerHTML = "";
     list.entries.forEach((entry, i) => {
       const row = document.createElement("label");
       row.className = "playlist-row";
-      row.innerHTML = `<input type="checkbox" checked><span class="number"></span><span class="thumb"></span>
+      row.innerHTML = `<input type="checkbox"><span class="number"></span><span class="thumb"></span>
         <span class="info"><span class="title"></span><span class="meta"></span></span>`;
+      row.querySelector("input").checked = picked.has(entry.url);
+      row.querySelector("input").disabled = !!entry.note;
+      row.classList.toggle("bad", !!entry.note);
+      row.classList.toggle("looking", !!entry.looking);
       row.querySelector(".number").textContent = i + 1;
       row.querySelector(".thumb").style.backgroundImage = entry.thumbnail ? `url("${entry.thumbnail}")` : "";
       row.querySelector(".title").textContent = entry.title;
-      row.querySelector(".meta").textContent = [entry.channel, entry.duration].filter(Boolean).join(" · ");
+      row.querySelector(".meta").textContent = entry.note || (entry.looking ? "Looking it up..."
+        : [entry.channel, entry.duration].filter(Boolean).join(" · "));
       row.querySelector("input").addEventListener("change", (e) => {
         if (e.target.checked) picked.add(entry.url); else picked.delete(entry.url);
         updatePlaylistBits();
@@ -153,11 +160,64 @@ function updatePlaylistBits() {
 $("playlistAll").addEventListener("click", () => {
   const all = picked.size !== playlist.entries.length;
   $("playlistList").querySelectorAll("input").forEach((box, i) => {
+    if (box.disabled) return;
     box.checked = all;
     if (all) picked.add(playlist.entries[i].url); else picked.delete(playlist.entries[i].url);
   });
   updatePlaylistBits();
 });
+
+// ---- many links at once: each one is looked up, then they're listed like a playlist
+
+// The links in pasted text. (A text box drops line breaks, so links can end up stuck together.)
+function linksIn(text) {
+  const found = text.match(/https?:\/\/.+?(?=https?:\/\/|[\s,;]|$)/gi) || [];
+  return [...new Set(found.map((l) => l.replace(/[)\]>.]+$/, "")))].slice(0, 50);
+}
+
+async function lookUpMany(raw, links) {
+  previewUrl = raw;
+  clearTrim();
+  previewSeconds = 0;
+  const list = { batch: true, links: links.length, looking: true,
+    entries: links.map((url) => ({ url, title: url, channel: "", duration: "", seconds: 0, thumbnail: "", looking: true })) };
+  showPreview("", `${links.length} links`, "Looking them up...", "");
+  showPlaylist(list);
+  let next = 0;
+  const one = async () => {
+    while (next < links.length) {
+      const url = links[next++];
+      const res = await api("/api/info", { url }).catch(() => ({ ok: false, error: "Couldn't look up that link." }));
+      if (previewUrl !== raw) return; // the box was changed meanwhile
+      const at = list.entries.findIndex((e) => e.url === url && e.looking);
+      if (at < 0) continue;
+      if (res.ok && res.preview.playlist) {
+        // A playlist link: all its videos, picked like the others.
+        const videos = res.preview.entries.filter((v) => !list.entries.some((e) => e.url === v.url));
+        list.entries.splice(at, 1, ...videos);
+        picked.delete(url);
+        videos.forEach((v) => picked.add(v.url));
+      } else if (res.ok) {
+        const p = res.preview;
+        Object.assign(list.entries[at], { title: p.title, channel: p.channel, duration: p.duration, seconds: p.seconds,
+          thumbnail: p.thumbnail, looking: false });
+      } else {
+        Object.assign(list.entries[at], { looking: false, note: res.error });
+        picked.delete(url);
+      }
+      showPlaylist(list, true);
+    }
+  };
+  await Promise.all([one(), one(), one()]); // 3 at a time
+  if (previewUrl !== raw) return;
+  list.looking = false;
+  const good = list.entries.filter((e) => !e.note);
+  const bad = list.entries.length - good.length;
+  showPreview(bad === list.entries.length ? "error" : "",
+    `${good.length} video${good.length === 1 ? "" : "s"} from ${links.length} links`,
+    bad ? `${bad} link${bad === 1 ? "" : "s"} didn't work` : "Untick the ones you don't want", (good[0] || {}).thumbnail);
+  showPlaylist(list, true);
+}
 
 async function lookUp(url) {
   previewUrl = url;
@@ -186,9 +246,21 @@ async function lookUp(url) {
 $("url").addEventListener("input", () => {
   clearTimeout(previewTimer);
   const url = $("url").value.trim();
+  if (url && url === previewUrl) return;
+  const links = linksIn(url);
+  if (links.length > 1) return void (previewTimer = setTimeout(() => lookUpMany(url, links), 400));
   if (!url || !looksLikeLink(url)) return hidePreview();
-  if (url === previewUrl) return;
   previewTimer = setTimeout(() => lookUp(url), 400);
+});
+// Pasting several lines of links: put them in the box with spaces, not stuck together.
+$("url").addEventListener("paste", (e) => {
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  if (linksIn(text).length < 2) return;
+  e.preventDefault();
+  const box = $("url");
+  const joined = text.trim().split(/\s+/).join(" ");
+  box.setRangeText(joined, box.selectionStart, box.selectionEnd, "end");
+  box.dispatchEvent(new Event("input"));
 });
 
 // ---- trim editor: a waveform with a start line and an end line

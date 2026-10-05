@@ -7,6 +7,7 @@ let appSettings = { hardware: true, theme: "dark", accent: "yellow" };
 
 function drawSettings() {
   $("setHardware").checked = appSettings.hardware;
+  $("setChatSound").checked = loadPref("chatSound") !== false;
   document.querySelectorAll("#themePicks button").forEach((b) => b.classList.toggle("active", b.dataset.theme === appSettings.theme));
   const light = appSettings.theme === "light";
   $("accentPicks").replaceChildren(...Object.keys(ACCENT_COLORS).map((name) => {
@@ -50,5 +51,9 @@ $("settingsOpen").addEventListener("click", openSettings);
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsModal").addEventListener("click", (e) => { if (e.target === $("settingsModal")) closeSettings(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); });
+$("setChatSound").addEventListener("change", () => {
+  savePref("chatSound", $("setChatSound").checked);
+  if ($("setChatSound").checked && typeof chatDing === "function") chatDing();  // what it sounds like
+});
 $("setHardware").addEventListener("change", () => changeSettings({ hardware: $("setHardware").checked }));
 document.querySelectorAll("#themePicks button").forEach((b) => b.addEventListener("click", () => changeSettings({ theme: b.dataset.theme })));
