@@ -21,6 +21,7 @@
     <button class="active" data-tab="video">Video</button>
     <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
+    <button data-tab="sfx">SFX</button>
     <button data-tab="history">History</button>
   </nav>
 
@@ -152,6 +153,40 @@
     </div>
   </section>
 
+  <section class="tab-page" id="sfxTab" hidden>
+    <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
+
+    <div class="sfx-join" id="sfxJoin" hidden>
+      <p class="sfx-lead" id="sfxJoinText">Type the friend code you got to hear everyone's sounds and add your own.</p>
+      <form class="row" id="sfxJoinForm">
+        <label class="input"><input id="sfxCode" placeholder="Friend code" autocomplete="off" spellcheck="false"></label>
+        <button class="convert" type="submit" id="sfxJoinButton">Join</button>
+      </form>
+      <div class="sfx-owner-row">
+        <button type="button" class="link" id="sfxOwnerToggle">I have an owner code</button>
+        <label class="input sfx-owner" id="sfxOwnerBox" hidden><input id="sfxOwnerCode" placeholder="Owner code (lets you delete any sound)" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <p class="sfx-error" id="sfxJoinError"></p>
+    </div>
+
+    <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
+
+    <div id="sfxMain" hidden>
+      <div class="history-tools">
+        <label class="input history-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
+        </label>
+        <button type="button" class="small-button" id="sfxUploadOpen">Upload a sound</button>
+      </div>
+      <div class="chips sfx-cats" id="sfxCats"></div>
+      <div class="jobs" id="sfxUploads"></div>
+      <p class="history-empty" id="sfxEmpty"></p>
+      <div class="jobs sfx-list" id="sfxList"></div>
+      <p class="sfx-foot" id="sfxFoot"></p>
+    </div>
+  </section>
+
   <section class="tab-page" id="historyTab" hidden>
     <h1 class="headline">Everything you got.<br><em>Get it again.</em></h1>
     <div class="history-tools">
@@ -250,6 +285,45 @@
 
 <!-- Trim editor: play to the spot you want and press "Set start here" / "Set end here",
      or drag the yellow lines. Clicking the waveform only moves the white playhead. -->
+<!-- SFX: upload a sound -->
+<div class="modal" id="sfxModal" hidden>
+  <div class="dialog sfx-dialog" role="dialog" aria-labelledby="sfxHeading">
+    <h2 id="sfxHeading">Upload a sound</h2>
+    <p class="sub">Everyone with the friend code can hear and download it. Up to 10 MB (about 7 minutes).</p>
+    <label class="dropzone compact" id="sfxDrop">
+      <input type="file" id="sfxFileInput" accept="audio/*,video/*" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span class="drop-text" id="sfxDropText"><strong>Drop a sound or video here</strong> or <span class="link">choose a file</span></span>
+    </label>
+    <div class="sfx-form" id="sfxForm" hidden>
+      <div class="opt-row">
+        <span class="opt-label">Part</span>
+        <span id="sfxPart"></span>
+        <button type="button" class="link" id="sfxTrim">Trim</button>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">Name</span>
+        <label class="input sfx-field"><input id="sfxName" maxlength="80" autocomplete="off" spellcheck="false" placeholder="What is it?"></label>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">Category</span>
+        <div class="chips" id="sfxCategory"></div>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">You</span>
+        <label class="input sfx-field"><input id="sfxUploader" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Your name (shown with the sound)"></label>
+      </div>
+    </div>
+    <p class="sfx-error" id="sfxUploadError"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="sfxCancel">Cancel</button>
+      <button type="button" class="small-button" id="sfxSend" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+<audio id="sfxAudio" preload="none"></audio>
+
 <div class="modal" id="trimModal" hidden>
   <div class="dialog trim-dialog" role="dialog" aria-labelledby="trimHeading">
     <h2 id="trimHeading">Trim</h2>
@@ -328,5 +402,6 @@
 <script src="images.js"></script>
 <script src="files.js"></script>
 <script src="history.js"></script>
+<script src="sfx.js"></script>
 </body>
 </html>

@@ -34,6 +34,7 @@ import jobs  # noqa: E402
 import media  # noqa: E402
 import names  # noqa: E402
 import settings  # noqa: E402
+import sfx  # noqa: E402
 import waveform  # noqa: E402
 import windows  # noqa: E402
 from version import VERSION  # noqa: E402
@@ -109,6 +110,7 @@ class State:
                 "jobs": queue.snapshot(),
                 "files": local_files.snapshot(),
                 "historyVersion": history.version,
+                "sfxUploads": sfx.library.snapshot(),
             }
 
     @property
@@ -117,7 +119,7 @@ class State:
 
     @property
     def converting(self):
-        return queue.busy or local_files.busy or waveform.busy()
+        return queue.busy or local_files.busy or waveform.busy() or sfx.library.busy
 
     def start(self, flag):
         """Set a flag (like "checking") if it isn't set yet. False if it already was."""
@@ -351,6 +353,65 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
 
+    def handle_sfx(self, action, data):
+        """The SFX tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        library = sfx.library
+        try:
+            if action == "account":
+                result = {"account": library.account()}
+            elif action == "join":
+                result = {"account": library.join(data.get("code"), data.get("ownerCode") or "")}
+            elif action == "leave":
+                library.leave()
+                result = {"account": library.account()}
+            elif action == "name":
+                library.set_name(data.get("name"))
+                result = {"account": library.account()}
+            elif action == "list":
+                result = {"sounds": library.sounds()}
+            elif action == "delete":
+                library.delete(data.get("id"))
+                result = {}
+            elif action == "download":
+                path = library.download(str(data.get("url") or ""), data.get("name"), state.folder)
+                result = {"path": path, "fileName": os.path.basename(path)}
+            elif action == "show":
+                path = str(data.get("path") or "")
+                if os.path.normcase(path) in library.saved:
+                    show_in_folder(path)
+                result = {}
+            elif action == "pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a sound or video", sfx.UPLOAD_KINDS)
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                result = {"file": library.add_path(paths[0]) if paths else None}
+            elif action == "upload":
+                trim = None
+                try:
+                    start, end = float(data.get("start")), float(data.get("end"))
+                    item = library.find(data.get("id"))
+                    if item and 0 <= start < end and not (start <= 0.05 and end >= item["seconds"] - 0.05):
+                        trim = (start, min(end, item["seconds"] or end))
+                except (TypeError, ValueError):
+                    pass
+                library.upload(data.get("id"), data.get("name"), data.get("category"), trim)
+                result = {}
+            elif action == "forget":
+                library.forget(data.get("id"))
+                result = {}
+            elif action == "clear":
+                library.clear_done()
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True, **result})
+
     def handle_post(self):
         length = int(self.headers.get("Content-Length") or 0)
         if self.path == "/api/file-add":  # the body is the file itself
@@ -358,6 +419,16 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length)})
             except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/sfx-add":  # the body is the sound itself
+            if length > 2 * 1024 ** 3:
+                return self.send_json({"ok": False, "error": "That file is too big."})
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "sound")
+            try:
+                return self.send_json({"ok": True, "file": sfx.library.add(name, self.rfile, length)})
+            except sfx.Error as e:
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
@@ -380,6 +451,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "preview": queue.preview(url)})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
+        elif self.path == "/api/waveform" and data.get("sfx"):
+            item = sfx.library.find(data["sfx"])
+            try:
+                if not item:
+                    raise OSError("That file is gone. Pick it again.")
+                self.send_json({"ok": True, **waveform.get_local("sfx-" + item["id"], item["path"])})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e) if isinstance(e, OSError) else "Couldn't load this file."})
         elif self.path == "/api/waveform" and data.get("file"):
             item = local_files.find(data["file"])
             try:
@@ -470,6 +549,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/history-clear":
             history.clear()
             self.send_json({"ok": True})
+        elif self.path.startswith("/api/sfx-"):
+            self.handle_sfx(self.path[len("/api/sfx-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

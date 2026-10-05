@@ -19,12 +19,13 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const name of ["video", "files", "images", "history"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["video", "files", "images", "sfx", "history"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
+  if (tab === "sfx" && typeof openSfx === "function") openSfx();
   try { localStorage.setItem("tab", tab); } catch (e) { /* not important */ }
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-try { if (["files", "images", "history"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
+try { if (["files", "images", "sfx", "history"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 
@@ -79,6 +80,8 @@ window.addEventListener("drop", (e) => {
   document.body.classList.remove("dragging");
   // Pictures go to the Images tab, videos and songs to the Files tab.
   const files = [...e.dataTransfer.files];
+  // The SFX upload window takes the first file itself.
+  if (typeof sfxTakesDrop === "function" && sfxTakesDrop(files)) return;
   const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
   const pictures = files.filter(isPicture), others = files.filter((f) => !isPicture(f));
   if (others.length) addMediaFiles(others);

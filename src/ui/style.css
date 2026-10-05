@@ -452,3 +452,34 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .history-empty[hidden] { display: none; }
 .history-list .job .msg.gone { color: var(--red); }
 .history-list .again { height: 30px; padding: 0 12px; font-size: 13px; white-space: nowrap; }
+
+/* SFX tab */
+.sfx-lead { color: var(--muted); font-size: 15px; margin: 0 0 16px; max-width: 560px; }
+.sfx-error { color: var(--red); font-size: 13.5px; margin: 12px 0 0; }
+.sfx-error:empty { display: none; }
+.sfx-owner-row { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 13px; }
+.sfx-owner { height: 44px; max-width: 360px; }
+.sfx-owner input { font-size: 14px; }
+.sfx-owner[hidden] { display: none; }
+.sfx-cats { margin-bottom: 8px; }
+.sfx-cats button .count { margin-left: 6px; opacity: .6; font-weight: 500; }
+.sfx-list .job .play {
+  all: unset; cursor: pointer; flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel2); color: var(--text); transition: background .15s, color .15s;
+}
+.sfx-list .job .play:hover { background: var(--accent); color: var(--ink); }
+.sfx-list .job.playing .play { background: var(--accent); color: var(--ink); }
+.sfx-list .job .play svg { width: 16px; height: 16px; }
+.sfx-list .job .bar { margin-top: 6px; }
+.sfx-list .job .msg.saved { color: var(--green); }
+.sfx-list .job .msg.bad { color: var(--red); }
+.sfx-cat-badge { flex: none; }
+.sfx-foot { color: var(--muted); font-size: 12.5px; margin-top: 18px; }
+.sfx-foot .link { font-size: 12.5px; }
+.sfx-dialog { max-width: 560px; }
+.sfx-dialog .dropzone { margin-top: 18px; }
+.sfx-form { margin-top: 16px; }
+.sfx-form[hidden] { display: none; }
+.sfx-field { height: 40px; padding: 0 12px; }
+.sfx-field input { font-size: 14px; }
+.small-button:disabled { opacity: .5; cursor: default; filter: none; }
