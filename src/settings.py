@@ -10,10 +10,16 @@ DEFAULT_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
 # Quality choices shown in the dropdown: (value, label).
 QUALITIES = {
     "mp3": [("320", "320 kbps (best)"), ("256", "256 kbps"), ("192", "192 kbps"), ("128", "128 kbps (smallest)")],
+    "m4a": [("256", "256 kbps (best)"), ("192", "192 kbps"), ("128", "128 kbps (smallest)")],
+    "wav": [("lossless", "Lossless (big files)")],
+    "flac": [("lossless", "Lossless (smaller than WAV)")],
     "mp4": [("2160", "2160p (4K)"), ("1440", "1440p (2K)"), ("1080", "1080p (Full HD)"),
-            ("720", "720p (HD)"), ("480", "480p"), ("360", "360p (smallest)")],
+            ("720", "720p (HD)"), ("480", "480p"), ("360", "360p (smallest)"),
+            ("fit10", "Under 10 MB (Discord)"), ("fit25", "Under 25 MB"), ("fit50", "Under 50 MB")],
+    "gif": [("320", "320 px wide (smallest)"), ("480", "480 px wide"), ("640", "640 px wide"),
+            ("800", "800 px wide (sharpest)")],
 }
-DEFAULT_QUALITY = {"mp3": "320", "mp4": "1080"}
+DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossless", "mp4": "1080", "gif": "480"}
 
 
 def is_valid_quality(fmt, quality):
@@ -30,6 +36,7 @@ def load():
     if not os.path.isdir(settings.get("folder") or ""):
         settings["folder"] = DEFAULT_FOLDER
     settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
+    settings["normalize"] = settings.get("normalize") is True  # "Even out volume", off unless turned on
     for fmt in QUALITIES:
         if not is_valid_quality(fmt, settings.get(f"quality_{fmt}")):
             settings[f"quality_{fmt}"] = DEFAULT_QUALITY[fmt]

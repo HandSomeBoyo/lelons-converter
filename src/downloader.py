@@ -6,7 +6,9 @@ import re
 import subprocess
 import sys
 
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+import media
+
+NO_WINDOW = media.NO_WINDOW
 
 
 def use_bundled_ffmpeg():
@@ -49,26 +51,32 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         # Download several pieces of a video at once where YouTube allows it.
         "concurrent_fragment_downloads": 4,
         # Put the thumbnail in the file as cover art, plus the title and artist.
-        "writethumbnail": True,
+        # (WAV files and GIFs can't have cover art.)
+        "writethumbnail": fmt not in ("wav", "gif"),
     }
     # Cover art has to be a JPG; YouTube's thumbnails are usually WebP.
     # (The cover art itself is added in download(), after any trimming.)
     to_jpg = {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
-    if fmt == "mp3":
+    if fmt in media.AUDIO_FORMATS:
         options["format"] = "bestaudio/best"
         options["format_sort"] = ["lang"]  # the video's own audio, not a dubbed one
-        options["postprocessors"] = [to_jpg, {
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": quality,
-        }]
+        convert = {"key": "FFmpegExtractAudio", "preferredcodec": fmt}
+        if fmt not in media.LOSSLESS:
+            convert["preferredquality"] = quality
+        options["postprocessors"] = [convert] if fmt == "wav" else [to_jpg, convert]
         # Album art is square, so cut the middle out of the wide thumbnail.
         options["postprocessor_args"] = {
             "thumbnailsconvertor+ffmpeg_o": ["-c:v", "mjpeg", "-vf", r"crop=min(iw\,ih):min(iw\,ih)"],
         }
+    elif fmt == "gif":
+        # No sound needed, and the GIF ends up much smaller than the video anyway.
+        options["format"] = "bv*[height<=720]/b[height<=720]/bv*/b"
+        options["format_sort"] = ["res", "fps"]
     else:
-        h = f"[height<={quality}]"
-        if int(quality) <= 1080:
+        # "Under 10 MB" and so on: download in HD, then make it fit.
+        height = "720" if quality.startswith("fit") else quality
+        h = f"[height<={height}]"
+        if int(height) <= 1080:
             # Prefer H.264 + AAC so the MP4 plays everywhere on Windows.
             preferred = f"bv*{h}[vcodec^=avc1]+ba[acodec^=mp4a]/bv*{h}[ext=mp4]+ba[ext=m4a]/b{h}[ext=mp4]/"
         else:
@@ -82,39 +90,52 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
     return options
 
 
-def _cut_step(ydl, fmt, trim):
-    """A yt-dlp step that keeps only the trimmed part of the downloaded file.
+def _finish_step(ydl, fmt, quality, trim, normalize, on_progress):
+    """A yt-dlp step that does what's left after downloading: cutting, the GIF,
+    making it fit a size, evening out the volume. None if nothing is left.
 
-    The whole video is downloaded first and then cut here on the PC. Letting
-    ffmpeg cut while downloading from YouTube gave files that some players
-    couldn't skip around in.
+    The whole video is downloaded first and then changed here on the PC.
+    Letting ffmpeg cut while downloading from YouTube gave files that some
+    players couldn't skip around in.
     """
+    shrink = fmt == "mp4" and quality.startswith("fit")
+    if fmt != "gif" and not trim and not shrink and not (normalize and fmt in media.AUDIO_FORMATS):
+        return None
     from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
     from yt_dlp.utils import prepend_extension
 
-    class CutPP(FFmpegPostProcessor):
+    def progress(step):
+        return lambda percent: on_progress({"status": "step", "step": step, "percent": percent})
+
+    class FinishPP(FFmpegPostProcessor):
         def run(self, info):
             path = info["filepath"]
+            length = (trim[1] - trim[0]) if trim else float(info.get("duration") or 0)
+            if fmt == "gif":
+                target = os.path.splitext(path)[0] + ".gif"
+                media.make_gif(path, target, int(quality), trim, length, progress("Gif"))
+                info.update(filepath=target, ext="gif")
+                return [path], info
             temp = prepend_extension(path, "cut")
-            start, end = trim
-            if fmt == "mp3":
-                codecs = ["-c:a", "copy"]  # MP3 can be cut without converting it again
+            if fmt in media.AUDIO_FORMATS:
+                if normalize or fmt in media.LOSSLESS:
+                    kbps = quality if fmt not in media.LOSSLESS else "0"
+                    media.convert_audio(path, temp, fmt, kbps, trim, normalize, length, progress("Volume" if normalize else "Cut"))
+                else:
+                    # MP3 and M4A can be cut without converting them again.
+                    on_progress({"status": "step", "step": "Cut"})
+                    media.run([*media._part(trim), "-i", path, "-map", "0:a:0", "-c:a", "copy", temp], length)
+            elif shrink:
+                media.convert_video(path, temp, target_mb=int(quality[3:]), trim=trim, length=length,
+                                    on_progress=progress("Shrink"))
             else:
                 # Re-encode so the video starts exactly at the cut, with clean
                 # timestamps, in H.264 + AAC that every Windows player handles.
-                # A keyframe every 2 seconds makes skipping around in players quick.
-                codecs = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
-                          "-force_key_frames", "expr:gte(t,n_forced*2)",
-                          "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
-            self.real_run_ffmpeg(
-                [(path, ["-ss", f"{start:.3f}", "-to", f"{end:.3f}"])],
-                [(temp, ["-map", "0:v:0?", "-map", "0:a:0?", "-dn", "-sn", *codecs,
-                         "-avoid_negative_ts", "make_zero"])],
-            )
+                media.convert_video(path, temp, trim=trim, length=length, on_progress=progress("Cut"))
             os.replace(temp, path)
             return [], info
 
-    return CutPP(ydl)
+    return FinishPP(ydl)
 
 
 def warm_up():
@@ -132,35 +153,78 @@ def warm_up():
 def friendly_error(e):
     """yt-dlp's error text without the technical bits."""
     text = str(e).split("\n")[0].replace("ERROR: ", "")
+    if "Unsupported URL" in text:
+        return "This app can't download from that website."
+    if re.search(r"connect to proxy|Unable to connect|getaddrinfo|resolve|timed out|Connection refused|unreachable", text, re.I):
+        return "Couldn't reach that website. Check your internet connection and the link."
+    if "HTTP Error 404" in text:
+        return "That page doesn't exist. Check the link."
+    if re.search(r"log(ged)?[ -]?in|cookies|private", text, re.I) and "confirm you" not in text:
+        return "That site only shows this to people who are logged in, so the app can't get it."
     text = re.sub(r"^\[[\w:]+\] [^:]*: ", "", text)  # "[youtube] abc123: "
-    text = re.sub(r" \(caused by .*\)$", "", text)
+    text = re.sub(r" \(caused by .*$", "", text)
     text = re.sub(r";? ?please report this issue.*$", "", text, flags=re.I)
     return text.strip().rstrip(".") + "."
 
 
+PLAYLIST_LIMIT = 500
+
+
 def fetch_info(url):
-    """Look up a video without downloading it. Returns (info, preview)."""
+    """Look up a video or a playlist without downloading it. Returns (info, preview)."""
     import yt_dlp
 
     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True,
+                           "extract_flat": "in_playlist", "playlistend": PLAYLIST_LIMIT,
                            "js_runtimes": _js_runtimes()}) as ydl:
         info = ydl.extract_info(url, download=False, process=False)
-    if info.get("_type") in ("playlist", "multi_video"):
-        raise ValueError("That's a playlist link. Paste a link to a single video.")
+        if info.get("_type") in ("playlist", "multi_video"):
+            # Only the list of videos; each one is looked up when it's its turn.
+            info = ydl.process_ie_result(info, download=False)
+            return info, playlist_preview(info)
     return info, preview_of(info)
 
 
-def preview_of(info):
+def _thumbnail_of(info):
     thumbnail = info.get("thumbnail")
     if not thumbnail and info.get("thumbnails"):
         thumbnail = info["thumbnails"][-1].get("url")
-    if info.get("extractor_key") == "Youtube" and info.get("id"):
+    if (info.get("extractor_key") or info.get("ie_key")) == "Youtube" and info.get("id"):
         thumbnail = f"https://i.ytimg.com/vi/{info['id']}/mqdefault.jpg"
+    return thumbnail or ""
+
+
+def playlist_preview(info):
+    entries = []
+    for entry in info.get("entries") or []:
+        url = entry.get("webpage_url") or entry.get("url")
+        if not url or entry.get("title") in ("[Private video]", "[Deleted video]"):
+            continue
+        entries.append({
+            "url": url,
+            "title": entry.get("title") or "Untitled video",
+            "channel": entry.get("channel") or entry.get("uploader") or "",
+            "duration": format_duration(entry.get("duration")),
+            "seconds": int(entry.get("duration") or 0),
+            "thumbnail": _thumbnail_of(entry),
+        })
+    if not entries:
+        raise ValueError("That playlist is empty, or its videos are private.")
+    return {
+        "playlist": True,
+        "title": info.get("title") or "Playlist",
+        "channel": info.get("channel") or info.get("uploader") or "",
+        "entries": entries,
+        "thumbnail": entries[0]["thumbnail"],
+    }
+
+
+def preview_of(info):
     return {
         "title": info.get("title") or "Untitled video",
         "channel": info.get("channel") or info.get("uploader") or "",
         "duration": info.get("duration_string") or format_duration(info.get("duration")),
-        "thumbnail": thumbnail or "",
+        "thumbnail": _thumbnail_of(info),
         "seconds": int(info.get("duration") or 0),
     }
 
@@ -201,7 +265,7 @@ def song_info(info):
     info["track"] = track
 
 
-def download(info, folder, fmt, quality, on_progress, trim=None):
+def download(info, folder, fmt, quality, on_progress, trim=None, normalize=False):
     """Download a video looked up with fetch_info. Returns the saved file's path."""
     import yt_dlp
 
@@ -210,11 +274,14 @@ def download(info, folder, fmt, quality, on_progress, trim=None):
     from yt_dlp.postprocessor import EmbedThumbnailPP, FFmpegMetadataPP
 
     with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim)) as ydl:
-        if trim:
-            ydl.add_post_processor(_cut_step(ydl, fmt, trim))
-        # Title, artist and cover art go in last, so trimming can't drop them.
-        ydl.add_post_processor(FFmpegMetadataPP(ydl, add_metadata=True))
-        ydl.add_post_processor(EmbedThumbnailPP(ydl, already_have_thumbnail=False))
+        finish = _finish_step(ydl, fmt, quality, trim, normalize, on_progress)
+        if finish:
+            ydl.add_post_processor(finish)
+        if fmt != "gif":
+            # Title, artist and cover art go in last, so trimming can't drop them.
+            ydl.add_post_processor(FFmpegMetadataPP(ydl, add_metadata=True))
+            if fmt != "wav":
+                ydl.add_post_processor(EmbedThumbnailPP(ydl, already_have_thumbnail=False))
         result = ydl.process_ie_result(info, download=True)
     downloads = (result or {}).get("requested_downloads") or [{}]
     return downloads[0].get("filepath") or ""

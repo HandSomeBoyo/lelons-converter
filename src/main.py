@@ -25,8 +25,10 @@ import updater
 YT_DLP_VERSION = updater.use_newest_yt_dlp()
 
 import downloader  # noqa: E402
+import files  # noqa: E402
 import images  # noqa: E402
 import jobs  # noqa: E402
+import media  # noqa: E402
 import settings  # noqa: E402
 import waveform  # noqa: E402
 from version import VERSION  # noqa: E402
@@ -60,6 +62,7 @@ class State:
         # A message under the card: {"kind": "info"|"error"|"done", "text": ...}
         self.notice = None
         self.auto_update = saved["auto_update"]
+        self.normalize = saved["normalize"]
         self.checking = False
         self.app_update = None  # newer version info, once found
         self.app_update_progress = None
@@ -82,18 +85,21 @@ class State:
                 "qualities": settings.QUALITIES,
                 "notice": self.notice,
                 "autoUpdate": self.auto_update,
+                "normalize": self.normalize,
                 "checking": self.checking,
                 "appUpdate": self.app_update,
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
+                "files": local_files.snapshot(),
             }
 
     @property
     def busy(self):
-        return self.checking or self.app_update_progress is not None or queue.busy
+        return self.checking or self.app_update_progress is not None or queue.busy or local_files.busy
 
 
 queue = jobs.Queue()
+local_files = files.Files()
 state = State()
 
 
@@ -237,6 +243,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/file-thumb/"):
+            item = local_files.find(self.path[len("/file-thumb/"):])
+            path = item and item["thumbPath"]
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/image/"):
             path = images.thumbnail_path(self.path[len("/image/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -251,6 +261,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
+        if self.path == "/api/file-add":  # the body is the file itself
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
+            try:
+                return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length)})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
         if self.path == "/api/image-add":  # the body is the picture itself
             if length > images.MAX_BYTES:
                 return self.send_json({"ok": False, "error": "That file is too big."})
@@ -270,19 +288,27 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "preview": queue.lookup(url)})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
+        elif self.path == "/api/waveform" and data.get("file"):
+            item = local_files.find(data["file"])
+            try:
+                if not item:
+                    raise OSError("That file is gone. Drop it in again.")
+                self.send_json({"ok": True, **waveform.get_local(item["id"], item["path"], bool(data.get("video")))})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e) if isinstance(e, OSError) else "Couldn't load this file."})
         elif self.path == "/api/waveform":
             url = str(data.get("url", "")).strip()
             try:
                 queue.lookup(url)
-                media = waveform.get(url, queue.info_cache[url][1], bool(data.get("video")))
-                self.send_json({"ok": True, **media})
+                wave = waveform.get(url, queue.info_cache[url][1], bool(data.get("video")))
+                self.send_json({"ok": True, **wave})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
         elif self.path == "/api/convert":
             url = str(data.get("url", "")).strip()
-            fmt = "mp4" if data.get("format") == "mp4" else "mp3"
+            fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
             if not url:
-                return self.send_json({"ok": False, "error": "Paste a YouTube link first."})
+                return self.send_json({"ok": False, "error": "Paste a link first."})
             trim = None
             if data.get("start") or data.get("end"):
                 start = downloader.parse_time(data.get("start") or "0")
@@ -297,10 +323,34 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": False, "error": "Check the trim times, like 1:20 to 2:05."})
                 if not (start <= 0 and length and end >= length):  # the whole video isn't a trim
                     trim = [start, min(end, length) if length else end]
+            if fmt == "gif":
+                if trim and trim[1] - trim[0] > media.GIF_MAX_SECONDS + 0.05:
+                    return self.send_json({"ok": False, "error": f"GIFs can be up to {media.GIF_MAX_SECONDS} seconds. Trim it shorter."})
+                if not trim:  # a GIF of a whole video would be huge
+                    try:
+                        length = queue.lookup(url).get("seconds") or 0
+                    except Exception:
+                        length = 0
+                    trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), state.folder, trim)
+            queue.add(url, fmt, quality, quality_label(fmt, quality), state.folder, trim, state.normalize)
             state.set(notice=None)
             self.send_json({"ok": True})
+        elif self.path == "/api/convert-many":
+            # Videos picked from a playlist.
+            fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
+            quality = state.quality[fmt]
+            items = [i for i in (data.get("items") or []) if isinstance(i, dict) and str(i.get("url", "")).startswith("http")]
+            for item in items:
+                trim = [0, min(media.GIF_DEFAULT_SECONDS, int(item.get("seconds") or 0) or media.GIF_DEFAULT_SECONDS)] if fmt == "gif" else None
+                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), state.folder, trim,
+                          state.normalize, preview=item)
+            state.set(notice=None)
+            self.send_json({"ok": True, "added": len(items)})
+        elif self.path == "/api/normalize":
+            state.set(normalize=bool(data.get("on")))
+            settings.save(normalize=state.normalize)
+            self.send_json(state.snapshot())
         elif self.path == "/api/remove":
             queue.remove(data.get("id"))
             self.send_json({"ok": True})
@@ -314,6 +364,20 @@ class Handler(BaseHTTPRequestHandler):
             job = queue.find(data.get("id"))
             if job:
                 show_in_folder(job["file"])
+            self.send_json({"ok": True})
+        elif self.path == "/api/files-convert":
+            local_files.convert(data.get("items") or [], data.get("options") or {}, state.folder)
+            self.send_json({"ok": True})
+        elif self.path == "/api/file-remove":
+            local_files.remove(data.get("id"))
+            self.send_json({"ok": True})
+        elif self.path == "/api/files-clear":
+            local_files.clear()
+            self.send_json({"ok": True})
+        elif self.path == "/api/file-show":
+            item = local_files.find(data.get("id"))
+            if item and item["out"]:
+                show_in_folder(item["out"])
             self.send_json({"ok": True})
         elif self.path == "/api/image-convert":
             try:
@@ -454,6 +518,7 @@ def main():
         pass
     waveform.clean_up()
     images.clean_up()
+    files.clean_up()
 
 
 if __name__ == "__main__":

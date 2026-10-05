@@ -19,6 +19,7 @@
 
   <nav class="tabs" id="tabs">
     <button class="active" data-tab="video">Video</button>
+    <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
   </nav>
 
@@ -27,10 +28,10 @@
 
   <form class="row" id="form">
     <label class="input">
-      <input id="url" placeholder="Paste a YouTube link here" autocomplete="off" spellcheck="false" autofocus>
+      <input id="url" placeholder="Paste a link from YouTube, TikTok, SoundCloud and more" autocomplete="off" spellcheck="false" autofocus>
     </label>
     <button class="convert" id="convert" type="submit">
-      Convert
+      <span id="convertText">Convert</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
   </form>
@@ -38,13 +39,18 @@
   <div class="options">
     <div class="toggle" id="toggle">
       <button class="active" data-format="mp3">MP3</button>
+      <button data-format="m4a">M4A</button>
+      <button data-format="wav">WAV</button>
+      <button data-format="flac">FLAC</button>
       <button data-format="mp4">MP4</button>
+      <button data-format="gif">GIF</button>
     </div>
     <label class="quality">
       <span>Quality</span>
       <select id="quality" aria-label="Quality"></select>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </label>
+    <label class="check volume-check" id="normalizeBox" title="Makes quiet and loud songs about as loud as each other"><input type="checkbox" id="normalize"> Even out volume</label>
   </div>
 
   <div class="preview" id="preview">
@@ -52,6 +58,8 @@
     <div class="info">
       <div class="title clamp" id="previewTitle"></div>
       <div class="meta" id="previewMeta"></div>
+      <div class="gif-hint" id="gifHint" hidden>The GIF uses the first 10 seconds unless you pick a part.</div>
+      <button type="button" class="link whole-playlist" id="wholePlaylist" hidden>This video is in a playlist. Get the whole playlist</button>
       <div class="trim-chip" id="trimChip" hidden>
         <button type="button" class="link" id="trimEdit" title="Change the trim"></button>
         <button type="button" class="icon-button" id="trimClear" title="Don't trim">
@@ -60,6 +68,17 @@
       </div>
     </div>
     <button type="button" class="outline-button trim-toggle" id="trimToggle">Trim</button>
+  </div>
+
+  <div class="playlist" id="playlist" hidden>
+    <div class="playlist-head">
+      <div>
+        <div class="title" id="playlistTitle"></div>
+        <div class="meta" id="playlistMeta"></div>
+      </div>
+      <button type="button" class="link" id="playlistAll">Select none</button>
+    </div>
+    <div class="playlist-list" id="playlistList"></div>
   </div>
 
   <div class="notice" id="notice"></div>
@@ -71,6 +90,65 @@
     </div>
     <div class="jobs" id="jobs"></div>
   </section>
+  </section>
+
+  <section class="tab-page" id="filesTab" hidden>
+    <h1 class="headline">Drop a video or song.<br><em>Make it what you need.</em></h1>
+
+    <label class="dropzone" id="fileDrop">
+      <input type="file" id="mediaFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav,.ogg,.opus,.wma,.aac" multiple hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span class="drop-text"><strong>Drop videos or songs here</strong> or <span class="link">choose files</span></span>
+      <span class="drop-hint">MP4, MKV, MOV, AVI, WEBM, MP3, WAV, FLAC, M4A and more</span>
+    </label>
+
+    <div class="image-list file-list" id="fileList"></div>
+
+    <div class="image-options" id="fileOptions" hidden>
+      <div class="opt-row">
+        <span class="opt-label">Format</span>
+        <div class="chips" id="fileFormat">
+          <button data-value="mp3" class="active">MP3</button>
+          <button data-value="m4a">M4A</button>
+          <button data-value="wav">WAV</button>
+          <button data-value="flac">FLAC</button>
+          <button data-value="mp4">MP4</button>
+          <button data-value="gif">GIF</button>
+        </div>
+      </div>
+      <div class="opt-row" id="fileQualityRow">
+        <span class="opt-label" id="fileQualityLabel">Quality</span>
+        <div class="chips" id="fileQuality"></div>
+      </div>
+      <div class="opt-row" id="fileFitRow">
+        <span class="opt-label">Smaller</span>
+        <div class="chips" id="fileFit">
+          <button data-value="" class="active">Off</button>
+          <button data-value="10">Under 10 MB (Discord)</button>
+          <button data-value="25">25 MB</button>
+          <button data-value="50">50 MB</button>
+          <button data-value="custom">Custom</button>
+        </div>
+        <div class="custom-size" id="fileFitCustomBox" hidden>
+          <input id="fileFitCustom" inputmode="decimal" placeholder="MB" autocomplete="off">
+          <span>MB</span>
+        </div>
+      </div>
+      <div class="opt-row" id="fileVolumeRow">
+        <span class="opt-label">Volume</span>
+        <div class="chips">
+          <button class="toggle-chip" id="fileNormalize" title="Makes quiet and loud songs about as loud as each other">Even out volume</button>
+        </div>
+      </div>
+      <p class="opt-note" id="fileNote"></p>
+      <div class="image-go">
+        <button class="link" id="fileClear">Remove all</button>
+        <button class="convert" id="fileConvert">
+          <span id="fileConvertText">Convert</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
   </section>
 
   <section class="tab-page" id="imagesTab" hidden>
@@ -211,5 +289,6 @@
 
 <script src="app.js"></script>
 <script src="images.js"></script>
+<script src="files.js"></script>
 </body>
 </html>

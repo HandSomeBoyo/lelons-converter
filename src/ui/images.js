@@ -19,12 +19,11 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-  $("videoTab").hidden = tab !== "video";
-  $("imagesTab").hidden = tab !== "images";
+  for (const name of ["video", "files", "images"]) $(name + "Tab").hidden = tab !== name;
   try { localStorage.setItem("tab", tab); } catch (e) { /* not important */ }
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-try { if (localStorage.getItem("tab") === "images") showTab("images"); } catch (e) { /* first start */ }
+try { if (["files", "images"].includes(localStorage.getItem("tab"))) showTab(localStorage.getItem("tab")); } catch (e) { /* first start */ }
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 
@@ -77,8 +76,12 @@ window.addEventListener("drop", (e) => {
   e.preventDefault();
   dragDepth = 0;
   document.body.classList.remove("dragging");
+  // Pictures go to the Images tab, videos and songs to the Files tab.
   const files = [...e.dataTransfer.files];
-  if (files.length) addImageFiles(files);
+  const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
+  const pictures = files.filter(isPicture), others = files.filter((f) => !isPicture(f));
+  if (others.length) addMediaFiles(others);
+  if (pictures.length) addImageFiles(pictures);
 });
 
 // ---- options

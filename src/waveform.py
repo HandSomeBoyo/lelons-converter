@@ -15,6 +15,7 @@ import tempfile
 import threading
 
 import downloader
+import media
 
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter")
 BARS = 1200  # how many loudness values the editor draws
@@ -66,17 +67,47 @@ def _build(url, info, video):
     if not path or not os.path.isfile(path):
         raise OSError("Couldn't get the audio for this video.")
 
+    return _result(path, float(info.get("duration") or 0))
+
+
+def get_local(file_id, source, video=False):
+    """The same for a file from the PC. A small copy is made that the window can surely play."""
+    with _lock:
+        key = ("file", file_id), video
+        if key not in _cache:
+            os.makedirs(FOLDER, exist_ok=True)
+            found = media.probe(source)
+            target = os.path.join(FOLDER, f"file-{file_id}" + ("-video.mp4" if video else ".m4a"))
+            if video:
+                if not found["video"]:
+                    raise OSError("This file has no video in it.")
+                media.run(["-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=-2:'min(360,ih)'",
+                           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p",
+                           "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", target], found["duration"])
+            else:
+                if not found["audio"]:
+                    raise OSError("This file has no sound to show.")
+                media.run(["-i", source, "-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", "128k", target], found["duration"])
+            _cache[key] = _result(target, found["duration"])
+        return _cache[key]
+
+
+def _result(path, duration):
+    """Loudness values for drawing, plus the address the window plays the file from."""
+    import imageio_ffmpeg
+
     # Decode to plain numbers, at a low sample rate: plenty for drawing.
-    duration = float(info.get("duration") or 0)
     rate = max(400, min(8000, int(2_000_000 / duration))) if duration else 4000
     pcm = subprocess.run(
         [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-i", path, "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
-        capture_output=True, check=True, creationflags=downloader.NO_WINDOW,
+        capture_output=True, creationflags=downloader.NO_WINDOW,
     ).stdout
     samples = array.array("h")
     samples.frombytes(pcm[: len(pcm) // 2 * 2])
-    if not samples:
-        raise OSError("This video has no sound to show.")
+    name = os.path.basename(path)
+    _files.add(name)
+    if not samples:  # a video without sound: a flat line, but the picture still plays
+        return {"peaks": [0] * BARS, "duration": duration, "media": "/media/" + name}
 
     step = max(1, len(samples) // BARS)
     peaks = []
@@ -84,8 +115,6 @@ def _build(url, info, video):
         chunk = samples[start:start + step]
         peaks.append(max(max(chunk), -min(chunk)))
     loudest = max(peaks) or 1
-    name = os.path.basename(path)
-    _files.add(name)
     return {
         # Square root makes quiet parts easier to see.
         "peaks": [round((p / loudest) ** 0.5, 3) for p in peaks],

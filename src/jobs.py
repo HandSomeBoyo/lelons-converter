@@ -11,10 +11,13 @@ INFO_TTL = 30 * 60  # download links from a lookup stay valid for a while, not f
 
 # What the download list says during each step after downloading.
 STEPS = {
-    "Merger": "Putting the video and sound together...",
-    "ExtractAudio": "Converting to MP3...",
-    "Cut": "Cutting out your part...",
-    "Metadata": "Adding the title and cover art...",
+    "Merger": "Putting the video and sound together",
+    "ExtractAudio": "Converting",
+    "Cut": "Cutting out your part",
+    "Gif": "Making the GIF",
+    "Shrink": "Making it smaller",
+    "Volume": "Evening out the volume",
+    "Metadata": "Adding the title and cover art",
 }
 
 
@@ -40,12 +43,14 @@ class Queue:
 
     # ---- changing the queue
 
-    def add(self, url, fmt, quality, quality_label, folder, trim=None):
+    def add(self, url, fmt, quality, quality_label, folder, trim=None, normalize=False, preview=None):
         cached = self.info_cache.get(url)
-        preview = cached[2] if cached else {"title": url, "channel": "", "duration": "", "thumbnail": "", "seconds": 0}
+        preview = preview or (cached[2] if cached else None) or {
+            "title": url, "channel": "", "duration": "", "thumbnail": "", "seconds": 0}
+        preview = {k: preview.get(k, "") for k in ("title", "channel", "duration", "thumbnail", "seconds")}
         job = {
             "id": next(self.ids), "url": url, "format": fmt, "quality": quality,
-            "qualityLabel": quality_label, "folder": folder, "file": "", "trim": trim,
+            "qualityLabel": quality_label, "folder": folder, "file": "", "trim": trim, "normalize": normalize,
             "trimLabel": " to ".join(downloader.format_duration(t) or "0:00" for t in trim) if trim else "",
             "status": "queued", "progress": 0, "message": "Waiting...", **preview,
         }
@@ -106,17 +111,25 @@ class Queue:
             elif d["status"] == "finished":
                 self._update(job, progress=100, message="Converting...")
             elif d["status"] == "step" and d["step"] in STEPS:
-                self._update(job, progress=100, message=STEPS[d["step"]])
+                if d["step"] == "ExtractAudio":
+                    text = f"Converting to {job['format'].upper()}..."
+                elif "percent" in d:
+                    text = f"{STEPS[d['step']]}... {d['percent']:.0f}%"
+                else:
+                    text = STEPS[d["step"]] + "..."
+                self._update(job, progress=d.get("percent", 100), message=text)
 
         try:
             cached = self.info_cache.get(job["url"])
             if not cached or time.time() - cached[0] >= INFO_TTL:
                 self.lookup(job["url"])
                 cached = self.info_cache[job["url"]]
-            self._update(job, **cached[2])
+            if cached[2].get("playlist"):
+                raise ValueError("That's a playlist. Pick the videos you want from the list.")
+            self._update(job, **{k: v for k, v in cached[2].items() if k in ("title", "channel", "duration", "thumbnail", "seconds")})
             self._update(job, message="Starting download...")
             path = downloader.download(cached[1], job["folder"], job["format"], job["quality"],
-                                       on_progress, job["trim"])
+                                       on_progress, job["trim"], job["normalize"])
         except Exception as e:
             self._update(job, status="error", message=downloader.friendly_error(e))
             return

@@ -20,11 +20,32 @@ async function api(path, body) {
 
 // ---- format toggle and quality
 
+const AUDIO_FORMATS = ["mp3", "m4a", "wav", "flac"];
+const isVideoFormat = (f) => f === "mp4" || f === "gif";
+let playlist = null; // the looked-up playlist, if the link is one
+const picked = new Set(); // playlist videos to convert, by url
+
+// Things under the link box that depend on the format.
+function showFormatExtras() {
+  $("normalizeBox").hidden = !AUDIO_FORMATS.includes(format);
+  $("gifHint").hidden = !(format === "gif" && $("preview").classList.contains("show")
+    && !$("preview").classList.contains("loading") && !$("preview").classList.contains("error") && !trim && !playlist);
+  $("trimToggle").textContent = format === "gif" && !trim ? "Pick part" : "Trim";
+  updateConvertText();
+}
+
+function updateConvertText() {
+  $("convertText").textContent = playlist ? `Convert ${picked.size} video${picked.size === 1 ? "" : "s"}` : "Convert";
+  $("convert").disabled = !!playlist && picked.size === 0;
+}
+
+$("normalize").addEventListener("change", async () => render(await api("/api/normalize", { on: $("normalize").checked })));
+
 document.querySelectorAll("#toggle button").forEach((btn) => {
   btn.addEventListener("click", () => {
     format = btn.dataset.format;
-    $("toggle").classList.toggle("mp4", format === "mp4");
     document.querySelectorAll("#toggle button").forEach((b) => b.classList.toggle("active", b === btn));
+    showFormatExtras();
     refresh();
   });
 });
@@ -45,6 +66,8 @@ function showPreview(kind, title, meta, thumbnail) {
   $("previewTitle").textContent = title;
   $("previewMeta").textContent = meta || "";
   $("previewThumb").style.backgroundImage = thumbnail ? `url("${thumbnail}")` : "";
+  $("wholePlaylist").hidden = true;
+  showFormatExtras();
 }
 
 function hidePreview() {
@@ -52,7 +75,68 @@ function hidePreview() {
   clearTrim();
   $("preview").className = "preview";
   previewUrl = "";
+  showPlaylist(null);
 }
+
+// A YouTube link to a video that's in a playlist: "watch?v=...&list=..."
+function playlistIdIn(url) {
+  const match = /[?&]list=([\w-]+)/.exec(url);
+  return match && /youtube\.com|youtu\.be/i.test(url) ? match[1] : null;
+}
+
+$("wholePlaylist").addEventListener("click", () => {
+  const id = playlistIdIn(previewUrl);
+  if (!id) return;
+  $("url").value = "https://www.youtube.com/playlist?list=" + id;
+  lookUp($("url").value);
+});
+
+function showPlaylist(list) {
+  playlist = list;
+  picked.clear();
+  $("playlist").hidden = !list;
+  $("preview").classList.toggle("is-playlist", !!list);
+  if (list) {
+    list.entries.forEach((e) => picked.add(e.url));
+    $("playlistMeta").textContent = [`${list.entries.length} videos`, list.channel].filter(Boolean).join(" · ");
+    const rows = $("playlistList");
+    rows.innerHTML = "";
+    list.entries.forEach((entry, i) => {
+      const row = document.createElement("label");
+      row.className = "playlist-row";
+      row.innerHTML = `<input type="checkbox" checked><span class="number"></span><span class="thumb"></span>
+        <span class="info"><span class="title"></span><span class="meta"></span></span>`;
+      row.querySelector(".number").textContent = i + 1;
+      row.querySelector(".thumb").style.backgroundImage = entry.thumbnail ? `url("${entry.thumbnail}")` : "";
+      row.querySelector(".title").textContent = entry.title;
+      row.querySelector(".meta").textContent = [entry.channel, entry.duration].filter(Boolean).join(" · ");
+      row.querySelector("input").addEventListener("change", (e) => {
+        if (e.target.checked) picked.add(entry.url); else picked.delete(entry.url);
+        updatePlaylistBits();
+      });
+      rows.append(row);
+    });
+  }
+  updatePlaylistBits();
+  showFormatExtras();
+}
+
+function updatePlaylistBits() {
+  if (playlist) {
+    $("playlistAll").textContent = picked.size === playlist.entries.length ? "Select none" : "Select all";
+    $("playlistTitle").textContent = `${picked.size} of ${playlist.entries.length} videos picked`;
+  }
+  updateConvertText();
+}
+
+$("playlistAll").addEventListener("click", () => {
+  const all = picked.size !== playlist.entries.length;
+  $("playlistList").querySelectorAll("input").forEach((box, i) => {
+    box.checked = all;
+    if (all) picked.add(playlist.entries[i].url); else picked.delete(playlist.entries[i].url);
+  });
+  updatePlaylistBits();
+});
 
 async function lookUp(url) {
   previewUrl = url;
@@ -61,11 +145,18 @@ async function lookUp(url) {
   showPreview("loading", "Looking up video...", "", "");
   const res = await api("/api/info", { url }).catch(() => ({ ok: false, error: "Couldn't look up that link." }));
   if (previewUrl !== url) return; // the link changed while we were waiting
-  if (res.ok) {
+  if (res.ok && res.preview.playlist) {
     const p = res.preview;
+    showPreview("", p.title, ["Playlist", `${p.entries.length} videos`, p.channel].filter(Boolean).join(" · "), p.thumbnail);
+    showPlaylist(p);
+  } else if (res.ok) {
+    const p = res.preview;
+    showPlaylist(null);
     showPreview("", p.title, [p.channel, p.duration].filter(Boolean).join(" · "), p.thumbnail);
     previewSeconds = p.seconds || 0;
+    $("wholePlaylist").hidden = !playlistIdIn(url);
   } else {
+    showPlaylist(null);
     showPreview("error", res.error, "Check the link and try again.", "");
   }
 }
@@ -105,6 +196,7 @@ function showTrimChip() {
   $("trimChip").hidden = !trim;
   $("trimToggle").classList.toggle("hidden", !!trim);
   if (trim) $("trimEdit").textContent = `Keeping ${clock(trim.start)} to ${clock(trim.end)}`;
+  showFormatExtras();
 }
 
 function clearTrim() {
@@ -112,29 +204,31 @@ function clearTrim() {
   showTrimChip();
 }
 
-async function openTrim() {
-  const url = previewUrl;
-  const video = format === "mp4";
-  Object.assign(editor, { url, duration: previewSeconds, peaks: null });
+// Opens the trim editor. source: {key, request, video, title, duration, start, end, maxLength, done(part or null)}
+let trimSource = null;
+async function openTrim(source) {
+  trimSource = source;
+  const video = source.video;
+  const key = (video ? "video:" : "audio:") + source.key;
+  Object.assign(editor, { url: key, duration: source.duration, peaks: null });
   stopPlaying();
   player = video ? $("trimVideo") : $("trimAudio");
   $("videoBox").hidden = !video;
   document.querySelector(".trim-dialog").classList.toggle("video-mode", video);
-  editor.start = trim ? trim.start : 0;
-  editor.end = trim ? trim.end : previewSeconds;
+  editor.start = source.start ?? 0;
+  editor.end = source.end ?? source.duration;
   $("trimModal").hidden = false;
-  $("trimSub").textContent = $("previewTitle").textContent;
+  $("trimSub").textContent = source.title + (source.maxLength ? ` · GIFs can be up to ${source.maxLength} seconds` : "");
   $("trimPlay").disabled = true;
   layOut();
-  const key = (video ? "video:" : "audio:") + url;
   let wave = waves.get(key);
   if (!wave) {
-    waveMessage("loading", video ? "Loading the video..." : "Loading the sound of the video...");
-    wave = await api("/api/waveform", { url, video })
+    waveMessage("loading", video ? "Loading the video..." : "Loading the sound...");
+    wave = await api("/api/waveform", { ...source.request, video })
       .catch(() => ({ ok: false, error: video ? "Couldn't load the video." : "Couldn't load the sound." }));
     if (wave.ok) waves.set(key, wave);
   }
-  if (editor.url !== url || $("trimModal").hidden) return; // closed or changed meanwhile
+  if (editor.url !== key || $("trimModal").hidden) return; // closed or changed meanwhile
   if (!wave.ok) {
     waveMessage("error", wave.error + " You can still type the times below.");
     return;
@@ -144,10 +238,25 @@ async function openTrim() {
   editor.peaks = wave.peaks;
   editor.duration = wave.duration;
   if (wasWhole || editor.end > editor.duration) editor.end = editor.duration;
+  // A GIF of a video whose length wasn't known yet: start with the first 10 seconds.
+  if (source.maxLength && editor.end - editor.start > source.maxLength) editor.end = Math.min(editor.duration, editor.start + 10);
   if (player.getAttribute("src") !== wave.media) player.src = wave.media;
   $("trimPlay").disabled = false;
   layOut();
   showFrame(editor.start);
+}
+
+// The trim editor for the link in the Video tab.
+function openVideoTrim() {
+  const gif = format === "gif";
+  openTrim({
+    key: previewUrl, request: { url: previewUrl }, video: isVideoFormat(format),
+    title: $("previewTitle").textContent, duration: previewSeconds,
+    start: trim ? trim.start : 0,
+    end: trim ? trim.end : gif ? Math.min(10, previewSeconds) : previewSeconds,
+    maxLength: gif ? 60 : 0,
+    done: (part) => { trim = part; showTrimChip(); },
+  });
 }
 
 // Show the video at a moment, e.g. where a line was dragged to.
@@ -301,13 +410,19 @@ $("trimReset").addEventListener("click", () => {
 });
 $("trimCancel").addEventListener("click", closeTrim);
 $("trimDone").addEventListener("click", () => {
+  const max = trimSource && trimSource.maxLength;
+  if (max && editor.end - editor.start > max + 0.05) {
+    $("trimLength").textContent = `That's ${clock(editor.end - editor.start)}. GIFs can be up to ${max} seconds, so move the lines closer together.`;
+    return;
+  }
   const whole = editor.start <= 0.05 && editor.end >= editor.duration - 0.05;
-  trim = whole || !editor.duration ? null : { start: editor.start, end: editor.end };
-  showTrimChip();
+  const part = whole || !editor.duration ? null : { start: editor.start, end: editor.end };
+  const source = trimSource;
   closeTrim();
+  if (source) source.done(part);
 });
-$("trimToggle").addEventListener("click", openTrim);
-$("trimEdit").addEventListener("click", openTrim);
+$("trimToggle").addEventListener("click", openVideoTrim);
+$("trimEdit").addEventListener("click", openVideoTrim);
 $("trimClear").addEventListener("click", clearTrim);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("trimModal").hidden) closeTrim();
@@ -324,10 +439,12 @@ $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const url = $("url").value.trim();
   const part = trim ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
+  const items = playlist ? playlist.entries.filter((entry) => picked.has(entry.url)) : null;
+  if (items && !items.length) return;
   $("url").value = "";
   hidePreview();
   $("url").focus();
-  const res = await api("/api/convert", { url, format, ...part });
+  const res = items ? await api("/api/convert-many", { format, items }) : await api("/api/convert", { url, format, ...part });
   $("notice").className = res.ok ? "notice" : "notice error";
   $("notice").textContent = res.ok ? "" : res.error;
   refresh();
@@ -453,6 +570,7 @@ function render(s) {
   }
   $("checkNow").disabled = s.checking;
   $("autoUpdate").checked = s.autoUpdate;
+  $("normalize").checked = s.normalize;
   if (s.notice) {
     $("notice").className = "notice " + s.notice.kind;
     $("notice").textContent = s.notice.text;
@@ -460,12 +578,14 @@ function render(s) {
     $("notice").textContent = "";
   }
   renderQueue(s.jobs);
+  if (typeof renderFiles === "function") renderFiles(s.files);
   renderUpdatePopup(s);
 }
 
 async function refresh() {
   try { render(await api("/api/state")); } catch (e) { /* app closed */ }
 }
+showFormatExtras();
 refresh();
 setInterval(refresh, 500);
 window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye"));

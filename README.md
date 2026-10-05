@@ -15,17 +15,35 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
 
 ## Using it
 
-1. Paste a YouTube link.
-2. Pick MP3 or MP4 and a quality.
+1. Paste a link from YouTube, TikTok, SoundCloud, X/Twitter, Instagram or
+   one of the many other sites yt-dlp knows.
+2. Pick a format and a quality:
+   - **MP3** or **M4A** for music, **WAV** or **FLAC** for perfect (lossless) sound
+   - **MP4** for video. "Under 10 MB (Discord)", "Under 25 MB" and "Under 50 MB"
+     make the video just small enough to send.
+   - **GIF** for a looping clip without sound (up to 60 seconds; the first 10
+     seconds unless you pick a part)
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
+
+**Even out volume** (for the music formats) makes quiet and loud songs about
+equally loud.
+
+Paste a **playlist** link and the app lists its videos. Untick the ones you
+don't want and click **Convert**. If you paste a video that's in a playlist,
+click "Get the whole playlist" to see the rest.
 
 To save only part of a video, click **Trim** under the preview. Drag the
 yellow Start and End lines on the waveform (or type the times), press play to
-hear your pick, then click **Done**. For MP4s the video plays above the
-waveform, and dragging a line shows that moment of the video.
+hear your pick, then click **Done**. For MP4s and GIFs the video plays above
+the waveform, and dragging a line shows that moment of the video.
 
-MP3s get the video's thumbnail as cover art, plus the song title and artist,
-so they look right in music apps.
+MP3s, M4As and FLACs get the video's thumbnail as cover art, plus the song
+title and artist, so they look right in music apps.
+
+The **Files** tab does the same for videos and songs already on your PC. Drop
+them in (or click **choose files**), pick a format, and if you like a smaller
+size, a part to keep (**Trim**), or even volume. Your original files aren't
+changed.
 
 The **Images** tab changes pictures. Drop one or more images into the box (or
 click **choose files**), then pick a format (PNG, JPG, WEBP, GIF, BMP, ICO or
@@ -51,6 +69,8 @@ Lelons Converter/
 │   ├── updater.py       keeps the app and the downloader up to date
 │   ├── waveform.py      the sound picture for the trim editor
 │   ├── images.py        the Images tab's converting (uses Pillow)
+│   ├── files.py         the Files tab's list of your own videos and songs
+│   ├── media.py         converting with ffmpeg: formats, GIFs, smaller files, even volume
 │   ├── version.py       the app's version number
 │   ├── settings.py      remembers your save folder and quality choices
 │   ├── folder_picker.py the Windows "Select Folder" window
@@ -59,6 +79,7 @@ Lelons Converter/
 │       ├── style.css    colors and styling
 │       ├── app.js       what the buttons do
 │       ├── images.js    what the Images tab's buttons do
+│       ├── files.js     what the Files tab's buttons do
 │       └── fonts/       the Space Grotesk and Inter fonts
 ├── assets/              app icon (icon.ico for Windows, icon.png for the window)
 ├── installer/           recipe for the Setup.exe installer
