@@ -142,6 +142,10 @@ function closeChat() {
 }
 
 function switchChat(name) {
+  sendTyping(true); // (in the chat being left)
+  chatTypingNames = [];
+  chatSeenBy = [];
+  drawTyping();
   chatWith = name || "";
   chatMessages = [];
   chatLastId = 0;
@@ -241,6 +245,77 @@ async function loadChat() {
   }
 }
 
+// ---- "typing..." and who has seen what (only while the chat is open)
+
+let chatTypingNames = [];
+let chatSeenBy = []; // [{username, avatarUrl, last_id}]
+let chatLiveBusy = false;
+async function loadChatLive() {
+  if (chatLiveBusy || !sfxUser() || !chatIsOpen() || document.hidden) return;
+  chatLiveBusy = true;
+  const asked = chatWith;
+  const newest = chatMessages.length ? chatMessages[chatMessages.length - 1].id : null;
+  const res = await api("/api/sfx-chat-live", { with: chatWith || null, seen: newest }).catch(() => null);
+  chatLiveBusy = false;
+  if (!res || !res.ok || asked !== chatWith) return;
+  chatTypingNames = res.typing || [];
+  chatSeenBy = res.seen || [];
+  drawTyping();
+  drawSeen();
+}
+
+function drawTyping() {
+  const names = chatTypingNames;
+  $("chatTyping").hidden = !names.length;
+  $("chatTypingText").textContent = !names.length ? ""
+    : names.length === 1 ? `${names[0]} is typing`
+    : names.length === 2 ? `${names[0]} and ${names[1]} are typing`
+    : `${names[0]} and ${names.length - 1} others are typing`;
+}
+
+// Little faces under the last message each person has read.
+function drawSeen() {
+  const list = $("chatList");
+  const at = new Map(); // message id -> people
+  const ids = chatMessages.map((m) => m.id);
+  for (const p of chatSeenBy) {
+    let id = null;
+    for (const mid of ids) if (mid <= p.last_id) id = mid;
+    if (id === null) continue;
+    if (!at.has(id)) at.set(id, []);
+    at.get(id).push(p);
+  }
+  const sig = JSON.stringify([...at].map(([id, people]) => [id, people.map((p) => p.username + p.avatarUrl)]));
+  if (list.dataset.seen === sig && list.querySelectorAll(".seen-by").length === at.size) return;
+  list.dataset.seen = sig;
+  list.querySelectorAll(".seen-by").forEach((el) => el.remove());
+  for (const [id, people] of at) {
+    const kept = chatEls.get(id);
+    if (!kept || !kept.el.isConnected) continue;
+    const box = document.createElement("div");
+    box.className = "seen-by";
+    box.title = "Seen by " + people.map((p) => p.username).join(", ");
+    for (const p of people.slice(0, 8)) box.append(avatarEl(p.avatarUrl, p.username, "tiny"));
+    if (people.length > 8) box.append(Object.assign(document.createElement("span"), { textContent: "+" + (people.length - 8) }));
+    kept.el.querySelector(".body").append(box);
+  }
+}
+
+// Tell the others you're typing (at most every 3 seconds), and that you stopped.
+let chatTypingSent = 0;
+function sendTyping(stop = false) {
+  if (!sfxUser()) return;
+  const now = Date.now();
+  if (stop) {
+    if (!chatTypingSent) return;
+    chatTypingSent = 0;
+  } else {
+    if (now - chatTypingSent < 3000) return;
+    chatTypingSent = now;
+  }
+  api("/api/sfx-chat-typing", { with: chatWith || null, stop }).catch(() => {});
+}
+
 function addChat(res) {
   if (!res.ok) {
     if (chatIsOpen()) $("chatNote").textContent = res.error;
@@ -293,6 +368,7 @@ function addChat(res) {
   if (chatIsOpen()) drawChat();
   markSeen();
   drawUnread();
+  loadChatLive();
 }
 
 function chatTime(when) {
@@ -423,6 +499,7 @@ function drawChat(force) {
   }
   forgetNodes(chatEls, keys);
   setChildren(list, rows);
+  drawSeen();
   if (atBottom || force === "bottom") list.scrollTop = list.scrollHeight;
 }
 
@@ -570,6 +647,7 @@ $("chatForm").addEventListener("submit", async (e) => {
     return;
   }
   $("chatInput").value = "";
+  sendTyping(true);
   $("chatNote").textContent = "";
   if (chatAttached === attached) { chatAttached = null; drawAttach(); }
   if (asked === chatWith) addChat(res);
@@ -622,7 +700,12 @@ function useName(name) {
   input.focus();
 }
 
-$("chatInput").addEventListener("input", () => { $("chatNote").textContent = ""; suggestPick = 0; suggestNames(); });
+$("chatInput").addEventListener("input", () => {
+  $("chatNote").textContent = "";
+  suggestPick = 0;
+  suggestNames();
+  sendTyping(!$("chatInput").value.trim());
+});
 $("chatInput").addEventListener("keydown", (e) => {
   const box = $("chatSuggest");
   if (box.hidden) return;

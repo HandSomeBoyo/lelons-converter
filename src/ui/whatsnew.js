@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.27.0", items: [
+    "The chat shows when someone is typing, and little faces show who has seen your message.",
+    "Home has a new Activity list: new sounds (play them right there), new people, new videos and channels hitting a big number.",
+    "The app opens instantly: it shows what you saw last time straight away, and updates it in the background.",
+    "A cleaner look: Settings has its own button at the top, and the Library shows fewer buttons until you point at a sound.",
+  ] },
   { version: "1.26.1", items: [
     "Playing a sound in the Library no longer jumps you back to the top. The same fix is in every list in the app.",
     "Find sounds doesn't flicker anymore while you type or play sounds.",

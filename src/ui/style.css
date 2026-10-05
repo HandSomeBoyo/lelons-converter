@@ -1649,3 +1649,72 @@ button.stats-bar:hover .stats-bar-track { background: var(--line2); }
 .stats-calm .stats-lines path, .stats-calm .stats-spark path { animation: none; stroke-dashoffset: 0; }
 .stats-calm .stats-lines circle { animation: none; opacity: 1; }
 .stats-calm .stats-bar-fill { animation: none; transform: none; }
+
+/* ---------------------------------------------------------------- Typing and seen in the chat (1.27.0) */
+.chat-typing { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 18px 6px; color: var(--muted); font-size: 12.5px;
+  animation: rise-in .3s var(--ease-out) both; }
+.typing-dots { display: inline-flex; gap: 3px; padding: 6px 8px; border-radius: 10px; background: var(--panel2); }
+.typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: typing-bounce 1.2s ease-in-out infinite; }
+.typing-dots i:nth-child(2) { animation-delay: .15s; }
+.typing-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+.seen-by { display: flex; justify-content: flex-end; align-items: center; gap: 2px; margin-top: 4px; animation: rise-in .35s var(--ease-out) both; }
+.seen-by .avatar { width: 16px; height: 16px; min-width: 16px; font-size: 8px; box-shadow: 0 0 0 2px var(--panel); }
+.seen-by > span:not(.avatar) { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+/* ---------------------------------------------------------------- Activity on Home (1.27.0) */
+.home-activity { display: flex; flex-direction: column; gap: 2px; margin: 4px -8px 0; }
+.activity { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: var(--r-sm);
+  animation: rise-in .45s var(--ease-out) both; transition: background-color .25s var(--ease); }
+.activity:hover, .activity.playing { background: var(--panel2); }
+.activity > .avatar { width: 32px; height: 32px; min-width: 32px; font-size: 13px; }
+.activity > .avatar.clickable { cursor: pointer; }
+.activity-text { flex: 1; min-width: 0; }
+.activity-text p { margin: 0; font-size: 13.5px; line-height: 1.35; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.activity-text b { color: var(--text); font-weight: 600; }
+.activity-text small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.activity .play { all: unset; cursor: pointer; flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel2); color: var(--text); transition: background-color .25s var(--ease), transform .35s var(--spring); }
+.activity:hover .play { background: var(--line2); }
+.activity.playing .play, .activity .play:hover { background: var(--accent); color: var(--ink); }
+.activity .play:active { transform: scale(.9); }
+.activity .play svg { width: 12px; height: 12px; }
+.activity.milestone .activity-text p { color: var(--text); }
+.activity-thumb { all: unset; cursor: pointer; flex: none; width: 64px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--panel2); }
+.activity-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .6s var(--ease); }
+.activity-thumb:hover img { transform: scale(1.06); }
+.home-activity-more { margin-top: 8px; }
+
+/* ---------------------------------------------------------------- Cleaner (1.27.0) */
+/* The header keeps only buttons: where to save lives in Settings (the sliders button). */
+.top-right .where { display: none; }
+/* Footer: quiet links, the accent is kept for what matters */
+.footer { font-size: 12.5px; }
+.footer .link { color: var(--muted); font-weight: 500; transition: color .2s var(--ease); }
+.footer .link:hover { color: var(--text); text-decoration: none; }
+.footer .check { color: var(--muted); }
+/* Library rows: play, star and download always; the rest when the mouse is over the row */
+.sound .actions { opacity: 1; }
+.sound .actions .icon-button { color: var(--muted); }
+.sound .actions .icon-button:hover { color: var(--text); }
+.sound .actions .extra { opacity: 0; transform: translateX(6px); pointer-events: none;
+  transition: opacity .25s var(--ease), transform .35s var(--ease), color .2s; }
+.sound:hover .actions .extra, .sound .actions:focus-within .extra, .sound .actions .extra.sure { opacity: 1; transform: none; pointer-events: auto; }
+.lib-tools .history-search { min-width: 150px; }
+.lib-tools .lib-sort > span { display: none; }
+.lib-tools .find-open { border-color: transparent; background: var(--panel); }
+.lib-tools .find-open:hover { background: var(--panel2); }
+/* Home: a little more room for the activity */
+.home-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+/* Who's online and the chat on the left, the activity down the right */
+#homeCrewGrid { grid-template-rows: auto 1fr; }
+#homeCrewGrid > .home-card:nth-child(1) { grid-column: 1; grid-row: 1; }
+#homeCrewGrid > .home-card:nth-child(2) { grid-column: 2; grid-row: 1 / span 2; }
+#homeCrewGrid > .home-card.wide { grid-column: 1; grid-row: 2; }
+.upload-card:not(.hero) .upload-actions { padding-top: 6px; }
+@media (max-width: 760px) {
+  .home-grid { grid-template-columns: 1fr; }
+  #homeCrewGrid { grid-template-rows: none; }
+  #homeCrewGrid > .home-card:nth-child(n) { grid-column: 1; grid-row: auto; }
+}

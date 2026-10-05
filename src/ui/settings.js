@@ -63,6 +63,7 @@ function openSettings(part) {
 function closeSettings() { $("settingsModal").hidden = true; }
 
 $("settingsOpen").addEventListener("click", () => openSettings());
+$("settingsHead").addEventListener("click", () => openSettings());
 document.querySelectorAll('input[name="saveMode"]').forEach((r) => r.addEventListener("change", () => {
   if (r.checked) changeSettings({ saveMode: r.value });
 }));

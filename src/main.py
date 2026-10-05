@@ -30,6 +30,7 @@ import clips  # noqa: E402
 import downloader  # noqa: E402
 import files  # noqa: E402
 import findsounds  # noqa: E402
+import pagecache  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -301,6 +302,7 @@ def home_page():
         "loggedIn": bool(crew and crew["loggedIn"]),
         "sounds": (crew or {}).get("sounds") or [],
         "chat": (crew or {}).get("chat") or [],
+        "activity": (crew or {}).get("activity") or [],
         "crewError": error,
         "online": sfx.presence.get(),
         "stats": history.stats(),
@@ -406,7 +408,8 @@ class Handler(BaseHTTPRequestHandler):
             saved = {**(settings.load().get("page") or {}), "theme": state.theme, "accent": state.accent,
                      "zoom": state.zoom, "nativeZoom": appwindow.active()}
             text = json.dumps(saved).replace("<", "\\u003c")
-            body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};</script>".encode())
+            cache = json.dumps(pagecache.get(), separators=(",", ":")).replace("<", "\\u003c")
+            body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};\nconst LELONS_CACHE = {cache};</script>".encode())
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
         self.send_body(body, content_type, cookie)
 
@@ -498,6 +501,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if action == "account":
                 result = {"account": library.account()}
+                user = (result["account"] or {}).get("user") or {}
+                if ((pagecache.get().get("account") or {}).get("user") or {}).get("id") != user.get("id"):
+                    pagecache.forget()
+                pagecache.put("account", result["account"])
             elif action == "signup":
                 result = {"account": library.signup(data.get("username"), data.get("password"))}
             elif action == "login":
@@ -558,6 +565,11 @@ class Handler(BaseHTTPRequestHandler):
                         raise sfx.Error("Make the clip first.")
                 library.chat_send(data.get("message"), data.get("with"), data.get("sound"), clip)
                 result = library.chat(data.get("after"), data.get("with"))
+            elif action == "chat-typing":
+                library.chat_typing(data.get("with"), data.get("stop"))
+                result = {}
+            elif action == "chat-live":
+                result = library.chat_live(data.get("with"), data.get("seen"))
             elif action == "chat-react":
                 library.chat_react(data.get("id"), data.get("emoji"), data.get("on"))
                 result = {}
@@ -615,6 +627,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         except OSError:
             return self.send_json({"ok": False, "error": "Couldn't open that file."})
+        if action == "list":
+            pagecache.put("sounds", result["sounds"])
+        elif action in ("login", "signup", "logout"):
+            pagecache.forget()
+            pagecache.put("account", result.get("account"))
         self.send_json({"ok": True, **result})
 
     def handle_post(self):
@@ -775,7 +792,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/stats":  # the channel stats page
             self.send_json(stats_page(data.get("days")))
         elif self.path == "/api/home":
-            self.send_json(home_page())
+            page = home_page()
+            if not page["crewError"]:
+                pagecache.put("home", page)
+            self.send_json(page)
         elif self.path == "/api/home-channels":  # the owner changes the channels on everyone's Home page
             links = [home.normalize(t) for t in data.get("channels") or [] if str(t).strip()]
             if None in links:
@@ -1099,8 +1119,6 @@ def main():
 
     # Left over from a time the app didn't close properly (the PC turned off, say).
     clean_up()
-    names.remove_leftovers(state.folder)
-    updater.tidy_yt_dlp()  # before the update check can start downloading a new one
     check_window_crash()
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -1118,9 +1136,14 @@ def main():
     sfx.presence.start()
     home.on_update = sfx.library.log_channel
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
-    start_background(warm_up)
-    if state.auto_update:
-        start_background(check_for_updates)
+    # Chores that can wait until the window is up (so it opens sooner).
+    def after_start():
+        names.remove_leftovers(state.folder)
+        updater.tidy_yt_dlp()  # before the update check can start downloading a new one
+        if state.auto_update:
+            start_background(check_for_updates)
+        warm_up()
+    start_background(after_start)
 
     # Quit once the window is closed (the page says bye and stops checking in).
     # Minimized windows check in rarely, so the plain-silence timeout is long.

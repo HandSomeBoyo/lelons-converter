@@ -22,6 +22,7 @@ const sfxSure = new Set(); // sounds whose bin was clicked once
 const sfxDragReady = new Set(); // sounds with a copy ready to drag into other apps
 const sfxNotes = new Map(); // id -> {text, kind, path}: "Saved as ..." under a sound
 let sfxLastLoad = 0;
+let sfxFromCache = false; // the account shown is from last time (the fresh one is on its way)
 
 function sfxAgo(when) {
   const seconds = (Date.now() - new Date(when).getTime()) / 1000;
@@ -65,14 +66,21 @@ async function loadAccount() {
     $("sfxNotSetUp").textContent = (res && res.error) || "Couldn't reach the library. Check your internet connection.";
     return false;
   }
+  const was = sfxUser() && sfxUser().id;
   sfxAccount = res.account;
+  sfxFromCache = false;
+  if (was && (!sfxUser() || sfxUser().id !== was)) { // not who was shown from last time
+    sfxSounds = [];
+    $("sfxList").replaceChildren();
+    if (typeof homeAccountChanged === "function") homeAccountChanged(true);
+  }
   drawSfxAccount();
   return true;
 }
 
 async function openSfx() {
   sfxPeaksFailed.clear();
-  if (!sfxAccount && !(await loadAccount())) return;
+  if ((!sfxAccount || sfxFromCache) && !(await loadAccount()) && !sfxAccount) return;
   drawSfxAccount();
   if (sfxUser() && Date.now() - sfxLastLoad > 5000) loadSfx();
 }
@@ -498,9 +506,10 @@ function sfxRow(sound) {
       : { text: res.error, kind: "bad" });
     drawSfx();
   });
-  add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } }));
+  // The rest only shows when the mouse is over the row (less to look at).
+  add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } })).classList.add("extra");
   if (sfxUser() && (sfxUser().canUpload || sound.mine)) {
-    add(SFX_ICONS.edit, "Change the name or category", () => openEditSound(sound));
+    add(SFX_ICONS.edit, "Change the name or category", () => openEditSound(sound)).classList.add("extra");
   }
   if (sfxUser() && sfxUser().canUpload) {
     // Deleting needs a second click, so it can't happen by accident.
@@ -529,7 +538,8 @@ function sfxRow(sound) {
       }
       drawSfx();
     });
-    if (sfxSure.has(sound.id)) bin.style.color = "var(--red)";
+    bin.classList.add("extra");
+    if (sfxSure.has(sound.id)) { bin.style.color = "var(--red)"; bin.classList.add("sure"); }
   }
   return el;
 }
@@ -804,6 +814,13 @@ setInterval(() => {
   if (!$("sfxTab").hidden && sfxUser() && !document.hidden) loadSfx();
 }, 60000);
 
+// Instant start: show who was logged in, and their Library, from last time.
+if (pageCache.account && pageCache.account.user) {
+  sfxAccount = pageCache.account;
+  sfxFromCache = true;
+  if (Array.isArray(pageCache.sounds)) sfxSounds = pageCache.sounds;
+  drawSfxAccount();
+}
 if (!$("sfxTab").hidden) openSfx();
 else loadAccount();
 

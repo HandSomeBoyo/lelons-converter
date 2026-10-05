@@ -190,41 +190,114 @@ function drawCrew() {
   $("homeOnlineMore").textContent = others === 1 ? "+ 1 person not logged in" : `+ ${others} people not logged in`;
 }
 
-function drawHomeSounds() {
+// The crew's activity: new sounds (with a play button), new people, new videos and channels
+// passing a round number. Newest first.
+let homeActivityAll = false;
+function activityItems() {
   const d = homeData;
-  if (!d || !d.loggedIn) return;
-  $("homeSoundsEmpty").hidden = d.sounds.length > 0;
-  setChildren($("homeSounds"), d.sounds.map((s) => keptNode(homeEls, "s" + s.id, JSON.stringify([s, homePlaying === s.id]), () => {
-    const row = document.createElement("div");
-    row.className = "chat-sound" + (homePlaying === s.id ? " playing" : "");
-    setDrag(row, { kind: "sound", url: s.url, name: s.name });
+  const items = (d.activity || []).map((a) => ({ ...a, when: Date.parse(a.at) }));
+  const weekAgo = Date.now() - 7 * 86400000;
+  for (const c of d.channels) {
+    const info = c.info;
+    for (const v of ((info && info.videos) || info && info.uploads || []).slice(0, 3)) {
+      if (v.when && v.when * 1000 > weekAgo) {
+        items.push({ kind: "video", when: v.when * 1000, id: v.id, title: v.title, url: v.url, thumbnail: v.thumbnail,
+          channel: info.name, avatarUrl: info.avatar });
+      }
+    }
+  }
+  const channelOf = (url) => (d.channels.find((c) => c.url === url) || {}).info || {};
+  for (const item of items) {
+    if (item.kind === "milestone") {
+      const info = channelOf(item.channel);
+      item.name = info.name || item.channel.split("/").pop();
+      item.avatarUrl = info.avatar || "";
+    }
+  }
+  return items.sort((a, b) => b.when - a.when);
+}
+
+function activityRow(item) {
+  const row = document.createElement("div");
+  row.className = "activity " + item.kind;
+  const text = document.createElement("div");
+  text.className = "activity-text";
+  const line = document.createElement("p");
+  const b = (t) => Object.assign(document.createElement("b"), { textContent: t });
+  const meta = document.createElement("small");
+  let face;
+  if (item.kind === "upload") {
+    face = avatarEl(item.avatarUrl, item.username);
+    line.append(b(item.username || "Someone"), " uploaded ", b(item.name));
+    meta.textContent = `${CAT_NAMES[item.category] || "Other"} · ${clock(item.seconds, false)} · ${sfxAgo(item.at)}`;
+    setDrag(row, { kind: "sound", url: item.url, name: item.name });
     row.title = DRAG_HINT;
+  } else if (item.kind === "joined") {
+    face = avatarEl(item.avatarUrl, item.username);
+    line.append(b(item.username), " joined the crew 👋");
+    meta.textContent = sfxAgo(item.at);
+  } else if (item.kind === "milestone") {
+    face = avatarEl(item.avatarUrl, item.name);
+    line.append(b(item.name), " passed ", b(Number(item.subs).toLocaleString()), " subscribers 🎉");
+    meta.textContent = sfxAgo(item.at);
+  } else {
+    face = avatarEl(item.avatarUrl, item.channel);
+    line.append(b(item.channel), " posted ", b(item.title));
+    meta.textContent = sfxAgo(item.when);
+  }
+  if (item.kind === "joined" || item.kind === "upload") {
+    face.classList.add("clickable");
+    face.title = "See " + item.username + "'s profile";
+    face.onclick = () => openProfile(item.username);
+  }
+  text.append(line, meta);
+  row.append(face, text);
+  if (item.kind === "upload") {
     const play = document.createElement("button");
     play.type = "button";
     play.className = "play";
-    play.innerHTML = homePlaying === s.id ? SFX_ICONS.pause : SFX_ICONS.play;
+    play.innerHTML = homePlaying === item.id ? SFX_ICONS.pause : SFX_ICONS.play;
+    play.title = homePlaying === item.id ? "Stop" : "Play";
     play.onclick = () => {
-      if (homePlaying === s.id) {
+      if (homePlaying === item.id) {
         homeAudio.pause();
         homePlaying = null;
       } else {
-        homeAudio.src = s.url;
+        homeAudio.src = item.url;
         homeAudio.play().catch(() => {});
-        homePlaying = s.id;
+        homePlaying = item.id;
       }
       drawHomeSounds();
     };
-    const info = document.createElement("div");
-    info.className = "info";
-    const title = Object.assign(document.createElement("b"), { textContent: s.name });
-    const sub = Object.assign(document.createElement("span"), {
-      textContent: `${s.uploader || "Someone"} · ${CAT_NAMES[s.category] || "Other"} · ${clock(s.seconds, false)} · ${sfxAgo(s.created_at)}`,
-    });
-    info.append(title, sub);
-    row.append(play, info);
-    return row;
-  })));
+    row.classList.toggle("playing", homePlaying === item.id);
+    row.append(play);
+  } else if (item.kind === "video") {
+    const thumb = document.createElement("button");
+    thumb.type = "button";
+    thumb.className = "activity-thumb";
+    thumb.title = "Watch on YouTube";
+    thumb.append(Object.assign(document.createElement("img"), { src: item.thumbnail, alt: "", loading: "lazy" }));
+    thumb.onclick = () => api("/api/open-youtube", { url: item.url });
+    row.append(thumb);
+  }
+  return row;
 }
+
+function drawHomeSounds() {
+  const d = homeData;
+  if (!d || !d.loggedIn) return;
+  const items = activityItems();
+  const shown = homeActivityAll ? items.slice(0, 25) : items.slice(0, 6);
+  $("homeSoundsEmpty").hidden = items.length > 0;
+  $("homeActivityMore").hidden = items.length <= 6;
+  $("homeActivityMore").textContent = homeActivityAll ? "Show less" : "Show more";
+  setChildren($("homeSounds"), shown.map((item) => {
+    const key = "a" + item.kind + (item.id || item.username || item.channel) + (item.subs || "");
+    return keptNode(homeEls, key, JSON.stringify([item, item.kind === "upload" && homePlaying === item.id, sfxAgo(item.when)]),
+      () => activityRow(item));
+  }));
+}
+$("homeActivityMore").addEventListener("click", () => { homeActivityAll = !homeActivityAll; drawHomeSounds(); });
 
 function drawHomeChat() {
   const d = homeData;
@@ -347,4 +420,9 @@ $("channelsSave").addEventListener("click", async () => {
   closeChannels();
   loadHome();
 });
+// Instant start: Home as it was last time, until the fresh numbers come in.
+if (pageCache.home && pageCache.home.channels && (!pageCache.home.loggedIn || sfxUser())) {
+  homeData = pageCache.home;
+  drawHome();
+}
 if (!$("homeTab").hidden) loadHome();

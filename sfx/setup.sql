@@ -809,7 +809,8 @@ begin
                                         'sound_name', s.name, 'file_name', m.file_name) order by m.id)
       from (select * from lelons.chat c where c.to_id is null order by c.id desc limit 3) m
       join lelons.accounts a on a.id = m.account_id
-      left join lelons.sounds s on s.id = m.sound_id), '[]'::json) end);
+      left join lelons.sounds s on s.id = m.sound_id), '[]'::json) end,
+    'activity', case when me.id is null then '[]'::json else lelons.activity() end);
 end $$;
 
 -- The owner picks the channels shown on everyone's Home page (an empty list goes back to the app's own list).
@@ -871,6 +872,112 @@ begin
                    where c.day > (now() at time zone 'utc')::date - least(greatest(coalesce(days, 90), 1), 3650)), '[]'::json);
 end $$;
 
+-- ---- 1.27.0: "typing..." and "seen" in the chat, and the activity feed on Home
+
+-- Who's typing, and where (to_key: the person they write to, or the zero id for the chat with everyone).
+create table if not exists lelons.chat_typing (
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  to_key uuid not null,
+  at timestamptz not null default now(),
+  primary key (account_id, to_key)
+);
+alter table lelons.chat_typing enable row level security;
+-- How far each person has read (peer_key: the other person in a private chat, or the zero id).
+create table if not exists lelons.chat_seen (
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  peer_key uuid not null,
+  last_id bigint not null,
+  seen_at timestamptz not null default now(),
+  primary key (account_id, peer_key)
+);
+alter table lelons.chat_seen enable row level security;
+
+create or replace function lelons.peer_of(with_user text) returns uuid
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  peer uuid;
+begin
+  if with_user is null then
+    return null;
+  end if;
+  select a.id into peer from lelons.accounts a where lower(a.username) = lower(btrim(with_user));
+  if peer is null then
+    raise exception 'nobody' using hint = 'nobody';
+  end if;
+  return peer;
+end $$;
+
+-- Typing in a chat (stop = true when the message was sent or the box emptied).
+create or replace function public.lelons_chat_typing(token text, with_user text default null, stop boolean default false)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  key uuid := coalesce(lelons.peer_of(with_user), '00000000-0000-0000-0000-000000000000'::uuid);
+begin
+  if stop then
+    delete from lelons.chat_typing t where t.account_id = me.id and t.to_key = key;
+  else
+    insert into lelons.chat_typing as t (account_id, to_key, at) values (me.id, key, now())
+    on conflict (account_id, to_key) do update set at = now();
+  end if;
+end $$;
+
+-- While a chat is open: say how far you've read (seen_id), and get who's typing and who has seen what.
+create or replace function public.lelons_chat_live(token text, with_user text default null, seen_id bigint default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  peer uuid := lelons.peer_of(with_user);
+  zero uuid := '00000000-0000-0000-0000-000000000000'::uuid;
+begin
+  if seen_id is not null then
+    insert into lelons.chat_seen as x (account_id, peer_key, last_id) values (me.id, coalesce(peer, zero), seen_id)
+    on conflict (account_id, peer_key) do update set last_id = greatest(x.last_id, excluded.last_id), seen_at = now();
+  end if;
+  return json_build_object(
+    'typing', coalesce((select json_agg(a.username order by lower(a.username))
+                        from lelons.chat_typing t join lelons.accounts a on a.id = t.account_id
+                        where t.at > now() - interval '6 seconds' and t.account_id <> me.id
+                          and (case when peer is null then t.to_key = zero else t.account_id = peer and t.to_key = me.id end)),
+                       '[]'::json),
+    'seen', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'last_id', x.last_id)
+                                      order by x.seen_at desc)
+                      from lelons.chat_seen x join lelons.accounts a on a.id = x.account_id
+                      where x.account_id <> me.id and x.seen_at > now() - interval '30 days'
+                        and (case when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)),
+                     '[]'::json));
+end $$;
+
+-- The round numbers worth a party: every 100 below 1,000, every 1,000 below 10K, and so on.
+create or replace function lelons.step(n bigint) returns bigint language sql immutable set search_path = '' as $$
+  select case when n < 1000 then 100 when n < 10000 then 1000 when n < 100000 then 10000
+              when n < 1000000 then 100000 else 1000000 end::bigint
+$$;
+
+-- What the crew did lately, for Home: new sounds, new people, and channels passing a round number.
+create or replace function lelons.activity() returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(x.item order by x.at desc), '[]'::json) from (
+    (select s.created_at as at, json_build_object('kind', 'upload', 'at', s.created_at, 'id', s.id, 'name', s.name,
+              'category', s.category, 'path', s.path, 'seconds', s.seconds,
+              'username', coalesce(a.username, s.uploader), 'avatar', a.avatar) as item
+     from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
+     where s.created_at > now() - interval '30 days' order by s.created_at desc limit 15)
+    union all
+    (select a.created_at, json_build_object('kind', 'joined', 'at', a.created_at, 'username', a.username, 'avatar', a.avatar)
+     from lelons.accounts a where a.created_at > now() - interval '60 days' order by a.created_at desc limit 5)
+    union all
+    (select m.day::timestamptz + interval '12 hours', json_build_object('kind', 'milestone', 'at', m.day::timestamptz + interval '12 hours',
+              'channel', m.channel, 'subs', m.mark)
+     from (select c.channel, c.day,
+                  (c.subs / lelons.step(c.subs)) * lelons.step(c.subs) as mark,
+                  lag(c.subs) over (partition by c.channel order by c.day) as before
+           from lelons.channel_stats c where c.day > (now() at time zone 'utc')::date - 61) m
+     where m.before is not null and m.before < m.mark and m.day > (now() at time zone 'utc')::date - 31
+     order by m.day desc limit 8)
+  ) x
+$$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -888,7 +995,8 @@ begin
     'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
     'lelons_home(text)', 'lelons_set_channels(text, text[])',
     'lelons_edit_sound(text, uuid, text, text)', 'lelons_channel_log(text, text, bigint, int)',
-    'lelons_channel_history(text, int)'] loop
+    'lelons_channel_history(text, int)', 'lelons_chat_typing(text, text, boolean)',
+    'lelons_chat_live(text, text, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

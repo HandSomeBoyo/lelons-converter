@@ -5,6 +5,9 @@
 // - Themes: dark, black or light, with an accent color, set before anything is drawn.
 
 const pageSaved = (typeof LELONS_SAVED === "object" && LELONS_SAVED) || {};
+// What the page showed last time (account, Home, the Library list): drawn straight away when the
+// app opens, then replaced by the fresh answers. See pagecache.py.
+const pageCache = (typeof LELONS_CACHE === "object" && LELONS_CACHE) || {};
 function loadPref(key) {
   return key in pageSaved ? pageSaved[key] : null;
 }

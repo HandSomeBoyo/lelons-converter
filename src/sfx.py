@@ -395,6 +395,21 @@ class Library:
                 os.remove(mp3)
         return {"file": file, "file_name": _clean_name(name, 120), "file_seconds": round(seconds, 2)}
 
+    def chat_typing(self, with_user=None, stop=False):
+        _rpc("lelons_chat_typing", token=self._token(), with_user=str(with_user) if with_user else None, stop=bool(stop))
+
+    def chat_live(self, with_user=None, seen_id=None):
+        """Who's typing in this chat right now, and how far each person has read (and say how far you have)."""
+        try:
+            seen_id = int(seen_id) if seen_id else None
+        except (TypeError, ValueError):
+            seen_id = None
+        result = _rpc("lelons_chat_live", token=self._token(), with_user=str(with_user) if with_user else None,
+                      seen_id=seen_id) or {}
+        return {"typing": result.get("typing") or [],
+                "seen": [{**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""}
+                         for row in result.get("seen") or []]}
+
     def chat_react(self, message_id, emoji, on):
         _rpc("lelons_chat_react", token=self._token(), message_id=int(message_id), emoji=str(emoji), on_off=bool(on))
 
@@ -429,6 +444,10 @@ class Library:
                         "uploaderAvatar": pictured(row.get("uploader_avatar"))}
                        for row in result.get("sounds") or []],
             "chat": [{**m, "avatarUrl": pictured(m.get("avatar"))} for m in result.get("chat") or []],
+            "activity": [{**item, "avatarUrl": pictured(item.get("avatar")),
+                          **({"url": public_url(item["path"]), "categoryName": CATEGORIES.get(item.get("category"), "Other")}
+                             if item.get("kind") == "upload" and item.get("path") else {})}
+                         for item in result.get("activity") or []],
         }
 
     def log_channel(self, url, info):

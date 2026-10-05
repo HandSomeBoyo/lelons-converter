@@ -18,6 +18,9 @@
     </div>
     <div class="top-right">
       <div class="where"><span id="whereText">Saving to <strong id="folder">Downloads</strong></span> · <button class="link" id="change">Change</button></div>
+      <button type="button" class="icon-button head-button" id="settingsHead" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
       <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
       </button>
@@ -120,9 +123,10 @@
           <p class="home-muted" id="homeOnlineMore" hidden></p>
         </div>
         <div class="home-card">
-          <div class="home-card-head"><h3>New in the Library</h3><button type="button" class="link" id="homeAllSounds">See all</button></div>
-          <p class="home-muted" id="homeSoundsEmpty" hidden>No sounds yet.</p>
-          <div class="home-sounds" id="homeSounds"></div>
+          <div class="home-card-head"><h3>Activity</h3><button type="button" class="link" id="homeAllSounds">Library</button></div>
+          <p class="home-muted" id="homeSoundsEmpty" hidden>Nothing yet. Upload a sound to get things going!</p>
+          <div class="home-activity" id="homeSounds"></div>
+          <button type="button" class="link home-activity-more" id="homeActivityMore" hidden>Show more</button>
         </div>
         <div class="home-card wide">
           <div class="home-card-head"><h3>Live chat</h3><button type="button" class="link" id="homeOpenChat">Open the chat</button></div>
@@ -711,6 +715,7 @@
     <button type="button" class="small-button" id="chatLogin">Log in</button>
   </div>
   <div class="chat-list" id="chatList"></div>
+  <p class="chat-typing" id="chatTyping" hidden><span class="typing-dots"><i></i><i></i><i></i></span><span id="chatTypingText"></span></p>
   <p class="chat-note" id="chatNote"></p>
   <div class="chat-attach" id="chatAttach" hidden></div>
   <div class="chat-suggest" id="chatSuggest" hidden></div>

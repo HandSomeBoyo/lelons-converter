@@ -88,6 +88,14 @@ time), a leaderboard, the most watched recent videos and uploads per channel. Lo
 apps write each channel's subscribers to Supabase once a day (lelons.channel_stats),
 so the history fills in over time.
 
+**Chat:** shows "... is typing" and small faces under the last message each person has
+read (lelons.chat_typing / lelons.chat_seen, via lelons_chat_typing and lelons_chat_live,
+only while the chat is open). **Activity** on Home lists new sounds, new people, new videos
+and channels passing a round number (lelons.activity() inside lelons_home).
+
+**Instant start:** the app keeps what the page last showed (account, Home, Library list) in
+page-cache.json and puts it into the page, so it draws at once and updates in the background.
+
 **Find sounds** (in the Library) searches free sound effects (Openverse: Freesound and
 others, Creative Commons) and meme sounds (Myinstants). Listen, download as MP3, or
 "Add to Library", which opens the upload window with the sound ready.
