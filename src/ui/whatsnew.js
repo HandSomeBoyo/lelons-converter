@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.25.0", items: [
+    "A new animated tour that shows how to use the app. Watch it again any time with \"How to use\" at the bottom.",
+    "Turn on \"Voice\" in the tour and it reads itself out loud.",
+  ] },
   { version: "1.24.0", items: [
     "A volume slider! Click the speaker at the top (or go to Settings). It works for every sound in the app.",
     "Uploaded a sound to the wrong category? Click the pencil on it to change its name or category.",
@@ -104,8 +108,11 @@ function showWhatsNew(entries, sub) {
 let whatsNewChecked = false;
 function checkWhatsNew(s) {
   if (whatsNewChecked) return;
+  if (typeof tourShowing === "function" && tourShowing()) return; // after the tour
   whatsNewChecked = true;
   if (s.seenVersion === s.version) return;
+  // The tour opened by itself on a new install: that's enough for now.
+  if (!s.seenVersion && typeof tourShownNow !== "undefined" && tourShownNow) return void api("/api/seen-version", {}).catch(() => {});
   // Everything since the last version you saw (or just this one, on a new install).
   const fresh = CHANGES.filter((c) => !newerThan(c.version, s.version) && (s.seenVersion ? newerThan(c.version, s.seenVersion) : c.version === s.version));
   api("/api/seen-version", {}).catch(() => {});

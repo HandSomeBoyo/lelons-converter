@@ -486,7 +486,7 @@
   </section>
 
   <footer class="footer">
-    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button> · <button class="link" id="settingsOpen">Settings</button></span>
+    <span><span id="version"></span> · <button class="link" id="tourOpen">How to use</button> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button> · <button class="link" id="settingsOpen">Settings</button></span>
     <span>
       <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label> ·
       <button class="link" id="checkNow">Check for updates</button>
@@ -678,6 +678,32 @@
   </form>
 </aside>
 
+<div class="modal tour-modal" id="tourModal" hidden>
+  <div class="dialog tour-dialog" role="dialog" aria-labelledby="tourTitle">
+    <div class="tour-top">
+      <div class="tour-bars" id="tourBars"></div>
+      <button type="button" class="tour-voice" id="tourVoice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/></svg>
+        <span id="tourVoiceText">Voice off</span>
+      </button>
+      <button type="button" class="icon-button tour-x" id="tourClose" title="Close (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="tour-stage" id="tourStage" title="Click to pause"></div>
+    <div class="tour-caption" id="tourCaption">
+      <h2 id="tourTitle"></h2>
+      <p id="tourText"></p>
+    </div>
+    <div class="dialog-actions tour-actions">
+      <button type="button" class="icon-button tour-pause" id="tourPause" title="Pause"></button>
+      <span class="spacer"></span>
+      <button type="button" class="outline-button" id="tourBack">Back</button>
+      <button type="button" class="small-button" id="tourNext">Next</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="editSoundModal" hidden>
   <div class="dialog small-dialog" role="dialog" aria-labelledby="editSoundTitle">
     <h2 id="editSoundTitle">Edit sound</h2>
@@ -814,5 +840,6 @@
 <script src="profile.js"></script>
 <script src="home.js"></script>
 <script src="settings.js"></script>
+<script src="tutorial.js"></script>
 </body>
 </html>

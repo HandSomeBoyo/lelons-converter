@@ -84,6 +84,9 @@ counters and their newest uploads, who's online, the newest Library sounds, the
 latest chat messages, your own stats and your recent downloads. Paste a link there
 to convert it right away. The Owner can change the channels with "Change channels".
 
+**How to use** (at the bottom) plays a short animated tour of the app. It opens
+by itself the first time. The Voice button reads it out loud with Windows' own voice.
+
 **Where to save:** the app asks with a folder picker every time you convert or
 download. In Settings, "Always save to" picks one folder instead. The speaker
 button at the top sets the volume for every sound, and the round arrow (or F5)
