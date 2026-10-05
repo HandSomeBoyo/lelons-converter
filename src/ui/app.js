@@ -173,7 +173,8 @@ $("url").addEventListener("input", () => {
 
 let trim = null; // the part to keep, {start, end} in seconds, or null for all of it
 const waves = new Map(); // url -> waveform from the app, so it only loads once
-const editor = { url: "", duration: 0, peaks: null, start: 0, end: 0, dragging: null, raf: 0 };
+// pos: where the white playhead is. stopAt: where playing stops ("Play my part" stops at the end line).
+const editor = { url: "", duration: 0, peaks: null, start: 0, end: 0, pos: 0, dragging: null, raf: 0, stopAt: null };
 // What plays in the editor: the video for MP4s (so you can see where you are), else just the sound.
 let player = $("trimAudio");
 
@@ -217,9 +218,11 @@ async function openTrim(source) {
   document.querySelector(".trim-dialog").classList.toggle("video-mode", video);
   editor.start = source.start ?? 0;
   editor.end = source.end ?? source.duration;
+  editor.pos = editor.start;
+  warn("");
   $("trimModal").hidden = false;
   $("trimSub").textContent = source.title + (source.maxLength ? ` · GIFs can be up to ${source.maxLength} seconds` : "");
-  $("trimPlay").disabled = true;
+  setPlayable(false);
   layOut();
   let wave = waves.get(key);
   if (!wave) {
@@ -241,9 +244,13 @@ async function openTrim(source) {
   // A GIF of a video whose length wasn't known yet: start with the first 10 seconds.
   if (source.maxLength && editor.end - editor.start > source.maxLength) editor.end = Math.min(editor.duration, editor.start + 10);
   if (player.getAttribute("src") !== wave.media) player.src = wave.media;
-  $("trimPlay").disabled = false;
-  layOut();
-  showFrame(editor.start);
+  setPlayable(true);
+  seek(editor.start);
+}
+
+// Playing needs the sound (or video) to have loaded.
+function setPlayable(on) {
+  for (const id of ["trimPlay", "trimPreview", "setStart", "setEnd"]) $(id).disabled = !on;
 }
 
 // The trim editor for the link in the Video tab.
@@ -259,7 +266,7 @@ function openVideoTrim() {
   });
 }
 
-// Show the video at a moment, e.g. where a line was dragged to.
+// Show the video at a moment, e.g. where a line is being dragged to (without moving the playhead).
 function showFrame(seconds) {
   if (player !== $("trimVideo") || !player.paused || !player.getAttribute("src")) return;
   player.currentTime = Math.min(seconds, Math.max(0, editor.duration - 0.05));
@@ -282,20 +289,38 @@ function waveMessage(kind, text) {
   $("waveMessage").textContent = text;
 }
 
+// A short red note under the times, like "The start has to be before the end."
+function warn(text) {
+  $("trimLength").classList.toggle("warn", !!text);
+  if (text) $("trimLength").textContent = text;
+}
+
+const pct = (seconds) => (seconds / (editor.duration || 1)) * 100;
+
 // Draw the waveform and put the lines, shading and times where they belong.
 function layOut() {
-  const d = editor.duration || 1;
-  const startPct = (editor.start / d) * 100, endPct = (editor.end / d) * 100;
+  const startPct = pct(editor.start), endPct = pct(editor.end);
   $("handleStart").style.left = startPct + "%";
   $("handleEnd").style.left = endPct + "%";
   $("shadeLeft").style.cssText = `left:0;width:${startPct}%`;
   $("shadeRight").style.cssText = `left:${endPct}%;right:0`;
+  $("keepBox").style.cssText = `left:${startPct}%;width:${endPct - startPct}%`;
   $("rulerEnd").textContent = editor.duration ? clock(editor.duration, false) : "";
   if (document.activeElement !== $("trimStart")) $("trimStart").value = clock(editor.start);
   if (document.activeElement !== $("trimEnd")) $("trimEnd").value = clock(editor.end);
-  $("trimLength").textContent = editor.duration
-    ? `Keeping ${clock(editor.end - editor.start)} of ${clock(editor.duration, false)}` : "";
+  if (!$("trimLength").classList.contains("warn")) {
+    $("trimLength").textContent = editor.duration
+      ? `Keeping ${clock(editor.end - editor.start)} of ${clock(editor.duration, false)}` : "";
+  }
+  showPlayhead();
   drawWave();
+}
+
+function showPlayhead() {
+  const ready = !!editor.peaks;
+  $("playhead").hidden = !ready;
+  $("playhead").style.left = pct(editor.pos) + "%";
+  $("trimNow").textContent = ready ? clock(editor.pos) : "";
 }
 
 function drawWave() {
@@ -323,10 +348,19 @@ function drawWave() {
 
 const MIN_LENGTH = 0.5;
 
+// Move one line. It never pushes the other line: it stops just before it instead.
 function setLine(which, seconds) {
   const d = editor.duration;
   if (which === "start") editor.start = Math.min(Math.max(0, seconds), editor.end - MIN_LENGTH);
   else editor.end = Math.max(Math.min(d, seconds), editor.start + MIN_LENGTH);
+  warn("");
+  layOut();
+}
+
+// Move the playhead (and the video picture) to a moment.
+function seek(seconds) {
+  editor.pos = Math.min(Math.max(0, seconds), editor.duration);
+  if (player.getAttribute("src")) player.currentTime = Math.min(editor.pos, Math.max(0, editor.duration - 0.05));
   layOut();
 }
 
@@ -335,27 +369,87 @@ function timeAt(clientX) {
   return Math.min(Math.max(0, (clientX - box.left) / box.width), 1) * editor.duration;
 }
 
-// Click or drag anywhere on the waveform: the nearest line moves there.
+// Dragging a yellow line moves only that line.
+for (const [id, which] of [["handleStart", "start"], ["handleEnd", "end"]]) {
+  const handle = $(id);
+  handle.addEventListener("pointerdown", (e) => {
+    if (!editor.duration) return;
+    e.stopPropagation();
+    e.preventDefault();
+    editor.dragging = which;
+    handle.classList.add("dragging");
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (editor.dragging !== which) return;
+    setLine(which, timeAt(e.clientX));
+    showFrame(editor[which]);
+  });
+  const drop = () => {
+    if (editor.dragging !== which) return;
+    editor.dragging = null;
+    handle.classList.remove("dragging");
+    // The playhead goes to the line, so pressing play plays from there.
+    seek(which === "start" ? editor.start : Math.max(editor.start, editor.end - 2));
+  };
+  handle.addEventListener("pointerup", drop);
+  handle.addEventListener("pointercancel", drop);
+}
+
+// Clicking (or dragging) anywhere else on the waveform only moves the playhead.
 $("wave").addEventListener("pointerdown", (e) => {
   if (!editor.duration) return;
-  const t = timeAt(e.clientX);
-  editor.dragging = Math.abs(t - editor.start) <= Math.abs(t - editor.end) ? "start" : "end";
-  if (editor.start === editor.end) editor.dragging = t < editor.start ? "start" : "end";
+  editor.dragging = "playhead";
   $("wave").setPointerCapture(e.pointerId);
-  setLine(editor.dragging, t);
-  showFrame(editor[editor.dragging]);
+  seek(timeAt(e.clientX));
 });
 $("wave").addEventListener("pointermove", (e) => {
-  if (!editor.dragging) return;
-  setLine(editor.dragging, timeAt(e.clientX));
-  showFrame(editor[editor.dragging]);
+  // A thin line and the time under the mouse, so you can see where a click goes.
+  const hover = $("hoverLine");
+  if (editor.duration && editor.peaks && !editor.dragging) {
+    const box = $("wave").getBoundingClientRect();
+    const x = Math.min(Math.max(0, e.clientX - box.left), box.width);
+    hover.hidden = false;
+    hover.style.left = x + "px";
+    hover.classList.toggle("flip", x > box.width - 60);
+    $("hoverTime").textContent = clock(timeAt(e.clientX));
+  } else {
+    hover.hidden = true;
+  }
+  if (editor.dragging === "playhead") seek(timeAt(e.clientX));
 });
-$("wave").addEventListener("pointerup", () => {
-  if (!editor.dragging) return;
-  // While playing, jump to the line that was moved so you hear the new spot.
-  if (!player.paused) player.currentTime = editor.dragging === "start" ? editor.start : Math.max(editor.start, editor.end - 2);
-  editor.dragging = null;
-});
+$("wave").addEventListener("pointerleave", () => { $("hoverLine").hidden = true; });
+const endScrub = () => { if (editor.dragging === "playhead") editor.dragging = null; };
+$("wave").addEventListener("pointerup", endScrub);
+$("wave").addEventListener("pointercancel", endScrub);
+
+// "Set start here" / "Set end here": the line jumps to the playhead.
+function setHere(which) {
+  const t = editor.pos;
+  if (which === "start" && t > editor.end - MIN_LENGTH) {
+    return warn(`The start has to be before the end (${clock(editor.end)}). Move the end first, or pick an earlier moment.`);
+  }
+  if (which === "end" && t < editor.start + MIN_LENGTH) {
+    return warn(`The end has to be after the start (${clock(editor.start)}). Move the start first, or pick a later moment.`);
+  }
+  setLine(which, t);
+}
+$("setStart").addEventListener("click", () => setHere("start"));
+$("setEnd").addEventListener("click", () => setHere("end"));
+
+// -1s / +1s next to the times (with Shift: a tenth of a second).
+document.querySelectorAll(".nudge").forEach((button) => button.addEventListener("click", (e) => {
+  if (!editor.duration) return;
+  const which = button.dataset.which;
+  const step = Number(button.dataset.step) * (e.shiftKey ? 0.1 : 1);
+  const before = editor[which];
+  setLine(which, before + step);
+  if (editor[which] === before) {
+    warn(which === "start" && step > 0 ? "The start can't go past the end." : which === "end" && step < 0
+      ? "The end can't go before the start." : "That's as far as it goes.");
+  }
+  seek(which === "start" ? editor.start : Math.max(editor.start, editor.end - 2));
+}));
 
 ["trimStart", "trimEnd"].forEach((id) => {
   const input = $(id), which = id === "trimStart" ? "start" : "end";
@@ -363,13 +457,18 @@ $("wave").addEventListener("pointerup", () => {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
   input.addEventListener("change", () => {
     const t = parseTime(input.value.trim());
-    const ok = t !== null && t <= editor.duration
-      && (which === "start" ? t <= editor.end - MIN_LENGTH : t >= editor.start + MIN_LENGTH);
-    input.classList.toggle("bad", !ok);
-    if (ok) {
-      setLine(which, t);
-      showFrame(editor[which]);
+    if (t === null || t > editor.duration) {
+      input.classList.add("bad");
+      return warn(`Type a time like 1:20${editor.duration ? `, up to ${clock(editor.duration, false)}` : ""}.`);
     }
+    if (which === "start" ? t > editor.end - MIN_LENGTH : t < editor.start + MIN_LENGTH) {
+      input.classList.add("bad");
+      return warn(which === "start" ? `The start has to be before the end (${clock(editor.end)}).`
+        : `The end has to be after the start (${clock(editor.start)}).`);
+    }
+    input.classList.remove("bad");
+    setLine(which, t);
+    seek(which === "start" ? editor.start : Math.max(editor.start, editor.end - 2));
   });
   input.addEventListener("blur", () => { if (!input.classList.contains("bad")) layOut(); });
 });
@@ -377,43 +476,60 @@ $("wave").addEventListener("pointerup", () => {
 function stopPlaying() {
   player.pause();
   cancelAnimationFrame(editor.raf);
+  editor.stopAt = null;
   $("trimPlay").classList.remove("playing");
-  $("playhead").hidden = true;
+  $("trimPreview").textContent = "Play my part";
 }
 
 function followPlayhead() {
-  if (player.currentTime >= editor.end) {
+  editor.pos = player.currentTime;
+  if (editor.stopAt !== null && editor.pos >= editor.stopAt) {
+    editor.pos = editor.stopAt;
     stopPlaying();
-    return;
+    return showPlayhead();
   }
-  $("playhead").hidden = false;
-  $("playhead").style.left = (player.currentTime / editor.duration) * 100 + "%";
+  showPlayhead();
   editor.raf = requestAnimationFrame(followPlayhead);
 }
 
+function play(from, stopAt) {
+  stopPlaying();
+  player.currentTime = from;
+  editor.pos = from;
+  player.play().then(() => {
+    editor.stopAt = stopAt;
+    $("trimPlay").classList.add("playing");
+    if (stopAt !== null) $("trimPreview").textContent = "Stop";
+    followPlayhead();
+  }).catch(() => warn("Couldn't play the sound, but trimming still works."));
+}
+
+// Play / pause from the playhead.
 $("trimPlay").addEventListener("click", () => {
   if (!player.paused) return stopPlaying();
-  if (player.currentTime < editor.start || player.currentTime >= editor.end - 0.05) player.currentTime = editor.start;
-  player.play().then(() => {
-    $("trimPlay").classList.add("playing");
-    followPlayhead();
-  }).catch(() => { $("trimLength").textContent = "Couldn't play the sound, but trimming still works."; });
+  play(editor.pos >= editor.duration - 0.05 ? 0 : editor.pos, null);
 });
-$("trimAudio").addEventListener("ended", stopPlaying);
-$("trimVideo").addEventListener("ended", stopPlaying);
+// Play just the part between the lines.
+$("trimPreview").addEventListener("click", () => {
+  if (!player.paused) return stopPlaying();
+  play(editor.start, editor.end);
+});
+const ended = () => { stopPlaying(); editor.pos = editor.duration; showPlayhead(); };
+$("trimAudio").addEventListener("ended", ended);
+$("trimVideo").addEventListener("ended", ended);
 $("trimVideo").addEventListener("click", () => { if (!$("trimPlay").disabled) $("trimPlay").click(); });
 
 $("trimReset").addEventListener("click", () => {
   editor.start = 0;
   editor.end = editor.duration;
+  warn("");
   layOut();
 });
 $("trimCancel").addEventListener("click", closeTrim);
 $("trimDone").addEventListener("click", () => {
   const max = trimSource && trimSource.maxLength;
   if (max && editor.end - editor.start > max + 0.05) {
-    $("trimLength").textContent = `That's ${clock(editor.end - editor.start)}. GIFs can be up to ${max} seconds, so move the lines closer together.`;
-    return;
+    return warn(`That's ${clock(editor.end - editor.start)}. GIFs can be up to ${max} seconds, so move the lines closer together.`);
   }
   const whole = editor.start <= 0.05 && editor.end >= editor.duration - 0.05;
   const part = whole || !editor.duration ? null : { start: editor.start, end: editor.end };
@@ -425,10 +541,19 @@ $("trimToggle").addEventListener("click", openVideoTrim);
 $("trimEdit").addEventListener("click", openVideoTrim);
 $("trimClear").addEventListener("click", clearTrim);
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !$("trimModal").hidden) closeTrim();
-  if (e.key === " " && !$("trimModal").hidden && e.target.tagName !== "INPUT") {
+  if ($("trimModal").hidden) return;
+  if (e.key === "Escape") return closeTrim();
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === " ") {
     e.preventDefault();
     $("trimPlay").click();
+  } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && editor.peaks) {
+    // Arrow keys move the playhead 1 second (with Shift: a tenth).
+    e.preventDefault();
+    const step = (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 0.1 : 1);
+    const playing = !player.paused, stopAt = editor.stopAt;
+    seek(editor.pos + step);
+    if (playing) play(editor.pos, stopAt);
   }
 });
 window.addEventListener("resize", () => { if (!$("trimModal").hidden) drawWave(); });

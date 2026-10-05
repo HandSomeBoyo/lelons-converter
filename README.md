@@ -34,9 +34,11 @@ Paste a **playlist** link and the app lists its videos. Untick the ones you
 don't want and click **Convert**. If you paste a video that's in a playlist,
 click "Get the whole playlist" to see the rest.
 
-To save only part of a video, click **Trim** under the preview. Drag the
-yellow Start and End lines on the waveform (or type the times), press play to
-hear your pick, then click **Done**. For MP4s and GIFs the video plays above
+To save only part of a video, click **Trim** under the preview. Play it (or
+click the waveform to jump around) and press **Set start here** and **Set end
+here** at the right moments. You can also drag the yellow lines, type the
+times, or nudge them with -1s and +1s. **Play my part** plays just your pick.
+Then click **Done**. For MP4s and GIFs the video plays above
 the waveform, and dragging a line shows that moment of the video.
 
 MP3s, M4As and FLACs get the video's thumbnail as cover art, plus the song

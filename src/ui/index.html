@@ -234,7 +234,8 @@
   </footer>
 </main>
 
-<!-- Trim editor: drag the two lines on the waveform to pick the part to keep -->
+<!-- Trim editor: play to the spot you want and press "Set start here" / "Set end here",
+     or drag the yellow lines. Clicking the waveform only moves the white playhead. -->
 <div class="modal" id="trimModal" hidden>
   <div class="dialog trim-dialog" role="dialog" aria-labelledby="trimHeading">
     <h2 id="trimHeading">Trim</h2>
@@ -247,21 +248,43 @@
       <canvas id="waveCanvas"></canvas>
       <div class="shade" id="shadeLeft"></div>
       <div class="shade" id="shadeRight"></div>
-      <div class="handle" id="handleStart"><span>Start</span></div>
-      <div class="handle" id="handleEnd"><span>End</span></div>
+      <div class="keep" id="keepBox"></div>
+      <div class="hover-line" id="hoverLine" hidden><span id="hoverTime"></span></div>
       <div class="playhead" id="playhead" hidden></div>
+      <div class="handle" id="handleStart" title="Drag to move the start"><span>Start</span></div>
+      <div class="handle" id="handleEnd" title="Drag to move the end"><span>End</span></div>
       <div class="wave-message" id="waveMessage"></div>
     </div>
-    <div class="ruler"><span>0:00</span><span id="rulerEnd"></span></div>
+    <div class="ruler"><span>0:00</span><span class="now" id="trimNow"></span><span id="rulerEnd"></span></div>
     <div class="trim-controls">
-      <label>Start <input id="trimStart" autocomplete="off" spellcheck="false"></label>
-      <button type="button" class="play-button" id="trimPlay" title="Play the part you picked">
-        <svg class="play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
-        <svg class="pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
-      </button>
-      <label>End <input id="trimEnd" autocomplete="off" spellcheck="false"></label>
+      <div class="trim-point">
+        <span class="point-label">Start</span>
+        <div class="point-time">
+          <button type="button" class="nudge" data-which="start" data-step="-1" title="1 second earlier (Shift: 0.1 second)">&minus;1s</button>
+          <input id="trimStart" autocomplete="off" spellcheck="false" aria-label="Start time">
+          <button type="button" class="nudge" data-which="start" data-step="1" title="1 second later (Shift: 0.1 second)">+1s</button>
+        </div>
+        <button type="button" class="outline-button set-here" id="setStart">Set start here</button>
+      </div>
+      <div class="trim-play">
+        <button type="button" class="play-button" id="trimPlay" title="Play or pause (space bar)">
+          <svg class="play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+          <svg class="pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="link-button" id="trimPreview">Play my part</button>
+      </div>
+      <div class="trim-point">
+        <span class="point-label">End</span>
+        <div class="point-time">
+          <button type="button" class="nudge" data-which="end" data-step="-1" title="1 second earlier (Shift: 0.1 second)">&minus;1s</button>
+          <input id="trimEnd" autocomplete="off" spellcheck="false" aria-label="End time">
+          <button type="button" class="nudge" data-which="end" data-step="1" title="1 second later (Shift: 0.1 second)">+1s</button>
+        </div>
+        <button type="button" class="outline-button set-here" id="setEnd">Set end here</button>
+      </div>
     </div>
     <p class="trim-length" id="trimLength"></p>
+    <p class="trim-help" id="trimHelp">Play it and press <b>Set start here</b> and <b>Set end here</b> at the right moments. Or drag the yellow lines.</p>
     <div class="dialog-actions">
       <button type="button" class="link-button" id="trimReset">Select all</button>
       <span class="spacer"></span>

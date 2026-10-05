@@ -208,28 +208,51 @@ button { font: inherit; }
   overflow: hidden; background: #000; line-height: 0;
 }
 .video-box[hidden] { display: none; }
-.video-box video { cursor: pointer; display: block; height: 270px; max-width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.video-box video { cursor: pointer; display: block; height: min(270px, 30vh); max-width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .video-time {
   position: absolute; right: 8px; bottom: 8px; padding: 3px 7px; border-radius: 2px; line-height: 1.4;
   background: rgba(0, 0, 0, .75); color: #fff; font: 600 12px var(--head); font-variant-numeric: tabular-nums;
 }
 .wave {
   position: relative; height: 150px; margin-top: 18px; border-radius: 2px; overflow: hidden;
-  background: var(--bg); border: 1px solid var(--line); cursor: pointer; touch-action: none;
+  background: var(--bg); border: 1px solid var(--line); cursor: text; touch-action: none; user-select: none;
 }
-.video-mode .wave { height: 110px; margin-top: 14px; }
+.video-mode .wave { height: 100px; margin-top: 12px; }
+.video-mode .video-box { margin-top: 14px; }
+.video-mode .trim-controls { margin-top: 12px; }
+.video-mode .dialog-actions { margin-top: 16px; }
 .wave canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .wave .shade { position: absolute; top: 0; bottom: 0; background: rgba(20, 20, 20, .72); pointer-events: none; }
-.wave .handle { position: absolute; top: 0; bottom: 0; width: 22px; margin-left: -11px; cursor: ew-resize; z-index: 2; }
-.wave .handle::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+/* The part that's kept: a yellow frame between the lines */
+.wave .keep {
+  position: absolute; top: 0; bottom: 0; border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+  background: rgba(255, 207, 63, .06); pointer-events: none;
+}
+.wave .handle { position: absolute; top: 0; bottom: 0; width: 28px; margin-left: -14px; cursor: ew-resize; z-index: 4; }
+.wave .handle::before { content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--accent); }
+/* a grip in the middle, so the line looks like something to grab */
+.wave .handle::after {
+  content: ""; position: absolute; left: 7px; top: 50%; width: 14px; height: 34px; margin-top: -17px; border-radius: 3px;
+  background: var(--accent) repeating-linear-gradient(90deg, transparent 0 4px, rgba(20, 20, 20, .55) 4px 5px, transparent 5px 9px) center / 9px 16px no-repeat;
+}
+.wave .handle:hover::before, .wave .handle.dragging::before, .wave .handle:hover::after, .wave .handle.dragging::after { filter: brightness(1.12); }
 .wave .handle span {
   position: absolute; left: 50%; top: 0; padding: 2px 7px; border-radius: 0 0 2px 2px;
   background: var(--accent); color: var(--ink); font: 700 11px var(--head); white-space: nowrap;
 }
 #handleStart span { transform: translateX(-1px); border-bottom-left-radius: 0; }
 #handleEnd span { transform: translateX(calc(-100% + 1px)); border-bottom-right-radius: 0; }
-.wave .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 1; }
-.wave .playhead[hidden] { display: none; }
+.wave .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 3; }
+.wave .playhead::before {
+  content: ""; position: absolute; left: -5px; top: 0; border: 6px solid transparent; border-top: 7px solid var(--text); border-bottom: 0;
+}
+.wave .playhead[hidden], .wave .hover-line[hidden] { display: none; }
+.wave .hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(241, 239, 233, .35); pointer-events: none; z-index: 2; }
+.wave .hover-line span {
+  position: absolute; bottom: 4px; left: 5px; padding: 1px 5px; border-radius: 2px; background: var(--panel2);
+  color: var(--text); font: 600 11px var(--head); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.wave .hover-line.flip span { left: auto; right: 5px; }
 .wave-message {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px;
   color: var(--muted); font-size: 14px; background: var(--bg); z-index: 3;
@@ -242,8 +265,21 @@ button { font: inherit; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ruler { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); font: 500 12px var(--head); }
-.trim-controls { display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: 14px; }
-.trim-controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 600 13px var(--head); }
+.ruler .now { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.trim-controls {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; margin-top: 16px;
+}
+.trim-point { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.trim-point .point-label { color: var(--muted); font: 600 12px var(--head); text-transform: uppercase; letter-spacing: .6px; }
+.point-time { display: flex; align-items: center; gap: 6px; }
+.nudge {
+  all: unset; cursor: pointer; height: 36px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 4px;
+  color: var(--muted); font: 600 12px var(--head); display: flex; align-items: center;
+}
+.nudge:hover { color: var(--text); border-color: var(--muted); }
+.set-here { justify-content: center; min-width: 150px; }
+.trim-play { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.trim-play .link-button { font-size: 13px; }
 .trim-controls input {
   all: unset; width: 84px; height: 36px; border: 1px solid var(--line2); border-radius: 4px; background: var(--bg);
   color: var(--text); text-align: center; font: 500 15px var(--head); user-select: text; font-variant-numeric: tabular-nums;
@@ -251,7 +287,7 @@ button { font: inherit; }
 .trim-controls input:focus { border-color: var(--accent); }
 .trim-controls input.bad { border-color: var(--red); }
 .play-button {
-  all: unset; cursor: pointer; width: 48px; height: 48px; border-radius: 4px; display: flex; align-items: center;
+  all: unset; cursor: pointer; width: 56px; height: 56px; border-radius: 4px; display: flex; align-items: center;
   justify-content: center; background: var(--accent); color: var(--ink);
 }
 .play-button:hover { filter: brightness(1.07); }
@@ -259,7 +295,10 @@ button { font: inherit; }
 .play-button svg { width: 22px; height: 22px; }
 .play-button .pause, .play-button.playing .play { display: none; }
 .play-button.playing .pause { display: block; }
-.trim-length { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 13px; }
+.trim-length { margin: 14px 0 0; text-align: center; color: var(--text); font: 600 14px var(--head); }
+.trim-length.warn { color: var(--red); }
+.trim-help { margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; }
+.trim-help b { color: var(--text); font-weight: 600; }
 
 @media (max-width: 680px) {
   main { padding: 24px 20px; }
