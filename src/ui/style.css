@@ -312,6 +312,28 @@ button { font: inherit; }
 .trim-help { margin: 4px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; }
 .trim-help b { color: var(--text); font-weight: 600; }
 
+/* The clip you drag out of the trim editor */
+.trim-clip { display: flex; justify-content: center; margin-top: 16px; }
+.trim-clip[hidden] { display: none; }
+.clip-make { display: inline-flex; align-items: center; gap: 8px; }
+.clip-make svg { width: 16px; height: 16px; color: var(--accent); }
+.clip-chip {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; min-width: 320px; max-width: 100%;
+  box-sizing: border-box; padding: 10px 16px 10px 12px; border-radius: 6px; border: 1px dashed var(--line2); background: var(--panel2);
+}
+.clip-chip[hidden] { display: none; }
+.clip-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255, 207, 63, .12); transition: width .3s; }
+.clip-grip { position: relative; width: 22px; height: 22px; flex: none; color: var(--muted); }
+.clip-text { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.clip-text b { font: 600 14px var(--head); }
+.clip-text span { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-chip.working .clip-grip { animation: pulse 1.2s ease-in-out infinite; }
+.clip-chip.ready { border: 1px solid var(--accent); background: rgba(255, 207, 63, .08); }
+.clip-chip.ready .clip-grip { color: var(--accent); }
+.clip-chip.ready:hover { background: rgba(255, 207, 63, .14); }
+.clip-chip.error { border-color: var(--red); cursor: pointer; }
+.clip-chip.error b { color: var(--red); }
+
 @media (max-width: 680px) {
   main { padding: 24px 20px; }
   .top { flex-wrap: wrap; }
@@ -521,7 +543,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .sound .sound-wave.loading .bars i { animation: pulse 1.2s ease-in-out infinite; }
 .sound .time { flex: none; width: 38px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sound.playing .time { color: var(--accent); }
-.sound .actions { display: flex; justify-content: flex-end; gap: 2px; flex: none; width: 92px; opacity: .55; transition: opacity .15s; }
+.sound .actions { display: flex; justify-content: flex-end; gap: 2px; flex: none; width: 124px; opacity: .55; transition: opacity .15s; }
 .sound:hover .actions, .sound .actions:focus-within { opacity: 1; }
 
 .upload-list:empty { display: none; }
@@ -656,3 +678,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 }
 .job.can-drag:hover .thumb::after, .image-row.can-drag:hover .pic::after { opacity: 1; }
 .drag-tip { flex: 1; margin: 0 14px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Favorites in the Library */
+.sfx-cats button.fav-chip::before {
+  content: "★"; margin-right: 6px; font-size: 12px; line-height: 1; color: var(--accent);
+}
+.sfx-cats button.fav-chip.active::before { color: var(--ink); }
+.sound .actions .star.on { color: var(--accent); }
+.sound:has(.star.on) .actions { opacity: 1; }
+.sound:has(.star.on) .actions button:not(.star) { opacity: .55; }
+.sound:hover .actions button { opacity: 1 !important; }

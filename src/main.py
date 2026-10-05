@@ -26,6 +26,7 @@ import updater
 # Before anything loads yt-dlp: use a newer one if one was downloaded.
 YT_DLP_VERSION = updater.use_newest_yt_dlp()
 
+import clips  # noqa: E402
 import downloader  # noqa: E402
 import files  # noqa: E402
 import history  # noqa: E402
@@ -135,6 +136,7 @@ class State:
 queue = jobs.Queue(on_done=history.add_job)
 page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()
+clip_maker = clips.Clips(queue.lookup, local_files.find)
 state = State()
 
 
@@ -230,6 +232,8 @@ def drag_path(data):
         return item and item["out"]
     if kind == "image":
         return images.was_made(data.get("path")) and data["path"]
+    if kind == "clip":
+        return clip_maker.path(data.get("key"))
     if kind == "sound":
         return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
     return None
@@ -434,6 +438,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"sounds": library.sounds()}
             elif action == "peaks":
                 result = {"peaks": sfx.waveforms.get(str(data.get("path") or ""))}
+            elif action == "favorite":
+                library.favorite(data.get("id"), data.get("on"))
+                result = {}
             elif action == "delete":
                 library.delete(data.get("id"))
                 result = {}
@@ -640,6 +647,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True})
             except (ValueError, sfx.Error) as e:
                 self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/clip":  # the trim editor's clip to drag: make it for this start and end
+            try:
+                self.send_json({"ok": True, "clip": clip_maker.want(data)})
+            except ValueError as e:
+                self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/clip-state":
+            self.send_json({"ok": True, "clip": clip_maker.state(data.get("key"))})
         elif self.path == "/api/drag-ready":  # the mouse is over a library sound: have it ready to drag
             try:
                 sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))

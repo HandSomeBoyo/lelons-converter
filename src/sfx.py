@@ -266,6 +266,9 @@ class Library:
             raise Error(FRIENDLY.get(error, "That didn't work. Try again."))
         return self.account()
 
+    def favorite(self, sound_id, starred):
+        _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))
+
     def delete_me(self, password):
         """Deletes your own account (your sounds stay) and logs you out."""
         result = _rpc("lelons_delete_me", token=self._token(), password=str(password or ""))

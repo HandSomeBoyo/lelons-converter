@@ -468,6 +468,17 @@
       </div>
     </div>
     <p class="trim-length" id="trimLength"></p>
+    <div class="trim-clip" id="trimClip" hidden>
+      <button type="button" class="outline-button clip-make" id="clipMake">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>
+        Make a clip to drag into your editor
+      </button>
+      <div class="clip-chip" id="clipChip" hidden>
+        <span class="clip-bar" id="clipBar"></span>
+        <svg class="clip-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>
+        <span class="clip-text"><b id="clipTitle"></b><span id="clipInfo"></span></span>
+      </div>
+    </div>
     <p class="trim-help" id="trimHelp">Play it and press <b>Set start here</b> and <b>Set end here</b> at the right moments. Or drag the yellow lines.</p>
     <div class="dialog-actions">
       <button type="button" class="link-button" id="trimReset">Select all</button>
@@ -509,6 +520,7 @@
 </div>
 
 <script src="app.js"></script>
+<script src="clip.js"></script>
 <script src="images.js"></script>
 <script src="files.js"></script>
 <script src="history.js"></script>

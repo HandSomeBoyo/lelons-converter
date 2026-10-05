@@ -58,6 +58,13 @@ and delete them. **Viewers** can listen and download. New accounts start as
 viewers. The sounds are kept in a free Supabase project; `sfx/setup.sql` sets
 it up.
 
+**Clips from the trim editor:** after picking your part, click **Make a clip
+to drag** and drag the clip straight into your editor. Moving the lines makes
+the clip again by itself. Clips are kept in `%LOCALAPPDATA%\LelonsConverter\Clips`.
+
+In the Library, click the star on a sound to add it to your **Favorites**. They
+show at the top, and the Favorites chip shows only them.
+
 **Drag and drop into other apps:** grab any finished download, converted file,
 picture, history item or Library sound and drop it straight into DaVinci
 Resolve, Premiere, a Discord chat or a folder, just like dragging a file out of

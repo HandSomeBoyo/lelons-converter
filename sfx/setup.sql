@@ -76,6 +76,14 @@ create table if not exists lelons.sounds (
 alter table lelons.sounds add column if not exists uploader_id uuid references lelons.accounts (id) on delete set null;
 alter table lelons.sounds drop column if exists owner_hash;
 
+-- Everyone's starred sounds.
+create table if not exists lelons.favorites (
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  sound_id uuid not null references lelons.sounds (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (account_id, sound_id)
+);
+
 alter table lelons.config enable row level security;
 alter table lelons.accounts enable row level security;
 alter table lelons.sessions enable row level security;
@@ -217,17 +225,34 @@ begin
   return json_build_object('ok', true);
 end $$;
 
+drop function if exists public.lelons_list(text);  -- (it gained a column: favorite)
 create or replace function public.lelons_list(token text)
 returns table (id uuid, name text, category text, path text, seconds real, bytes int,
-               uploader text, uploader_avatar text, created_at timestamptz, mine boolean)
+               uploader text, uploader_avatar text, created_at timestamptz, mine boolean, favorite boolean)
 language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
 begin
   return query select s.id, s.name, s.category, s.path, s.seconds, s.bytes,
-                      coalesce(a.username, s.uploader), a.avatar, s.created_at, s.uploader_id is not distinct from me.id
+                      coalesce(a.username, s.uploader), a.avatar, s.created_at, s.uploader_id is not distinct from me.id,
+                      exists (select 1 from lelons.favorites f where f.account_id = me.id and f.sound_id = s.id)
                from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
                order by s.created_at desc limit 5000;
+end $$;
+
+-- Star or unstar a sound, just for you.
+create or replace function public.lelons_favorite(token text, sound_id uuid, starred boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if starred then
+    insert into lelons.favorites (account_id, sound_id)
+    select me.id, s.id from lelons.sounds s where s.id = lelons_favorite.sound_id
+    on conflict do nothing;
+  else
+    delete from lelons.favorites f where f.account_id = me.id and f.sound_id = lelons_favorite.sound_id;
+  end if;
 end $$;
 
 -- A place to upload one file: kind 'sound' (admins and the owner) or 'avatar' (everyone).
@@ -414,7 +439,7 @@ begin
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
     'lelons_add(text, text, text, text, real, int)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
-    'lelons_rename(text, text)', 'lelons_delete_me(text, text)'] loop
+    'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

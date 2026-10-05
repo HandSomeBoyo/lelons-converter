@@ -5,6 +5,8 @@ const SFX_ICONS = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  starOn: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
 };
 
@@ -222,16 +224,17 @@ async function loadSfx() {
 }
 
 function drawSfxCategories() {
-  const counts = { all: sfxSounds.length };
+  const counts = { all: sfxSounds.length, favorites: sfxSounds.filter((s) => s.favorite).length };
   for (const s of sfxSounds) counts[s.category] = (counts[s.category] || 0) + 1;
   const cats = $("sfxCats");
   cats.innerHTML = "";
-  for (const [value, label] of [["all", "All"], ...Object.entries(sfxAccount.categories)]) {
+  for (const [value, label] of [["all", "All"], ["favorites", "Favorites"], ...Object.entries(sfxAccount.categories)]) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = sfxCategory === value ? "active" : "";
     b.innerHTML = `<span></span><span class="count">${counts[value] || 0}</span>`;
-    if (value !== "all") b.classList.add("cat-" + value);
+    if (value === "favorites") b.classList.add("fav-chip");
+    else if (value !== "all") b.classList.add("cat-" + value);
     b.firstChild.textContent = label;
     b.onclick = () => { sfxCategory = value; drawSfx(); };
     cats.append(b);
@@ -242,13 +245,16 @@ function drawSfx() {
   if (!sfxAccount) return;
   drawSfxCategories();
   const words = $("sfxSearch").value.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = sfxSounds.filter((s) => (sfxCategory === "all" || s.category === sfxCategory) &&
+  const shown = sfxSounds.filter((s) => (sfxCategory === "all" || s.category === sfxCategory ||
+    (sfxCategory === "favorites" && s.favorite)) &&
     words.every((w) => `${s.name} ${s.uploader} ${s.categoryName}`.toLowerCase().includes(w)));
+  shown.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0)); // your starred ones first (the rest stay newest first)
   $("sfxList").replaceChildren(...shown.map(sfxRow));
   $("sfxEmpty").hidden = shown.length > 0;
   $("sfxEmpty").textContent = sfxError ||
     (!sfxSounds.length ? "No sounds yet. Be the first: click Upload a sound."
-      : words.length ? "Nothing matches that search." : "No sounds in this category yet.");
+      : words.length ? "Nothing matches that search."
+      : sfxCategory === "favorites" ? "No favorites yet. Click the star on a sound to add it here." : "No sounds in this category yet.");
 }
 
 function sfxRow(sound) {
@@ -315,6 +321,21 @@ function sfxRow(sound) {
     actions.append(b);
     return b;
   };
+  const star = add(sound.favorite ? SFX_ICONS.starOn : SFX_ICONS.star,
+    sound.favorite ? "Remove from your favorites" : "Add to your favorites (they show at the top)", async () => {
+      const on = !sound.favorite;
+      sound.favorite = on; // show it right away
+      drawSfx();
+      const res = await api("/api/sfx-favorite", { id: sound.id, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
+      if (sfxLoggedOut(res)) return;
+      if (!res.ok) {
+        sound.favorite = !on;
+        sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
+        drawSfx();
+      }
+    });
+  star.classList.add("star");
+  star.classList.toggle("on", !!sound.favorite);
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
   add(SFX_ICONS.download, "Download (saved in your downloads folder as MP3)", async (b) => {
     b.disabled = true;

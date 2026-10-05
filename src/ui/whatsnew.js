@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.18.0", items: [
+    "Drag clips straight out of the trim editor: pick your part, click \"Make a clip to drag\" and drop it into DaVinci Resolve. Move the lines and the clip updates by itself.",
+    "Favorites in the Library: click the star on a sound. Your starred sounds show at the top, and the Favorites chip shows only them.",
+  ] },
   { version: "1.17.0", items: [
     "This window! After every update it shows what changed. You can open it again with \"What's new\" at the bottom.",
   ] },

@@ -268,6 +268,7 @@ async function openTrim(source) {
   editor.pos = editor.start;
   warn("");
   $("trimModal").hidden = false;
+  if (typeof clipOpened === "function") clipOpened(source);
   $("trimSub").textContent = source.title + (source.maxLength ? ` · GIFs can be up to ${source.maxLength} seconds` : "");
   setPlayable(false);
   layOut();
@@ -311,6 +312,8 @@ function openVideoTrim() {
     end: trim ? trim.end : gif ? Math.min(10, previewSeconds) : previewSeconds,
     maxLength: gif ? 60 : 0,
     done: (part) => { trim = part; showTrimChip(); },
+    clip: () => ({ source: { url: previewUrl }, title: $("previewTitle").textContent, format, quality: $("quality").value,
+                   normalize: AUDIO_FORMATS.includes(format) && $("normalize").checked }),
   });
 }
 
@@ -328,6 +331,7 @@ $("trimVideo").addEventListener("seeked", showVideoTime);
 
 function closeTrim() {
   stopPlaying();
+  if (typeof clipClosed === "function") clipClosed();
   $("trimModal").hidden = true;
   editor.url = "";
 }
@@ -362,6 +366,7 @@ function layOut() {
   }
   showPlayhead();
   drawWave();
+  if (typeof clipChanged === "function") clipChanged();
 }
 
 function showPlayhead() {

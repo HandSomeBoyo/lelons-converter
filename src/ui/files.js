@@ -129,6 +129,8 @@ function trimFile(file) {
     start: saved ? saved.start : 0,
     end: saved ? saved.end : gif ? Math.min(10, file.seconds) : file.seconds,
     maxLength: gif ? 60 : 0,
+    clip: () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
+                   quality: fileOptions.quality[fileOptions.format] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize }),
     done: (part) => {
       if (part) fileTrims.set(file.id, part); else fileTrims.delete(file.id);
       drawFiles();
