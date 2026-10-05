@@ -28,6 +28,8 @@
           <div class="lib-menu" id="libMenuItems" hidden>
             <button type="button" id="libAccountOpen">Manage account</button>
             <button type="button" id="libPeopleOpen" hidden>People and roles</button>
+            <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
+            <button type="button" id="libFeedbackOpen">Send feedback</button>
             <button type="button" id="libLogout">Log out</button>
           </div>
           <div class="lib-login" id="libLogin" hidden>
@@ -201,18 +203,40 @@
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
-    <div id="sfxMain" hidden>
-      <div class="history-tools">
-        <label class="input history-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
-        </label>
-        <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload a sound</button>
+    <div id="sfxMain" class="lib-layout" hidden>
+      <aside class="lib-side" id="sfxSide" aria-label="Browse the library">
+        <div class="side-group" id="sfxBrowse"></div>
+        <h3 class="side-head">Categories</h3>
+        <div class="side-group" id="sfxCats"></div>
+        <h3 class="side-head">Uploaded by</h3>
+        <div class="side-group side-people" id="sfxPeople"></div>
+      </aside>
+      <div class="lib-main">
+        <div class="lib-tools">
+          <label class="input history-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="quality lib-sort" title="Sort by">
+            <span>Sort</span>
+            <select id="sfxSort">
+              <option value="favorites">Favorites first</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="name">Name (A to Z)</option>
+              <option value="longest">Longest</option>
+              <option value="shortest">Shortest</option>
+              <option value="uploader">Uploader (A to Z)</option>
+            </select>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+          <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
+        </div>
+        <p class="lib-showing" id="sfxShowing"></p>
+        <div class="upload-list" id="sfxUploads"></div>
+        <p class="history-empty" id="sfxEmpty"></p>
+        <div class="sound-list" id="sfxList"></div>
       </div>
-      <div class="chips sfx-cats" id="sfxCats"></div>
-      <div class="upload-list" id="sfxUploads"></div>
-      <p class="history-empty" id="sfxEmpty"></p>
-      <div class="sound-list" id="sfxList"></div>
     </div>
   </section>
 
@@ -260,6 +284,13 @@
         <button type="submit" class="small-button">Change password</button>
         <p class="acct-note" id="acctPasswordNote"></p>
       </form>
+
+      <div class="acct-card" id="acctInbox" hidden>
+        <h2>Feedback inbox</h2>
+        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
+        <p class="sfx-error" id="inboxError"></p>
+        <div id="inboxList"></div>
+      </div>
 
       <div class="acct-card" id="libPeople" hidden>
         <h2>People and roles</h2>
@@ -373,7 +404,7 @@
   </section>
 
   <footer class="footer">
-    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button></span>
+    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button></span>
     <span>
       <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label> ·
       <button class="link" id="checkNow">Check for updates</button>
@@ -505,6 +536,36 @@
   </div>
 </div>
 
+<div class="modal" id="feedbackModal" hidden>
+  <div class="dialog feedback-dialog" role="dialog" aria-labelledby="feedbackHeading">
+    <h2 id="feedbackHeading">Send feedback</h2>
+    <p class="sub">Found a bug or want something added? Tell the owner of the app.</p>
+    <div id="feedbackOut" class="feedback-out" hidden>
+      <p>Log in first, so the owner knows who it's from.</p>
+      <button type="button" class="small-button" id="feedbackLogin">Log in</button>
+    </div>
+    <form id="feedbackForm">
+      <div class="chips feedback-kinds" id="feedbackKinds">
+        <button type="button" data-kind="bug" class="active">Bug</button>
+        <button type="button" data-kind="idea">Idea</button>
+        <button type="button" data-kind="other">Something else</button>
+      </div>
+      <textarea id="feedbackText" maxlength="2000" placeholder="What happened, or what should the app do?"></textarea>
+      <p class="acct-note" id="feedbackNote"></p>
+      <div class="dialog-actions">
+        <span class="feedback-count" id="feedbackCount"></span>
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="feedbackCancel">Cancel</button>
+        <button type="submit" class="small-button" id="feedbackSend">Send</button>
+      </div>
+    </form>
+    <div id="feedbackThanks" class="feedback-thanks" hidden>
+      <p><b>Thanks!</b> The owner got it.</p>
+      <div class="dialog-actions"><span class="spacer"></span><button type="button" class="small-button" id="feedbackDone">Close</button></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="whatsNewModal" hidden>
   <div class="dialog whats-new-dialog" role="dialog" aria-labelledby="whatsNewHeading">
     <img src="/icon.png" alt="" class="update-icon">
@@ -527,5 +588,6 @@
 <script src="sfx.js"></script>
 <script src="account.js"></script>
 <script src="whatsnew.js"></script>
+<script src="feedback.js"></script>
 </body>
 </html>

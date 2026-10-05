@@ -16,6 +16,18 @@ _MARK_RE = re.compile(re.escape(MARK) + r"[0-9a-f]{8}")
 _lock = threading.Lock()
 
 
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def safe_stem(text, fallback="file", limit=80):
+    """A file name (without .ext) Windows accepts: no \\/:*?"<>| or control characters,
+    no dot or space at the end, and not a reserved name like CON or NUL."""
+    keep = re.sub(r'[\x00-\x1f\\/:*?"<>|]+', "", re.sub(r"\s+", " ", str(text or "")))[:limit].strip(". ")
+    if keep.split(".")[0].strip().upper() in _RESERVED:
+        keep = "_" + keep
+    return keep or fallback
+
+
 def new_mark():
     return MARK + uuid.uuid4().hex[:8]
 

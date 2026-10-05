@@ -11,6 +11,7 @@ function openAccount() {
   $("acctDeleteOpen").hidden = false;
   drawAccountPage(true);
   if (sfxUser() && sfxUser().isOwner) {
+    if (typeof loadInbox === "function") loadInbox();
     if (!people.length) $("libPeopleList").textContent = "Loading...";
     loadPeople(api("/api/sfx-people", {}));
   }
@@ -33,6 +34,7 @@ function drawAccountPage(fresh) {
   $("acctPictureRemove").hidden = !user.avatar;
   if (fresh || document.activeElement !== $("acctUsername")) $("acctUsername").value = user.username;
   $("libPeople").hidden = !user.isOwner;
+  $("acctInbox").hidden = !user.isOwner;
   $("acctDeleteBox").hidden = user.isOwner; // the owner's account can't be deleted
 }
 

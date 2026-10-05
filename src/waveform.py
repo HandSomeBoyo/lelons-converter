@@ -25,6 +25,8 @@ _locks = {}  # one lock per video, so different videos can load at the same time
 _cache = {}  # (url, video) -> result
 _waiting = 0  # trim editors waiting for their sound or video
 _files = set()  # file names the window may play
+_prefetching = threading.Semaphore(2)  # loaded ahead of time at once (more just get skipped)
+KEEP = 12  # editors' media kept at most; older ones are deleted
 
 
 def key_for(url):
@@ -36,19 +38,41 @@ def _once(key, build, prefetch=False):
     global _waiting
     with _guard:
         if key in _cache:
+            _cache[key] = _cache.pop(key)  # used just now: the last to be deleted
             return _cache[key]
         lock = _locks.setdefault(key, threading.Lock())
         if not prefetch:
             _waiting += 1
+    if prefetch and not _prefetching.acquire(blocking=False):
+        raise RuntimeError("Busy loading others; it loads when the trim editor opens.")
     try:
         with lock:
             if key not in _cache:
-                _cache[key] = build()
+                made = build()
+                with _guard:
+                    _cache[key] = made
+                    _forget_old(key)
             return _cache[key]
     finally:
-        if not prefetch:
+        if prefetch:
+            _prefetching.release()
+        else:
             with _guard:
                 _waiting -= 1
+
+
+def _forget_old(newest):
+    """Past KEEP, delete the oldest editors' media (call with _guard held)."""
+    while len(_cache) > KEEP:
+        old = next(k for k in _cache if k != newest)
+        name = _cache.pop(old).get("media", "").rsplit("/", 1)[-1]
+        _locks.pop(old, None)
+        if name and not any(c.get("media", "").endswith("/" + name) for c in _cache.values()):
+            _files.discard(name)
+            try:
+                os.remove(os.path.join(FOLDER, name))
+            except OSError:
+                pass
 
 
 def get(url, info, video=False, prefetch=False):
@@ -120,10 +144,14 @@ def _result(path, duration):
 
     # Decode to plain numbers, at a low sample rate: plenty for drawing.
     rate = max(400, min(8000, int(2_000_000 / duration))) if duration else 4000
-    pcm = subprocess.run(
-        [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-i", path, "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
-        capture_output=True, creationflags=downloader.NO_WINDOW,
-    ).stdout
+    try:
+        pcm = subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-nostdin", "-i", path, "-ac", "1", "-ar", str(rate),
+             "-f", "s16le", "-"],
+            capture_output=True, timeout=300, creationflags=downloader.NO_WINDOW,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        pcm = b""
     samples = array.array("h")
     samples.frombytes(pcm[: len(pcm) // 2 * 2])
     name = os.path.basename(path)

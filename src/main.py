@@ -235,7 +235,7 @@ def drag_path(data):
     if kind == "clip":
         return clip_maker.path(data.get("key"))
     if kind == "sound":
-        return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
+        return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"), dragged=True)
     return None
 
 
@@ -438,6 +438,13 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"sounds": library.sounds()}
             elif action == "peaks":
                 result = {"peaks": sfx.waveforms.get(str(data.get("path") or ""))}
+            elif action == "feedback-send":
+                library.send_feedback(data.get("kind"), data.get("message"))
+                result = {}
+            elif action == "feedback-list":
+                result = {"feedback": library.feedback()}
+            elif action == "feedback-set":
+                result = {"feedback": library.set_feedback(data.get("id"), data.get("done"), data.get("remove"))}
             elif action == "favorite":
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}
@@ -866,6 +873,9 @@ def clean_up():
     waveform.clean_up()  # the whole temporary folder, with the Images and Files tabs' parts
     images.clean_up()
     files.clean_up()
+    sfx.clean_drag_copies()
+    sfx.waveforms.save()  # waveforms not written down yet
+    clips.clean_up()
 
 
 # ---------------------------------------------------------------- main

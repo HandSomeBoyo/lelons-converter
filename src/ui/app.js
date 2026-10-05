@@ -207,6 +207,8 @@ function loadWave(key, request, video, prefetch = false) {
       if (wave.ok) waves.set(key, wave);
       else waves.delete(key); // try again next time
     });
+    // Keep only the newest few (the app deletes older editors' sound and video files).
+    while (waves.size > 6) waves.delete(waves.keys().next().value);
   }
   return waves.get(key);
 }
@@ -793,7 +795,12 @@ async function refresh() {
   }
 }
 showFormatExtras();
-refresh();
-setInterval(refresh, 500);
+// Ask again only after the last answer came back (so a busy moment can't stack up requests),
+// and less often while the window is minimized.
+async function keepRefreshing() {
+  await refresh();
+  setTimeout(keepRefreshing, document.hidden ? 2000 : 500);
+}
+keepRefreshing();
 // (The token from the address: a goodbye message can't carry the window's cookie when it closes.)
 window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye?t=" + encodeURIComponent(new URLSearchParams(location.search).get("t") || "")));

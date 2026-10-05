@@ -26,9 +26,12 @@ def ffmpeg():
 
 def probe(path):
     """{"duration", "video", "audio", "width", "height"} for a file."""
-    result = subprocess.run([ffmpeg(), "-hide_banner", "-nostdin", "-i", path],
-                            capture_output=True, creationflags=NO_WINDOW)
-    text = result.stderr.decode("utf-8", "replace")
+    try:  # (a broken file can make ffmpeg hang: give up after a minute)
+        result = subprocess.run([ffmpeg(), "-hide_banner", "-nostdin", "-i", path],
+                                capture_output=True, timeout=60, creationflags=NO_WINDOW)
+        text = result.stderr.decode("utf-8", "replace")
+    except subprocess.TimeoutExpired:
+        text = ""
     found = {"duration": 0.0, "video": False, "audio": False, "width": 0, "height": 0}
     match = re.search(r"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", text)
     if match:
@@ -246,7 +249,10 @@ def make_gif(source, target, width=480, trim=None, length=0, on_progress=None, f
 
 def thumbnail(source, target, seconds=1.0):
     """A small picture of a video, for the file list. Returns False if there isn't one."""
-    result = subprocess.run([ffmpeg(), "-hide_banner", "-nostdin", "-y", "-ss", f"{seconds:.2f}", "-i", source,
-                             "-frames:v", "1", "-vf", "scale=240:-2", target],
-                            capture_output=True, creationflags=NO_WINDOW)
+    try:
+        result = subprocess.run([ffmpeg(), "-hide_banner", "-nostdin", "-y", "-ss", f"{seconds:.2f}", "-i", source,
+                                 "-frames:v", "1", "-vf", "scale=240:-2", target],
+                                capture_output=True, timeout=60, creationflags=NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        return False
     return result.returncode == 0 and os.path.isfile(target)

@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import urllib.error
@@ -30,6 +31,7 @@ MAX_BYTES = 10 * 1024 * 1024  # the storage refuses bigger files
 FOLDER = os.path.join(waveform.FOLDER, "sfx")  # deleted when the app closes
 PEAKS_FILE = os.path.join(settings.DATA_DIR, "sfx-waveforms.json")
 DRAG_DIR = os.path.join(settings.DATA_DIR, "Library sounds")  # sounds dragged into other apps
+KEPT_MARK = ".dragged"  # in a sound's folder there: it was dragged somewhere, so keep it
 BARS = 72  # bars in each sound's little waveform
 UPLOAD_KINDS = [
     ("Sounds and videos", ";".join("*." + e for e in (
@@ -121,8 +123,11 @@ def _rpc(name, **args):
 
 def _peaks_of(path):
     """BARS loudness values (0 to 1) for drawing a sound."""
-    pcm = subprocess.run([media.ffmpeg(), "-v", "error", "-i", path, "-ac", "1", "-ar", "4000", "-f", "s16le", "-"],
-                         capture_output=True, creationflags=media.NO_WINDOW).stdout
+    try:
+        pcm = subprocess.run([media.ffmpeg(), "-v", "error", "-nostdin", "-i", path, "-ac", "1", "-ar", "4000",
+                              "-f", "s16le", "-"], capture_output=True, timeout=120, creationflags=media.NO_WINDOW).stdout
+    except subprocess.TimeoutExpired:
+        pcm = b""
     samples = array.array("h")
     samples.frombytes(pcm[: len(pcm) // 2 * 2])
     if not samples:
@@ -143,6 +148,8 @@ class Waveforms:
         self.lock = threading.Lock()
         self.busy = threading.Semaphore(2)  # sounds downloaded at the same time
         self.known = None
+        self.save_timer = None
+        self.save_lock = threading.Lock()
 
     def _load(self):
         if self.known is None:
@@ -159,13 +166,28 @@ class Waveforms:
             known[path] = peaks
             while len(known) > 5000:
                 del known[next(iter(known))]
-            try:
-                os.makedirs(settings.DATA_DIR, exist_ok=True)
+            # Saved a few seconds later, once for a whole batch of new waveforms.
+            if not self.save_timer:
+                self.save_timer = threading.Timer(3, self.save)
+                self.save_timer.daemon = True
+                self.save_timer.start()
+
+    def save(self):
+        with self.lock:
+            if self.save_timer:
+                self.save_timer.cancel()
+            self.save_timer = None
+            if self.known is None:
+                return
+            text = json.dumps(self.known)
+        try:
+            os.makedirs(settings.DATA_DIR, exist_ok=True)
+            with self.save_lock:
                 with open(PEAKS_FILE + ".new", "w", encoding="utf-8") as f:
-                    json.dump(known, f)
+                    f.write(text)
                 os.replace(PEAKS_FILE + ".new", PEAKS_FILE)
-            except OSError:
-                pass
+        except OSError:
+            pass
 
     def get(self, path):
         with self.lock:
@@ -205,6 +227,7 @@ class Library:
         self.uploads = {}  # id -> a sound being prepared or uploaded
         self.ids = 0
         self.drag_lock = threading.Lock()
+        self.drag_locks = {}  # one per sound being fetched for dragging
         self.saved = set()  # files downloaded from the library (allowed for "show in folder")
 
     # ---- who you are
@@ -265,6 +288,27 @@ class Library:
             error = (result or {}).get("error")
             raise Error(FRIENDLY.get(error, "That didn't work. Try again."))
         return self.account()
+
+    # ---- feedback for the owner
+
+    def send_feedback(self, kind, message):
+        result = _rpc("lelons_feedback_send", token=self._token(), kind=str(kind or "other"),
+                      message=str(message or ""), app_version=version.VERSION)
+        if not result or not result.get("ok"):
+            raise Error({
+                "short": "Write a little more so the owner knows what you mean.",
+                "long": "That's a bit long. Keep it under 2000 letters.",
+                "daily": "You've sent a lot today. Try again tomorrow.",
+            }.get((result or {}).get("error"), "That didn't send. Try again."))
+
+    def feedback(self):
+        rows = _rpc("lelons_feedback_list", token=self._token()) or []
+        return [{**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""} for row in rows]
+
+    def set_feedback(self, feedback_id, done=False, remove=False):
+        _rpc("lelons_feedback_set", token=self._token(), feedback_id=str(feedback_id), is_done=bool(done),
+             remove=bool(remove))
+        return self.feedback()
 
     def favorite(self, sound_id, starred):
         _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))
@@ -353,7 +397,7 @@ class Library:
         if not url.startswith(version.SFX_URL.rstrip("/") + "/storage/"):
             raise Error("That isn't a sound from the library.")
         os.makedirs(folder, exist_ok=True)
-        stem = re.sub(r'[\\/:*?"<>|]+', "", _clean_name(name)).strip(". ") or "sound"
+        stem = names.safe_stem(name, "sound")
         temp = names.temp_path(folder, stem, ".mp3")
         try:
             with urllib.request.urlopen(urllib.request.Request(url), timeout=60) as response, open(temp, "wb") as out:
@@ -367,17 +411,18 @@ class Library:
         self.saved.add(os.path.normcase(path))
         return path
 
-    def drag_copy(self, url, name):
-        """A copy of a sound to drag into another app, kept for good (video editors keep
-        pointing at the file). Downloaded once; later drags reuse it."""
+    def drag_copy(self, url, name, dragged=False):
+        """A copy of a sound to drag into another app. Downloaded once; later drags reuse it.
+        Copies that were really dragged are kept for good (video editors keep pointing at
+        the file); ones only made because the mouse went over a sound are tidied up later."""
         if not url.startswith(version.SFX_URL.rstrip("/") + "/storage/"):
             raise Error("That isn't a sound from the library.")
-        stem = re.sub(r'[\\/:*?"<>|]+', "", _clean_name(name)).strip(". ") or "sound"
+        stem = names.safe_stem(name, "sound")
         folder = os.path.join(DRAG_DIR, hashlib.sha1(url.encode()).hexdigest()[:12])
         path = os.path.join(folder, stem + ".mp3")
-        if os.path.isfile(path):
-            return path
         with self.drag_lock:
+            lock = self.drag_locks.setdefault(folder, threading.Lock())
+        with lock:  # one download per sound; other sounds don't wait for it
             if not os.path.isfile(path):
                 os.makedirs(folder, exist_ok=True)
                 temp = path + ".part"
@@ -390,6 +435,11 @@ class Library:
                     if os.path.exists(temp):
                         os.remove(temp)
                     raise Error("Couldn't download that sound. Check your internet connection.") from None
+            if dragged:
+                try:
+                    open(os.path.join(folder, KEPT_MARK), "a").close()
+                except OSError:
+                    pass
         return path
 
     # ---- uploading
@@ -399,15 +449,19 @@ class Library:
         os.makedirs(FOLDER, exist_ok=True)
         path = os.path.join(FOLDER, f"in-{uuid.uuid4().hex[:8]}{os.path.splitext(name)[1].lower()[:10]}")
         left = length
-        with open(path, "wb") as out:
-            while left > 0:
-                chunk = stream.read(min(1024 * 1024, left))
-                if not chunk:
-                    break
-                out.write(chunk)
-                left -= len(chunk)
+        try:
+            with open(path, "wb") as out:
+                while left > 0:
+                    chunk = stream.read(min(1024 * 1024, left))
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    left -= len(chunk)
+        except OSError:
+            left = left or 1  # stopped halfway (the window closed, say)
         if left:
-            os.remove(path)
+            if os.path.exists(path):
+                os.remove(path)
             raise Error("The file wasn't copied all the way.")
         return self._register(os.path.basename(name), path, copied=True)
 
@@ -494,8 +548,12 @@ class Library:
             self._set(item, progress=0, message="Uploading...")
             with open(mp3, "rb") as f:
                 path = self._put_file("sound", f.read(), "audio/mpeg")
-            _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
-                 file=path, sound_seconds=round(seconds, 2), sound_bytes=size)
+            try:
+                _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
+                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size)
+            except Exception:
+                self._remove_file(path)  # uploaded, but it didn't make it into the list: nothing uses it
+                raise
             waveforms.remember(path, peaks)
         except Exception as e:
             message = str(e) if isinstance(e, Error) else "Couldn't make an MP3 out of that file."
@@ -521,3 +579,24 @@ class Library:
 
 
 library = Library()
+
+
+def clean_drag_copies():
+    """Delete the Library sound copies that were never dragged anywhere (and half-downloaded ones)."""
+    try:
+        folders = os.listdir(DRAG_DIR)
+    except OSError:
+        return
+    for name in folders:
+        folder = os.path.join(DRAG_DIR, name)
+        if not os.path.isdir(folder):
+            continue
+        if os.path.exists(os.path.join(folder, KEPT_MARK)):
+            for leftover in os.listdir(folder):
+                if leftover.endswith(".part"):
+                    try:
+                        os.remove(os.path.join(folder, leftover))
+                    except OSError:
+                        pass
+        else:
+            shutil.rmtree(folder, ignore_errors=True)

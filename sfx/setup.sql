@@ -48,6 +48,10 @@ create table if not exists lelons.accounts (
   locked_until timestamptz
 );
 create unique index if not exists accounts_username on lelons.accounts (lower(username));
+-- There's already an owner (who may have changed their username since): they stay the
+-- owner, whatever name is in line 1, so there can never be two.
+update lelons.config set owner_username = (select lower(a.username) from lelons.accounts a where a.role = 'owner' limit 1)
+where exists (select 1 from lelons.accounts a where a.role = 'owner');
 
 create table if not exists lelons.sessions (
   token_hash text primary key,
@@ -76,6 +80,18 @@ create table if not exists lelons.sounds (
 alter table lelons.sounds add column if not exists uploader_id uuid references lelons.accounts (id) on delete set null;
 alter table lelons.sounds drop column if exists owner_hash;
 
+-- Bug reports and wishes people send to the owner.
+create table if not exists lelons.feedback (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid references lelons.accounts (id) on delete set null,
+  username text not null,
+  kind text not null check (kind in ('bug', 'idea', 'other')),
+  message text not null check (length(message) between 1 and 2000),
+  app_version text not null default '',
+  done boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
 -- Everyone's starred sounds.
 create table if not exists lelons.favorites (
   account_id uuid not null references lelons.accounts (id) on delete cascade,
@@ -89,6 +105,8 @@ alter table lelons.accounts enable row level security;
 alter table lelons.sessions enable row level security;
 alter table lelons.tickets enable row level security;
 alter table lelons.sounds enable row level security;
+alter table lelons.feedback enable row level security;
+alter table lelons.favorites enable row level security;
 revoke all on all tables in schema lelons from anon, authenticated;
 
 -- ---- helpers (not reachable from the app directly)
@@ -116,7 +134,9 @@ create or replace function lelons.account_json(a lelons.accounts) returns json
   language sql stable set search_path = '' as
   $$ select json_build_object('id', a.id, 'username', a.username, 'role', a.role, 'avatar', a.avatar,
                              'created_at', a.created_at,
-                             'sounds', (select count(*) from lelons.sounds s where s.uploader_id = a.id)) $$;
+                             'sounds', (select count(*) from lelons.sounds s where s.uploader_id = a.id),
+                             'open_feedback', case when a.role = 'owner'
+                               then (select count(*) from lelons.feedback f where not f.done) end) $$;
 
 create or replace function lelons.new_session(account uuid) returns text
   language plpgsql security definer set search_path = '' as $$
@@ -238,6 +258,62 @@ begin
                       exists (select 1 from lelons.favorites f where f.account_id = me.id and f.sound_id = s.id)
                from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
                order by s.created_at desc limit 5000;
+end $$;
+
+-- ---- feedback
+
+create or replace function public.lelons_feedback_send(token text, kind text, message text, app_version text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  text_in text := btrim(coalesce(message, ''));
+begin
+  if length(text_in) < 3 then
+    return json_build_object('ok', false, 'error', 'short');
+  end if;
+  if length(text_in) > 2000 then
+    return json_build_object('ok', false, 'error', 'long');
+  end if;
+  if (select count(*) from lelons.feedback f where f.account_id = me.id and f.created_at > now() - interval '1 day') >= 20 then
+    return json_build_object('ok', false, 'error', 'daily');
+  end if;
+  insert into lelons.feedback (account_id, username, kind, message, app_version)
+  values (me.id, me.username, case when kind in ('bug', 'idea') then kind else 'other' end, text_in,
+          left(coalesce(app_version, ''), 20));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function public.lelons_feedback_list(token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if me.role <> 'owner' then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  return coalesce((
+    select json_agg(json_build_object(
+      'id', f.id, 'username', coalesce(a.username, f.username), 'avatar', a.avatar, 'kind', f.kind,
+      'message', f.message, 'app_version', f.app_version, 'done', f.done, 'created_at', f.created_at)
+      order by f.done, f.created_at desc)
+    from (select * from lelons.feedback order by created_at desc limit 500) f
+    left join lelons.accounts a on a.id = f.account_id), '[]'::json);
+end $$;
+
+-- Mark one done (or not done), or delete it (remove = true). Owner only.
+create or replace function public.lelons_feedback_set(token text, feedback_id uuid, is_done boolean, remove boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if me.role <> 'owner' then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  if remove then
+    delete from lelons.feedback f where f.id = feedback_id;
+  else
+    update lelons.feedback f set done = is_done where f.id = feedback_id;
+  end if;
 end $$;
 
 -- Star or unstar a sound, just for you.
@@ -439,7 +515,9 @@ begin
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
     'lelons_add(text, text, text, text, real, int)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
-    'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)'] loop
+    'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)',
+    'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',
+    'lelons_feedback_set(text, uuid, boolean, boolean)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
@@ -460,6 +538,7 @@ create policy "lelons add file" on storage.objects for insert to anon, authentic
 create policy "lelons see file" on storage.objects for select to anon, authenticated
   using (bucket_id = 'lelons-sounds' and (lelons.ticket_ok(name, 'upload') or lelons.ticket_ok(name, 'delete')));
 create policy "lelons delete file" on storage.objects for delete to anon, authenticated
-  using (bucket_id = 'lelons-sounds' and lelons.ticket_ok(name, 'delete') and not lelons.listed(name));
+  using (bucket_id = 'lelons-sounds' and not lelons.listed(name)
+         and (lelons.ticket_ok(name, 'delete') or lelons.ticket_ok(name, 'upload')));  -- (an upload that didn't finish)
 
 select 'All set! Open the Library tab in the app and log in.' as done;

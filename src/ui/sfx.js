@@ -119,6 +119,7 @@ function drawSfxAccount() {
     }
   }
   if (!user) {
+    $("libMeButton").classList.remove("has-news");
     $("libMeAvatar").replaceWith(Object.assign(document.createElement("span"), {
       id: "libMeAvatar", className: "avatar account-empty",
       innerHTML: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/></svg>',
@@ -131,6 +132,9 @@ function drawSfxAccount() {
   $("libMeRole").textContent = user.roleName;
   $("libMeRole").className = "role role-" + user.role;
   $("libPeopleOpen").hidden = !user.isOwner;
+  $("libInboxOpen").hidden = !user.isOwner;
+  $("libInboxCount").textContent = user.open_feedback || "";
+  $("libMeButton").classList.toggle("has-news", !!(user.isOwner && user.open_feedback));
   $("sfxUploadOpen").hidden = !user.canUpload;
 }
 
@@ -223,38 +227,111 @@ async function loadSfx() {
   drawSfx();
 }
 
-function drawSfxCategories() {
-  const counts = { all: sfxSounds.length, favorites: sfxSounds.filter((s) => s.favorite).length };
-  for (const s of sfxSounds) counts[s.category] = (counts[s.category] || 0) + 1;
-  const cats = $("sfxCats");
-  cats.innerHTML = "";
-  for (const [value, label] of [["all", "All"], ["favorites", "Favorites"], ...Object.entries(sfxAccount.categories)]) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = sfxCategory === value ? "active" : "";
-    b.innerHTML = `<span></span><span class="count">${counts[value] || 0}</span>`;
-    if (value === "favorites") b.classList.add("fav-chip");
-    else if (value !== "all") b.classList.add("cat-" + value);
-    b.firstChild.textContent = label;
-    b.onclick = () => { sfxCategory = value; drawSfx(); };
-    cats.append(b);
+// ---- the side panel: what to show
+
+let sfxUploader = ""; // only sounds from this person ("" = everyone)
+let sfxSort = "favorites";
+let sfxLimit = 200; // rows drawn at once; "Show more" draws more
+try { sfxSort = localStorage.getItem("sfxSort") || sfxSort; } catch (e) { /* not important */ }
+$("sfxSort").value = sfxSort;
+if (!$("sfxSort").value) $("sfxSort").value = sfxSort = "favorites";
+
+function sideButton(label, count, active, onclick, extraClass = "") {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "side-item " + extraClass + (active ? " active" : "");
+  b.innerHTML = '<span class="side-label"></span><span class="count"></span>';
+  b.querySelector(".side-label").textContent = label;
+  b.querySelector(".count").textContent = count;
+  b.onclick = () => { onclick(); sfxLimit = 200; drawSfx(); };
+  return b;
+}
+
+function drawSfxSide() {
+  const counts = { all: sfxSounds.length, favorites: 0 };
+  const people = new Map(); // uploader -> {count, avatar}
+  for (const s of sfxSounds) {
+    counts[s.category] = (counts[s.category] || 0) + 1;
+    if (s.favorite) counts.favorites++;
+    const who = people.get(s.uploader) || { count: 0, avatar: s.uploaderAvatar };
+    who.count++;
+    people.set(s.uploader, who);
   }
+  const pick = (value) => () => { sfxCategory = value; };
+  $("sfxBrowse").replaceChildren(
+    sideButton("All sounds", counts.all, sfxCategory === "all", pick("all"), "side-all"),
+    sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip"));
+  $("sfxCats").replaceChildren(...Object.entries(sfxAccount.categories).map(([value, label]) =>
+    sideButton(label, counts[value] || 0, sfxCategory === value, pick(value), "cat-" + value)));
+  if (sfxUploader && !people.has(sfxUploader)) sfxUploader = "";
+  const names = [...people.keys()].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" }));
+  $("sfxPeople").replaceChildren(
+    sideButton("Everyone", counts.all, !sfxUploader, () => { sfxUploader = ""; }),
+    ...names.map((name) => {
+      const b = sideButton(name, people.get(name).count, sfxUploader === name, () => { sfxUploader = sfxUploader === name ? "" : name; });
+      b.prepend(avatarEl(people.get(name).avatar, name, "tiny"));
+      return b;
+    }));
+}
+
+const SORTS = {
+  newest: (a, b) => b.created_at.localeCompare(a.created_at),
+  oldest: (a, b) => a.created_at.localeCompare(b.created_at),
+  name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+  longest: (a, b) => b.seconds - a.seconds,
+  shortest: (a, b) => a.seconds - b.seconds,
+  uploader: (a, b) => a.uploader.localeCompare(b.uploader, undefined, { sensitivity: "base" }) || b.created_at.localeCompare(a.created_at),
+  favorites: (a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || b.created_at.localeCompare(a.created_at),
+};
+
+$("sfxSort").addEventListener("change", () => {
+  sfxSort = $("sfxSort").value;
+  try { localStorage.setItem("sfxSort", sfxSort); } catch (e) { /* not important */ }
+  drawSfx();
+});
+
+// Rows are kept and only made again when something on them changed, so typing in the search stays quick.
+const sfxRows = new Map(); // id -> {el, sig}
+
+function rowFor(sound) {
+  const note = sfxNotes.get(sound.id);
+  const sig = [sound.name, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0, sfxPlaying === sound.id,
+    note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload].join("|");
+  const kept = sfxRows.get(sound.id);
+  if (kept && kept.sig === sig && kept.sound === sound) return kept.el;
+  const el = sfxRow(sound);
+  sfxRows.set(sound.id, { el, sig, sound });
+  return el;
 }
 
 function drawSfx() {
   if (!sfxAccount) return;
-  drawSfxCategories();
+  drawSfxSide();
   const words = $("sfxSearch").value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = sfxSounds.filter((s) => (sfxCategory === "all" || s.category === sfxCategory ||
-    (sfxCategory === "favorites" && s.favorite)) &&
+    (sfxCategory === "favorites" && s.favorite)) && (!sfxUploader || s.uploader === sfxUploader) &&
     words.every((w) => `${s.name} ${s.uploader} ${s.categoryName}`.toLowerCase().includes(w)));
-  shown.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0)); // your starred ones first (the rest stay newest first)
-  $("sfxList").replaceChildren(...shown.map(sfxRow));
+  shown.sort(SORTS[sfxSort] || SORTS.favorites);
+  const rows = shown.slice(0, sfxLimit).map(rowFor);
+  if (shown.length > sfxLimit) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "outline-button lib-more";
+    more.textContent = `Show more (${shown.length - sfxLimit} left)`;
+    more.onclick = () => { sfxLimit += 200; drawSfx(); };
+    rows.push(more);
+  }
+  $("sfxList").replaceChildren(...rows);
+  for (const id of sfxRows.keys()) if (!sfxSounds.some((s) => s.id === id)) sfxRows.delete(id);
+  const what = sfxCategory === "all" ? "All sounds" : sfxCategory === "favorites" ? "Favorites"
+    : sfxAccount.categories[sfxCategory] || "Sounds";
+  $("sfxShowing").textContent = `${what}${sfxUploader ? " from " + sfxUploader : ""} · ${shown.length} sound${shown.length === 1 ? "" : "s"}`;
   $("sfxEmpty").hidden = shown.length > 0;
   $("sfxEmpty").textContent = sfxError ||
-    (!sfxSounds.length ? "No sounds yet. Be the first: click Upload a sound."
+    (!sfxSounds.length ? "No sounds yet. Be the first: click Upload."
       : words.length ? "Nothing matches that search."
-      : sfxCategory === "favorites" ? "No favorites yet. Click the star on a sound to add it here." : "No sounds in this category yet.");
+      : sfxCategory === "favorites" ? "No favorites yet. Click the star on a sound to add it here."
+      : sfxUploader ? `${sfxUploader} hasn't uploaded anything here.` : "No sounds in this category yet.");
 }
 
 function sfxRow(sound) {
@@ -264,12 +341,17 @@ function sfxRow(sound) {
   // Drag a sound straight into another app. Its kept copy is fetched as soon as the mouse is over it.
   setDrag(el, { kind: "sound", url: sound.url, name: sound.name });
   el.title = DRAG_HINT;
+  // (Only once the mouse stays a moment, so sweeping over the list doesn't fetch every sound.)
+  let readyTimer = null;
   el.addEventListener("mouseenter", () => {
     if (sfxDragReady.has(sound.url)) return;
-    sfxDragReady.add(sound.url);
-    api("/api/drag-ready", { url: sound.url, name: sound.name }).then((res) => { if (!res.ok) sfxDragReady.delete(sound.url); })
-      .catch(() => sfxDragReady.delete(sound.url));
+    readyTimer = setTimeout(() => {
+      sfxDragReady.add(sound.url);
+      api("/api/drag-ready", { url: sound.url, name: sound.name }).then((res) => { if (!res.ok) sfxDragReady.delete(sound.url); })
+        .catch(() => sfxDragReady.delete(sound.url));
+    }, 350);
   });
+  el.addEventListener("mouseleave", () => clearTimeout(readyTimer));
   el.innerHTML = `
     <button class="play" title="Play"></button>
     <div class="sound-info">
@@ -480,7 +562,7 @@ function pickUploadCategory(value) {
 function openSfxUpload() {
   $("sfxModal").hidden = false;
   $("sfxUploadError").textContent = "";
-  pickUploadCategory(sfxCategory !== "all" ? sfxCategory : sfxUploadCategory);
+  pickUploadCategory(sfxAccount.categories[sfxCategory] ? sfxCategory : sfxUploadCategory);
   drawSfxFile();
 }
 
@@ -598,8 +680,13 @@ $("sfxSend").addEventListener("click", async () => {
 
 // Uploads in progress, from the app's state (called by app.js a few times a second).
 let sfxDoneSeen = new Set();
+let sfxUploadsDrawn = "";
 function renderSfxUploads(list) {
   list = list || [];
+  // Unchanged since last time: leave it be (rebuilding it every moment can swallow a click).
+  const sig = JSON.stringify(list);
+  if (sig === sfxUploadsDrawn) return;
+  sfxUploadsDrawn = sig;
   const box = $("sfxUploads");
   box.replaceChildren(...list.map((item) => {
     const el = document.createElement("div");

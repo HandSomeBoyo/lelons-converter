@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.19.0", items: [
+    "Send feedback: found a bug or want something added? Click \"Send feedback\" at the bottom (or in the account menu) and write to the owner.",
+    "A new Library layout: All sounds, Favorites, the categories and who uploaded them are in a panel on the left.",
+    "Sort the Library by favorites, newest, oldest, name, length or uploader.",
+    "Bug fixes and a faster, lighter app: it uses less of your PC while it sits open, and cleans up clips and sounds you never dragged anywhere.",
+  ] },
   { version: "1.18.0", items: [
     "Drag clips straight out of the trim editor: pick your part, click \"Make a clip to drag\" and drop it into DaVinci Resolve. Move the lines and the clip updates by itself.",
     "Favorites in the Library: click the star on a sound. Your starred sounds show at the top, and the Favorites chip shows only them.",

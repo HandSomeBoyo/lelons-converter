@@ -2,8 +2,9 @@
 
 The first time, the whole video (or song) is fetched once in the picked format
 and quality. After that, every new start or end only cuts the clip again from
-that copy, which takes a moment. Clips are kept in a folder of their own for
-good, because video editors keep pointing at the file you dropped in.
+that copy, which takes a moment. Clips you drag somewhere are kept in a folder
+of their own for good, because video editors keep pointing at the file you
+dropped in. The others are deleted when the app closes.
 """
 
 import os
@@ -56,7 +57,9 @@ class Clips:
             clip = self.clips.setdefault(key, {"status": "idle", "message": "", "progress": 0, "path": "",
                                                "made": None, "dragged": set(), "running": False})
             clip["wanted"] = wanted
-            if clip["status"] == "ready" and clip["made"] == wanted:
+            if clip["made"] == wanted and os.path.isfile(clip["path"]):
+                # Back to the clip that's already made (the lines moved and came back): no need to cut it again.
+                clip.update(status="ready", message="", progress=100)
                 return self._public(clip)
             clip.update(status="working", message="Getting ready...", progress=0)
             if not clip["running"]:
@@ -76,6 +79,7 @@ class Clips:
             if not clip or clip["status"] != "ready":
                 return None
             clip["dragged"].add(clip["path"])
+            _keep(clip["path"])
             return clip["path"]
 
     def _public(self, clip):
@@ -165,7 +169,7 @@ class Clips:
 
         progress(0)
         os.makedirs(CLIP_DIR, exist_ok=True)
-        stem = _safe(wanted["title"])
+        stem = names.safe_stem(wanted["title"], "clip")
         temp = names.temp_path(CLIP_DIR, stem + _label(trim), "." + fmt)
         quality = wanted["quality"]
         try:
@@ -188,10 +192,45 @@ class ChangedMeanwhile(Exception):
     pass
 
 
-def _safe(title):
-    keep = "".join(c for c in title if c not in '\\/:*?"<>|').strip(". ")
-    return keep[:80] or "clip"
+KEPT_FILE = os.path.join(CLIP_DIR, ".dragged")  # names of the clips that were dragged somewhere
+_kept_lock = threading.Lock()
+
+
+def _keep(path):
+    with _kept_lock:
+        try:
+            os.makedirs(CLIP_DIR, exist_ok=True)
+            with open(KEPT_FILE, "a", encoding="utf-8") as f:
+                f.write(os.path.basename(path) + "\n")
+        except OSError:
+            pass
 
 
 def clean_up():
+    """The fetched videos, and every clip that was never dragged anywhere (nothing points at those)."""
     shutil.rmtree(SOURCE_DIR, ignore_errors=True)
+    with _kept_lock:
+        try:
+            with open(KEPT_FILE, encoding="utf-8") as f:
+                kept = {line.strip() for line in f if line.strip()}
+        except OSError:
+            kept = set()
+        try:
+            found = os.listdir(CLIP_DIR)
+        except OSError:
+            return
+        for name in found:
+            path = os.path.join(CLIP_DIR, name)
+            if name != os.path.basename(KEPT_FILE) and name not in kept and os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+        # Forget the dragged clips the user deleted themselves.
+        still = sorted(kept & set(found))
+        if still != sorted(kept):
+            try:
+                with open(KEPT_FILE, "w", encoding="utf-8") as f:
+                    f.write("".join(n + "\n" for n in still))
+            except OSError:
+                pass

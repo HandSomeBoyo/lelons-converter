@@ -62,8 +62,17 @@ it up.
 to drag** and drag the clip straight into your editor. Moving the lines makes
 the clip again by itself. Clips are kept in `%LOCALAPPDATA%\LelonsConverter\Clips`.
 
-In the Library, click the star on a sound to add it to your **Favorites**. They
-show at the top, and the Favorites chip shows only them.
+In the Library, click the star on a sound to add it to your **Favorites**. The
+panel on the left picks what you see: all sounds, your favorites, a category,
+or one person's uploads. **Sort** lists them favorites first, newest, oldest,
+by name, by length or by uploader.
+
+**Send feedback** (at the bottom of the app, or in the account menu) lets anyone
+with an account report a bug or ask for something new. The Owner reads them in
+**Feedback inbox** in the account menu and can mark them done or delete them.
+
+Clips and Library sounds you never dragged anywhere are deleted when the app
+closes; the ones you dragged into an editor are kept.
 
 **Drag and drop into other apps:** grab any finished download, converted file,
 picture, history item or Library sound and drop it straight into DaVinci
