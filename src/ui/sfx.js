@@ -52,26 +52,34 @@ function avatarEl(url, name, cls = "") {
 
 const sfxUser = () => sfxAccount && sfxAccount.user;
 
+// Who's logged in. Loaded when the app opens, so the account button at the top right shows your picture.
+async function loadAccount() {
+  const res = await api("/api/sfx-account", {}).catch(() => null);
+  if (!res || !res.ok) {
+    $("sfxNotSetUp").hidden = false;
+    $("sfxNotSetUp").textContent = (res && res.error) || "Couldn't reach the library. Check your internet connection.";
+    return false;
+  }
+  sfxAccount = res.account;
+  drawSfxAccount();
+  return true;
+}
+
 async function openSfx() {
   sfxPeaksFailed.clear();
-  if (!sfxAccount) {
-    const res = await api("/api/sfx-account", {}).catch(() => null);
-    if (!res || !res.ok) {
-      $("sfxNotSetUp").hidden = false;
-      $("sfxNotSetUp").textContent = (res && res.error) || "Couldn't reach the library. Check your internet connection.";
-      return;
-    }
-    sfxAccount = res.account;
-  }
+  if (!sfxAccount && !(await loadAccount())) return;
   drawSfxAccount();
   if (sfxUser() && Date.now() - sfxLastLoad > 5000) loadSfx();
 }
+
+const sfxTabOpen = () => !$("sfxTab").hidden;
 
 function setSfxAccount(account) {
   const was = sfxUser() && sfxUser().id;
   sfxAccount = account;
   if (!sfxUser() || sfxUser().id !== was) {
     sfxSounds = [];
+    sfxLastLoad = 0;
     $("sfxList").replaceChildren();
     closePeople();
   }
@@ -90,9 +98,13 @@ function drawSfxAccount() {
   const a = sfxAccount;
   const user = a.user;
   $("sfxNotSetUp").hidden = a.configured;
-  $("libLogin").hidden = !a.configured || !!user;
+  $("libMe").hidden = !a.configured;
+  $("libMeButton").classList.remove("saving");
+  $("libLogin").hidden = !!user;
+  $("libMeCard").hidden = $("libMenuItems").hidden = !user;
+  $("libLoggedOut").hidden = !a.configured || !!user;
   $("sfxMain").hidden = !a.configured || !user || !$("libPeople").hidden;
-  $("libMe").hidden = !user;
+  $("libMeButton").title = user ? `${user.username} (${user.roleName})` : "Log in or create an account";
   if (!$("sfxCategory").children.length) {
     for (const [value, label] of Object.entries(a.categories)) {
       const b = document.createElement("button");
@@ -103,8 +115,15 @@ function drawSfxAccount() {
       $("sfxCategory").append(b);
     }
   }
-  if (!user) return;
+  if (!user) {
+    $("libMeAvatar").replaceWith(Object.assign(document.createElement("span"), {
+      id: "libMeAvatar", className: "avatar account-empty",
+      innerHTML: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/></svg>',
+    }));
+    return;
+  }
   $("libMeAvatar").replaceWith(Object.assign(avatarEl(user.avatarUrl, user.username), { id: "libMeAvatar" }));
+  $("libMeCardAvatar").replaceWith(Object.assign(avatarEl(user.avatarUrl, user.username, "big"), { id: "libMeCardAvatar" }));
   $("libMeName").textContent = user.username;
   $("libMeRole").textContent = user.roleName;
   $("libMeRole").className = "role role-" + user.role;
@@ -116,16 +135,25 @@ function drawSfxAccount() {
 // ---- log in / create account
 
 let loginMode = "login";
-document.querySelectorAll(".lib-login-tabs button").forEach((b) => b.addEventListener("click", () => {
-  loginMode = b.dataset.mode;
-  document.querySelectorAll(".lib-login-tabs button").forEach((x) => x.classList.toggle("active", x === b));
+document.querySelectorAll(".lib-login-tabs button").forEach((b) => b.addEventListener("click", () => setLoginMode(b.dataset.mode)));
+function setLoginMode(mode) {
+  loginMode = mode;
+  document.querySelectorAll(".lib-login-tabs button").forEach((x) => x.classList.toggle("active", x.dataset.mode === mode));
   $("libLoginButton").textContent = loginMode === "login" ? "Log in" : "Create account";
   $("libPassword").autocomplete = loginMode === "login" ? "current-password" : "new-password";
   $("libLoginHint").textContent = loginMode === "login" ? "Log in to hear everyone's sounds."
     : "Pick a username and a password (at least 6 characters). New accounts can listen and download; the owner can let you upload.";
   $("libLoginError").textContent = "";
   $("libUsername").focus();
-}));
+}
+
+// The buttons on the Library tab when you're logged out open the account panel.
+function openLogin(mode) {
+  showMenu(true);
+  setLoginMode(mode);
+}
+$("libOutLogin").addEventListener("click", (e) => { e.stopPropagation(); openLogin("login"); });
+$("libOutSignup").addEventListener("click", (e) => { e.stopPropagation(); openLogin("signup"); });
 
 $("libLoginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -139,34 +167,42 @@ $("libLoginForm").addEventListener("submit", async (e) => {
     return;
   }
   $("libPassword").value = "";
+  closeMenu();
   setSfxAccount(res.account);
-  loadSfx();
+  if (sfxTabOpen()) loadSfx();
 });
 
 // ---- your account menu
 
-function closeMenu() { $("libMenu").hidden = true; }
+function showMenu(open) {
+  $("libMenu").hidden = !open;
+  $("libMeButton").setAttribute("aria-expanded", open);
+}
+function closeMenu() { showMenu(false); }
 $("libMeButton").addEventListener("click", (e) => {
   e.stopPropagation();
-  $("libMenu").hidden = !$("libMenu").hidden;
+  showMenu($("libMenu").hidden);
+  if (!$("libMenu").hidden && !sfxUser()) $("libUsername").focus();
 });
 document.addEventListener("click", (e) => { if (!$("libMe").contains(e.target)) closeMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
 
 $("libLogout").addEventListener("click", async () => {
   closeMenu();
   stopSfx();
   const res = await api("/api/sfx-logout", {});
   if (res.ok) setSfxAccount(res.account);
+  setLoginMode("login");
 });
 
 async function sendPicture(promise) {
-  $("libMeName").textContent = "Saving picture...";
+  $("libMeButton").classList.add("saving");
   const res = await promise.catch(() => ({ ok: false, error: "Couldn't save the picture." }));
   if (sfxLoggedOut(res)) return;
   if (res.ok && res.account) setSfxAccount(res.account);
   else drawSfxAccount();
   if (!res.ok) alert(res.error);
-  else if (res.account) loadSfx(); // your sounds show the new picture
+  else if (res.account && sfxTabOpen()) loadSfx(); // your sounds show the new picture
 }
 
 $("libPicture").addEventListener("click", async () => {
@@ -214,6 +250,7 @@ function closePeople() {
 
 $("libPeopleOpen").addEventListener("click", async () => {
   closeMenu();
+  if (!sfxTabOpen()) showTab("sfx");
   $("libPeople").hidden = false;
   $("sfxMain").hidden = true;
   $("libPeopleList").textContent = "Loading...";
@@ -692,3 +729,4 @@ setInterval(() => {
 }, 60000);
 
 if (!$("sfxTab").hidden) openSfx();
+else loadAccount();

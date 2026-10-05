@@ -14,7 +14,41 @@
       <div class="mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg></div>
       <div class="word">Lelons <span>Converter</span></div>
     </div>
-    <div class="where">Saving to <strong id="folder">Downloads</strong> · <button class="link" id="change">Change</button></div>
+    <div class="top-right">
+      <div class="where">Saving to <strong id="folder">Downloads</strong> · <button class="link" id="change">Change</button></div>
+      <div class="account" id="libMe" hidden>
+        <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
+          <span class="avatar account-empty" id="libMeAvatar"></span>
+        </button>
+        <div class="account-panel" id="libMenu" hidden>
+          <div class="account-card" id="libMeCard" hidden>
+            <span class="avatar big" id="libMeCardAvatar"></span>
+            <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
+          </div>
+          <div class="lib-menu" id="libMenuItems" hidden>
+            <button type="button" id="libPeopleOpen" hidden>People and roles</button>
+            <button type="button" id="libPicture">Change profile picture</button>
+            <button type="button" id="libPictureRemove" hidden>Remove profile picture</button>
+            <button type="button" id="libPasswordOpen">Change password</button>
+            <button type="button" id="libLogout">Log out</button>
+          </div>
+          <div class="lib-login" id="libLogin" hidden>
+            <div class="lib-login-tabs">
+              <button type="button" class="active" data-mode="login">Log in</button>
+              <button type="button" data-mode="signup">Create account</button>
+            </div>
+            <form id="libLoginForm">
+              <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+              <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
+              <p class="sfx-error" id="libLoginError"></p>
+              <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
+            </form>
+            <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
+          </div>
+        </div>
+        <input type="file" id="libPictureInput" accept="image/*" hidden>
+      </div>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -156,37 +190,15 @@
   <section class="tab-page" id="sfxTab" hidden>
     <div class="lib-head">
       <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
-      <div class="lib-me" id="libMe" hidden>
-        <button type="button" class="lib-me-button" id="libMeButton" aria-haspopup="menu">
-          <span class="avatar" id="libMeAvatar"></span>
-          <span class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="lib-menu" id="libMenu" role="menu" hidden>
-          <button type="button" id="libPeopleOpen" hidden>People and roles</button>
-          <button type="button" id="libPicture">Change profile picture</button>
-          <button type="button" id="libPictureRemove" hidden>Remove profile picture</button>
-          <button type="button" id="libPasswordOpen">Change password</button>
-          <button type="button" id="libLogout">Log out</button>
-        </div>
-        <input type="file" id="libPictureInput" accept="image/*" hidden>
-      </div>
     </div>
 
-    <div class="lib-login" id="libLogin" hidden>
-      <div class="lib-login-card">
-        <div class="lib-login-tabs">
-          <button type="button" class="active" data-mode="login">Log in</button>
-          <button type="button" data-mode="signup">Create account</button>
-        </div>
-        <form id="libLoginForm">
-          <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
-          <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
-          <p class="sfx-error" id="libLoginError"></p>
-          <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
-        </form>
-        <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
+    <div class="lib-out" id="libLoggedOut" hidden>
+      <p>Log in to hear, download and share everyone's sounds.</p>
+      <div class="lib-out-buttons">
+        <button type="button" class="convert" id="libOutLogin">Log in</button>
+        <button type="button" class="small-button" id="libOutSignup">Create account</button>
       </div>
+      <p class="lib-out-hint">You can also use the account button at the top right.</p>
     </div>
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>

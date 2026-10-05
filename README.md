@@ -43,10 +43,11 @@ Then click **Done**. For MP4s and GIFs the video plays above
 the waveform, and dragging a line shows that moment of the video.
 
 The **Library** tab is a sound library you share with your friends. Everyone
-makes an account with just a username and password, then plays, searches and
-downloads the sounds by category (SFX, Music, Memes, Ambience, Other). Each
-sound shows its waveform (click it to play from that spot) and who uploaded it.
-Click your name to change your profile picture or password.
+makes an account with just a username and password (the round account button
+at the top right), then plays, searches and downloads the sounds by category
+(SFX, Music, Memes, Ambience, Other). Each sound shows its waveform (click it
+to play from that spot) and who uploaded it. The account button is also where
+you change your profile picture or password, or log out.
 
 Accounts have roles. The **Owner** (the username set in `sfx/setup.sql`) gets a
 People menu to see every account, change roles and remove people. **Admins**

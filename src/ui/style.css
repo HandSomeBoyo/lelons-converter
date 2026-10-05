@@ -545,27 +545,41 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .role-admin { color: #6aa8ff; }
 
 .lib-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
-.lib-me { position: relative; flex: none; margin-top: 4px; }
-.lib-me-button {
-  all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 30px;
-  border: 1px solid var(--line); transition: border-color .15s, background .15s;
+
+/* The account button at the top right and its panel */
+.top-right { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.account { position: relative; flex: none; }
+.account-button {
+  all: unset; cursor: pointer; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line2); transition: border-color .15s, background .15s;
 }
-.lib-me-button:hover { border-color: var(--line2); background: var(--panel); }
-.lib-me-text { display: flex; flex-direction: column; line-height: 1.2; }
-.lib-me-text b { font-size: 14px; }
-.lib-me-button svg { width: 16px; height: 16px; color: var(--muted); }
-.lib-menu {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 220px; padding: 6px; border-radius: 6px;
-  background: var(--panel); border: 1px solid var(--line2); box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+.account-button:hover, .account-button[aria-expanded="true"] { border-color: var(--accent); }
+.account-button .avatar { width: 32px; height: 32px; font-size: 14px; }
+.account-button.saving .avatar { animation: account-pulse 1s ease-in-out infinite; }
+@keyframes account-pulse { 50% { opacity: .35; } }
+.avatar.account-empty { background: var(--panel2); color: var(--muted); }
+.avatar.account-empty svg { width: 20px; height: 20px; }
+.account-button:hover .account-empty { color: var(--text); }
+.account-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: 320px; box-sizing: border-box; padding: 16px;
+  border-radius: 6px; background: var(--panel); border: 1px solid var(--line2); box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
 }
-.lib-menu[hidden] { display: none; }
-.lib-menu button { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 9px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.account-card { display: flex; align-items: center; gap: 12px; padding: 2px 4px 14px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.lib-me-text { display: flex; flex-direction: column; gap: 2px; line-height: 1.2; min-width: 0; }
+.lib-me-text b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.lib-menu button { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 9px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }
 .lib-menu button:hover { background: var(--panel2); }
-.lib-menu button[hidden] { display: none; }
 .lib-menu #libLogout { color: var(--red); }
 
+.lib-out { max-width: 460px; padding: 22px 24px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
+.lib-out p { margin: 0; }
+.lib-out-buttons { display: flex; gap: 10px; margin: 16px 0 12px; }
+.lib-out-buttons .convert { height: 44px; padding: 0 22px; }
+.lib-out-buttons .small-button { height: 44px; padding: 0 18px; background: transparent; color: var(--text); border: 1px solid var(--line2); }
+.lib-out-buttons .small-button:hover { border-color: var(--text); }
+.lib-out-hint { font-size: 13px; color: var(--muted); }
+
 .lib-login[hidden] { display: none; }
-.lib-login-card { max-width: 420px; padding: 22px 24px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
 .lib-login-tabs { display: flex; gap: 22px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
 .lib-login-tabs button {
   all: unset; cursor: pointer; padding: 0 0 10px; margin-bottom: -1px; border-bottom: 2px solid transparent;
