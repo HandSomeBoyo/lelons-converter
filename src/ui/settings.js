@@ -3,10 +3,14 @@
 
 const ACCENT_NAMES = { yellow: "Yellow", orange: "Orange", red: "Red", pink: "Pink", purple: "Purple", blue: "Blue",
   teal: "Teal", green: "Green" };
-let appSettings = { hardware: true, theme: "dark", accent: "yellow", zoom: 1 };
+let appSettings = { hardware: true, theme: "dark", accent: "yellow", zoom: 1, saveMode: "ask", folder: "", folderName: "" };
 const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8];
 
 function drawSettings() {
+  $("setAsk").checked = appSettings.saveMode !== "folder";
+  $("setAlways").checked = appSettings.saveMode === "folder";
+  $("setFolderName").textContent = appSettings.folderName;
+  $("setFolderName").title = appSettings.folder;
   $("setHardware").checked = appSettings.hardware;
   drawSize();
   $("setChatSound").checked = loadPref("chatSound") !== false;
@@ -26,10 +30,15 @@ function drawSettings() {
 // From the app's state, every refresh. Only redraws when something changed.
 let settingsSeen = "";
 function syncSettings(s) {
-  const sig = [s.hardware, s.theme, s.accent, s.zoom, s.nativeZoom].join(" ");
+  const sig = [s.hardware, s.theme, s.accent, s.zoom, s.nativeZoom, s.saveMode, s.folder].join(" ");
   if (sig === settingsSeen) return;
   settingsSeen = sig;
-  appSettings = { hardware: s.hardware !== false, theme: s.theme, accent: s.accent, zoom: s.zoom || 1 };
+  appSettings = { hardware: s.hardware !== false, theme: s.theme, accent: s.accent, zoom: s.zoom || 1,
+    saveMode: s.saveMode || "ask", folder: s.folder, folderName: s.folderName };
+  // At the top: where things go.
+  const asks = appSettings.saveMode !== "folder";
+  $("whereText").replaceChildren(...(asks ? [document.createTextNode("Asks where to save")]
+    : [document.createTextNode("Saving to "), Object.assign(document.createElement("strong"), { textContent: s.folderName, title: s.folder })]));
   applyTheme(s.theme, s.accent);
   applyZoom(appSettings.zoom, !!s.nativeZoom);
   if (!$("settingsModal").hidden) drawSettings();
@@ -45,13 +54,23 @@ async function changeSettings(changes) {
   if (s) syncSettings(s);
 }
 
-function openSettings() {
+function openSettings(part) {
   drawSettings();
   $("settingsModal").hidden = false;
+  $("setSaveBlock").classList.toggle("glow", part === "save");
+  if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);
 }
 function closeSettings() { $("settingsModal").hidden = true; }
 
-$("settingsOpen").addEventListener("click", openSettings);
+$("settingsOpen").addEventListener("click", () => openSettings());
+document.querySelectorAll('input[name="saveMode"]').forEach((r) => r.addEventListener("change", () => {
+  if (r.checked) changeSettings({ saveMode: r.value });
+}));
+$("setFolderChange").addEventListener("click", async () => {
+  const s = await api("/api/pick-folder", {}).catch(() => null);
+  if (!s || !s.picked) return;
+  await changeSettings({ saveMode: "folder" });
+});
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsModal").addEventListener("click", (e) => { if (e.target === $("settingsModal")) closeSettings(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); });
@@ -100,4 +119,28 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "+" || e.key === "=") { e.preventDefault(); stepZoom(1); }
   else if (e.key === "-" || e.key === "_") { e.preventDefault(); stepZoom(-1); }
   else if (e.key === "0") { e.preventDefault(); changeSettings({ zoom: 1 }); }
+});
+
+// ---- the refresh button at the top (and F5): loads the page you're on again
+
+async function refreshPage() {
+  const button = $("refreshButton");
+  button.classList.remove("spin");
+  void button.offsetWidth; // so the spin plays again
+  button.classList.add("spin");
+  const tab = (document.querySelector("#tabs button.active") || {}).dataset?.tab;
+  const work = [refresh(), loadAccount()];
+  if (!$("homeTab").hidden) work.push(loadHome());
+  if (tab === "sfx" && sfxUser()) { sfxLastLoad = 0; work.push(loadSfx()); }
+  if (tab === "history") work.push(loadHistory());
+  if (!$("accountTab").hidden && typeof openAccount === "function") openAccount();
+  if (typeof loadChat === "function") work.push(loadChat());
+  await Promise.allSettled(work);
+}
+$("refreshButton").addEventListener("click", refreshPage);
+window.addEventListener("keydown", (e) => {
+  if (e.key === "F5" || (e.ctrlKey && !e.altKey && (e.key === "r" || e.key === "R"))) {
+    e.preventDefault();  // not the whole window: that would lose what you were doing
+    refreshPage();
+  }
 });

@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.24.0", items: [
+    "A volume slider! Click the speaker at the top (or go to Settings). It works for every sound in the app.",
+    "Uploaded a sound to the wrong category? Click the pencil on it to change its name or category.",
+    "A refresh button at the top (F5 works too) loads the page you're on again.",
+    "The app now asks where to save every time you convert or download. Want it to always save in one folder? Pick that in Settings, Where to save.",
+  ] },
   { version: "1.23.0", items: [
     "A new Home page! It's the first tab now.",
     "Live subscriber counters for all our YouTube channels, plus the total. The numbers roll up when they change.",

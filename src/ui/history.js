@@ -61,8 +61,10 @@ function historyRow(item) {
   again.className = "outline-button again";
   again.textContent = "Download again";
   again.onclick = async () => {
+    const folder = await whereToSave();
+    if (!folder) return;
     again.disabled = true;
-    const res = await api("/api/history-again", { id: item.id });
+    const res = await api("/api/history-again", { id: item.id, folder });
     if (res.ok) {
       showTab("video");
       refresh();

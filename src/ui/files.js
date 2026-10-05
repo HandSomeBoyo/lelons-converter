@@ -161,12 +161,14 @@ $("fileConvert").addEventListener("click", async () => {
     fileError = "Type a size between 0.5 and 4000 MB.";
     return drawFiles();
   }
+  const folder = await whereToSave();
+  if (!folder) return;
   // Shown as "Waiting..." until the app says this conversion (its next run) has started.
   fileError = "";
   for (const f of ready) Object.assign(f, { status: "queued", message: "Waiting...", waitingFor: f.run + 1 });
   drawFiles();
   const res = await api("/api/files-convert", {
-    items,
+    items, folder,
     options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize },
   }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) {

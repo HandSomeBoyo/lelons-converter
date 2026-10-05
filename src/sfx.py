@@ -515,6 +515,14 @@ class Library:
                      "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
                      "peaks": known.get(row["path"])} for row in rows]
 
+    def edit(self, sound_id, name, category):
+        name = _clean_name(name)
+        if not name:
+            raise Error("Give the sound a name.")
+        if category not in CATEGORIES:
+            raise Error("Pick a category.")
+        _rpc("lelons_edit_sound", token=self._token(), sound_id=str(sound_id), sound_name=name, sound_category=category)
+
     def delete(self, sound_id):
         self._remove_file(_rpc("lelons_delete", token=self._token(), sound_id=str(sound_id)))
 

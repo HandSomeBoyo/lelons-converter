@@ -27,6 +27,7 @@ DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossl
 
 
 THEMES = ("dark", "black", "light")
+SAVE_MODES = ("ask", "folder")
 ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green")
 
 
@@ -50,6 +51,10 @@ def load():
         settings["zoom"] = min(2.0, max(0.5, float(settings.get("zoom") or 1)))
     except (TypeError, ValueError):
         settings["zoom"] = 1.0
+    if settings.get("save_mode") not in SAVE_MODES:
+        settings["save_mode"] = "ask"  # ask where to save each time, unless "always save here" was picked
+    if not os.path.isdir(settings.get("last_asked") or ""):
+        settings["last_asked"] = settings["folder"]
     if settings.get("theme") not in THEMES:
         settings["theme"] = "dark"
     if settings.get("accent") not in ACCENTS:

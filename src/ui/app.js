@@ -19,6 +19,12 @@ async function api(path, body) {
   return res.json();
 }
 
+// Where to save: asks with the folder picker (unless Settings says "always save to"). null: cancelled.
+async function whereToSave() {
+  const res = await api("/api/ask-folder", {}).catch(() => ({ ok: false }));
+  return res.ok ? res.folder : null;
+}
+
 // ---- dragging finished files out, straight into DaVinci Resolve, Premiere, a folder...
 
 const DRAG_HINT = "Drag this into DaVinci Resolve, Premiere or any folder";
@@ -696,16 +702,18 @@ $("form").addEventListener("submit", async (e) => {
   const part = trim && same ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
   const items = playlist && same ? playlist.entries.filter((entry) => picked.has(entry.url)) : null;
   if (items && !items.length) return;
+  const folder = await whereToSave();
+  if (!folder) return;
   $("url").value = "";
   hidePreview();
   $("url").focus();
-  const res = items ? await api("/api/convert-many", { format, items }) : await api("/api/convert", { url, format, ...part });
+  const res = items ? await api("/api/convert-many", { format, items, folder }) : await api("/api/convert", { url, format, folder, ...part });
   $("notice").className = res.ok ? "notice" : "notice error";
   $("notice").textContent = res.ok ? "" : res.error;
   refresh();
 });
 
-$("change").addEventListener("click", async () => render(await api("/api/pick-folder", {})));
+$("change").addEventListener("click", () => openSettings("save"));
 $("checkNow").addEventListener("click", () => {
   dismissedUpdate = null;
   api("/api/check-updates", {}).then(refresh);
@@ -826,8 +834,6 @@ function renderUpdatePopup(s) {
 }
 
 function render(s) {
-  $("folder").textContent = s.folderName;
-  $("folder").title = s.folder;
   $("version").textContent = "Version " + s.version;
   if (typeof checkWhatsNew === "function") checkWhatsNew(s);
   const key = format + ":" + s.quality[format];

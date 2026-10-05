@@ -84,6 +84,12 @@ counters and their newest uploads, who's online, the newest Library sounds, the
 latest chat messages, your own stats and your recent downloads. Paste a link there
 to convert it right away. The Owner can change the channels with "Change channels".
 
+**Where to save:** the app asks with a folder picker every time you convert or
+download. In Settings, "Always save to" picks one folder instead. The speaker
+button at the top sets the volume for every sound, and the round arrow (or F5)
+refreshes the page you're on. Uploaders, admins and the owner can change a
+sound's name or category with the pencil button.
+
 **Settings** (at the bottom): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
 videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or

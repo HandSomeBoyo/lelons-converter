@@ -147,6 +147,8 @@ $("imgConvert").addEventListener("click", async () => {
   const todo = imageItems.filter((i) => i.id && i.status !== "loading");
   if (!todo.length) return;
   converting = true;
+  const folder = await whereToSave();
+  if (!folder) return void (converting = false);
   saveImageOptions();
   for (const item of todo) Object.assign(item, { status: "waiting", message: "Waiting..." });
   renderImages();
@@ -154,7 +156,7 @@ $("imgConvert").addEventListener("click", async () => {
     Object.assign(item, { status: "working", message: "Converting..." });
     renderImages();
     try {
-      const res = await api("/api/image-convert", { id: item.id, options: imageOptions });
+      const res = await api("/api/image-convert", { id: item.id, options: imageOptions, folder });
       if (res.ok) Object.assign(item, { status: "done", path: res.path, message: `Saved as ${res.name} · ${res.width} × ${res.height} · ${sizeText(res.bytes)}` });
       else Object.assign(item, { status: "error", message: res.error });
     } catch (e) {

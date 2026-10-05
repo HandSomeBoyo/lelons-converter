@@ -8,6 +8,7 @@ const SFX_ICONS = {
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   starOn: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
 };
 
@@ -442,17 +443,22 @@ function sfxRow(sound) {
   star.classList.add("star");
   star.classList.toggle("on", !!sound.favorite);
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
-  add(SFX_ICONS.download, "Download (saved in your downloads folder as MP3)", async (b) => {
+  add(SFX_ICONS.download, "Download as MP3", async (b) => {
+    const folder = await whereToSave();
+    if (!folder) return;
     b.disabled = true;
     sfxNotes.set(sound.id, { text: "Downloading...", kind: "" });
     drawSfx();
-    const res = await api("/api/sfx-download", { url: sound.url, name: sound.name })
+    const res = await api("/api/sfx-download", { url: sound.url, name: sound.name, folder })
       .catch(() => ({ ok: false, error: "Couldn't download that sound." }));
     sfxNotes.set(sound.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path }
       : { text: res.error, kind: "bad" });
     drawSfx();
   });
   add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } }));
+  if (sfxUser() && (sfxUser().canUpload || sound.mine)) {
+    add(SFX_ICONS.edit, "Change the name or category", () => openEditSound(sound));
+  }
   if (sfxUser() && sfxUser().canUpload) {
     // Deleting needs a second click, so it can't happen by accident.
     const bin = add(SFX_ICONS.trash, "Delete this sound for everyone", async () => {
@@ -745,3 +751,45 @@ setInterval(() => {
 
 if (!$("sfxTab").hidden) openSfx();
 else loadAccount();
+
+// ---- changing a sound's name or category (the one who uploaded it, or an owner or admin)
+
+let editingSound = null;
+function openEditSound(sound) {
+  editingSound = { id: sound.id, category: sound.category };
+  $("editSoundName").value = sound.name;
+  $("editSoundNote").textContent = "";
+  drawEditCats();
+  $("editSoundModal").hidden = false;
+  $("editSoundName").focus();
+  $("editSoundName").select();
+}
+function drawEditCats() {
+  const cats = (sfxAccount && sfxAccount.categories) || {};
+  $("editSoundCats").replaceChildren(...Object.entries(cats).map(([value, label]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.className = value === editingSound.category ? "active" : "";
+    b.onclick = () => { editingSound.category = value; drawEditCats(); };
+    return b;
+  }));
+}
+function closeEditSound() { $("editSoundModal").hidden = true; editingSound = null; }
+async function saveEditSound() {
+  if (!editingSound) return;
+  $("editSoundSave").disabled = true;
+  const res = await api("/api/sfx-edit", { id: editingSound.id, name: $("editSoundName").value, category: editingSound.category })
+    .catch(() => ({ ok: false, error: "That didn't work. Try again." }));
+  $("editSoundSave").disabled = false;
+  if (sfxLoggedOut(res)) return closeEditSound();
+  if (!res.ok) return void ($("editSoundNote").textContent = res.error);
+  sfxSounds = res.sounds;
+  closeEditSound();
+  drawSfx();
+}
+$("editSoundSave").addEventListener("click", saveEditSound);
+$("editSoundName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveEditSound(); });
+$("editSoundCancel").addEventListener("click", closeEditSound);
+$("editSoundModal").addEventListener("click", (e) => { if (e.target === $("editSoundModal")) closeEditSound(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("editSoundModal").hidden) closeEditSound(); });

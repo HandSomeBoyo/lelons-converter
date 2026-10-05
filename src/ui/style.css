@@ -594,7 +594,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .sound .sound-wave.loading .bars i { animation: pulse 1.2s ease-in-out infinite; }
 .sound .time { flex: none; width: 38px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sound.playing .time { color: var(--accent); }
-.sound .actions { display: flex; justify-content: flex-end; gap: 2px; flex: none; min-width: 124px; opacity: .55; transition: opacity .15s; }
+.sound .actions { display: flex; justify-content: flex-end; gap: 2px; flex: none; min-width: 154px; opacity: .55; transition: opacity .15s; }
 .sound .actions button { flex: none; }
 .sound:hover .actions, .sound .actions:focus-within { opacity: 1; }
 
@@ -1253,3 +1253,50 @@ button, .convert, .small-button, .ghost-button, .outline-button, .toggle button,
 @media (prefers-reduced-motion: reduce) {
   .roll-digit > span { transition: none; }
 }
+
+/* ---------------------------------------------------------------- 1.24.0: volume, refresh, edit, where to save */
+.top-right { gap: 12px; }
+.head-button { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: var(--muted); transition: background-color .25s var(--ease), color .25s var(--ease), transform .35s var(--spring); }
+.head-button:hover { background: var(--panel2); color: var(--text); }
+.head-button:active { transform: scale(.88); }
+.head-button svg { width: 19px; height: 19px; }
+#refreshButton.spin svg { animation: spin-once .7s var(--ease); }
+@keyframes spin-once { to { transform: rotate(360deg); } }
+
+.volume { position: relative; }
+.volume-pop {
+  position: absolute; top: calc(100% + 8px); right: -40px; z-index: 20; display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border-radius: var(--r); background: var(--panel); box-shadow: var(--shadow-lg); width: 230px;
+  transform-origin: top center; animation: pop-in .38s var(--ease) both;
+}
+.volume-pop.leaving { animation: pop-out .18s ease-in both; pointer-events: none; }
+.volume-value { flex: none; width: 38px; text-align: right; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.volume-row { display: flex; align-items: center; gap: 14px; max-width: 360px; }
+
+/* a smooth slider: a filled track and a round knob */
+input.volume-slider { width: auto; -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 6px; border-radius: 3px; cursor: pointer; margin: 0;
+  background: linear-gradient(to right, var(--accent) var(--fill, 60%), var(--line2) var(--fill, 60%)); outline: none; }
+input.volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .35); transition: transform .3s var(--spring); }
+input.volume-slider:hover::-webkit-slider-thumb { transform: scale(1.12); }
+input.volume-slider:active::-webkit-slider-thumb { transform: scale(.95); }
+input.volume-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .45); }
+
+.set-folder { color: var(--text); font-weight: 600; }
+.set-block.glow { animation: glow 1.6s var(--ease); border-radius: var(--r-sm); }
+@keyframes glow { 0%, 60% { background: rgba(var(--accent-rgb), .12); box-shadow: 0 0 0 8px rgba(var(--accent-rgb), .12); } }
+
+.edit-field { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.edit-label { font-size: 13px; color: var(--muted); }
+
+/* the other sliders get the same round, soft look */
+input[type=range] { height: 4px; border-radius: 2px; }
+input[type=range]::-webkit-slider-thumb { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); transition: transform .3s var(--spring); }
+input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15); }
+
+#setSaveBlock .check { display: flex; width: fit-content; margin-bottom: 8px; }
+.check input[type=radio] { border-radius: 50%; }
+.edit-label { display: block; font: 600 11px var(--head); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.edit-field.lib-field span { margin-bottom: 0; }
+.check input[type=radio]:checked::after { width: 5px; height: 5px; margin: 0; border: 0; border-radius: 50%; background: var(--ink); transform: none; }

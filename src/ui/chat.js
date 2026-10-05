@@ -96,7 +96,7 @@ function chatDing() {
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, now + at);
-      gain.gain.exponentialRampToValueAtTime(0.18, now + at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.18 * volumeLevel() / 0.36), now + at + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.22);
       osc.connect(gain).connect(chatAudioCtx.destination);
       osc.start(now + at);

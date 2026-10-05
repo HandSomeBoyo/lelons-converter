@@ -70,7 +70,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -90,6 +90,8 @@ class State:
         self.theme = saved["theme"]
         self.accent = saved["accent"]
         self.zoom = saved["zoom"]
+        self.save_mode = saved["save_mode"]
+        self.last_asked = saved["last_asked"]
         self.checking = False
         self.installing = False
         self.app_update = None  # newer version info, once found
@@ -119,6 +121,7 @@ class State:
                 "theme": self.theme,
                 "accent": self.accent,
                 "zoom": self.zoom,
+                "saveMode": self.save_mode,
                 "nativeZoom": appwindow.active(),
                 "online": sfx.presence.get(),
                 "checking": self.checking,
@@ -258,18 +261,26 @@ def open_folder(folder):
         os.startfile(folder)
 
 
-def pick_folder(current):
+def pick_folder(current, title="Where should files be saved?"):
     """Show the Windows folder picker; returns '' if cancelled."""
     if os.name != "nt":
         return ""
     import folder_picker
     try:
-        return folder_picker.pick_folder(current)
+        return folder_picker.pick_folder(current, title)
     except OSError:
         return ""
 
 
 # ---------------------------------------------------------------- web server
+
+def save_folder(data):
+    """The folder the page asked for with /api/ask-folder, else the one picked in Settings."""
+    folder = data.get("folder") if isinstance(data, dict) else None
+    if isinstance(folder, str) and folder and os.path.isdir(folder):
+        return os.path.normpath(folder)
+    return state.folder
+
 
 def home_page():
     """Everything on the Home page."""
@@ -516,11 +527,14 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "favorite":
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}
+            elif action == "edit":
+                library.edit(data.get("id"), data.get("name"), data.get("category"))
+                result = {"sounds": library.sounds()}
             elif action == "delete":
                 library.delete(data.get("id"))
                 result = {}
             elif action == "download":
-                path = library.download(str(data.get("url") or ""), data.get("name"), state.folder)
+                path = library.download(str(data.get("url") or ""), data.get("name"), save_folder(data))
                 result = {"path": path, "fileName": os.path.basename(path)}
             elif action == "show":
                 path = str(data.get("path") or "")
@@ -661,7 +675,7 @@ class Handler(BaseHTTPRequestHandler):
                         length = 0
                     trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), state.folder, trim, state.normalize)
+            queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data), trim, state.normalize)
             state.set(notice=None)
             self.send_json({"ok": True})
         elif self.path == "/api/convert-many":
@@ -671,7 +685,7 @@ class Handler(BaseHTTPRequestHandler):
             items = [i for i in (data.get("items") or []) if isinstance(i, dict) and str(i.get("url", "")).startswith("http")]
             for item in items:
                 trim = [0, min(media.GIF_DEFAULT_SECONDS, int(item.get("seconds") or 0) or media.GIF_DEFAULT_SECONDS)] if fmt == "gif" else None
-                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), state.folder, trim,
+                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), save_folder(data), trim,
                           state.normalize, preview=item)
             state.set(notice=None)
             self.send_json({"ok": True, "added": len(items)})
@@ -691,7 +705,7 @@ class Handler(BaseHTTPRequestHandler):
                 quality = state.quality.get(fmt) or settings.DEFAULT_QUALITY[fmt]
             trim = item.get("trim")
             trim = (float(trim[0]), float(trim[1])) if isinstance(trim, list) and len(trim) == 2 else None
-            queue.add(item["url"], fmt, quality, quality_label(fmt, quality), state.folder, trim,
+            queue.add(item["url"], fmt, quality, quality_label(fmt, quality), save_folder(data), trim,
                       state.normalize, preview=item)
             self.send_json({"ok": True})
         elif self.path == "/api/history-show":
@@ -774,7 +788,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "files": added, "errors": errors})
         elif self.path == "/api/files-convert":
             try:
-                local_files.convert(data.get("items") or [], data.get("options") or {}, state.folder)
+                local_files.convert(data.get("items") or [], data.get("options") or {}, save_folder(data))
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
             self.send_json({"ok": True})
@@ -794,7 +808,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/image-convert":
             try:
-                made = images.convert(str(data.get("id")), data.get("options") or {}, state.folder)
+                made = images.convert(str(data.get("id")), data.get("options") or {}, save_folder(data))
                 self.send_json({"ok": True, **made})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't save this picture."})
@@ -813,10 +827,20 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(state.snapshot())
         elif self.path == "/api/pick-folder":
             folder = pick_folder(state.folder)
-            if folder and os.path.isdir(folder):
+            picked = bool(folder and os.path.isdir(folder))
+            if picked:
                 state.set(folder=os.path.normpath(folder))
                 settings.save(folder=state.folder)
-            self.send_json(state.snapshot())
+            self.send_json({**state.snapshot(), "picked": picked})
+        elif self.path == "/api/ask-folder":  # before saving: where to? (or the folder picked in Settings)
+            if state.save_mode != "ask":
+                return self.send_json({"ok": True, "folder": state.folder})
+            folder = pick_folder(state.last_asked, "Where should this be saved?")
+            if not folder or not os.path.isdir(folder):
+                return self.send_json({"ok": False, "cancelled": True})
+            state.set(last_asked=os.path.normpath(folder))
+            settings.save(last_asked=state.last_asked)
+            self.send_json({"ok": True, "folder": state.last_asked})
         elif self.path == "/api/open-folder":
             open_folder(state.folder)
             self.send_json({"ok": True})
@@ -842,6 +866,8 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(data.get("zoom"), (int, float)):
                 changes["zoom"] = round(min(2.0, max(0.5, float(data["zoom"]))), 2)
                 appwindow.set_zoom(changes["zoom"])
+            if data.get("saveMode") in settings.SAVE_MODES:
+                changes["save_mode"] = data["saveMode"]
             if "theme" in changes:
                 appwindow.set_dark(changes["theme"] != "light")
             state.set(**changes)

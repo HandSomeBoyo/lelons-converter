@@ -636,6 +636,23 @@ begin
   return new_id;
 end $$;
 
+-- Change a sound's name or category (1.24.0): the one who uploaded it, or an owner or admin.
+create or replace function public.lelons_edit_sound(token text, sound_id uuid, sound_name text, sound_category text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  found lelons.sounds;
+begin
+  select * into found from lelons.sounds s where s.id = sound_id;
+  if found.id is null then
+    raise exception 'already gone' using hint = 'gone';
+  end if;
+  if me.role not in ('owner', 'admin') and found.uploader_id is distinct from me.id then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  update lelons.sounds s set name = btrim(sound_name), category = sound_category where s.id = sound_id;
+end $$;
+
 -- Use an uploaded picture as yours. Returns the old picture's file (for the app to delete), or null.
 create or replace function public.lelons_set_avatar(token text, file text)
 returns text language plpgsql security definer set search_path = '' as $$
@@ -832,7 +849,8 @@ begin
     'lelons_feedback_set(text, uuid, boolean, boolean)', 'lelons_ping(text, text)', 'lelons_bye(text)',
     'lelons_chat_send(text, text, text, uuid, text, text, real)', 'lelons_chat_list(text, bigint, text)',
     'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
-    'lelons_home(text)', 'lelons_set_channels(text, text[])'] loop
+    'lelons_home(text)', 'lelons_set_channels(text, text[])',
+    'lelons_edit_sound(text, uuid, text, text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
