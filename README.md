@@ -81,6 +81,7 @@ Lelons Converter/
 │   ├── folder_picker.py the Windows "Select Folder" and "Open" windows
 │   ├── names.py         saves files as "name (2)" instead of replacing them
 │   ├── windows.py       small Windows bits (one copy at a time, Downloads folder)
+│   ├── appwindow.py     the app's own window (WebView2, the Edge engine built into Windows)
 │   └── ui/              how the window looks
 │       ├── index.html   layout
 │       ├── style.css    colors and styling
@@ -122,10 +123,12 @@ installer, then create a GitHub Release tagged like `v1.3.0` with
 
 ## Building the installer
 
-`build/build.sh` runs on Linux (it needs `nsis`). It downloads Python for
-Windows, adds yt-dlp, ffmpeg and deno, and packs everything into
-`dist/Lelons Converter Setup.exe`.
+`build/build.sh` runs on Linux (it needs `nsis` and `wine`). It downloads
+Python for Windows, adds yt-dlp, ffmpeg, deno and Microsoft's WebView2Loader.dll,
+and packs everything into `dist/Lelons Converter Setup.exe`.
 
-The app's shortcut starts Python's own `pythonw.exe` (signed by the Python
-Software Foundation) with `app\main.py`, instead of a homemade .exe. Unsigned
-homemade programs are what virus scanners are most suspicious of.
+The app's shortcut starts `runtime\Lelons Converter.exe` with `app\main.py`.
+That's Python's own `pythonw.exe`, renamed and given the app's icon and details
+with rcedit (`build/unsign.py` takes off Python's signature first, since the
+change would break it). So Windows shows the app as Lelons Converter, without a
+homemade launcher program, which virus scanners are most suspicious of.

@@ -5,6 +5,7 @@ showing the page in ui/. This script runs a small local web server that the
 page talks to, and does the downloading with yt-dlp.
 """
 
+import ctypes
 import json
 import os
 import re
@@ -19,6 +20,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import appwindow
 import updater
 
 # Before anything loads yt-dlp: use a newer one if one was downloaded.
@@ -40,6 +42,8 @@ downloader.use_bundled_ffmpeg()
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(APP_DIR, "ui")
 ICON_CANDIDATES = [os.path.join(APP_DIR, "icon.png"), os.path.join(APP_DIR, "..", "assets", "icon.png")]
+WINDOW_ICON = next((p for p in (os.path.join(APP_DIR, "icon.ico"), os.path.join(APP_DIR, "..", "assets", "icon.ico"))
+                    if os.path.isfile(p)), "")
 PORT_FILE = os.path.join(settings.DATA_DIR, "running.port")
 NO_WINDOW = downloader.NO_WINDOW
 # A secret only the app's own window knows, so web pages open in a browser
@@ -504,6 +508,10 @@ class Handler(BaseHTTPRequestHandler):
             state.set(auto_update=bool(data.get("on")))
             settings.save(auto_update=state.auto_update)
             self.send_json(state.snapshot())
+        elif self.path == "/api/show-window":
+            # The app was started again while it's open.
+            open_window(f"http://127.0.0.1:{self.server.server_port}/?t={TOKEN}")
+            self.send_json({"ok": True})
         elif self.path == "/api/quit":
             # A different version of the app was started and needs this one gone.
             state.set(quit=True)
@@ -534,6 +542,29 @@ def find_edge():
 
 
 def open_window(url):
+    """Show the app's window (or bring it to the front if it's open)."""
+    # If opening the window ever crashed the app, this file is left behind:
+    # then use Edge from now on, so the app still opens.
+    starting = os.path.join(settings.DATA_DIR, "window-starting")
+    if os.path.exists(starting):
+        settings.save(own_window=False)
+        os.remove(starting)
+    if settings.load().get("own_window", True):
+        os.makedirs(settings.DATA_DIR, exist_ok=True)
+        with open(starting, "w"):
+            pass
+        try:
+            shown = appwindow.show(url, os.path.join(settings.DATA_DIR, "webview"), WINDOW_ICON,
+                                   on_closed=lambda: state.set(closed_at=time.time()))
+        finally:
+            os.remove(starting)
+        if shown:
+            return
+    open_edge(url)  # no WebView2 on this PC
+
+
+def open_edge(url):
+    """An Edge app window, like the app used before it had its own window."""
     edge = find_edge()
     if not edge:
         webbrowser.open(url)
@@ -549,7 +580,7 @@ def open_window(url):
 
 
 def already_running_url():
-    """If the app is already open, return its address so we just show it again."""
+    """If the app is already open, return its (address, token) so we just show it again."""
     try:
         with open(PORT_FILE) as f:
             port, _, token = f.read().strip().partition(" ")
@@ -560,7 +591,7 @@ def already_running_url():
     except (OSError, ValueError):
         return None
     if running == VERSION:
-        return url + "?t=" + token
+        return url, token
     # The app was updated but the old version is still running in the
     # background. Close it and start the new one instead.
     try:
@@ -590,7 +621,17 @@ def main():
     while True:
         existing = already_running_url()
         if existing:
-            open_window(existing)
+            # Ask the open app to show its window. (Windows only lets it come to
+            # the front if this program, which the user just started, allows it.)
+            url, token = existing
+            if os.name == "nt":
+                ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
+            try:
+                request = urllib.request.Request(url + "api/show-window", data=b"{}", method="POST",
+                                                 headers={"X-Lelons-Token": token})
+                urllib.request.urlopen(request, timeout=70).close()
+            except OSError:
+                open_edge(f"{url}?t={token}")
             return
         if windows.single_instance():
             break

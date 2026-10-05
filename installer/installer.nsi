@@ -13,9 +13,10 @@ Unicode true
 !define APP_PUBLISHER "Lelon"
 ; STAGE is passed in by build.sh: the folder holding app\ and runtime\.
 
-; The app starts with Python's own signed pythonw.exe (no homemade .exe).
+; The app starts with "Lelons Converter.exe": Python's own pythonw.exe with
+; the app's name and icon (see build.sh), so Windows shows it as the app.
 ; -E and -s keep any Python the user installed themselves from interfering.
-!define RUN_EXE "$INSTDIR\runtime\pythonw.exe"
+!define RUN_EXE "$INSTDIR\runtime\Lelons Converter.exe"
 !define RUN_ARGS '-E -s "$INSTDIR\app\main.py"'
 !define RUN_ICON "$INSTDIR\app\icon.ico"
 
@@ -65,10 +66,10 @@ Function SkipWelcomeWhenUpdating
 FunctionEnd
 
 ; Files of a running app can't be replaced, so close the app first.
-; Only Python processes started from this app's folder are closed.
+; Only programs started from this app's folder are closed.
 !macro CloseRunningApp
   System::Call 'kernel32::SetEnvironmentVariable(t "LELONS_DIR", t "$INSTDIR")'
-  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,ffmpeg,deno -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
+  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,'Lelons Converter',ffmpeg,deno -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
   Pop $0
   Sleep 800
 !macroend
