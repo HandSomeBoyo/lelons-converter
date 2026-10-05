@@ -202,6 +202,18 @@ button { font: inherit; }
 .update-dialog .update-icon { width: 44px; height: 44px; display: block; margin-bottom: 16px; border-radius: 4px; }
 .update-dialog .bar { margin-top: 18px; height: 3px; }
 
+.whats-new-dialog { max-width: 520px; }
+.whats-new-dialog .update-icon { width: 44px; height: 44px; display: block; margin-bottom: 16px; border-radius: 4px; }
+.whats-new-list { margin-top: 16px; max-height: 50vh; overflow-y: auto; padding-right: 6px; }
+.whats-new-list section + section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.whats-new-list h3 { margin: 0 0 8px; font: 600 12px var(--head); letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); }
+.whats-new-list section + section h3 { color: var(--muted); }
+.whats-new-list ul { margin: 0; padding-left: 18px; }
+.whats-new-list li { margin: 6px 0; font-size: 14px; line-height: 1.45; }
+.whats-new-list li::marker { color: var(--accent); }
+.whats-new-list::-webkit-scrollbar { width: 8px; }
+.whats-new-list::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; }
+
 /* Trim editor */
 .video-box {
   position: relative; margin: 18px auto 0; width: fit-content; max-width: 100%; border-radius: 2px;

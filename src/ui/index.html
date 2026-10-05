@@ -373,7 +373,7 @@
   </section>
 
   <footer class="footer">
-    <span id="version"></span>
+    <span><span id="version"></span> · <button class="link" id="whatsNewOpen">What's new</button></span>
     <span>
       <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label> ·
       <button class="link" id="checkNow">Check for updates</button>
@@ -494,11 +494,26 @@
   </div>
 </div>
 
+<div class="modal" id="whatsNewModal" hidden>
+  <div class="dialog whats-new-dialog" role="dialog" aria-labelledby="whatsNewHeading">
+    <img src="/icon.png" alt="" class="update-icon">
+    <h2 id="whatsNewHeading">What's new</h2>
+    <p class="sub" id="whatsNewSub"></p>
+    <div class="whats-new-list" id="whatsNewList"></div>
+    <div class="dialog-actions">
+      <button type="button" class="link" id="whatsNewAll">See older updates</button>
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="whatsNewClose">Nice!</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 <script src="images.js"></script>
 <script src="files.js"></script>
 <script src="history.js"></script>
 <script src="sfx.js"></script>
 <script src="account.js"></script>
+<script src="whatsnew.js"></script>
 </body>
 </html>

@@ -750,6 +750,7 @@ function render(s) {
   $("folder").textContent = s.folderName;
   $("folder").title = s.folder;
   $("version").textContent = "Version " + s.version;
+  if (typeof checkWhatsNew === "function") checkWhatsNew(s);
   const key = format + ":" + s.quality[format];
   if (key !== shownQuality) {
     $("quality").innerHTML = "";

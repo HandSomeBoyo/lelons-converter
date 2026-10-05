@@ -79,6 +79,7 @@ class State:
         # A message under the card: {"kind": "info"|"error"|"done", "text": ...}
         self.notice = None
         self.auto_update = saved["auto_update"]
+        self.seen_version = saved.get("seen_version") or ""  # the last version whose "What's new" was shown
         self.normalize = saved["normalize"]
         self.checking = False
         self.installing = False
@@ -103,6 +104,7 @@ class State:
                 "qualities": settings.QUALITIES,
                 "notice": self.notice,
                 "autoUpdate": self.auto_update,
+                "seenVersion": self.seen_version,
                 "normalize": self.normalize,
                 "checking": self.checking,
                 "appUpdate": self.app_update,
@@ -715,6 +717,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/check-updates":
             start_background(check_for_updates, True)
+            self.send_json({"ok": True})
+        elif self.path == "/api/seen-version":  # "What's new" was shown for this version
+            state.set(seen_version=VERSION)
+            settings.save(seen_version=VERSION)
             self.send_json({"ok": True})
         elif self.path == "/api/auto-update":
             state.set(auto_update=bool(data.get("on")))
