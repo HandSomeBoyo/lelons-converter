@@ -38,3 +38,14 @@ function applyTheme(theme, accent) {
 }
 
 applyTheme(pageSaved.theme, pageSaved.accent);
+
+// The Size setting. The app's own window draws the page bigger itself (sharp at any size);
+// in a browser window the page is zoomed here instead.
+let pageZoom = Number(pageSaved.zoom) || 1;
+let nativeZoom = !!pageSaved.nativeZoom;
+function applyZoom(zoom, native) {
+  pageZoom = zoom;
+  nativeZoom = native;
+  document.documentElement.style.zoom = native || zoom === 1 ? "" : String(zoom);
+}
+applyZoom(pageZoom, nativeZoom);

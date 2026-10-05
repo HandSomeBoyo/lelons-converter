@@ -46,6 +46,10 @@ def load():
     settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
     settings["normalize"] = settings.get("normalize") is True  # "Even out volume", off unless turned on
     settings["hardware"] = settings.get("hardware") is not False  # graphics card for videos and the window
+    try:
+        settings["zoom"] = min(2.0, max(0.5, float(settings.get("zoom") or 1)))
+    except (TypeError, ValueError):
+        settings["zoom"] = 1.0
     if settings.get("theme") not in THEMES:
         settings["theme"] = "dark"
     if settings.get("accent") not in ACCENTS:

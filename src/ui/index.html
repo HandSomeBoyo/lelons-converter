@@ -633,6 +633,20 @@
         come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
     </section>
     <section class="set-block">
+      <h3>Size</h3>
+      <div class="size-row">
+        <button type="button" class="size-step" id="sizeDown" title="Smaller (Ctrl and -)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>
+        </button>
+        <div class="size-track" id="sizeTrack"></div>
+        <button type="button" class="size-step" id="sizeUp" title="Bigger (Ctrl and +)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12M12 6v12"/></svg>
+        </button>
+        <span class="size-value" id="sizeValue">100%</span>
+      </div>
+      <p class="set-help">Tip: hold Ctrl and scroll, or press Ctrl and + or -. Ctrl and 0 goes back to normal.</p>
+    </section>
+    <section class="set-block">
       <h3>Chat</h3>
       <label class="check"><input type="checkbox" id="setChatSound"> Play a sound for new messages</label>
     </section>
@@ -666,6 +680,7 @@
   </div>
 </div>
 
+<script src="motion.js"></script>
 <script src="app.js"></script>
 <script src="clip.js"></script>
 <script src="images.js"></script>

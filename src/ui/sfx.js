@@ -344,6 +344,10 @@ function drawSfx() {
       : sfxUploader ? `${sfxUploader} hasn't uploaded anything here.` : "No sounds in this category yet.");
 }
 
+function sfxSep() {
+  return Object.assign(document.createElement("span"), { className: "sep", textContent: "·" });
+}
+
 function sfxRow(sound) {
   const el = document.createElement("div");
   el.className = "sound" + (sfxPlaying === sound.id ? " playing" : "");
@@ -387,16 +391,21 @@ function sfxRow(sound) {
     if (sound.uploader) {
       const by = document.createElement("span");
       by.className = "by";
-      by.append("Uploaded by ", avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
+      by.title = "Uploaded by " + sound.uploader;
+      by.append(avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
       const name = document.createElement("b");
       name.className = "by-name";
       name.textContent = sound.uploader;
       name.title = "See " + sound.uploader + "'s profile";
       name.onclick = (e) => { e.stopPropagation(); openProfile(sound.uploader); };
       by.append(name);
-      meta.append(" · ", by);
+      meta.append(sfxSep(), by);
     }
-    meta.append(" · " + sfxAgo(sound.created_at));
+    // The time goes last and is the part cut short when there isn't room (never the name).
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = sfxAgo(sound.created_at);
+    meta.append(sfxSep(), when);
   }
   const wave = el.querySelector(".sound-wave");
   drawSoundWave(wave, sound);

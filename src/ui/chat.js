@@ -18,6 +18,7 @@ let chatNames = []; // everyone's username, for @mentions
 let chatAttached = null; // {sound: {id, name}} or {clip: key, name}: sent with the next message
 let chatMention = false; // someone @mentioned you in the chat with everyone and you haven't looked yet
 let chatDrawn = ""; // what the list shows, so it's only redrawn when something changed
+let chatShown = { with: null, id: 0 }; // the newest message already on screen, so only newer ones slide in
 const chatSure = new Set(); // messages whose delete button was clicked once
 // The newest message you've seen, per conversation ("" = everyone). Kept after the app closes.
 let chatSeen = loadPref("chatSeen") || {};
@@ -194,7 +195,7 @@ function drawConvos() {
     who.addEventListener("click", () => openProfile(chatWith));
     head.append(who, document.createTextNode(". Only you two can see it."));
   }
-  $("chatInput").placeholder = chatWith ? `Message ${chatWith}...` : "Say something... (@ to mention someone)";
+  $("chatInput").placeholder = chatWith ? `Message ${chatWith}...` : "Say something... (@ to mention)";
 }
 
 // Checked every few seconds while the chat is open, less often while it's closed (for the unread number).
@@ -387,6 +388,9 @@ function drawChat(force) {
   }
   const rows = [];
   let last = null;
+  const firstDraw = chatShown.with !== chatWith;
+  const shownUpTo = firstDraw ? Infinity : chatShown.id;
+  chatShown = { with: chatWith, id: Math.max(...chatMessages.map((m) => m.id)) };
   for (const m of chatMessages) {
     const day = new Date(m.created_at).toDateString();
     if (!last || new Date(last.created_at).toDateString() !== day) {
@@ -400,7 +404,8 @@ function drawChat(force) {
     const follow = last && last.username === m.username && new Date(m.created_at) - new Date(last.created_at) < 300000
       && new Date(last.created_at).toDateString() === day;
     const el = document.createElement("div");
-    el.className = "chat-msg" + (follow ? " follow" : "") + (!m.mine && mentionsMe(m.message) ? " mentions-me" : "");
+    el.className = "chat-msg" + (follow ? " follow" : "") + (!m.mine && mentionsMe(m.message) ? " mentions-me" : "")
+      + (m.id > shownUpTo ? " new" : "");
     const face = avatarEl(m.avatarUrl, m.username);
     face.title = "See " + m.username + "'s profile";
     face.addEventListener("click", () => openProfile(m.username));

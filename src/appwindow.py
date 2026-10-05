@@ -27,9 +27,12 @@ WM_DESTROY, WM_SIZE, WM_MOVE, WM_ACTIVATE, WM_CLOSE = 0x0002, 0x0005, 0x0003, 0x
 WM_SETICON, WM_APP = 0x0080, 0x8000
 WM_SHOW = WM_APP + 1  # "come to the front", from another thread
 WM_DRAG = WM_APP + 2  # "drag this file out of the window", from another thread
+WM_ZOOM = WM_APP + 3  # "show the page at this size", from another thread
 
 _lock = threading.Lock()
 _window = None  # the open Window, if there is one
+_zoom = 1.0  # how big the page is drawn (the Size setting)
+_dark = True  # a dark title bar (the theme)
 
 
 def available():
@@ -73,6 +76,31 @@ def drag(path):
     window.drag_path = path
     window.user32.PostMessageW(window.hwnd, WM_DRAG, 0, 0)
     return True
+
+
+def set_zoom(factor):
+    """Draw the page bigger or smaller (1.0 = normal). Returns False if there's no window of ours."""
+    global _zoom
+    _zoom = float(factor)
+    window = _window
+    if not (window and window.alive and window.hwnd):
+        return False
+    window.user32.PostMessageW(window.hwnd, WM_ZOOM, 0, 0)
+    return True
+
+
+def set_dark(dark):
+    """A dark or light title bar, to match the theme."""
+    global _dark
+    _dark = bool(dark)
+    window = _window
+    if window and window.alive and window.hwnd:
+        window.title_bar()
+
+
+def active():
+    window = _window
+    return bool(window and window.alive and window.hwnd)
 
 
 def close():
@@ -306,11 +334,7 @@ class Window:
         for kind, handle in ((1, big), (0, small)):  # ICON_BIG, ICON_SMALL
             if handle:
                 user32.SendMessageW(self.hwnd, WM_SETICON, kind, handle)
-        try:  # a dark title bar, to match the app
-            dark = ctypes.c_int(1)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(wintypes.HWND(self.hwnd), 20, ctypes.byref(dark), 4)
-        except (AttributeError, OSError):
-            pass
+        self.title_bar()
 
         loader = ctypes.WinDLL(_loader_path())
         create = loader.CreateCoreWebView2EnvironmentWithOptions
@@ -362,7 +386,7 @@ class Window:
         if settings.value:
             _method(settings.value, 10, wintypes.BOOL)(False)  # no status bar at the bottom
             _method(settings.value, 12, wintypes.BOOL)(False)  # no developer tools
-            _method(settings.value, 18, wintypes.BOOL)(False)  # no Ctrl+scroll zoom
+            _method(settings.value, 18, wintypes.BOOL)(False)  # the page does Ctrl+scroll itself (the Size setting)
             _method(settings.value, 2)()
 
         # The page closes itself after starting an update: close the window too.
@@ -376,6 +400,7 @@ class Window:
         _method(self.webview, 44, ctypes.c_void_p, ctypes.POINTER(Token))(popup.pointer, ctypes.byref(token))
 
         self._fit()
+        self._zoom()
         _method(self.webview, 5, wintypes.LPCWSTR)(self.url)  # Navigate
         self.user32.ShowWindow(self.hwnd, 3 if self.maximized else 1)  # SW_SHOWMAXIMIZED / SW_SHOWNORMAL
         self.user32.SetForegroundWindow(self.hwnd)
@@ -384,6 +409,17 @@ class Window:
         self.ok = self.alive = True
         self.started.set()
         return S_OK
+
+    def title_bar(self):
+        try:  # a dark (or light) title bar, to match the theme
+            dark = ctypes.c_int(1 if _dark else 0)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(wintypes.HWND(self.hwnd), 20, ctypes.byref(dark), 4)
+        except (AttributeError, OSError):
+            pass
+
+    def _zoom(self):
+        if self.controller:
+            _method(self.controller, 8, ctypes.c_double)(max(0.5, min(2.0, _zoom)))  # put_ZoomFactor
 
     def _restore_placement(self):
         """Put the window where it was last time, if that's still on a screen."""
@@ -447,6 +483,9 @@ class Window:
                     dragout.drag(path, hwnd)  # Windows runs the drag here until it's dropped
                 except Exception:
                     pass
+            return 0
+        elif message == WM_ZOOM:
+            self._zoom()
             return 0
         elif message == WM_SHOW:
             if self.user32.IsIconic(hwnd):

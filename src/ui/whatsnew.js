@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.22.0", items: [
+    "Make the whole app bigger or smaller: Settings, Size. Or hold Ctrl and scroll, or press Ctrl and + or -. Ctrl and 0 goes back to normal.",
+    "You can always see who uploaded a sound in the Library now, even in a small window.",
+    "A cleaner look: softer corners, less clutter and a roomier layout on big screens.",
+    "Smooth animations everywhere: popups glide in, the chat slides open, a line follows the tab you pick and new messages float in.",
+    "The window's title bar now matches your theme.",
+  ] },
   { version: "1.21.0", items: [
     "Send Library sounds in the chat with the new chat button on a sound, or a trimmed clip with \"Send to chat\" in the trim editor. Others can play them or drag them into their editor.",
     "React to messages with emojis, and @mention people (type @ to pick a name). Mentions light up and ding.",

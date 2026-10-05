@@ -82,7 +82,8 @@ them all up and lists them like a playlist, so you can convert them together.
 **Settings** (at the bottom): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
 videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or
-Light) and an accent color too.
+Light) and an accent color too. **Size** makes the whole app bigger or smaller
+(or hold Ctrl and scroll, or press Ctrl and + or -; Ctrl and 0 resets it).
 
 **Send feedback** (at the bottom of the app, or in the account menu) lets anyone
 with an account report a bug or ask for something new. The Owner reads them in

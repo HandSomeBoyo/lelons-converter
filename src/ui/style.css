@@ -952,3 +952,186 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .playlist-row.bad .title { color: var(--muted); }
 .playlist-row.bad .meta { color: var(--red); }
 .playlist-row.looking .thumb { animation: pulse 1.2s ease-in-out infinite; }
+
+/* ==================================================================
+   Clean and smooth (1.22.0): softer corners, less clutter, and
+   Apple-style motion: quick to start, slow to settle.
+   ================================================================== */
+:root {
+  --ease: cubic-bezier(.32, .72, 0, 1);       /* sheets and panels (like iOS) */
+  --ease-out: cubic-bezier(.22, 1, .36, 1);   /* things appearing */
+  --spring: cubic-bezier(.34, 1.4, .64, 1);   /* a little bounce, for presses and pops */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r: 14px;
+  --r-lg: 20px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 10px 30px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 2px 6px rgba(0, 0, 0, .2), 0 24px 70px rgba(0, 0, 0, .45);
+}
+:root[data-theme="light"] {
+  --shadow: 0 1px 2px rgba(40, 30, 10, .06), 0 10px 30px rgba(40, 30, 10, .1);
+  --shadow-lg: 0 2px 6px rgba(40, 30, 10, .08), 0 24px 70px rgba(40, 30, 10, .18);
+}
+html { scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* Wider on big windows, so there's room for everything */
+main { max-width: min(1180px, max(880px, 84vw)); padding: 34px 44px 26px; }
+::selection { background: rgba(var(--accent-rgb), .35); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Softer corners everywhere */
+.mark { border-radius: var(--r-sm); }
+.input, .convert, .toggle button, .quality, .preview, .outline-button, .small-button, .ghost-button,
+.nudge, .trim-controls input, .dropzone, .image-options, .chips button, .custom-size input, .playlist,
+.side-item, .chat-form input, .history-search, .lib-sort, .upload-strip, .icon-button { border-radius: var(--r-sm); }
+.dialog { border-radius: var(--r-lg); border-color: transparent; box-shadow: var(--shadow-lg); }
+.play-button { border-radius: 50%; }
+.preview .thumb, .job .thumb, .playlist-row .thumb, .image-row .pic { border-radius: var(--r-xs); }
+.wave, .video-box { border-radius: var(--r-sm); }
+.badge { border-radius: var(--r-xs); padding: 2px 7px; }
+.account-panel { border-radius: var(--r); box-shadow: var(--shadow-lg); border-color: var(--line); }
+.lib-menu button { border-radius: var(--r-xs); }
+.sound { border-radius: var(--r-sm); }
+.clip-chip { border-radius: var(--r); }
+.check input { border-radius: 4px; }
+
+/* Calmer surfaces: fewer outlines, gentle fills */
+.input { border-color: transparent; background: var(--panel); }
+.input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .16); }
+.toggle button, .quality, .chips button { border-color: transparent; background: var(--panel); }
+.toggle button:hover, .quality:hover, .chips button:hover { border-color: transparent; background: var(--panel2); }
+.toggle button.active, .chips button.active { box-shadow: var(--shadow); }
+.preview { padding: 14px; }
+.playlist, .image-options { box-shadow: none; }
+.ghost-button { border-color: transparent; background: var(--panel2); }
+.ghost-button:hover { background: var(--line2); }
+.outline-button { border-width: 1.5px; }
+.job { border-top-color: var(--line); }
+.tabs { border-bottom-color: var(--line); position: relative; }
+.footer { border-top: 1px solid var(--line); margin-top: auto; padding-top: 18px; }
+main > .footer { margin-top: auto; }
+
+/* Every button: a smooth hover and a soft press */
+button, .convert, .small-button, .ghost-button, .outline-button, .toggle button, .chips button, .quality, .side-item,
+.icon-button, .account-button, .online-pill, .convo, .reaction, .size-dot, .theme-picks button, .accent-picks button {
+  transition: background-color .25s var(--ease), border-color .25s var(--ease), color .25s var(--ease),
+              box-shadow .3s var(--ease), opacity .25s var(--ease), filter .25s var(--ease), transform .35s var(--spring);
+}
+.convert:active:not(:disabled), .small-button:active:not(:disabled), .ghost-button:active, .outline-button:active,
+.toggle button:active, .chips button:active, .side-item:active, .online-pill:active, .account-button:active,
+.convo:active, .reaction:active, .theme-picks button:active, .sound .play:active, .chat-sound .play:active,
+.play-button:active:not(:disabled) { transform: scale(.96); transition-duration: .12s; }
+.icon-button:active { transform: scale(.88); transition-duration: .12s; }
+.convert:hover:not(:disabled), .small-button:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 6px 20px rgba(var(--accent-rgb), .28); }
+
+/* The tabs: a line that slides to the one you pick */
+.tabs button.active { border-bottom-color: transparent; }
+.tab-line {
+  position: absolute; left: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none;
+  transition: opacity .2s;
+}
+.tab-line.ready { transition: transform .5s var(--ease), width .5s var(--ease), opacity .2s; }
+
+/* Pages fade up into place */
+.tab-page:not([hidden]) { animation: page-in .55s var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+
+/* Popups: the background blurs, the card rises and settles */
+.modal {
+  background: rgba(0, 0, 0, .45); backdrop-filter: blur(14px) saturate(1.3);
+  animation: fade-in .35s var(--ease) both;
+}
+:root[data-theme="light"] .modal { background: rgba(60, 50, 30, .22); }
+.modal > .dialog { animation: sheet-in .55s var(--ease) both; }
+.modal.leaving { animation: fade-out .22s ease-in both; pointer-events: none; }
+.modal.leaving > .dialog { animation: sheet-out .22s ease-in both; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(18px) scale(.96); } }
+@keyframes sheet-out { to { opacity: 0; transform: translateY(8px) scale(.97); } }
+
+/* The account menu pops out of its button */
+.account-panel { transform-origin: top right; animation: pop-in .38s var(--ease) both; }
+.account-panel.leaving { animation: pop-out .18s ease-in both; pointer-events: none; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-6px) scale(.94); } }
+@keyframes pop-out { to { opacity: 0; transform: translateY(-4px) scale(.96); } }
+
+/* The chat slides in from the side, frosted */
+.chat-panel {
+  animation: panel-in .55s var(--ease) both; border-left-color: var(--line);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, .35);
+}
+.chat-panel.leaving { animation: panel-out .25s cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes panel-in { from { transform: translateX(100%); } }
+@keyframes panel-out { to { transform: translateX(100%); } }
+.chat-form input { border-color: transparent; background: var(--panel2); }
+.chat-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .14); }
+.chat-msg.new { animation: msg-in .45s var(--ease-out) both; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.reaction { animation: pop-in .3s var(--spring) both; }
+.msg-tools { animation: pop-in .2s var(--ease) both; transform-origin: top right; }
+.chat-suggest, .chat-attach { animation: rise-in .3s var(--ease-out) both; }
+.online-dot { animation: breathe 2.8s ease-in-out infinite; }
+@keyframes breathe { 50% { box-shadow: 0 0 0 6px rgba(127, 214, 106, .08); } }
+.chat-unread { animation: pop-in .35s var(--spring) both; }
+
+/* Things appearing in lists */
+.job, .upload-strip, .playlist-row, .image-row, .inbox-item { animation: rise-in .45s var(--ease-out) both; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } }
+.preview.show { animation: rise-in .45s var(--ease-out) both; }
+.playlist:not([hidden]) { animation: rise-in .5s var(--ease-out) both; }
+.notice:not(:empty) { animation: rise-in .35s var(--ease-out) both; }
+
+/* Smoother progress and hovers */
+.bar { border-radius: 2px; }
+.bar div { border-radius: 2px; transition: width .6s var(--ease); }
+.sound { transition: background-color .25s var(--ease); }
+.sound .sound-wave { flex: 0 1 26%; min-width: 90px; }
+.sound .play { transition: background-color .25s var(--ease), color .25s var(--ease), transform .35s var(--spring); }
+.side-item { transition: background-color .25s var(--ease), color .25s var(--ease), transform .35s var(--spring); }
+.side-item.active { box-shadow: none; background: var(--panel2); }
+.side-item.active .side-label { color: var(--text); }
+.side-item.active::after { content: ""; position: absolute; }
+.dropzone { transition: border-color .3s var(--ease), background-color .3s var(--ease), transform .4s var(--spring); }
+.dragging .dropzone { transform: scale(1.01); }
+.theme-picks button, .accent-picks button { transition: transform .35s var(--spring), box-shadow .3s var(--ease), border-color .3s var(--ease); }
+.accent-picks button:hover { transform: scale(1.1); }
+
+/* The sound rows: who uploaded it always shows; the time gets cut short first */
+.sound .meta { display: flex; align-items: center; gap: 6px; }
+.sound .meta .sep { flex: none; opacity: .6; }
+.sound .meta .cat, .sound .meta .by { flex: none; }
+.sound .meta .by { max-width: 60%; }
+.sound .meta .by b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound .meta .when { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lib-main { container-type: inline-size; }
+@container (max-width: 520px) {
+  .sound .sound-wave { display: none; }
+}
+
+/* Settings: Size */
+.size-row { display: flex; align-items: center; gap: 12px; }
+.size-step {
+  all: unset; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel2); color: var(--text);
+}
+.size-step:hover { background: var(--line2); }
+.size-step:disabled { opacity: .35; cursor: default; }
+.size-step svg { width: 14px; height: 14px; }
+.size-track { flex: 1; display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 4px; position: relative; }
+.size-track::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; margin-top: -1px; background: var(--line2); border-radius: 2px; }
+.size-dot {
+  all: unset; cursor: pointer; position: relative; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--panel); border: 2px solid var(--line2); box-sizing: border-box;
+}
+.size-dot.normal { border-color: var(--muted); }
+.size-dot:hover { transform: scale(1.25); }
+.size-dot.active { background: var(--accent); border-color: var(--accent); transform: scale(1.5); box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .18); }
+.size-value { width: 44px; text-align: right; font: 700 14px var(--head); font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

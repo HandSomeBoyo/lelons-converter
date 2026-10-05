@@ -88,6 +88,7 @@ class State:
         self.hardware = saved["hardware"]
         self.theme = saved["theme"]
         self.accent = saved["accent"]
+        self.zoom = saved["zoom"]
         self.checking = False
         self.installing = False
         self.app_update = None  # newer version info, once found
@@ -116,6 +117,8 @@ class State:
                 "hardware": self.hardware,
                 "theme": self.theme,
                 "accent": self.accent,
+                "zoom": self.zoom,
+                "nativeZoom": appwindow.active(),
                 "online": sfx.presence.get(),
                 "checking": self.checking,
                 "appUpdate": self.app_update,
@@ -316,7 +319,8 @@ class Handler(BaseHTTPRequestHandler):
             body = f.read()
         if os.path.basename(path) == "index.html":
             # What the page remembers (see ui/theme.js), plus the theme, so it shows the right colors at once.
-            saved = {**(settings.load().get("page") or {}), "theme": state.theme, "accent": state.accent}
+            saved = {**(settings.load().get("page") or {}), "theme": state.theme, "accent": state.accent,
+                     "zoom": state.zoom, "nativeZoom": appwindow.active()}
             text = json.dumps(saved).replace("<", "\\u003c")
             body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};</script>".encode())
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
@@ -788,6 +792,11 @@ class Handler(BaseHTTPRequestHandler):
                 changes["theme"] = data["theme"]
             if data.get("accent") in settings.ACCENTS:
                 changes["accent"] = data["accent"]
+            if isinstance(data.get("zoom"), (int, float)):
+                changes["zoom"] = round(min(2.0, max(0.5, float(data["zoom"]))), 2)
+                appwindow.set_zoom(changes["zoom"])
+            if "theme" in changes:
+                appwindow.set_dark(changes["theme"] != "light")
             state.set(**changes)
             settings.save(**changes)
             self.send_json(state.snapshot())
@@ -972,6 +981,8 @@ def main():
     media.use_gpu(state.hardware)
     if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too
         os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--disable-gpu"
+    appwindow.set_zoom(state.zoom)
+    appwindow.set_dark(state.theme != "light")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     sfx.presence.start()
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
