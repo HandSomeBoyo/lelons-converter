@@ -90,7 +90,10 @@
     <div class="home-section">
       <div class="home-head">
         <h2>Our channels</h2>
-        <button type="button" class="link" id="homeEditChannels" hidden>Change channels</button>
+        <span class="home-head-links">
+          <button type="button" class="link" id="homeEditChannels" hidden>Change channels</button>
+          <button type="button" class="link" id="homeSeeStats">See stats</button>
+        </span>
       </div>
       <div class="home-total">
         <span class="roll big" id="homeTotal"></span>
@@ -136,6 +139,45 @@
         <div class="home-card-head"><h3>Recent downloads</h3><button type="button" class="link" id="homeAllHistory">See all</button></div>
         <p class="home-muted" id="homeRecentEmpty" hidden>Nothing yet. Paste a link above to get started.</p>
         <div class="home-files" id="homeRecent"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="statsTab" hidden>
+    <button type="button" class="link stats-back" id="statsBack">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Home
+    </button>
+    <h1 class="headline">Channel stats.<br><em>How we're growing.</em></h1>
+    <div class="stats-top">
+      <div class="find-sources stats-range" id="statsRange">
+        <span class="find-pill" id="statsPill"></span>
+        <button type="button" data-days="7">7 days</button>
+        <button type="button" data-days="30">30 days</button>
+        <button type="button" data-days="3650">All time</button>
+      </div>
+      <p class="stats-note" id="statsNote"></p>
+    </div>
+
+    <div class="home-card stats-card">
+      <div class="home-card-head"><h3>Leaderboard</h3><span class="home-muted" id="statsBoardNote"></span></div>
+      <div class="stats-board" id="statsBoard"></div>
+    </div>
+
+    <div class="home-card stats-card">
+      <div class="home-card-head"><h3>Subscribers gained</h3></div>
+      <div class="stats-chart" id="statsChart"></div>
+      <div class="stats-legend" id="statsLegend"></div>
+    </div>
+
+    <div class="home-grid stats-grid">
+      <div class="home-card">
+        <div class="home-card-head"><h3>Most watched lately</h3></div>
+        <p class="home-muted" id="statsTopEmpty" hidden>No videos found yet.</p>
+        <div class="stats-bars" id="statsTop"></div>
+      </div>
+      <div class="home-card">
+        <div class="home-card-head"><h3>Uploads in the last 30 days</h3></div>
+        <div class="stats-bars" id="statsUploads"></div>
       </div>
     </div>
   </section>
@@ -312,6 +354,8 @@
             </select>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </label>
+          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
           <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
         </div>
         <p class="lib-showing" id="sfxShowing"></p>
@@ -678,6 +722,30 @@
   </form>
 </aside>
 
+<div class="modal" id="findModal" hidden>
+  <div class="dialog find-dialog" role="dialog" aria-labelledby="findTitle">
+    <div class="find-top">
+      <h2 id="findTitle">Find sounds</h2>
+      <button type="button" class="icon-button" id="findClose" title="Close (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="find-sources" id="findSources">
+      <span class="find-pill" id="findPill"></span>
+      <button type="button" class="active" data-source="effects">Sound effects</button>
+      <button type="button" data-source="memes">Meme sounds</button>
+    </div>
+    <label class="input find-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="findInput" autocomplete="off" spellcheck="false">
+      <span class="find-spinner" id="findSpinner" hidden></span>
+    </label>
+    <p class="find-state" id="findState"></p>
+    <div class="find-list" id="findList"></div>
+    <button type="button" class="outline-button find-more" id="findMore" hidden>Show more</button>
+  </div>
+</div>
+
 <div class="modal tour-modal" id="tourModal" hidden>
   <div class="dialog tour-dialog" role="dialog" aria-labelledby="tourTitle">
     <div class="tour-top">
@@ -838,7 +906,9 @@
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
 <script src="profile.js"></script>
+<script src="find.js"></script>
 <script src="home.js"></script>
+<script src="stats.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

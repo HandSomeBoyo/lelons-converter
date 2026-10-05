@@ -834,6 +834,43 @@ begin
   return json_build_object('ok', true);
 end $$;
 
+-- ---- channel stats (1.26.0): each channel's subscribers once a day, sent in by the crew's apps
+
+create table if not exists lelons.channel_stats (
+  channel text not null check (length(channel) <= 200),
+  day date not null,
+  subs bigint not null check (subs between 0 and 10000000000),
+  videos int check (videos between 0 and 10000000),
+  updated_at timestamptz not null default now(),
+  primary key (channel, day)
+);
+alter table lelons.channel_stats enable row level security;
+
+create or replace function public.lelons_channel_log(token text, channel text, subs bigint, videos int default null)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  link text := btrim(coalesce(channel, ''));
+begin
+  if link !~ '^https://www\.youtube\.com/(@[^/?#\s]{1,100}|channel/UC[A-Za-z0-9_-]{22}|c/[^/?#\s]{1,100}|user/[^/?#\s]{1,100})$' then
+    raise exception 'not a channel';
+  end if;
+  insert into lelons.channel_stats as c (channel, day, subs, videos)
+  values (link, (now() at time zone 'utc')::date, greatest(0, subs), videos)
+  on conflict (channel, day) do update set subs = excluded.subs, videos = coalesce(excluded.videos, c.videos), updated_at = now();
+end $$;
+
+create or replace function public.lelons_channel_history(token text, days int default 90)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return coalesce((select json_agg(json_build_object('channel', c.channel, 'day', c.day, 'subs', c.subs, 'videos', c.videos)
+                                   order by c.channel, c.day)
+                   from lelons.channel_stats c
+                   where c.day > (now() at time zone 'utc')::date - least(greatest(coalesce(days, 90), 1), 3650)), '[]'::json);
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -850,7 +887,8 @@ begin
     'lelons_chat_send(text, text, text, uuid, text, text, real)', 'lelons_chat_list(text, bigint, text)',
     'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
     'lelons_home(text)', 'lelons_set_channels(text, text[])',
-    'lelons_edit_sound(text, uuid, text, text)'] loop
+    'lelons_edit_sound(text, uuid, text, text)', 'lelons_channel_log(text, text, bigint, int)',
+    'lelons_channel_history(text, int)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

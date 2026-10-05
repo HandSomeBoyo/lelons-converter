@@ -12,7 +12,9 @@ import downloader
 
 REFRESH = 5 * 60  # seconds between looks at the channel
 RETRY = 60  # after it didn't work
-UPLOADS = 3  # newest uploads shown
+UPLOADS = 3  # newest uploads shown on Home
+VIDEOS = 30  # newest videos looked at for the stats (one page of the channel)
+on_update = None  # called with (url, info) after each new look, to remember the numbers
 
 _lock = threading.Lock()
 _cache = {}  # channel url -> {"at": time, "info": {...} or None, "error": "", "busy": bool}
@@ -37,13 +39,13 @@ def _fetch(url):
     """Look at the channel's Videos page: its name, subscribers and newest uploads."""
     import yt_dlp
 
-    options = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist", "playlistend": UPLOADS,
+    options = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist", "playlistend": VIDEOS,
                "socket_timeout": 20, "js_runtimes": downloader._js_runtimes(),
                "extractor_args": {"youtubetab": {"approximate_date": ["true"]}}}
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url + "/videos", download=False)
         uploads = []
-        for entry in list(info.get("entries") or [])[:UPLOADS]:
+        for entry in list(info.get("entries") or [])[:VIDEOS]:
             if not entry.get("id"):
                 continue
             uploads.append({
@@ -70,7 +72,8 @@ def _fetch(url):
         "handle": info.get("uploader_id") or "",
         "avatar": _avatar(info),
         "subscribers": info.get("channel_follower_count"),
-        "uploads": uploads,
+        "uploads": uploads[:UPLOADS],
+        "videos": uploads,
     }
 
 
@@ -85,6 +88,11 @@ def _refresh(url):
         if info:
             entry["info"] = info
             entry["checked"] = time.time()
+    if info and on_update:
+        try:
+            on_update(url, info)
+        except Exception:
+            pass  # only for the stats
 
 
 def channel(url):

@@ -83,6 +83,14 @@ them all up and lists them like a playlist, so you can convert them together.
 counters and their newest uploads, who's online, the newest Library sounds, the
 latest chat messages, your own stats and your recent downloads. Paste a link there
 to convert it right away. The Owner can change the channels with "Change channels".
+"See stats" opens charts of each channel's subscriber growth (7 days, 30 days or all
+time), a leaderboard, the most watched recent videos and uploads per channel. Logged-in
+apps write each channel's subscribers to Supabase once a day (lelons.channel_stats),
+so the history fills in over time.
+
+**Find sounds** (in the Library) searches free sound effects (Openverse: Freesound and
+others, Creative Commons) and meme sounds (Myinstants). Listen, download as MP3, or
+"Add to Library", which opens the upload window with the sound ready.
 
 **How to use** (at the bottom) plays a short animated tour of the app. It opens
 by itself the first time. The Voice button reads it out loud with Windows' own voice.

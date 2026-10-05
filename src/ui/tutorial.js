@@ -124,6 +124,7 @@ function tourShowing() { return !$("tourModal").hidden; }
 
 function openTour(auto = false) {
   tourShownNow = tourShownNow || auto;
+  $("tourStage").replaceChildren(); // start clean
   $("tourModal").hidden = false;
   if (!loadPref("tourSeen")) savePref("tourSeen", true);
   showScene(0);
@@ -133,6 +134,7 @@ function closeTour() {
   clearTimeout(tourTimer);
   stopSpeaking();
   $("tourModal").hidden = true;
+  setTimeout(() => { if (!tourShowing()) $("tourStage").replaceChildren(); }, 400);
 }
 
 function drawTourBars() {
@@ -157,8 +159,9 @@ function showScene(i) {
   const el = document.createElement("div");
   el.className = "t-scene ts-" + scene.key;
   el.innerHTML = scene.html;
-  const old = stage.firstElementChild;
-  if (old) {
+  // Every scene still there slides out (clicking fast can leave more than one).
+  for (const old of [...stage.children]) {
+    if (old.classList.contains("t-out")) continue;
     old.classList.add("t-out");
     setTimeout(() => old.remove(), 400);
   }

@@ -29,6 +29,7 @@ YT_DLP_VERSION = updater.use_newest_yt_dlp()
 import clips  # noqa: E402
 import downloader  # noqa: E402
 import files  # noqa: E402
+import findsounds  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -305,6 +306,37 @@ def home_page():
         "stats": history.stats(),
         "recent": recent,
     }
+
+
+def stats_page(days):
+    """The channels with their newest videos, and (logged in) each one's subscribers day by day."""
+    try:
+        days = max(2, min(3650, int(days or 30)))
+    except (TypeError, ValueError):
+        days = 30
+    links = None
+    history, error, logged_in = [], "", False
+    if sfx.configured():
+        try:
+            links = sfx.library.home().get("channels")
+            history = sfx.library.channel_history(days)
+            logged_in = True
+        except sfx.LoggedOut:
+            pass
+        except sfx.Error as e:
+            error = str(e)
+    links = links or version_channels()
+    days_of = {}
+    for row in history:
+        days_of.setdefault(row["channel"], []).append([row["day"], row["subs"]])
+    channels = []
+    for url in links:
+        found = home.channel(url)
+        info = found["info"] or {}
+        channels.append({"url": url, "name": info.get("name") or url.rsplit("/", 1)[-1], "avatar": info.get("avatar") or "",
+                         "subscribers": info.get("subscribers"), "videos": info.get("videos") or info.get("uploads") or [],
+                         "loading": found["loading"], "history": days_of.get(url, [])})
+    return {"ok": True, "channels": channels, "days": days, "loggedIn": logged_in, "error": error}
 
 
 def version_channels():
@@ -716,6 +748,22 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/history-remove":
             history.remove(str(data.get("id")))
             self.send_json({"ok": True})
+        elif self.path in ("/api/find-search", "/api/find-add", "/api/find-save"):  # Find sounds in the Library
+            try:
+                if self.path == "/api/find-search":
+                    result = findsounds.search(data.get("query"), data.get("source"), data.get("page") or 1)
+                elif self.path == "/api/find-add":
+                    result = {"file": findsounds.add_to_library(data.get("id"))}
+                else:
+                    path = findsounds.save(data.get("id"), save_folder(data))
+                    result = {"path": path, "fileName": os.path.basename(path)}
+            except (findsounds.Error, sfx.Error) as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except Exception:
+                return self.send_json({"ok": False, "error": "That didn't work. Try another sound."})
+            self.send_json({"ok": True, **result})
+        elif self.path == "/api/stats":  # the channel stats page
+            self.send_json(stats_page(data.get("days")))
         elif self.path == "/api/home":
             self.send_json(home_page())
         elif self.path == "/api/home-channels":  # the owner changes the channels on everyone's Home page
@@ -1058,6 +1106,7 @@ def main():
     appwindow.set_dark(state.theme != "light")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     sfx.presence.start()
+    home.on_update = sfx.library.log_channel
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
     start_background(warm_up)
     if state.auto_update:

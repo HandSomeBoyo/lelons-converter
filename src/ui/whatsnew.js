@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.26.0", items: [
+    "Find sounds: search free sound effects and meme sounds right from the Library. Listen, download, or add them to the Library in one click.",
+    "Channel stats: click \"See stats\" on Home for charts of how our channels are growing, a leaderboard and the most watched videos.",
+    "Fixed the tour playing scenes on top of each other when you watched it again.",
+  ] },
   { version: "1.25.0", items: [
     "A new animated tour that shows how to use the app. Watch it again any time with \"How to use\" at the bottom.",
     "Turn on \"Voice\" in the tour and it reads itself out loud.",

@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -230,6 +231,7 @@ class Library:
         self.drag_lock = threading.Lock()
         self.drag_locks = {}  # one per sound being fetched for dragging
         self.saved = set()  # files downloaded from the library (allowed for "show in folder")
+        self.channel_logged = {}  # channel url -> ((url, subs), when): what the stats last got
 
     # ---- who you are
 
@@ -428,6 +430,23 @@ class Library:
                        for row in result.get("sounds") or []],
             "chat": [{**m, "avatarUrl": pictured(m.get("avatar"))} for m in result.get("chat") or []],
         }
+
+    def log_channel(self, url, info):
+        """Remember a channel's subscribers for today (the stats page), at most once an hour unless they changed."""
+        token = settings.load().get("library_token")
+        subs = info.get("subscribers")
+        if not token or not configured() or subs is None:
+            return
+        key = (url, subs)
+        with self.lock:
+            last = self.channel_logged.get(url)
+            if last and last[0] == key and time.time() - last[1] < 3600:
+                return
+            self.channel_logged[url] = (key, time.time())
+        _rpc("lelons_channel_log", token=token, channel=url, subs=int(subs), videos=None)
+
+    def channel_history(self, days):
+        return _rpc("lelons_channel_history", token=self._token(), days=int(days)) or []
 
     def set_channels(self, urls):
         result = _rpc("lelons_set_channels", token=self._token(), urls=list(urls))

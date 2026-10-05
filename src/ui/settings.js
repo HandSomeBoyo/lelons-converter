@@ -131,6 +131,7 @@ async function refreshPage() {
   const tab = (document.querySelector("#tabs button.active") || {}).dataset?.tab;
   const work = [refresh(), loadAccount()];
   if (!$("homeTab").hidden) work.push(loadHome());
+  if (!$("statsTab").hidden) work.push(loadStats());
   if (tab === "sfx" && sfxUser()) { sfxLastLoad = 0; work.push(loadSfx()); }
   if (tab === "history") work.push(loadHistory());
   if (!$("accountTab").hidden && typeof openAccount === "function") openAccount();
