@@ -130,13 +130,14 @@ def _download(found_id):
                 if total > MAX_BYTES:
                     raise Error("That sound is too big.")
                 out.write(chunk)
-    except Error:
-        os.remove(path)
-        raise
-    except (urllib.error.URLError, OSError, ValueError):
+    except BaseException as e:
         if os.path.exists(path):
             os.remove(path)
-        raise Error("Couldn't download that sound. Check your internet connection.") from None
+        if isinstance(e, Error):
+            raise
+        if isinstance(e, Exception):  # a dropped connection, a bad answer...
+            raise Error("Couldn't download that sound. Check your internet connection.") from None
+        raise
     return path, found["title"]
 
 

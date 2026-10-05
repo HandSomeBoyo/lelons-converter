@@ -221,7 +221,14 @@ async function loadSfx() {
   const res = await api("/api/sfx-list", {}).catch(() => ({ ok: false, error: "Couldn't load the sounds." }));
   sfxLoading = false;
   if (res.ok) {
-    sfxSounds = res.sounds;
+    // The same sound keeps the same object, so its row (and what's playing on it) is kept.
+    const old = new Map(sfxSounds.map((x) => [x.id, x]));
+    sfxSounds = res.sounds.map((x) => {
+      const was = old.get(x.id);
+      if (!was) return x;
+      for (const key of Object.keys(was)) if (!(key in x)) delete was[key];
+      return Object.assign(was, x);
+    });
     sfxError = "";
   } else if (sfxLoggedOut(res)) {
     return;
@@ -240,11 +247,17 @@ sfxSort = loadPref("sfxSort") || sfxSort;
 $("sfxSort").value = sfxSort;
 if (!$("sfxSort").value) $("sfxSort").value = sfxSort = "favorites";
 
-function sideButton(label, count, active, onclick, extraClass = "") {
-  const b = document.createElement("button");
-  b.type = "button";
+// Side buttons are kept (by what they pick) and only updated, so clicking one never rebuilds the list it's in.
+const sfxSideButtons = new Map();
+function sideButton(label, count, active, onclick, extraClass = "", key = extraClass + "|" + label) {
+  let b = sfxSideButtons.get(key);
+  if (!b) {
+    b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = '<span class="side-label"></span><span class="count"></span>';
+    sfxSideButtons.set(key, b);
+  }
   b.className = "side-item " + extraClass + (active ? " active" : "");
-  b.innerHTML = '<span class="side-label"></span><span class="count"></span>';
   b.querySelector(".side-label").textContent = label;
   b.querySelector(".count").textContent = count;
   b.onclick = () => { onclick(); sfxLimit = 200; drawSfx(); };
@@ -262,20 +275,27 @@ function drawSfxSide() {
     people.set(s.uploader, who);
   }
   const pick = (value) => () => { sfxCategory = value; };
-  $("sfxBrowse").replaceChildren(
+  setChildren($("sfxBrowse"), [
     sideButton("All sounds", counts.all, sfxCategory === "all", pick("all"), "side-all"),
-    sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip"));
+    sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip")]);
   setChildren($("sfxCats"), Object.entries(sfxAccount.categories).map(([value, label]) =>
     sideButton(label, counts[value] || 0, sfxCategory === value, pick(value), "cat-" + value)));
   if (sfxUploader && sfxSounds.length && !people.has(sfxUploader)) sfxUploader = "";
   const names = [...people.keys()].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" }));
-  $("sfxPeople").replaceChildren(
-    sideButton("Everyone", counts.all, !sfxUploader, () => { sfxUploader = ""; }),
+  setChildren($("sfxPeople"), [
+    sideButton("Everyone", counts.all, !sfxUploader, () => { sfxUploader = ""; }, "", "everyone"),
     ...names.map((name) => {
-      const b = sideButton(name, people.get(name).count, sfxUploader === name, () => { sfxUploader = sfxUploader === name ? "" : name; });
-      b.prepend(avatarEl(people.get(name).avatar, name, "tiny"));
+      const b = sideButton(name, people.get(name).count, sfxUploader === name, () => { sfxUploader = sfxUploader === name ? "" : name; },
+        "", "person|" + name);
+      const avatar = people.get(name).avatar || "";
+      if (!b._face || b.dataset.avatar !== avatar) {
+        b.dataset.avatar = avatar;
+        if (b._face) b._face.remove();
+        b._face = avatarEl(avatar, name, "tiny");
+        b.prepend(b._face);
+      }
       return b;
-    }));
+    })]);
 }
 
 const SORTS = {
@@ -296,6 +316,7 @@ $("sfxSort").addEventListener("change", () => {
 
 // Rows are kept and only made again when something on them changed, so typing in the search stays quick.
 const sfxRows = new Map(); // id -> {el, sig}
+const sfxDownloading = new Set(); // ids being downloaded (a second click does nothing)
 
 function rowFor(sound) {
   const note = sfxNotes.get(sound.id);
@@ -462,14 +483,17 @@ function sfxRow(sound) {
   star.classList.add("star");
   star.classList.toggle("on", !!sound.favorite);
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
-  add(SFX_ICONS.download, "Download as MP3", async (b) => {
-    const folder = await whereToSave();
-    if (!folder) return;
-    b.disabled = true;
+  add(SFX_ICONS.download, "Download as MP3", async () => {
+    if (sfxDownloading.has(sound.id)) return;
+    sfxDownloading.add(sound.id);
+    const folder = await whereToSave().finally(() => sfxDownloading.delete(sound.id));
+    if (!folder || sfxDownloading.has(sound.id)) return;
+    sfxDownloading.add(sound.id);
     sfxNotes.set(sound.id, { text: "Downloading...", kind: "" });
     drawSfx();
     const res = await api("/api/sfx-download", { url: sound.url, name: sound.name, folder })
-      .catch(() => ({ ok: false, error: "Couldn't download that sound." }));
+      .catch(() => ({ ok: false, error: "Couldn't download that sound." }))
+      .finally(() => sfxDownloading.delete(sound.id));
     sfxNotes.set(sound.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path }
       : { text: res.error, kind: "bad" });
     drawSfx();
@@ -529,7 +553,9 @@ function playSfx(sound, from = null) {
   } else {
     start();
   }
-  sfxAudio.play().catch(() => {
+  sfxAudio.play().catch((e) => {
+    // Another sound was clicked before this one started: not an error.
+    if (e && e.name === "AbortError" || sfxPlaying !== sound.id) return;
     sfxNotes.set(sound.id, { text: "Couldn't play it. Check your internet connection.", kind: "bad" });
     stopSfx();
   });
@@ -542,6 +568,7 @@ function stopSfx() {
 }
 
 sfxAudio.addEventListener("ended", stopSfx);
+registerPlayer(sfxAudio, stopSfx);
 sfxAudio.addEventListener("timeupdate", () => {
   const row = sfxPlaying && $("sfxList").querySelector(`[data-id="${sfxPlaying}"]`);
   if (!row || !sfxAudio.duration) return;
@@ -730,6 +757,7 @@ $("sfxSend").addEventListener("click", async () => {
 // Uploads in progress, from the app's state (called by app.js a few times a second).
 let sfxDoneSeen = new Set();
 let sfxUploadsDrawn = "";
+const sfxStrips = new Map(); // upload id -> its strip
 function renderSfxUploads(list) {
   list = list || [];
   // Unchanged since last time: leave it be (rebuilding it every moment can swallow a click).
@@ -738,25 +766,33 @@ function renderSfxUploads(list) {
   sfxUploadsDrawn = sig;
   const box = $("sfxUploads");
   setChildren(box, list.map((item) => {
-    const el = document.createElement("div");
+    let el = sfxStrips.get(item.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.innerHTML = `<div class="up-text"><b></b><span></span></div><div class="bar"><div></div></div>`;
+      sfxStrips.set(item.id, el);
+    }
     el.className = "upload-strip " + item.status;
-    el.innerHTML = `<div class="up-text"><b></b><span></span></div><div class="bar"><div></div></div>`;
     el.querySelector("b").textContent = item.name;
     el.querySelector("span").textContent = item.message;
     const bar = el.querySelector(".bar");
     bar.hidden = item.status !== "uploading";
     bar.classList.toggle("indeterminate", !item.progress || item.progress >= 100);
     bar.firstElementChild.style.width = item.progress && item.progress < 100 ? item.progress + "%" : "";
-    if (item.status !== "uploading") {
-      const b = document.createElement("button");
-      b.className = "icon-button";
-      b.title = "Hide";
-      b.innerHTML = ICONS.remove;
-      b.onclick = () => api("/api/sfx-forget", { id: item.id });
-      el.querySelector(".up-text").append(b);
+    let hide = el.querySelector(".up-text .icon-button");
+    if (item.status !== "uploading" && !hide) {
+      hide = document.createElement("button");
+      hide.className = "icon-button";
+      hide.title = "Hide";
+      hide.innerHTML = ICONS.remove;
+      hide.onclick = () => api("/api/sfx-forget", { id: item.id });
+      el.querySelector(".up-text").append(hide);
+    } else if (item.status === "uploading" && hide) {
+      hide.remove();
     }
     return el;
   }));
+  for (const id of sfxStrips.keys()) if (!list.some((item) => item.id === id)) sfxStrips.delete(id);
   // A sound finished uploading: show it in the list.
   const done = list.filter((i) => i.status === "done").map((i) => i.id);
   if (done.some((id) => !sfxDoneSeen.has(id)) && sfxUser()) loadSfx();

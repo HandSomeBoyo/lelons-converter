@@ -7,10 +7,17 @@
 let statsDays = 30;
 let statsData = null;
 let statsTimer = null;
+let statsDrawn = "";
+let statsDrawnDays = 0;
 const STATS_COLORS = ["var(--accent)", "#5ab8ff", "#ff7aa8", "#7ee08a", "#c69bff", "#ff9f5a"];
 const DAY_MS = 24 * 3600 * 1000;
 
-function openStats() { loadStats(); }
+function openStats() {
+  statsDrawnDays = 0; // opening the page plays the animations again
+  statsDrawn = "";
+  loadStats();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("statsTab").hidden) loadStats(); });
 
 async function loadStats() {
   clearTimeout(statsTimer);
@@ -19,8 +26,16 @@ async function loadStats() {
   try {
     const res = await api("/api/stats", { days });
     if (res.ok && days === statsDays) {
-      statsData = res;
-      drawStatsPage();
+      // Nothing new: leave the page alone (redrawing would replay the animations and hide the
+      // tooltip you're reading). New numbers: update without the animations, unless the range changed.
+      const sig = JSON.stringify(res);
+      if (sig !== statsDrawn) {
+        $("statsTab").classList.toggle("stats-calm", statsDrawnDays === days);
+        statsDrawn = sig;
+        statsDrawnDays = days;
+        statsData = res;
+        drawStatsPage();
+      }
     }
   } catch (e) { /* the app is closing */ }
   const waiting = statsData && statsData.channels.some((c) => c.loading);

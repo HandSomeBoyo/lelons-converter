@@ -1,6 +1,7 @@
 // The History tab: everything downloaded in the Video tab, to find or get again.
 // Uses $, api(), refresh(), ICONS from app.js and showTab() from images.js.
 
+const historyEls = new Map(); // item id -> {el, sig}, so typing in the search doesn't rebuild every row
 let historyItems = [];
 let historyVersion = -1;
 let historyLoading = false;
@@ -64,7 +65,8 @@ function historyRow(item) {
     const folder = await whereToSave();
     if (!folder) return;
     again.disabled = true;
-    const res = await api("/api/history-again", { id: item.id, folder });
+    const res = await api("/api/history-again", { id: item.id, folder }).catch(() => ({ ok: false }));
+    again.disabled = false;
     if (res.ok) {
       showTab("video");
       refresh();
@@ -97,7 +99,9 @@ function drawHistory() {
     return words.every((w) => text.includes(w));
   });
   const list = $("historyList");
-  setChildren(list, shown.slice(0, 300).map(historyRow));
+  const rows = shown.slice(0, 300);
+  setChildren(list, rows.map((item) => keptNode(historyEls, item.id, JSON.stringify([item, whenText(item.date)]), () => historyRow(item))));
+  forgetNodes(historyEls, historyItems.map((item) => item.id));
   $("historyClear").hidden = !historyItems.length;
   $("historyEmpty").hidden = shown.length > 0;
   $("historyEmpty").textContent = historyItems.length

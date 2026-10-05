@@ -308,6 +308,9 @@ def home_page():
     }
 
 
+_stats_cache = {}
+
+
 def stats_page(days):
     """The channels with their newest videos, and (logged in) each one's subscribers day by day."""
     try:
@@ -316,11 +319,18 @@ def stats_page(days):
         days = 30
     links = None
     history, error, logged_in = [], "", False
-    if sfx.configured():
+    # The history only changes once a day, so it's asked for at most once a minute (the page polls).
+    key = (days, settings.load().get("library_token") or "")
+    cached = _stats_cache.get(key)
+    if cached and time.time() - cached[0] < 60:
+        links, history, logged_in = cached[1:]
+    elif sfx.configured():
         try:
             links = sfx.library.home().get("channels")
             history = sfx.library.channel_history(days)
             logged_in = True
+            _stats_cache.clear()
+            _stats_cache[key] = (time.time(), links, history, logged_in)
         except sfx.LoggedOut:
             pass
         except sfx.Error as e:

@@ -15,10 +15,15 @@ let appVolume = (() => {
 function volumeLevel() { return appVolume * appVolume; }
 
 const playedMedia = new Set();
+// The app's sound players (Library, Find, Home, chat, profiles), each with how to stop it. Starting
+// any sound stops the others, so two never play at once.
+const appPlayers = new Map(); // audio -> stop()
+function registerPlayer(audio, stop) { appPlayers.set(audio, stop); }
 const realPlay = HTMLMediaElement.prototype.play;
 HTMLMediaElement.prototype.play = function (...args) {
   this.volume = volumeLevel();
   playedMedia.add(this);
+  for (const [audio, stop] of appPlayers) if (audio !== this && !audio.paused) stop();
   return realPlay.apply(this, args);
 };
 

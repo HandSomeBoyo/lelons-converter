@@ -16,6 +16,7 @@ let findAsked = 0; // so an old answer can't replace a newer one
 const findNotes = new Map(); // id -> {text, kind, path}
 const findAudio = new Audio();
 findAudio.addEventListener("ended", () => { findPlaying = null; drawFind(); });
+registerPlayer(findAudio, () => { findAudio.pause(); findPlaying = null; drawFind(); });
 findAudio.addEventListener("error", () => {
   if (!findPlaying) return;
   findNotes.set(findPlaying, { text: "Couldn't play this one.", kind: "bad" });
@@ -38,6 +39,8 @@ function closeFind() {
 async function runFind(more = false) {
   const query = $("findInput").value.trim();
   if (query.length < 2) {
+    findAsked++; // an answer still on its way is for words that are gone now
+    findBusy = false;
     findResults = []; findMore = false; findError = ""; findQuery = "";
     return drawFind();
   }
@@ -99,12 +102,16 @@ function findRow(r, i) {
       }
       drawFind();
     };
-    row.querySelector(".icon-button").onclick = async () => {
-      const folder = await whereToSave();
-      if (!folder) return;
+    const save = row.querySelector(".icon-button");
+    save.onclick = async () => {
+      if (save.disabled) return;
+      save.disabled = true;
+      const folder = await whereToSave().catch(() => "");
+      if (!folder) { save.disabled = false; return; }
       findNotes.set(r.id, { text: "Downloading...", kind: "" });
       drawFind();
       const res = await api("/api/find-save", { id: r.id, folder }).catch(() => ({ ok: false, error: "Couldn't download it." }));
+      save.disabled = false;
       findNotes.set(r.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path } : { text: res.error, kind: "bad" });
       drawFind();
     };
@@ -161,6 +168,7 @@ function drawFind() {
   list.classList.toggle("stale", findBusy && !findLoadingMore);
   setChildren(list, findResults.map(findRow));
   for (const id of findRows.keys()) if (!findResults.some((r) => r.id === id)) findRows.delete(id);
+  if (findPlaying && !findRows.has(findPlaying)) { findAudio.pause(); findPlaying = null; }
   $("findMore").hidden = !findMore || !findResults.length;
   $("findMore").disabled = findBusy;
   $("findMore").textContent = findBusy && findLoadingMore ? "Loading..." : "Show more";

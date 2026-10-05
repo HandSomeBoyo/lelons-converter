@@ -8,6 +8,9 @@ let homeTimer = null;
 let homePlaying = null;
 const homeAudio = new Audio();
 homeAudio.addEventListener("ended", () => { homePlaying = null; drawHomeSounds(); });
+registerPlayer(homeAudio, () => { homeAudio.pause(); homePlaying = null; drawHomeSounds(); });
+const homeCards = new Map(); // video id -> {el, sig}
+const homeEls = new Map(); // people, sounds, chat and recent files on Home -> {el, sig}
 const homeNumbers = new Map(); // channel url -> the subscriber number shown, so it rolls to the new one
 
 function homeVisible() { return !$("homeTab").hidden && !document.hidden; }
@@ -73,6 +76,7 @@ function rollNumber(el, value) {
 function drawHome() {
   const d = homeData;
   if (!d) return;
+  if (homeEls.size > 200) homeEls.clear();
   const user = sfxUser();
   $("homeHello").textContent = user ? `Hey ${user.username}.` : "Hey there.";
   drawChannels();
@@ -141,7 +145,8 @@ function drawUploads() {
   const top = all.slice(0, 3);
   $("homeUploadsHead").hidden = !top.length;
   const box = $("homeUploads");
-  setChildren(box, top.map((u, i) => {
+  // Cards that didn't change are kept, so they don't fade in again every half a minute.
+  setChildren(box, top.map((u, i) => keptNode(homeCards, u.id, JSON.stringify([u, i === 0]), () => {
     const el = document.createElement("div");
     el.className = "upload-card" + (i === 0 ? " hero" : "");
     el.innerHTML = `<div class="upload-thumb"><img alt="" loading="lazy"><span class="upload-length"></span></div>
@@ -158,7 +163,8 @@ function drawUploads() {
     el.querySelector(".upload-watch").onclick = () => api("/api/open-youtube", { url: u.url });
     el.querySelector(".upload-convert").onclick = () => homeConvert(u.url, false);
     return el;
-  }));
+  })));
+  forgetNodes(homeCards, top.map((u) => u.id));
 }
 
 function drawCrew() {
@@ -171,7 +177,7 @@ function drawCrew() {
   const people = online.people || [];
   const others = Math.max(0, (online.online || 0) - people.length);
   $("homeOnlineCount").textContent = online.online ? `${online.online} online` : "Nobody online";
-  setChildren($("homeOnline"), people.map((p) => {
+  setChildren($("homeOnline"), people.map((p) => keptNode(homeEls, "p" + p.username, JSON.stringify(p), () => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "home-person";
@@ -179,7 +185,7 @@ function drawCrew() {
     b.append(avatarEl(p.avatarUrl, p.username, "big"), Object.assign(document.createElement("span"), { textContent: p.username }));
     b.onclick = () => openProfile(p.username);
     return b;
-  }));
+  })));
   $("homeOnlineMore").hidden = !others;
   $("homeOnlineMore").textContent = others === 1 ? "+ 1 person not logged in" : `+ ${others} people not logged in`;
 }
@@ -188,7 +194,7 @@ function drawHomeSounds() {
   const d = homeData;
   if (!d || !d.loggedIn) return;
   $("homeSoundsEmpty").hidden = d.sounds.length > 0;
-  setChildren($("homeSounds"), d.sounds.map((s) => {
+  setChildren($("homeSounds"), d.sounds.map((s) => keptNode(homeEls, "s" + s.id, JSON.stringify([s, homePlaying === s.id]), () => {
     const row = document.createElement("div");
     row.className = "chat-sound" + (homePlaying === s.id ? " playing" : "");
     setDrag(row, { kind: "sound", url: s.url, name: s.name });
@@ -217,14 +223,14 @@ function drawHomeSounds() {
     info.append(title, sub);
     row.append(play, info);
     return row;
-  }));
+  })));
 }
 
 function drawHomeChat() {
   const d = homeData;
   if (!d || !d.loggedIn) return;
   $("homeChatEmpty").hidden = d.chat.length > 0;
-  setChildren($("homeChat"), d.chat.map((m) => {
+  setChildren($("homeChat"), d.chat.map((m) => keptNode(homeEls, "m" + m.id, JSON.stringify(m), () => {
     const row = document.createElement("div");
     row.className = "home-chat-msg";
     const text = document.createElement("div");
@@ -234,11 +240,14 @@ function drawHomeChat() {
     row.append(avatarEl(m.avatarUrl, m.username, "tiny"), text,
       Object.assign(document.createElement("small"), { textContent: sfxAgo(m.created_at) }));
     return row;
-  }));
+  })));
 }
 
+let homeStatsDrawn = "";
 function drawStats() {
   const s = homeData.stats;
+  if (JSON.stringify(s) === homeStatsDrawn) return;
+  homeStatsDrawn = JSON.stringify(s);
   const minutes = Math.round(s.seconds / 60);
   const boxes = [
     [s.files.toLocaleString(), s.files === 1 ? "file converted" : "files converted"],
@@ -256,7 +265,7 @@ function drawStats() {
 function drawRecent() {
   const items = homeData.recent;
   $("homeRecentEmpty").hidden = items.length > 0;
-  setChildren($("homeRecent"), items.map((item) => {
+  setChildren($("homeRecent"), items.map((item) => keptNode(homeEls, "r" + item.id, JSON.stringify(item), () => {
     const row = document.createElement("div");
     row.className = "home-file";
     setDrag(row, { kind: "history", id: item.id });
@@ -278,7 +287,7 @@ function drawRecent() {
     folder.onclick = () => api("/api/history-show", { id: item.id });
     row.append(thumb, info, folder);
     return row;
-  }));
+  })));
 }
 
 // ---- the quick paste box: one link converts right away, several open in the Video tab to pick from

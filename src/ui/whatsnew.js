@@ -2,6 +2,15 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.26.1", items: [
+    "Playing a sound in the Library no longer jumps you back to the top. The same fix is in every list in the app.",
+    "Find sounds doesn't flicker anymore while you type or play sounds.",
+    "Only one sound plays at a time now. Starting a new one stops the other.",
+    "Clicking two sounds quickly no longer shows a wrong \"check your internet\" message.",
+    "Home, History, the chat and Stats update without everything fading in again, so clicks don't get lost.",
+    "Double-clicking Convert or Download only starts it once.",
+    "Stats loads faster and keeps updating after you minimize the app.",
+  ] },
   { version: "1.26.0", items: [
     "Find sounds: search free sound effects and meme sounds right from the Library. Listen, download, or add them to the Library in one click.",
     "Channel stats: click \"See stats\" on Home for charts of how our channels are growing, a leaderboard and the most watched videos.",

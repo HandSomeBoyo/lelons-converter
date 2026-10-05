@@ -694,6 +694,7 @@ window.addEventListener("resize", () => { if (!$("trimModal").hidden) drawWave()
 
 // ---- adding to the queue
 
+let convertBusy = false;
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const url = $("url").value.trim();
@@ -702,14 +703,20 @@ $("form").addEventListener("submit", async (e) => {
   const part = trim && same ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
   const items = playlist && same ? playlist.entries.filter((entry) => picked.has(entry.url)) : null;
   if (items && !items.length) return;
-  const folder = await whereToSave();
-  if (!folder) return;
-  $("url").value = "";
-  hidePreview();
-  $("url").focus();
-  const res = items ? await api("/api/convert-many", { format, items, folder }) : await api("/api/convert", { url, format, folder, ...part });
-  $("notice").className = res.ok ? "notice" : "notice error";
-  $("notice").textContent = res.ok ? "" : res.error;
+  if (convertBusy) return; // a double click or double Enter starts it once
+  convertBusy = true;
+  try {
+    const folder = await whereToSave();
+    if (!folder) return;
+    $("url").value = "";
+    hidePreview();
+    $("url").focus();
+    const res = items ? await api("/api/convert-many", { format, items, folder }) : await api("/api/convert", { url, format, folder, ...part });
+    $("notice").className = res.ok ? "notice" : "notice error";
+    $("notice").textContent = res.ok ? "" : res.error;
+  } finally {
+    convertBusy = false;
+  }
   refresh();
 });
 

@@ -8,6 +8,7 @@ let profileShown = null;
 let profilePlaying = null;
 const profileAudio = new Audio();
 profileAudio.addEventListener("ended", () => { profilePlaying = null; drawProfileSounds(); });
+registerPlayer(profileAudio, () => { profileAudio.pause(); profilePlaying = null; drawProfileSounds(); });
 
 async function openProfile(username) {
   if (!username) return;

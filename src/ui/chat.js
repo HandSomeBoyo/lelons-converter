@@ -3,6 +3,7 @@
 // Uses $, api(), setDrag(), DRAG_HINT, ICONS, clock() from app.js, loadPref()/savePref() from theme.js,
 // and sfxUser(), avatarEl(), sfxLoggedOut(), openLogin(), closeMenu(), SFX_ICONS from sfx.js.
 
+const chatEls = new Map(); // message id (or "day ...") -> {el, sig}, see drawChat
 const REACTIONS = ["👍", "😂", "🔥", "❤️", "😮", "😢"];
 
 let chatWith = ""; // "" = the chat with everyone, else the username of a private chat
@@ -48,8 +49,13 @@ function personChip(person) {
   return el;
 }
 
+let onlineDrawn = "";
 function drawOnline() {
   const box = $("chatOnline");
+  // Only when who's online changed: rebuilding the chips every moment swallows clicks on them.
+  const sig = JSON.stringify(onlineInfo);
+  if (sig === onlineDrawn) return;
+  onlineDrawn = sig;
   if (!onlineInfo) return box.replaceChildren();
   const people = onlineInfo.people || [];
   const others = Math.max(0, onlineInfo.online - people.length);
@@ -163,8 +169,12 @@ function drawChatUser() {
 }
 
 // "Everyone" and your private chats, across the top of the panel.
+let convosDrawn = "";
 function drawConvos() {
   const box = $("chatConvos");
+  const sig = JSON.stringify([chatWith, chatMention, chatPrivate.map((p) => [p.username, p.avatarUrl, unreadIn(p.username)]), unreadIn("")]);
+  if (sig === convosDrawn) return;
+  convosDrawn = sig;
   const chip = (label, name, avatar) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -318,6 +328,7 @@ function stopChatAudio() {
   chatAudio.pause();
   if (chatPlaying !== null) { chatPlaying = null; drawChat(true); }
 }
+registerPlayer(chatAudio, stopChatAudio);
 
 function chatAttachment(m) {
   const sound = m.sound;
@@ -391,82 +402,91 @@ function drawChat(force) {
   const firstDraw = chatShown.with !== chatWith;
   const shownUpTo = firstDraw ? Infinity : chatShown.id;
   chatShown = { with: chatWith, id: Math.max(...chatMessages.map((m) => m.id)) };
+  const keys = [];
   for (const m of chatMessages) {
     const day = new Date(m.created_at).toDateString();
     if (!last || new Date(last.created_at).toDateString() !== day) {
-      const d = document.createElement("div");
-      d.className = "chat-day";
-      d.textContent = day === new Date().toDateString() ? "Today"
+      const dayText = day === new Date().toDateString() ? "Today"
         : new Date(m.created_at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" });
-      rows.push(d);
+      keys.push("day " + day);
+      rows.push(keptNode(chatEls, "day " + day, dayText, () =>
+        Object.assign(document.createElement("div"), { className: "chat-day", textContent: dayText })));
     }
     // A message right after one from the same person (within 5 minutes) doesn't repeat the name.
     const follow = last && last.username === m.username && new Date(m.created_at) - new Date(last.created_at) < 300000
       && new Date(last.created_at).toDateString() === day;
-    const el = document.createElement("div");
-    el.className = "chat-msg" + (follow ? " follow" : "") + (!m.mine && mentionsMe(m.message) ? " mentions-me" : "")
-      + (m.id > shownUpTo ? " new" : "");
-    const face = avatarEl(m.avatarUrl, m.username);
-    face.title = "See " + m.username + "'s profile";
-    face.addEventListener("click", () => openProfile(m.username));
-    el.append(face);
-    const body = document.createElement("div");
-    body.className = "body";
-    if (!follow) {
-      const line = document.createElement("div");
-      line.className = "who-line";
-      const name = document.createElement("button");
-      name.type = "button";
-      name.className = "name role-" + m.role;
-      name.textContent = m.username;
-      name.title = "See " + m.username + "'s profile";
-      name.addEventListener("click", () => openProfile(m.username));
-      const when = document.createElement("span");
-      when.className = "when";
-      when.textContent = chatTime(m.created_at);
-      line.append(name, when);
-      body.append(line);
-    }
-    if (m.message) {
-      const text = chatText(m.message);
-      text.title = chatTime(m.created_at);
-      body.append(text);
-    }
-    if (m.sound || m.file || m.shared_gone) body.append(chatAttachment(m));
-    if ((m.reactions || []).length) body.append(reactionRow(m));
-    el.append(body);
-
-    // On hover: react, and delete (yours, or anyone's for the owner and admins).
-    const tools = document.createElement("div");
-    tools.className = "msg-tools";
-    const pick = document.createElement("div");
-    pick.className = "react-pick";
-    for (const emoji of REACTIONS) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = emoji;
-      b.title = "React with " + emoji;
-      const mine = (m.reactions || []).some((r) => r.emoji === emoji && r.mine);
-      b.addEventListener("click", () => react(m, emoji, !mine));
-      pick.append(b);
-    }
-    tools.append(pick);
-    if (m.mine || canDeleteAll) {
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "icon-button del" + (chatSure.has(m.id) ? " sure" : "");
-      del.title = chatSure.has(m.id) ? "Click again to delete" : "Delete";
-      del.innerHTML = ICONS.remove;
-      del.addEventListener("click", () => deleteChat(m.id));
-      tools.append(del);
-      if (chatSure.has(m.id)) el.classList.add("sure");
-    }
-    el.append(tools);
-    rows.push(el);
+    // Messages that didn't change keep their element (so a click or a text selection on one survives).
+    const sig = JSON.stringify([m, follow, chatPlaying === m.id, chatSure.has(m.id), canDeleteAll, me && me.username]);
+    keys.push(m.id);
+    rows.push(keptNode(chatEls, m.id, sig, () => chatMessageEl(m, follow, shownUpTo, canDeleteAll)));
     last = m;
   }
+  forgetNodes(chatEls, keys);
   setChildren(list, rows);
   if (atBottom || force === "bottom") list.scrollTop = list.scrollHeight;
+}
+
+function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
+  const el = document.createElement("div");
+  el.className = "chat-msg" + (follow ? " follow" : "") + (!m.mine && mentionsMe(m.message) ? " mentions-me" : "")
+    + (m.id > shownUpTo ? " new" : "");
+  const face = avatarEl(m.avatarUrl, m.username);
+  face.title = "See " + m.username + "'s profile";
+  face.addEventListener("click", () => openProfile(m.username));
+  el.append(face);
+  const body = document.createElement("div");
+  body.className = "body";
+  if (!follow) {
+    const line = document.createElement("div");
+    line.className = "who-line";
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "name role-" + m.role;
+    name.textContent = m.username;
+    name.title = "See " + m.username + "'s profile";
+    name.addEventListener("click", () => openProfile(m.username));
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = chatTime(m.created_at);
+    line.append(name, when);
+    body.append(line);
+  }
+  if (m.message) {
+    const text = chatText(m.message);
+    text.title = chatTime(m.created_at);
+    body.append(text);
+  }
+  if (m.sound || m.file || m.shared_gone) body.append(chatAttachment(m));
+  if ((m.reactions || []).length) body.append(reactionRow(m));
+  el.append(body);
+
+  // On hover: react, and delete (yours, or anyone's for the owner and admins).
+  const tools = document.createElement("div");
+  tools.className = "msg-tools";
+  const pick = document.createElement("div");
+  pick.className = "react-pick";
+  for (const emoji of REACTIONS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = emoji;
+    b.title = "React with " + emoji;
+    const mine = (m.reactions || []).some((r) => r.emoji === emoji && r.mine);
+    b.addEventListener("click", () => react(m, emoji, !mine));
+    pick.append(b);
+  }
+  tools.append(pick);
+  if (m.mine || canDeleteAll) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "icon-button del" + (chatSure.has(m.id) ? " sure" : "");
+    del.title = chatSure.has(m.id) ? "Click again to delete" : "Delete";
+    del.innerHTML = ICONS.remove;
+    del.addEventListener("click", () => deleteChat(m.id));
+    tools.append(del);
+    if (chatSure.has(m.id)) el.classList.add("sure");
+  }
+  el.append(tools);
+  return el;
 }
 
 async function react(m, emoji, on) {

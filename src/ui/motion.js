@@ -20,6 +20,20 @@ function setChildren(parent, nodes, ...more) {
   for (const child of [...parent.childNodes]) if (!keep.has(child)) child.remove();
 }
 
+// A cached element: the one made before for this key if what it shows (sig) is the same, else a
+// new one from make(). Lists that redraw often use it so unchanged rows aren't made again.
+function keptNode(cache, key, sig, make) {
+  const kept = cache.get(key);
+  if (kept && kept.sig === sig) return kept.el;
+  const el = make();
+  cache.set(key, { el, sig });
+  return el;
+}
+function forgetNodes(cache, keys) {
+  const keep = new Set(keys);
+  for (const key of cache.keys()) if (!keep.has(key)) cache.delete(key);
+}
+
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const LEAVE_MS = 220;
 

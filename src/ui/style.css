@@ -1644,3 +1644,8 @@ button.stats-bar:hover .stats-bar-track { background: var(--line2); }
 }
 .find-list { transition: opacity .25s var(--ease); }
 .find-list.stale { opacity: .45; }
+/* Stats updated in the background: show the new numbers without replaying the entrance */
+.stats-calm .stats-row, .stats-calm .stats-bar { animation: none; }
+.stats-calm .stats-lines path, .stats-calm .stats-spark path { animation: none; stroke-dashoffset: 0; }
+.stats-calm .stats-lines circle { animation: none; opacity: 1; }
+.stats-calm .stats-bar-fill { animation: none; transform: none; }
