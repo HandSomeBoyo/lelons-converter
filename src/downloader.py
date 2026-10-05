@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 import media
+import names
 
 NO_WINDOW = media.NO_WINDOW
 
@@ -30,7 +31,7 @@ def _js_runtimes():
     return {"deno": {"path": deno.find_deno_bin()}}
 
 
-def build_options(folder, fmt, quality, on_progress, trim=None):
+def build_options(folder, fmt, quality, on_progress, trim=None, mark=""):
     import imageio_ffmpeg
 
     name = "%(title)s"
@@ -38,7 +39,8 @@ def build_options(folder, fmt, quality, on_progress, trim=None):
         # Windows file names can't have ":", so 1:20 is written 1m20s
         name += " ({}-{})".format(*(f"{int(t) // 60}m{int(t) % 60:02d}s" for t in trim))
     options = {
-        "outtmpl": os.path.join(folder, name + ".%(ext)s"),
+        # mark: a temporary name while it's being made (see names.py)
+        "outtmpl": os.path.join(folder, name + mark + ".%(ext)s"),
         "noplaylist": True,
         "ffmpeg_location": imageio_ffmpeg.get_ffmpeg_exe(),
         "js_runtimes": _js_runtimes(),
@@ -147,6 +149,7 @@ def warm_up():
 
     gen_extractor_classes()  # yt-dlp checks every site it knows on each link
     imageio_ffmpeg.get_ffmpeg_exe()
+    media.gpu_encoder()  # find out now whether the graphics card can make videos
     yt_dlp.YoutubeDL({"quiet": True})
 
 
@@ -178,6 +181,16 @@ def fetch_info(url):
                            "extract_flat": "in_playlist", "playlistend": PLAYLIST_LIMIT,
                            "js_runtimes": _js_runtimes()}) as ydl:
         info = ydl.extract_info(url, download=False, process=False)
+        # Some links only point at the real page (a short link, a video in a
+        # playlist link): follow them, so the preview has the title and so on.
+        for _ in range(3):
+            if info.get("_type") not in ("url", "url_transparent") or not info.get("url"):
+                break
+            found = ydl.extract_info(info["url"], download=False, process=False, ie_key=info.get("ie_key"))
+            if info["_type"] == "url_transparent":
+                found = {**found, **{k: v for k, v in info.items()
+                                     if v is not None and k not in ("_type", "url", "ie_key", "id", "extractor", "extractor_key")}}
+            info = found
         if info.get("_type") in ("playlist", "multi_video"):
             # Only the list of videos; each one is looked up when it's its turn.
             info = ydl.process_ie_result(info, download=False)
@@ -273,15 +286,28 @@ def download(info, folder, fmt, quality, on_progress, trim=None, normalize=False
     song_info(info)
     from yt_dlp.postprocessor import EmbedThumbnailPP, FFmpegMetadataPP
 
-    with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim)) as ydl:
-        finish = _finish_step(ydl, fmt, quality, trim, normalize, on_progress)
-        if finish:
-            ydl.add_post_processor(finish)
-        if fmt != "gif":
-            # Title, artist and cover art go in last, so trimming can't drop them.
-            ydl.add_post_processor(FFmpegMetadataPP(ydl, add_metadata=True))
-            if fmt != "wav":
-                ydl.add_post_processor(EmbedThumbnailPP(ydl, already_have_thumbnail=False))
-        result = ydl.process_ie_result(info, download=True)
-    downloads = (result or {}).get("requested_downloads") or [{}]
-    return downloads[0].get("filepath") or ""
+    # Made under a temporary name, then renamed, so a file with the same name
+    # is never replaced (it becomes "name (2)" instead).
+    mark = names.new_mark()
+    os.makedirs(folder, exist_ok=True)
+    try:
+        with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim, mark)) as ydl:
+            finish = _finish_step(ydl, fmt, quality, trim, normalize, on_progress)
+            if finish:
+                ydl.add_post_processor(finish)
+            if fmt != "gif":
+                # Title, artist and cover art go in last, so trimming can't drop them.
+                ydl.add_post_processor(FFmpegMetadataPP(ydl, add_metadata=True))
+                if fmt != "wav":
+                    ydl.add_post_processor(EmbedThumbnailPP(ydl, already_have_thumbnail=False))
+            result = ydl.process_ie_result(info, download=True)
+        downloads = (result or {}).get("requested_downloads") or [{}]
+        path = downloads[0].get("filepath") or ""
+        if not path or not os.path.isfile(path):
+            raise OSError("The download didn't make a file.")
+        path = names.finish(path)
+    except BaseException:
+        names.remove_leftovers(folder, mark)
+        raise
+    names.remove_leftovers(folder, mark)  # a thumbnail that wasn't used, and so on
+    return path

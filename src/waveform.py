@@ -123,6 +123,11 @@ def _result(path, duration):
     }
 
 
+def busy():
+    """True while a trim editor's sound or video is being made."""
+    return _lock.locked()
+
+
 def file_path(name):
     """The file for a /media/ address, if the window is allowed to play it."""
     return os.path.join(FOLDER, name) if name in _files else None

@@ -14,6 +14,8 @@ import uuid
 
 from PIL import Image, ImageOps, ImageSequence
 
+import names
+
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter", "images")
 MAX_BYTES = 300 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 400_000_000  # big photos are fine, absurd ones aren't
@@ -158,15 +160,6 @@ def _without_alpha(frame):
     return frame.convert("L" if frame.mode in ("L", "1") else "RGB")
 
 
-def _free_name(folder, stem, ext):
-    path = os.path.join(folder, stem + ext)
-    n = 2
-    while os.path.exists(path):
-        path = os.path.join(folder, f"{stem} ({n}){ext}")
-        n += 1
-    return path
-
-
 def convert(image_id, options, folder):
     """Make the finished file in folder. Returns {"path", "name", "bytes", "width", "height"}."""
     with _lock:
@@ -221,9 +214,14 @@ def convert(image_id, options, folder):
 
     os.makedirs(folder, exist_ok=True)
     stem = os.path.splitext(os.path.basename(image["name"]))[0] or "image"
-    path = _free_name(folder, stem, ext)
-    first.save(path + ".part", pil_name, **save)
-    os.replace(path + ".part", path)
+    path = names.temp_path(folder, stem, ext)
+    try:
+        first.save(path, pil_name, **save)
+        path = names.finish(path)
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
     with _lock:
         _made.add(path)
     return {

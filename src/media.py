@@ -66,6 +66,77 @@ def run(args, seconds, on_progress=None):
         raise OSError(f"Converting didn't work. ({last.strip()[:200]})")
 
 
+# ---------------------------------------------------------------- graphics card
+
+# Video makers built into graphics cards: NVIDIA, Intel, AMD. Several times
+# faster than the normal (processor) way. Which one works is checked once.
+GPU_ENCODERS = ("h264_nvenc", "h264_qsv", "h264_amf")
+_gpu = None  # None: not checked yet, "": none works on this PC
+_gpu_lock = threading.Lock()
+
+
+def _gpu_pixels(name):
+    return "nv12" if name in ("h264_qsv", "h264_amf") else "yuv420p"
+
+
+def gpu_encoder():
+    """The graphics card's video maker if this PC has one that works, else ""."""
+    global _gpu
+    with _gpu_lock:
+        if _gpu is None:
+            _gpu = ""
+            for name in GPU_ENCODERS:
+                try:
+                    result = subprocess.run(
+                        [ffmpeg(), "-hide_banner", "-nostdin", "-f", "lavfi", "-i", "color=black:s=640x360:r=30:d=0.5",
+                         "-c:v", name, "-pix_fmt", _gpu_pixels(name), "-f", "null", "-"],
+                        capture_output=True, timeout=20, creationflags=NO_WINDOW)
+                except (OSError, subprocess.SubprocessError):
+                    continue
+                if result.returncode == 0:
+                    _gpu = name
+                    break
+        return _gpu
+
+
+def _gpu_failed():
+    global _gpu
+    with _gpu_lock:
+        _gpu = ""
+
+
+def video_codec(encoder, kbps=None):
+    """ffmpeg options for H.264 video. kbps: aim for that size; else just good quality."""
+    if kbps:
+        rate = ["-b:v", f"{kbps}k", "-maxrate", f"{int(kbps * 1.4)}k", "-bufsize", f"{kbps * 2}k"]
+    if encoder == "h264_nvenc":
+        quality = ["-rc", "vbr", "-cq", "23", "-b:v", "0"]
+        return ["-c:v", encoder, "-preset", "p5", *(["-rc", "vbr", *rate] if kbps else quality),
+                "-pix_fmt", "yuv420p", "-g", "60", "-bf", "2"]
+    if encoder == "h264_qsv":
+        return ["-c:v", encoder, "-preset", "medium", *(rate if kbps else ["-global_quality", "23"]),
+                "-pix_fmt", "nv12", "-g", "60"]
+    if encoder == "h264_amf":
+        quality = ["-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-qp_b", "24"]
+        return ["-c:v", encoder, "-quality", "balanced", *(["-rc", "vbr_peak", *rate] if kbps else quality),
+                "-pix_fmt", "nv12", "-g", "60"]
+    # The normal way, on the processor. A keyframe every 2 seconds makes skipping around in players quick.
+    return ["-c:v", "libx264", "-preset", "veryfast", *(rate if kbps else ["-crf", "20"]),
+            "-pix_fmt", "yuv420p", "-force_key_frames", "expr:gte(t,n_forced*2)"]
+
+
+def run_video(args_before_codec, args_after_codec, target, seconds, on_progress, kbps=None):
+    """Run an ffmpeg command that makes H.264 video, on the graphics card if it can."""
+    encoder = gpu_encoder()
+    try:
+        return run([*args_before_codec, *video_codec(encoder, kbps), *args_after_codec, target], seconds, on_progress)
+    except OSError:
+        if not encoder:
+            raise
+    _gpu_failed()  # the graphics card didn't manage it: use the processor from now on
+    run([*args_before_codec, *video_codec("", kbps), *args_after_codec, target], seconds, on_progress)
+
+
 def _part(trim):
     """ffmpeg options that keep only the trimmed part."""
     if not trim:
@@ -111,7 +182,6 @@ def convert_video(source, target, max_height=None, target_mb=None, trim=None, no
     length = length or (trim[1] - trim[0] if trim else info["duration"])
     height = info["height"] or 1080
     audio_kbps = 160
-    video = ["-crf", "20"]
     if target_mb:
         if not length:
             raise ValueError("Couldn't tell how long this video is, so it can't be made to fit a size.")
@@ -127,14 +197,10 @@ def convert_video(source, target, max_height=None, target_mb=None, trim=None, no
 
     def encode(video_kbps=None):
         scale = [] if height >= info["height"] else ["-vf", f"scale=-2:{height}"]
-        rate = (["-b:v", f"{video_kbps}k", "-maxrate", f"{int(video_kbps * 1.4)}k", "-bufsize", f"{video_kbps * 2}k"]
-                if video_kbps else video)
         sound = ["-c:a", "aac", "-b:a", f"{audio_kbps}k"] if audio_kbps or not target_mb else ["-an"]
         volume = ["-af", LOUDNORM, "-ar", "48000"] if normalize and info["audio"] else []
-        run([*_part(trim), "-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-dn", "-sn", "-map_metadata", "0",
-             *scale, "-c:v", "libx264", "-preset", "veryfast", *rate, "-pix_fmt", "yuv420p",
-             "-force_key_frames", "expr:gte(t,n_forced*2)", *volume, *sound,
-             "-movflags", "+faststart", target], length, on_progress)
+        run_video([*_part(trim), "-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-dn", "-sn", "-map_metadata", "0", *scale],
+                  [*volume, *sound, "-movflags", "+faststart"], target, length, on_progress, video_kbps)
 
     if not target_mb:
         return encode()

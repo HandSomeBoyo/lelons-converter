@@ -19,8 +19,10 @@ try {
 let serverFiles = []; // from the app's state
 const uploads = []; // files still being copied into the app, or that couldn't be opened
 const fileTrims = new Map(); // file id -> {start, end}
+let fileError = ""; // shown under the options until they're changed
 
 function saveFileOptions() {
+  fileError = "";
   try { localStorage.setItem("fileOptions", JSON.stringify(fileOptions)); } catch (e) { /* not important */ }
 }
 
@@ -30,24 +32,48 @@ async function addMediaFiles(list) {
   showTab("files");
   for (const file of list) {
     const upload = { key: "u" + Math.random(), name: file.name, status: "loading", message: `Opening... (${sizeText(file.size)})` };
+    upload.stop = new AbortController(); // the remove button stops the copying
     uploads.push(upload);
     drawFiles();
+    let res;
     try {
-      const res = await fetch("/api/file-add", {
-        method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name) }, body: file,
+      res = await fetch("/api/file-add", {
+        method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name) }, body: file, signal: upload.stop.signal,
       }).then((r) => r.json());
-      if (res.ok) {
-        uploads.splice(uploads.indexOf(upload), 1);
-        serverFiles.push(res.file);
-      } else {
-        Object.assign(upload, { status: "error", message: res.error });
-      }
     } catch (e) {
-      Object.assign(upload, { status: "error", message: "Couldn't open this file." });
+      res = { ok: false, error: "Couldn't open this file." };
+    }
+    const index = uploads.indexOf(upload);
+    if (index < 0) {
+      // removed while it was being copied
+      if (res.ok) api("/api/file-remove", { id: res.file.id });
+      continue;
+    }
+    if (res.ok) {
+      uploads.splice(index, 1);
+      serverFiles.push(res.file);
+    } else {
+      Object.assign(upload, { status: "error", message: res.error });
     }
     drawFiles();
   }
 }
+
+// "choose files" opens the Windows Open window, which lets the app read the
+// files where they are instead of copying them first. (Dropped files have to be copied.)
+let picking = false;
+$("fileDrop").addEventListener("click", async (e) => {
+  if (e.target === $("mediaFiles")) return;
+  e.preventDefault();
+  if (picking) return;
+  picking = true;
+  const res = await api("/api/files-pick", {}).catch(() => ({ ok: false, fallback: true }));
+  picking = false;
+  if (!res.ok) return res.fallback && $("mediaFiles").click();
+  for (const file of res.files) serverFiles.push(file);
+  for (const error of res.errors) uploads.push({ key: "u" + Math.random(), name: "", status: "error", message: error });
+  drawFiles();
+});
 
 $("mediaFiles").addEventListener("change", (e) => {
   addMediaFiles([...e.target.files]);
@@ -129,12 +155,22 @@ $("fileConvert").addEventListener("click", async () => {
     return { id: f.id, ...(part ? { start: part.start.toFixed(2), end: part.end.toFixed(2) } : {}) };
   });
   const fmt = fileOptions.format;
-  for (const f of ready) Object.assign(f, { status: "queued", message: "Waiting..." });
+  if (fmt === "mp4" && fileOptions.fit === "custom" && !(targetMb() >= 0.5 && targetMb() <= 4000)) {
+    fileError = "Type a size between 0.5 and 4000 MB.";
+    return drawFiles();
+  }
+  // Shown as "Waiting..." until the app says this conversion (its next run) has started.
+  fileError = "";
+  for (const f of ready) Object.assign(f, { status: "queued", message: "Waiting...", waitingFor: f.run + 1 });
   drawFiles();
-  await api("/api/files-convert", {
+  const res = await api("/api/files-convert", {
     items,
     options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize },
-  });
+  }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  if (!res.ok) {
+    for (const f of ready) delete f.waitingFor;
+    fileError = res.error;
+  }
   refresh();
 });
 
@@ -236,7 +272,9 @@ function fileRow(el, file) {
       b.onclick = () => {
         if (kind === "folder") return api("/api/file-show", { id: file.id });
         if (!file.id) {
-          uploads.splice(uploads.indexOf(file), 1);
+          if (file.stop) file.stop.abort();
+          const index = uploads.indexOf(file);
+          if (index >= 0) uploads.splice(index, 1);
         } else {
           serverFiles = serverFiles.filter((f) => f.id !== file.id);
           fileTrims.delete(file.id);
@@ -300,9 +338,10 @@ function drawFiles() {
     flac: "FLAC keeps the sound perfect like WAV, at about half the size.",
     gif: "GIFs have no sound and can be up to 60 seconds.",
   };
-  $("fileNote").textContent = fmt === "mp4" && targetMb()
+  $("fileNote").classList.toggle("error", !!fileError);
+  $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
     ? `Videos are made just small enough to stay under ${targetMb()} MB. Long videos get a smaller picture to fit.`
-    : notes[fmt] || "";
+    : notes[fmt] || "");
 
   const ready = readyFiles().length;
   const busy = serverFiles.some((f) => f.status === "active" || f.status === "queued");
@@ -317,8 +356,8 @@ function renderFiles(list) {
   serverFiles = (list || []).map((f) => {
     const mine = known.get(f.id);
     // Just clicked Convert, and the app hasn't caught up yet: keep showing "Waiting..."
-    if (mine && mine.status === "queued" && f.status !== "queued" && f.status !== "active" && f.message === mine._lastMessage) return mine;
-    return { ...f, _lastMessage: f.message };
+    if (mine && mine.waitingFor > f.run) return { ...f, status: "queued", message: "Waiting...", waitingFor: mine.waitingFor };
+    return f;
   });
   for (const id of fileTrims.keys()) if (!serverFiles.some((f) => f.id === id)) fileTrims.delete(id);
   drawFiles();

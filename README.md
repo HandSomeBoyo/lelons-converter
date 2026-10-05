@@ -24,6 +24,8 @@ To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
    - **GIF** for a looping clip without sound (up to 60 seconds; the first 10
      seconds unless you pick a part)
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
+   Up to 3 videos download at the same time. A file never replaces one with the
+   same name; it's saved as "name (2)" instead.
 
 **Even out volume** (for the music formats) makes quiet and loud songs about
 equally loud.
@@ -41,9 +43,12 @@ MP3s, M4As and FLACs get the video's thumbnail as cover art, plus the song
 title and artist, so they look right in music apps.
 
 The **Files** tab does the same for videos and songs already on your PC. Drop
-them in (or click **choose files**), pick a format, and if you like a smaller
-size, a part to keep (**Trim**), or even volume. Your original files aren't
-changed.
+them in (or click **choose files**, which is quicker for big videos because
+nothing has to be copied), pick a format, and if you like a smaller size, a
+part to keep (**Trim**), or even volume. Your original files aren't changed.
+
+Making MP4s uses your graphics card (NVIDIA, AMD or Intel) when it can, which
+is several times faster. If it can't, the processor does it.
 
 The **Images** tab changes pictures. Drop one or more images into the box (or
 click **choose files**), then pick a format (PNG, JPG, WEBP, GIF, BMP, ICO or
@@ -65,7 +70,7 @@ Lelons Converter/
 ├── src/                 the app itself
 │   ├── main.py          starts the app, opens the window, handles button clicks
 │   ├── downloader.py    the downloading and converting (uses yt-dlp)
-│   ├── jobs.py          the download queue (one video at a time)
+│   ├── jobs.py          the download queue (3 videos at a time)
 │   ├── updater.py       keeps the app and the downloader up to date
 │   ├── waveform.py      the sound picture for the trim editor
 │   ├── images.py        the Images tab's converting (uses Pillow)
@@ -73,7 +78,9 @@ Lelons Converter/
 │   ├── media.py         converting with ffmpeg: formats, GIFs, smaller files, even volume
 │   ├── version.py       the app's version number
 │   ├── settings.py      remembers your save folder and quality choices
-│   ├── folder_picker.py the Windows "Select Folder" window
+│   ├── folder_picker.py the Windows "Select Folder" and "Open" windows
+│   ├── names.py         saves files as "name (2)" instead of replacing them
+│   ├── windows.py       small Windows bits (one copy at a time, Downloads folder)
 │   └── ui/              how the window looks
 │       ├── index.html   layout
 │       ├── style.css    colors and styling

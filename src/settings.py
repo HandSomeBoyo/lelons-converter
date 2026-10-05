@@ -2,10 +2,14 @@
 
 import json
 import os
+import threading
+
+import windows
 
 DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "LelonsConverter")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-DEFAULT_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
+DEFAULT_FOLDER = windows.downloads_folder()
+_lock = threading.Lock()
 
 # Quality choices shown in the dropdown: (value, label).
 QUALITIES = {
@@ -44,8 +48,12 @@ def load():
 
 
 def save(**changes):
-    settings = load()
-    settings.update(changes)
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings, f)
+    with _lock:
+        settings = load()
+        settings.update(changes)
+        os.makedirs(DATA_DIR, exist_ok=True)
+        # Written to a new file first, so a crash halfway can't leave a broken settings file.
+        temp = SETTINGS_FILE + ".new"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(settings, f)
+        os.replace(temp, SETTINGS_FILE)

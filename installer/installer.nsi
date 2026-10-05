@@ -68,7 +68,7 @@ FunctionEnd
 ; Only Python processes started from this app's folder are closed.
 !macro CloseRunningApp
   System::Call 'kernel32::SetEnvironmentVariable(t "LELONS_DIR", t "$INSTDIR")'
-  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
+  nsExec::Exec `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,ffmpeg,deno -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and $$_.Path.StartsWith($$env:LELONS_DIR + '\', 'OrdinalIgnoreCase') } | Stop-Process -Force"`
   Pop $0
   Sleep 800
 !macroend

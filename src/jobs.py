@@ -1,4 +1,4 @@
-"""The download queue: videos waiting their turn, downloading one at a time."""
+"""The download queue: videos waiting their turn, a few downloading at once."""
 
 import itertools
 import os
@@ -8,6 +8,8 @@ import time
 import downloader
 
 INFO_TTL = 30 * 60  # download links from a lookup stay valid for a while, not forever
+INFO_KEEP = 100  # looked-up videos kept at most (each can be big)
+WORKERS = 3  # downloads at the same time
 
 # What the download list says during each step after downloading.
 STEPS = {
@@ -28,23 +30,42 @@ class Queue:
         self.jobs = []
         self.ids = itertools.count(1)
         self.info_cache = {}  # url -> (time, info, preview)
-        threading.Thread(target=self._worker, daemon=True).start()
+        self.cache_lock = threading.Lock()
+        for _ in range(WORKERS):
+            threading.Thread(target=self._worker, daemon=True).start()
 
     # ---- looking videos up
 
-    def lookup(self, url):
-        """Preview info for a link, looking it up if needed (may take a few seconds)."""
-        cached = self.info_cache.get(url)
-        if cached and time.time() - cached[0] < INFO_TTL:
-            return cached[2]
+    def lookup(self, url, fresh=False):
+        """(info, preview) for a link, looking it up if needed (may take a few seconds).
+
+        fresh: look it up again if the download links in it may have run out.
+        """
+        with self.cache_lock:
+            cached = self.info_cache.get(url)
+        if cached and time.time() - cached[0] < (INFO_TTL if fresh else INFO_TTL * 4):
+            return cached[1], cached[2]
         info, preview = downloader.fetch_info(url)
-        self.info_cache[url] = (time.time(), info, preview)
-        return preview
+        # Subtitle lists are huge and not used.
+        info.pop("automatic_captions", None)
+        info.pop("subtitles", None)
+        with self.cache_lock:
+            now = time.time()
+            for old in [u for u, c in self.info_cache.items() if now - c[0] > INFO_TTL * 4]:
+                del self.info_cache[old]
+            while len(self.info_cache) >= INFO_KEEP:
+                del self.info_cache[next(iter(self.info_cache))]  # the oldest
+            self.info_cache[url] = (now, info, preview)
+        return info, preview
+
+    def preview(self, url):
+        return self.lookup(url)[1]
 
     # ---- changing the queue
 
     def add(self, url, fmt, quality, quality_label, folder, trim=None, normalize=False, preview=None):
-        cached = self.info_cache.get(url)
+        with self.cache_lock:
+            cached = self.info_cache.get(url)
         preview = preview or (cached[2] if cached else None) or {
             "title": url, "channel": "", "duration": "", "thumbnail": "", "seconds": 0}
         preview = {k: preview.get(k, "") for k in ("title", "channel", "duration", "thumbnail", "seconds")}
@@ -120,15 +141,12 @@ class Queue:
                 self._update(job, progress=d.get("percent", 100), message=text)
 
         try:
-            cached = self.info_cache.get(job["url"])
-            if not cached or time.time() - cached[0] >= INFO_TTL:
-                self.lookup(job["url"])
-                cached = self.info_cache[job["url"]]
-            if cached[2].get("playlist"):
+            info, preview = self.lookup(job["url"], fresh=True)
+            if preview.get("playlist"):
                 raise ValueError("That's a playlist. Pick the videos you want from the list.")
-            self._update(job, **{k: v for k, v in cached[2].items() if k in ("title", "channel", "duration", "thumbnail", "seconds")})
+            self._update(job, **{k: v for k, v in preview.items() if k in ("title", "channel", "duration", "thumbnail", "seconds")})
             self._update(job, message="Starting download...")
-            path = downloader.download(cached[1], job["folder"], job["format"], job["quality"],
+            path = downloader.download(info, job["folder"], job["format"], job["quality"],
                                        on_progress, job["trim"], job["normalize"])
         except Exception as e:
             self._update(job, status="error", message=downloader.friendly_error(e))

@@ -438,8 +438,10 @@ window.addEventListener("resize", () => { if (!$("trimModal").hidden) drawWave()
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const url = $("url").value.trim();
-  const part = trim ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
-  const items = playlist ? playlist.entries.filter((entry) => picked.has(entry.url)) : null;
+  // A trim or playlist from a link that was changed since doesn't count.
+  const same = url === previewUrl;
+  const part = trim && same ? { start: trim.start.toFixed(1), end: trim.end.toFixed(1) } : {};
+  const items = playlist && same ? playlist.entries.filter((entry) => picked.has(entry.url)) : null;
   if (items && !items.length) return;
   $("url").value = "";
   hidePreview();
@@ -457,7 +459,13 @@ $("checkNow").addEventListener("click", () => {
 });
 $("autoUpdate").addEventListener("change", async () => render(await api("/api/auto-update", { on: $("autoUpdate").checked })));
 $("clear").addEventListener("click", () => api("/api/clear", {}).then(refresh));
-$("updateInstall").addEventListener("click", () => api("/api/install-app-update", {}).then(refresh));
+$("updateInstall").addEventListener("click", async () => {
+  $("updateInstall").disabled = true;
+  const res = await api("/api/install-app-update", {}).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  $("updateInstall").disabled = false;
+  if (!res.ok) $("updateText").textContent = res.error;
+  else refresh();
+});
 $("updateLater").addEventListener("click", () => {
   dismissedUpdate = $("updateModal").dataset.version;
   $("updateModal").hidden = true;
@@ -538,12 +546,16 @@ function renderUpdatePopup(s) {
   modal.hidden = !update || (!installing && dismissedUpdate === update.version);
   if (modal.hidden) return;
   modal.dataset.version = update.version;
+  if (installing) modal.dataset.shown = "";
   $("updateActions").hidden = installing;
   $("updateBar").hidden = !installing;
   $("updateBar").firstElementChild.style.width = installing ? s.appUpdateProgress + "%" : "";
   if (!installing) {
     $("updateHeading").textContent = "Update available";
-    $("updateText").textContent = `Version ${update.version} of Lelons Converter is ready to install. You have ${s.version}.`;
+    if (!$("updateInstall").disabled && modal.dataset.shown !== update.version) {
+      modal.dataset.shown = update.version;
+      $("updateText").textContent = `Version ${update.version} of Lelons Converter is ready to install. You have ${s.version}.`;
+    }
   } else if (s.appUpdateProgress < 100) {
     $("updateHeading").textContent = "Updating...";
     $("updateText").textContent = "Downloading the new version.";
@@ -582,8 +594,18 @@ function render(s) {
   renderUpdatePopup(s);
 }
 
+let failedChecks = 0;
 async function refresh() {
-  try { render(await api("/api/state")); } catch (e) { /* app closed */ }
+  try {
+    render(await api("/api/state"));
+    failedChecks = 0;
+  } catch (e) {
+    // The app isn't answering: it was closed (or is updating).
+    if (++failedChecks === 6 && !closing) {
+      $("notice").className = "notice error";
+      $("notice").textContent = "Lelons Converter was closed. Close this window and open the app again.";
+    }
+  }
 }
 showFormatExtras();
 refresh();

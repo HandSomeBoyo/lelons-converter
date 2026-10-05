@@ -6,9 +6,9 @@ page talks to, and does the downloading with yt-dlp.
 """
 
 import json
-import mimetypes
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -29,8 +29,10 @@ import files  # noqa: E402
 import images  # noqa: E402
 import jobs  # noqa: E402
 import media  # noqa: E402
+import names  # noqa: E402
 import settings  # noqa: E402
 import waveform  # noqa: E402
+import windows  # noqa: E402
 from version import VERSION  # noqa: E402
 
 downloader.use_bundled_ffmpeg()
@@ -40,6 +42,15 @@ UI_DIR = os.path.join(APP_DIR, "ui")
 ICON_CANDIDATES = [os.path.join(APP_DIR, "icon.png"), os.path.join(APP_DIR, "..", "assets", "icon.png")]
 PORT_FILE = os.path.join(settings.DATA_DIR, "running.port")
 NO_WINDOW = downloader.NO_WINDOW
+# A secret only the app's own window knows, so web pages open in a browser
+# can't use the app (they could otherwise reach it at 127.0.0.1).
+TOKEN = secrets.token_urlsafe(24)
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
+    ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
+    ".ico": "image/x-icon", ".woff2": "font/woff2",
+}
 
 # pythonw has no console, so there's nowhere for text output to go.
 # Send it nowhere instead of crashing.
@@ -64,6 +75,7 @@ class State:
         self.auto_update = saved["auto_update"]
         self.normalize = saved["normalize"]
         self.checking = False
+        self.installing = False
         self.app_update = None  # newer version info, once found
         self.app_update_progress = None
         self.last_ping = time.time()
@@ -95,7 +107,19 @@ class State:
 
     @property
     def busy(self):
-        return self.checking or self.app_update_progress is not None or queue.busy or local_files.busy
+        return (self.checking or self.app_update_progress is not None or self.converting)
+
+    @property
+    def converting(self):
+        return queue.busy or local_files.busy or waveform.busy()
+
+    def start(self, flag):
+        """Set a flag (like "checking") if it isn't set yet. False if it already was."""
+        with self.lock:
+            if getattr(self, flag):
+                return False
+            setattr(self, flag, True)
+            return True
 
 
 queue = jobs.Queue()
@@ -113,9 +137,8 @@ def quality_label(fmt, quality):
 
 def check_for_updates(manual=False):
     """Look for a new version of the app (shown as a popup) and of the downloader."""
-    if state.checking:
+    if not state.start("checking"):
         return
-    state.set(checking=True)
     if manual:
         state.set(notice={"kind": "info", "text": "Checking for updates..."})
     failed = False
@@ -151,7 +174,7 @@ def install_app_update():
     try:
         updater.download_and_run(found["url"], found["version"], lambda p: state.set(app_update_progress=p))
     except Exception as e:
-        state.set(app_update_progress=None,
+        state.set(app_update_progress=None, installing=False,
                   notice={"kind": "error", "text": f"Couldn't download the update. ({e})"})
         return
     time.sleep(2.5)  # let the window show "Opening the installer..." and close itself
@@ -161,8 +184,13 @@ def install_app_update():
 def show_in_folder(path):
     if os.name == "nt" and os.path.isfile(path):
         subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
-    elif hasattr(os, "startfile"):
-        os.startfile(os.path.dirname(path) or state.folder)
+    else:
+        open_folder(os.path.dirname(path) or state.folder)
+
+
+def open_folder(folder):
+    if hasattr(os, "startfile") and os.path.isdir(folder):
+        os.startfile(folder)
 
 
 def pick_folder(current):
@@ -182,8 +210,33 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def send_body(self, body, content_type):
+    def allowed(self):
+        """Only the app's window may use the app (see TOKEN)."""
+        port = self.server.server_port
+        if self.headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            return False
+        if secrets.compare_digest(self.headers.get("X-Lelons-Token") or "", TOKEN):
+            return True
+        cookie = f"lelons{port}="
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            part = part.strip()
+            if part.startswith(cookie) and secrets.compare_digest(part[len(cookie):], TOKEN):
+                return True
+        return False
+
+    def refuse(self):
+        body = b"Open Lelons Converter from the Start menu or the desktop."
+        self.send_response(403)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_body(self, body, content_type, cookie=False):
         self.send_response(200)
+        if cookie:
+            port = self.server.server_port
+            self.send_header("Set-Cookie", f"lelons{port}={TOKEN}; Path=/; HttpOnly; SameSite=Strict")
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -193,13 +246,11 @@ class Handler(BaseHTTPRequestHandler):
     def send_json(self, data):
         self.send_body(json.dumps(data).encode(), "application/json")
 
-    def send_file(self, path):
+    def send_file(self, path, cookie=False):
         with open(path, "rb") as f:
             body = f.read()
-        content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-        if content_type.startswith("text/") or content_type.endswith("javascript"):
-            content_type += "; charset=utf-8"
-        self.send_body(body, content_type)
+        content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
+        self.send_body(body, content_type, cookie)
 
     def send_media(self, path):
         """Audio for the trim editor. Supports byte ranges so the player can jump around."""
@@ -237,6 +288,13 @@ class Handler(BaseHTTPRequestHandler):
                 pass  # the player only wanted part of it
 
     def do_GET(self):
+        # The window opens /?t=TOKEN; the page gets a cookie with it for everything after.
+        url = urllib.parse.urlsplit(self.path)
+        if url.path == "/" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
+            if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
+                return self.send_file(os.path.join(UI_DIR, "index.html"), cookie=True)
+        if not self.allowed():
+            return self.refuse()
         if self.path == "/api/state":
             state.set(last_ping=time.time())
             return self.send_json(state.snapshot())
@@ -260,6 +318,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
+        if not self.allowed():
+            return self.refuse()
+        try:
+            self.handle_post()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass  # the window went away
+        except Exception:
+            try:
+                self.send_json({"ok": False, "error": "Something went wrong. Try again."})
+            except OSError:
+                pass
+
+    def handle_post(self):
         length = int(self.headers.get("Content-Length") or 0)
         if self.path == "/api/file-add":  # the body is the file itself
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
@@ -285,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/info":
             url = str(data.get("url", "")).strip()
             try:
-                self.send_json({"ok": True, "preview": queue.lookup(url)})
+                self.send_json({"ok": True, "preview": queue.preview(url)})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
         elif self.path == "/api/waveform" and data.get("file"):
@@ -299,8 +370,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/waveform":
             url = str(data.get("url", "")).strip()
             try:
-                queue.lookup(url)
-                wave = waveform.get(url, queue.info_cache[url][1], bool(data.get("video")))
+                info, _ = queue.lookup(url, fresh=True)
+                wave = waveform.get(url, info, bool(data.get("video")))
                 self.send_json({"ok": True, **wave})
             except Exception as e:
                 self.send_json({"ok": False, "error": downloader.friendly_error(e)})
@@ -314,7 +385,7 @@ class Handler(BaseHTTPRequestHandler):
                 start = downloader.parse_time(data.get("start") or "0")
                 end = downloader.parse_time(data.get("end")) if data.get("end") else None
                 try:
-                    length = queue.lookup(url).get("seconds") or 0
+                    length = queue.preview(url).get("seconds") or 0
                 except Exception:
                     length = 0  # the download will report what's wrong with the link
                 if end is None and length:
@@ -328,7 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": False, "error": f"GIFs can be up to {media.GIF_MAX_SECONDS} seconds. Trim it shorter."})
                 if not trim:  # a GIF of a whole video would be huge
                     try:
-                        length = queue.lookup(url).get("seconds") or 0
+                        length = queue.preview(url).get("seconds") or 0
                     except Exception:
                         length = 0
                     trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
@@ -365,8 +436,27 @@ class Handler(BaseHTTPRequestHandler):
             if job:
                 show_in_folder(job["file"])
             self.send_json({"ok": True})
+        elif self.path == "/api/files-pick":
+            # The Windows Open window gives real paths, so nothing has to be copied.
+            if os.name != "nt":
+                return self.send_json({"ok": False, "fallback": True})
+            import folder_picker
+            try:
+                paths = folder_picker.pick_files("Pick videos or songs", files.PICK_KINDS)
+            except OSError:
+                return self.send_json({"ok": False, "fallback": True})
+            added, errors = [], []
+            for path in paths:
+                try:
+                    added.append(local_files.add_path(path))
+                except (ValueError, OSError) as e:
+                    errors.append(str(e) if isinstance(e, ValueError) else f"Couldn't open {os.path.basename(path)}.")
+            self.send_json({"ok": True, "files": added, "errors": errors})
         elif self.path == "/api/files-convert":
-            local_files.convert(data.get("items") or [], data.get("options") or {}, state.folder)
+            try:
+                local_files.convert(data.get("items") or [], data.get("options") or {}, state.folder)
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
             self.send_json({"ok": True})
         elif self.path == "/api/file-remove":
             local_files.remove(data.get("id"))
@@ -405,8 +495,7 @@ class Handler(BaseHTTPRequestHandler):
                 settings.save(folder=state.folder)
             self.send_json(state.snapshot())
         elif self.path == "/api/open-folder":
-            if hasattr(os, "startfile"):
-                os.startfile(state.folder)
+            open_folder(state.folder)
             self.send_json({"ok": True})
         elif self.path == "/api/check-updates":
             start_background(check_for_updates, True)
@@ -420,7 +509,10 @@ class Handler(BaseHTTPRequestHandler):
             state.set(quit=True)
             self.send_json({"ok": True})
         elif self.path == "/api/install-app-update":
-            if state.app_update_progress is None:
+            # Installing closes the app, which would stop what's converting.
+            if state.converting:
+                return self.send_json({"ok": False, "error": "Wait until your downloads and files are done, then install the update."})
+            if state.start("installing"):
                 start_background(install_app_update)
             self.send_json({"ok": True})
         elif self.path == "/api/bye":
@@ -460,17 +552,20 @@ def already_running_url():
     """If the app is already open, return its address so we just show it again."""
     try:
         with open(PORT_FILE) as f:
-            url = f"http://127.0.0.1:{int(f.read().strip())}/"
-        with urllib.request.urlopen(url + "api/state", timeout=2) as response:
+            port, _, token = f.read().strip().partition(" ")
+        url = f"http://127.0.0.1:{int(port)}/"
+        request = urllib.request.Request(url + "api/state", headers={"X-Lelons-Token": token})
+        with urllib.request.urlopen(request, timeout=2) as response:
             running = json.load(response).get("version")
     except (OSError, ValueError):
         return None
     if running == VERSION:
-        return url
+        return url + "?t=" + token
     # The app was updated but the old version is still running in the
     # background. Close it and start the new one instead.
     try:
-        request = urllib.request.Request(url + "api/quit", data=b"{}", method="POST")
+        request = urllib.request.Request(url + "api/quit", data=b"{}", method="POST",
+                                         headers={"X-Lelons-Token": token})
         urllib.request.urlopen(request, timeout=2).close()
     except OSError:
         pass
@@ -481,21 +576,39 @@ def already_running_url():
     return None
 
 
+def clean_up():
+    waveform.clean_up()  # the whole temporary folder, with the Images and Files tabs' parts
+    images.clean_up()
+    files.clean_up()
+
+
 # ---------------------------------------------------------------- main
 
 def main():
-    existing = already_running_url()
-    if existing:
-        open_window(existing)
-        return
+    # Only one copy runs. Starting it again shows the open window instead.
+    give_up = time.time() + 15
+    while True:
+        existing = already_running_url()
+        if existing:
+            open_window(existing)
+            return
+        if windows.single_instance():
+            break
+        if time.time() > give_up:
+            return  # another copy is starting or closing and doesn't answer; leave it be
+        time.sleep(0.3)
+
+    # Left over from a time the app didn't close properly (the PC turned off, say).
+    clean_up()
+    names.remove_leftovers(state.folder)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     os.makedirs(settings.DATA_DIR, exist_ok=True)
     with open(PORT_FILE, "w") as f:
-        f.write(str(server.server_port))
+        f.write(f"{server.server_port} {TOKEN}")
 
-    open_window(f"http://127.0.0.1:{server.server_port}/")
+    open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     state.set(last_ping=time.time() + 30)  # give the window time to open
     start_background(downloader.warm_up)
     if state.auto_update:
@@ -503,9 +616,14 @@ def main():
 
     # Quit once the window is closed (the page says bye and stops checking in).
     # Minimized windows check in rarely, so the plain-silence timeout is long.
+    last_tick = time.time()
     while True:
         time.sleep(0.5)
         now = time.time()
+        if now - last_tick > 30:
+            # The PC was asleep, so the window couldn't check in. That's not closing it.
+            state.set(last_ping=now)
+        last_tick = now
         closed = state.closed_at and state.last_ping < state.closed_at and now - state.closed_at > 3
         silent = now - state.last_ping > 180
         if state.quit or ((closed or silent) and not state.busy):
@@ -516,9 +634,8 @@ def main():
         os.remove(PORT_FILE)
     except OSError:
         pass
-    waveform.clean_up()
-    images.clean_up()
-    files.clean_up()
+    windows.stop_helpers()  # ffmpeg can keep running after the app if it isn't told to stop
+    clean_up()
 
 
 if __name__ == "__main__":
