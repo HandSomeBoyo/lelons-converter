@@ -79,6 +79,7 @@
     <button data-tab="files">Files</button>
     <button data-tab="images">Images</button>
     <button data-tab="sfx">Library</button>
+    <button data-tab="copyright">Copyright</button>
     <button data-tab="history">History</button>
   </nav>
 
@@ -450,6 +451,24 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="tab-page" id="copyrightTab" hidden>
+    <h1 class="headline">Is it copyrighted?<br><em>Check before you post.</em></h1>
+    <label class="dropzone" id="copyDrop">
+      <input type="file" id="copyFiles" accept="audio/*,video/*" multiple hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.6 9.6a3.6 3.6 0 1 0 0 4.8"/></svg>
+      <span class="drop-text"><strong>Drop a song, sound or video here</strong> or <span class="link">choose files</span></span>
+      <span class="drop-hint">It listens and looks it up in a database of millions of songs</span>
+    </label>
+    <div class="copy-head" id="copyHead" hidden>
+      <h3>Checked</h3>
+      <button type="button" class="link" id="copyClear">Clear</button>
+    </div>
+    <div class="copy-list" id="copyList"></div>
+    <p class="copy-note">A match means it's a released song, so a video using it will probably get a copyright claim.
+      No match is a good sign, but not a promise: sound effects, memes and short bits of songs usually
+      aren't in the database. You can also check any Library sound with its shield button.</p>
   </section>
 
   <section class="tab-page" id="historyTab" hidden>
@@ -955,6 +974,7 @@
 <script src="find.js"></script>
 <script src="home.js"></script>
 <script src="stats.js"></script>
+<script src="copyright.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

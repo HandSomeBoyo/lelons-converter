@@ -37,12 +37,147 @@ function setDrag(el, what) {
 }
 
 // The page only notices the drag starting; Windows does the real one, like dragging out of Explorer.
+// Under the mouse goes a little card the page draws (the name and the waveform), not the file's icon.
 document.addEventListener("dragstart", (e) => {
   const el = e.target.closest && e.target.closest(".can-drag");
   if (!el || !el._drag) return;
   e.preventDefault();
-  api("/api/drag", el._drag).then((res) => { if (res && !res.ok) alert(res.error); }).catch(() => {});
+  const what = { ...el._drag };
+  let image = null;
+  try { image = dragCard(el, what); } catch { image = null; }
+  if (image) Object.assign(what, image);
+  el.classList.remove("drag-dropped", "drag-back");
+  el.classList.add("drag-lift");
+  api("/api/drag", what).then((res) => {
+    if (res && !res.ok) { el.classList.remove("drag-lift"); return alert(res.error); }
+    if (res && res.drag) watchDrag(el, res.drag);
+  }).catch(() => el.classList.remove("drag-lift"));
 });
+
+// What the card shows: the sound's name, what it is, and its waveform when the app has one.
+function dragCardInfo(el, what) {
+  const sound = what.kind === "sound" && typeof sfxSounds !== "undefined" ? sfxSounds.find((s) => s.url === what.url) : null;
+  const titleEl = el.querySelector(".title, .name, .info b, b, strong");
+  const title = (sound && sound.name) || what.name || (titleEl && titleEl.textContent.trim()) || "File";
+  let peaks = null;
+  if (sound) peaks = sound.peaks || (typeof sfxPeaks !== "undefined" && sfxPeaks.get(sound.path)) || null;
+  if (!peaks) {
+    const bars = el.querySelectorAll(".bars i");
+    if (bars.length > 8) peaks = [...bars].map((b) => (parseFloat(b.style.height) || 8) / 100);
+  }
+  const ext = ((what.kind === "sound" ? "mp3" : (title.match(/\.(\w{2,4})$/) || [])[1]) || "").toUpperCase();
+  const video = /^(MP4|GIF|WEBM|MOV|MKV)$/.test(ext) || what.kind === "image";
+  const sub = [sound ? sound.categoryName : ext || (what.kind === "clip" ? "Clip" : ""),
+    sound && sound.seconds ? clock(sound.seconds, false) : ""].filter(Boolean).join(" · ");
+  return { title: title.replace(/\.(\w{2,4})$/, ""), sub, peaks, video };
+}
+
+function dragCard(el, what) {
+  const info = dragCardInfo(el, what);
+  const scale = window.devicePixelRatio || 1;
+  const w = 300, h = 68, pad = 6; // pad: room for the soft shadow
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round((w + pad * 2) * scale);
+  canvas.height = Math.round((h + pad * 2) * scale);
+  const c = canvas.getContext("2d");
+  c.scale(scale, scale);
+  c.translate(pad, pad);
+  const css = getComputedStyle(document.documentElement);
+  const color = (name, fallback) => (css.getPropertyValue(name) || fallback).trim();
+  const accent = color("--accent", "#ffcf3f"), panel = color("--panel", "#1d1d1d"), text = color("--text", "#f1efe9"),
+    muted = color("--muted", "#8d8a83"), ink = color("--ink", "#141414");
+  const round = (x, y, rw, rh, r) => { c.beginPath(); c.roundRect(x, y, rw, rh, r); };
+  c.shadowColor = "rgba(0,0,0,.45)";
+  c.shadowBlur = 6;
+  c.shadowOffsetY = 2;
+  round(0, 0, w, h, 14);
+  c.fillStyle = panel;
+  c.fill();
+  c.shadowColor = "transparent";
+  c.strokeStyle = "rgba(255,255,255,.08)";
+  c.lineWidth = 1;
+  round(0.5, 0.5, w - 1, h - 1, 13.5);
+  c.stroke();
+  // the yellow square with a play (or a film strip for videos)
+  round(12, 12, 44, 44, 11);
+  c.fillStyle = accent;
+  c.fill();
+  c.fillStyle = ink;
+  c.beginPath();
+  if (info.video) {
+    c.roundRect(24, 24, 20, 20, 3);
+    c.fill();
+    c.fillStyle = accent;
+    for (const y of [27, 32.5, 38]) { c.fillRect(26, y, 2.5, 2.5); c.fillRect(39.5, y, 2.5, 2.5); }
+  } else {
+    c.moveTo(29, 24); c.lineTo(29, 44); c.lineTo(45, 34); c.closePath();
+    c.fill();
+  }
+  // name and what it is
+  const left = 68, right = w - 14;
+  c.textBaseline = "alphabetic";
+  c.font = "600 14px Inter, 'Segoe UI', sans-serif";
+  c.fillStyle = text;
+  let title = info.title;
+  while (title.length > 1 && c.measureText(title).width > right - left) title = title.slice(0, -2).trimEnd() + "…";
+  c.fillText(title, left, 29);
+  // the waveform (or, without one, what kind of file it is)
+  if (info.peaks && info.peaks.length) {
+    const count = 46, gap = 1.6, top = 37, height = 20;
+    const bar = (right - left - gap * (count - 1)) / count;
+    c.fillStyle = accent;
+    for (let i = 0; i < count; i++) {
+      const v = info.peaks[Math.floor(i * info.peaks.length / count)] || 0;
+      const bh = Math.max(2.5, v * height);
+      round(left + i * (bar + gap), top + (height - bh) / 2, bar, bh, Math.min(1.2, bar / 2));
+      c.fill();
+    }
+    if (info.sub) {
+      c.font = "500 11px Inter, 'Segoe UI', sans-serif";
+      const tw = c.measureText(info.sub).width;
+      c.fillStyle = muted;
+      c.textAlign = "right";
+      c.fillText(info.sub, right, 16);
+      c.textAlign = "left";
+      if (tw > 0) {
+        // keep the name clear of it
+      }
+    }
+  } else {
+    c.font = "500 12px Inter, 'Segoe UI', sans-serif";
+    c.fillStyle = muted;
+    c.fillText(info.sub || "Drop it into your editor", left, 48);
+  }
+  // Under the mouse: a bit in from the left, in the middle (where you grabbed the row, roughly).
+  return { image: canvas.toDataURL("image/png"), offset: [Math.round((pad + 34) * scale), Math.round((pad + h / 2) * scale)] };
+}
+
+// While it's being dragged the row stays lifted; then it says "Dropped" or settles back.
+function watchDrag(el, number) {
+  const started = Date.now();
+  const check = async () => {
+    const res = await api("/api/drag-state", {}).catch(() => null);
+    if (res && res.id === number && res.busy && Date.now() - started < 10 * 60 * 1000) return setTimeout(check, 150);
+    el.classList.remove("drag-lift");
+    if (!res || res.id !== number) return;
+    el.classList.add(res.result === "drop" ? "drag-dropped" : "drag-back");
+    if (res.result === "drop") dropBadge(el);
+    setTimeout(() => el.classList.remove("drag-dropped", "drag-back"), 900);
+  };
+  setTimeout(check, 150);
+}
+
+function dropBadge(el) {
+  const box = el.getBoundingClientRect();
+  if (!box.width) return;
+  const badge = document.createElement("div");
+  badge.className = "drop-badge";
+  badge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Dropped';
+  badge.style.left = box.left + box.width / 2 + "px";
+  badge.style.top = box.top + box.height / 2 + "px";
+  document.body.append(badge);
+  setTimeout(() => badge.remove(), 1400);
+}
 
 // ---- format toggle and quality
 

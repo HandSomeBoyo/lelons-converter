@@ -65,15 +65,16 @@ def show(url, data_folder, icon, on_closed, placement=None):
     return window.ok
 
 
-def drag(path):
+def drag(path, image=None, offset=None, done=None):
     """Start dragging a file out of the window (the mouse button is held on it right now).
 
+    image/offset: the card to show under the mouse (see dragout.drag); done(result) is called after.
     Returns False if there's no window of ours to do it from.
     """
     window = _window
     if not (window and window.alive and window.hwnd):
         return False
-    window.drag_path = path
+    window.drag_path = (path, image, offset, done)
     window.user32.PostMessageW(window.hwnd, WM_DRAG, 0, 0)
     return True
 
@@ -476,13 +477,17 @@ class Window:
         elif message == WM_ACTIVATE and self.controller and wparam & 0xFFFF:
             _method(self.controller, 12, ctypes.c_int)(0)
         elif message == WM_DRAG:
-            path, self.drag_path = self.drag_path, None
-            if path:
+            wanted, self.drag_path = self.drag_path, None
+            if wanted:
+                path, image, offset, done = wanted
+                result = False
                 try:
                     import dragout
-                    dragout.drag(path, hwnd)  # Windows runs the drag here until it's dropped
+                    result = dragout.drag(path, hwnd, image, offset)  # Windows runs the drag here until it's dropped
                 except Exception:
                     pass
+                if done:
+                    done(result)
             return 0
         elif message == WM_ZOOM:
             self._zoom()

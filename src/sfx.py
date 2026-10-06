@@ -64,6 +64,8 @@ FRIENDLY = {
     "full": "The library is full. Delete some old sounds first.",
     "denied": "Your account isn't allowed to do that. Ask the owner.",
     "gone": "Someone already deleted that sound.",
+    "same_name": "There's already a sound with that name. Pick another name.",
+    "same_file": "That sound is already in the Library.",
     # what log in and create account can answer
     "username": "Usernames are 3 to 20 letters or numbers (dots, dashes and _ are fine too).",
     "password": "Passwords need at least 6 characters.",
@@ -646,13 +648,29 @@ class Library:
             if copied:
                 os.remove(path)
             raise Error(f"{name} has no sound in it.")
+        digest = hashlib.sha256()
+        try:
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError:
+            pass
         with self.lock:
             self.ids += 1
             item = {"id": str(self.ids), "file": name, "path": path, "copied": copied, "seconds": found["duration"],
+                    "hash": digest.hexdigest(),
                     "status": "ready", "message": "", "progress": 0,
                     "name": _clean_name(os.path.splitext(name)[0])}
             self.uploads[item["id"]] = item
-        return self._public(item)
+        public = self._public(item)
+        # Already in the Library? Said right away (the page then asks for a part of it or another file).
+        try:
+            clash = _rpc("lelons_sound_check", token=self._token(), sound_name="", sound_hash=item["hash"])
+            if clash and clash.get("why") == "same_file":
+                public["duplicate"] = {"name": clash.get("name"), "uploader": clash.get("uploader")}
+        except Exception:
+            pass  # checked again when it's uploaded
+        return public
 
     def _public(self, item):
         return {k: item[k] for k in ("id", "file", "seconds", "status", "message", "progress", "name")}
@@ -695,8 +713,29 @@ class Library:
                 raise Error("That file is gone. Pick it again.")
             if item["status"] == "uploading":
                 return
+        # The same file (the same part of it, when trimmed) can only be in the Library once, and
+        # every name only once. Asked first, so it doesn't convert for nothing.
+        same = self.sound_hash(item, trim)
+        clash = _rpc("lelons_sound_check", token=token, sound_name=name, sound_hash=same)
+        if clash:
+            if clash.get("why") == "same_name":
+                raise Error(f"There's already a sound called \"{clash.get('name')}\". Pick another name.")
+            by = f" ({clash.get('uploader')} uploaded it as \"{clash.get('name')}\")" if clash.get("uploader") else ""
+            raise Error(f"That sound is already in the Library{by}.")
+        with self.lock:
+            if item["status"] == "uploading":
+                return
             item.update(status="uploading", message="Getting it ready...", progress=0, name=name)
         threading.Thread(target=self._upload, args=(item, token, category, trim), daemon=True).start()
+
+    @staticmethod
+    def sound_hash(item, trim):
+        """Which file this is (and which part of it, if trimmed to a smaller part)."""
+        if not item.get("hash"):
+            return None
+        if trim and (trim[0] > 0.05 or trim[1] < item["seconds"] - 0.05):
+            return hashlib.sha256(f"{item['hash']}:{trim[0]:.1f}-{trim[1]:.1f}".encode()).hexdigest()
+        return item["hash"]
 
     def _set(self, item, **changes):
         with self.lock:
@@ -722,7 +761,7 @@ class Library:
                 path = self._put_file("sound", f.read(), "audio/mpeg")
             try:
                 _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
-                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size)
+                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size, sound_hash=self.sound_hash(item, trim))
             except Exception:
                 self._remove_file(path)  # uploaded, but it didn't make it into the list: nothing uses it
                 raise

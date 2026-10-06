@@ -53,6 +53,12 @@ WV="$WORK/webview2-$WEBVIEW2_VERSION.nupkg"
 [ -f "$WV" ] || curl -sSL -o "$WV" "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/$WEBVIEW2_VERSION/microsoft.web.webview2.$WEBVIEW2_VERSION.nupkg"
 unzip -q -o -j "$WV" "build/native/x64/WebView2Loader.dll" -d "$STAGE/app"
 
+echo "==> Getting fpcalc.exe (audio fingerprints for the Copyright tab)"
+CHROMAPRINT_VERSION="1.5.1"
+FP="$WORK/chromaprint-fpcalc-$CHROMAPRINT_VERSION-windows-x86_64.zip"
+[ -f "$FP" ] || curl -sSL -o "$FP" "https://github.com/acoustid/chromaprint/releases/download/v$CHROMAPRINT_VERSION/chromaprint-fpcalc-$CHROMAPRINT_VERSION-windows-x86_64.zip"
+unzip -q -o -j "$FP" "*/fpcalc.exe" -d "$STAGE/app"
+
 WINE="${WINE:-$(command -v wine64 || command -v wine || ls /usr/lib/wine/wine64 2>/dev/null || true)}"
 [ -n "$WINE" ] || { echo "Wine is needed to name Ultimate Recording.exe"; exit 1; }
 

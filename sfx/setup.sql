@@ -80,6 +80,9 @@ create table if not exists lelons.sounds (
 );
 alter table lelons.sounds add column if not exists uploader_id uuid references lelons.accounts (id) on delete set null;
 alter table lelons.sounds drop column if exists owner_hash;
+-- (1.31.0) What the uploaded file was, so the same file can't go in twice.
+alter table lelons.sounds add column if not exists source_hash text;
+create index if not exists sounds_source_hash on lelons.sounds (source_hash);
 
 -- Bug reports and wishes people send to the owner.
 create table if not exists lelons.feedback (
@@ -609,8 +612,37 @@ begin
   return file;
 end $$;
 
+-- (1.31.0) Is there already a sound with this name (any capitals) or made from this same file?
+create or replace function lelons.same_sound(sound_name text, sound_hash text, except_id uuid default null)
+returns text language sql stable security definer set search_path = '' as $$
+  select case
+    when exists (select 1 from lelons.sounds s where lower(btrim(s.name)) = lower(btrim(sound_name))
+                 and s.id is distinct from except_id) then 'same_name'
+    when sound_hash is not null and exists (select 1 from lelons.sounds s where s.source_hash = sound_hash
+                 and s.id is distinct from except_id) then 'same_file'
+  end
+$$;
+
+-- The app asks before it starts converting: null if it's fine, else which one it matches.
+create or replace function public.lelons_sound_check(token text, sound_name text, sound_hash text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  why text := lelons.same_sound(sound_name, sound_hash);
+  other lelons.sounds;
+begin
+  if why is null then
+    return null;
+  end if;
+  select * into other from lelons.sounds s
+  where (why = 'same_name' and lower(btrim(s.name)) = lower(btrim(sound_name))) or (why = 'same_file' and s.source_hash = sound_hash)
+  order by s.created_at limit 1;
+  return json_build_object('why', why, 'name', other.name, 'uploader', other.uploader);
+end $$;
+
+drop function if exists public.lelons_add(text, text, text, text, real, int);  -- (it gained sound_hash)
 create or replace function public.lelons_add(token text, sound_name text, sound_category text,
-                                             file text, sound_seconds real, sound_bytes int)
+                                             file text, sound_seconds real, sound_bytes int, sound_hash text default null)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
@@ -629,8 +661,11 @@ begin
   if (select coalesce(sum(s.bytes), 0) from lelons.sounds s) + sound_bytes > 950 * 1024 * 1024 then
     raise exception 'storage full' using hint = 'full';
   end if;
-  insert into lelons.sounds (name, category, path, seconds, bytes, uploader, uploader_id)
-  values (btrim(sound_name), sound_category, file, sound_seconds, sound_bytes, me.username, me.id)
+  if lelons.same_sound(sound_name, sound_hash) is not null then
+    raise exception 'already in the library' using hint = lelons.same_sound(sound_name, sound_hash);
+  end if;
+  insert into lelons.sounds (name, category, path, seconds, bytes, uploader, uploader_id, source_hash)
+  values (btrim(sound_name), sound_category, file, sound_seconds, sound_bytes, me.username, me.id, sound_hash)
   returning sounds.id into new_id;
   delete from lelons.tickets where path = file;
   return new_id;
@@ -649,6 +684,9 @@ begin
   end if;
   if me.role not in ('owner', 'admin') and found.uploader_id is distinct from me.id then
     raise exception 'not allowed' using hint = 'denied';
+  end if;
+  if lelons.same_sound(sound_name, null, sound_id) is not null then
+    raise exception 'name taken' using hint = 'same_name';
   end if;
   update lelons.sounds s set name = btrim(sound_name), category = sound_category where s.id = sound_id;
 end $$;
@@ -986,7 +1024,7 @@ declare
 begin
   foreach f in array array['lelons_signup(text, text)', 'lelons_login(text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
-    'lelons_add(text, text, text, text, real, int)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
+    'lelons_add(text, text, text, text, real, int, text)', 'lelons_sound_check(text, text, text)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
     'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)',
     'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',

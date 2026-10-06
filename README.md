@@ -138,6 +138,19 @@ Resolve, Premiere, a Discord chat or a folder, just like dragging a file out of
 File Explorer. Library sounds you drag are kept in
 `%LOCALAPPDATA%\LelonsConverter\Library sounds` so your editor can always find them.
 
+**Copyright:** the Copyright tab checks songs and sounds. Drop files in (or click
+**choose files**, or the shield button on a Library sound) and the app listens to them
+with [Chromaprint](https://acoustid.org/chromaprint) and looks them up on
+[AcoustID](https://acoustid.org) / [MusicBrainz](https://musicbrainz.org). A known song
+shows its title and artist, which means it's most likely copyrighted. Short sound effects
+and memes usually can't be matched, so "No known song found" doesn't promise it's free to use.
+
+**No double uploads:** the Library won't take a sound with the same name, or the exact same
+file (checked by its fingerprint, `sounds.source_hash`), as one that's already there.
+
+**Drag card:** when you drag a sound out, you see a small card with its name and
+waveform, and it lifts and drops with smooth animations.
+
 The **History** tab lists everything you've downloaded, newest first. Search
 it, open the folder a file is in, or click **Download again** to get the same
 thing again (handy if you deleted it or want it in another folder).
@@ -202,7 +215,7 @@ Ultimate Recording/
 
 The window is the app's own window with a WebView2 page inside (WebView2 is
 part of Windows, the same thing Edge uses), so Task Manager shows "Ultimate
-Converter". It opens where you left it last time. If WebView2 is missing, an
+Recording". It opens where you left it last time. If WebView2 is missing, an
 Edge app window is used instead. `main.py` runs a small server on your own computer that only the window can
 talk to. When you click Convert, it uses yt-dlp to download the video and
 ffmpeg to turn it into MP3 or MP4.

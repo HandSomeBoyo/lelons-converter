@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.31.0", items: [
+    "New Copyright tab: drop in a song or sound and the app tells you if it's a known (copyrighted) song, with the title and artist. You can also check any Library sound with the shield button.",
+    "No more double uploads: the Library won't take a sound with the same name, or the exact same file, as one that's already there.",
+    "Dragging a sound into your editor now shows a little card with its waveform instead of a plain file, with smooth lift and drop animations.",
+  ] },
   { version: "1.30.0", items: [
     "Lelons Converter is now called Ultimate Recording! Same app, same account, same settings and history, just a new name.",
     "The new shortcut is on your desktop and in the Start menu. The old ones are removed for you.",

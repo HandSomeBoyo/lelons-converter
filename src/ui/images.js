@@ -19,18 +19,19 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab)));
-  for (const name of ["home", "stats", "video", "files", "images", "sfx", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "stats", "video", "files", "images", "sfx", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
   if (tab === "sfx" && typeof openSfx === "function") openSfx();
   if (tab === "account" && typeof openAccount === "function") openAccount();
+  if (tab === "copyright" && typeof openCopyright === "function") openCopyright();
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "sfx", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "sfx", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
@@ -88,6 +89,7 @@ window.addEventListener("drop", (e) => {
   const files = [...e.dataTransfer.files];
   // The SFX upload window takes the first file itself.
   if (typeof sfxTakesDrop === "function" && sfxTakesDrop(files)) return;
+  if (typeof copyTakesDrop === "function" && copyTakesDrop(files)) return;
   const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
   const pictures = files.filter(isPicture), others = files.filter((f) => !isPicture(f));
   if (others.length) addMediaFiles(others);

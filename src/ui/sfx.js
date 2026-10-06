@@ -7,6 +7,7 @@ const SFX_ICONS = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   starOn: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.6 9.6a3.6 3.6 0 1 0 0 4.8"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>',
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
@@ -538,6 +539,7 @@ function sfxRow(sound) {
   add(SFX_ICONS.download, "Download as MP3", () => downloadSfx(sound));
   // The rest only shows when the mouse is over the row (less to look at).
   add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } })).classList.add("extra");
+  add(SFX_ICONS.shield, "Check if it's a copyrighted song", () => checkSoundCopyright(sound)).classList.add("extra");
   if (sfxUser() && (sfxUser().canUpload || sound.mine)) {
     add(SFX_ICONS.edit, "Change the name or category", () => openEditSound(sound)).classList.add("extra");
   }
@@ -762,9 +764,31 @@ function closeSfxUpload() {
   sfxPart = null;
 }
 
+// The same name (any capitals) or the very same file can only be in the Library once.
+function sfxUploadProblem() {
+  if (!sfxFile) return "";
+  const name = $("sfxName").value.trim().toLowerCase();
+  const taken = name && sfxSounds.find((s) => s.name.trim().toLowerCase() === name);
+  if (taken) return `There's already a sound called "${taken.name}". Pick another name.`;
+  const dup = sfxFile.duplicate;
+  if (dup && !sfxPart) {
+    return `This file is already in the Library${dup.uploader ? ` (${dup.uploader} uploaded it as "${dup.name}")` : ""}. `
+      + "Trim it to upload just a part, or pick another file.";
+  }
+  return "";
+}
+
+function drawSfxProblem() {
+  const problem = sfxUploadProblem();
+  const box = $("sfxUploadError");
+  if (problem || box.classList.contains("clash")) box.textContent = problem;
+  box.classList.toggle("clash", !!problem);
+  $("sfxSend").disabled = !sfxFile || !!problem;
+}
+
 function drawSfxFile() {
   $("sfxForm").hidden = !sfxFile;
-  $("sfxSend").disabled = !sfxFile;
+  drawSfxProblem();
   $("sfxDropText").innerHTML = sfxFile
     ? `<strong></strong> · <span class="link">pick another</span>`
     : `<strong>Drop a sound or video here</strong> or <span class="link">choose a file</span>`;
@@ -784,7 +808,7 @@ function useSfxFile(file) {
   }
   drawSfxFile();
 }
-$("sfxName").addEventListener("input", () => { $("sfxName").dataset.auto = ""; });
+$("sfxName").addEventListener("input", () => { $("sfxName").dataset.auto = ""; drawSfxProblem(); });
 
 async function addSfxFile(file) {
   $("sfxUploadError").textContent = "";
@@ -849,12 +873,13 @@ $("sfxSend").addEventListener("click", async () => {
     $("sfxUploadError").textContent = "Give the sound a name.";
     return $("sfxName").focus();
   }
+  if (sfxUploadProblem()) return drawSfxProblem();
   $("sfxSend").disabled = true;
   const res = await api("/api/sfx-upload", {
     id: sfxFile.id, name, category: sfxUploadCategory,
     start: sfxPart ? sfxPart.start : null, end: sfxPart ? sfxPart.end : null,
   }).catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
-  $("sfxSend").disabled = false;
+  drawSfxProblem();
   if (sfxLoggedOut(res)) return ($("sfxModal").hidden = true);
   if (!res.ok) {
     $("sfxUploadError").textContent = res.error;

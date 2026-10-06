@@ -6,6 +6,7 @@ page talks to, and does the downloading with yt-dlp.
 """
 
 import ctypes
+import base64
 import json
 import os
 import re
@@ -31,6 +32,7 @@ import downloader  # noqa: E402
 import files  # noqa: E402
 import findsounds  # noqa: E402
 import pagecache  # noqa: E402
+import copycheck as copyright_check  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -226,15 +228,41 @@ def show_in_folder(path):
         open_folder(os.path.dirname(path) or state.folder)
 
 
-def start_drag(path):
-    """Drag a finished file out of the app into another one (the mouse is held on it now)."""
+# The last drag out: the page shows it lifting while it's busy, then "Dropped" or settling back.
+drag_state = {"id": 0, "busy": False, "result": None}
+
+
+def start_drag(path, image=None, offset=None):
+    """Drag a finished file out of the app into another one (the mouse is held on it now).
+
+    image: a PNG of the card the page drew (name and waveform), shown under the mouse.
+    Returns the drag's number, for /api/drag-state.
+    """
     if not path or not os.path.isfile(path):
         raise ValueError("That file isn't there anymore.")
     if os.name != "nt":
         raise ValueError("Dragging files out only works on Windows.")
     import dragout
-    if not appwindow.drag(path):
-        dragout.drag_on_new_thread(path)
+    drag_state.update(id=drag_state["id"] + 1, busy=True, result=None)
+    number = drag_state["id"]
+
+    def done(result):
+        if drag_state["id"] == number:
+            drag_state.update(busy=False, result=result or "cancel")
+    if not appwindow.drag(path, image, offset, done):
+        dragout.drag_on_new_thread(path, image, offset, done)
+    return number
+
+
+def drag_image(data):
+    """The card PNG the page sent along (a data: URL), or None."""
+    url = data.get("image")
+    if not isinstance(url, str) or not url.startswith("data:image/png;base64,") or len(url) > 3_000_000:
+        return None
+    try:
+        return base64.b64decode(url.split(",", 1)[1])
+    except ValueError:
+        return None
 
 
 def drag_path(data):
@@ -654,6 +682,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/copyright-add":  # the body is the sound or video to check
+            if length > 2 * 1024 ** 3:
+                return self.send_json({"ok": False, "error": "That file is too big."})
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "sound")
+            try:
+                return self.send_json({"ok": True, "item": copyright_check.checker.add(name, self.rfile, length)})
+            except copyright_check.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
         if self.path == "/api/sfx-picture":  # the body is the new profile picture
             if length > 30 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})
@@ -826,10 +864,40 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/drag":
             try:
-                start_drag(drag_path(data))
+                offset = data.get("offset")
+                offset = offset if isinstance(offset, list) and len(offset) == 2 else None
+                number = start_drag(drag_path(data), drag_image(data), offset)
+                self.send_json({"ok": True, "drag": number})
+            except (ValueError, sfx.Error) as e:
+                self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/copyright-list":
+            self.send_json({"ok": True, "items": copyright_check.checker.snapshot()})
+        elif self.path == "/api/copyright-pick":
+            if os.name != "nt":
+                return self.send_json({"ok": False, "fallback": True})
+            import folder_picker
+            try:
+                paths = folder_picker.pick_files("Pick songs or videos to check", sfx.UPLOAD_KINDS)
+            except OSError:
+                return self.send_json({"ok": False, "fallback": True})
+            for path in paths[:20]:
+                copyright_check.checker.add_path(path)
+            self.send_json({"ok": True})
+        elif self.path == "/api/copyright-sound":  # a Library sound
+            try:
+                path = sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
+                copyright_check.checker.add_path(path, str(data.get("name") or os.path.basename(path)))
                 self.send_json({"ok": True})
             except (ValueError, sfx.Error) as e:
                 self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/copyright-remove":
+            copyright_check.checker.remove(data.get("id"))
+            self.send_json({"ok": True, "items": copyright_check.checker.snapshot()})
+        elif self.path == "/api/copyright-clear":
+            copyright_check.checker.clear()
+            self.send_json({"ok": True, "items": copyright_check.checker.snapshot()})
+        elif self.path == "/api/drag-state":
+            self.send_json({"ok": True, **drag_state})
         elif self.path == "/api/clip":  # the trim editor's clip to drag: make it for this start and end
             try:
                 self.send_json({"ok": True, "clip": clip_maker.want(data)})
@@ -1089,6 +1157,7 @@ def clean_up():
     sfx.clean_drag_copies()
     sfx.waveforms.save()  # waveforms not written down yet
     pagecache.flush()
+    copyright_check.clean_up()
     clips.clean_up()
 
 
