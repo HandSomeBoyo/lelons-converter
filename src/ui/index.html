@@ -13,7 +13,7 @@
 <main>
   <header class="top">
     <div class="brand">
-      <div class="mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg></div>
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg></div>
       <div class="word">Vault<span>Hub</span></div>
     </div>
     <div class="top-right">
@@ -27,6 +27,10 @@
           <button type="button" id="whatsNewOpen">What's new</button>
         </div>
       </div>
+      <button type="button" class="icon-button head-button chat-button" id="chatButton" title="Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg>
+        <b class="chat-badge" id="chatBadge" hidden></b>
+      </button>
       <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
       </button>
@@ -863,35 +867,69 @@
   </div>
 </div>
 
-<!-- Live chat: a panel on the right side -->
+<!-- The chat: a whole page, Discord style (everyone, groups and private chats on the left) -->
 <aside class="chat-panel" id="chatPanel" hidden aria-labelledby="chatHeading">
-  <div class="chat-head">
-    <div class="chat-title">
-      <h3 id="chatHeading">Live chat</h3>
-      <div class="chat-online" id="chatOnline"></div>
+  <nav class="chat-side">
+    <div class="chat-side-head"><h3 id="chatHeading">Chat</h3></div>
+    <div class="chat-convos" id="chatConvos"></div>
+    <div class="chat-side-online"><small>Online now</small><div class="chat-online" id="chatOnline"></div></div>
+  </nav>
+  <section class="chat-main">
+    <div class="chat-head">
+      <div class="chat-room" id="chatRoom"></div>
+      <div class="chat-room-tools" id="chatRoomTools"></div>
+      <button type="button" class="icon-button" id="chatClose" title="Close the chat (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
-    <button type="button" class="icon-button" id="chatClose" title="Close">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button>
-  </div>
-  <div class="chat-convos" id="chatConvos"></div>
-  <div class="chat-private-head" id="chatPrivateHead" hidden></div>
-  <div class="chat-out" id="chatOut" hidden>
-    <p>Log in to chat with everyone.</p>
-    <button type="button" class="small-button" id="chatLogin">Log in</button>
-  </div>
-  <div class="chat-list" id="chatList"></div>
-  <p class="chat-typing" id="chatTyping" hidden><span class="typing-dots"><i></i><i></i><i></i></span><span id="chatTypingText"></span></p>
-  <p class="chat-note" id="chatNote"></p>
-  <div class="chat-attach" id="chatAttach" hidden></div>
-  <div class="chat-suggest" id="chatSuggest" hidden></div>
-  <form class="chat-form" id="chatForm" autocomplete="off">
-    <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
-    <button type="submit" class="small-button" id="chatSend" title="Send">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </button>
-  </form>
+    <div class="chat-private-head" id="chatPrivateHead" hidden></div>
+    <div class="chat-out" id="chatOut" hidden>
+      <p>Log in to chat with everyone.</p>
+      <button type="button" class="small-button" id="chatLogin">Log in</button>
+    </div>
+    <div class="chat-list" id="chatList"></div>
+    <p class="chat-typing" id="chatTyping" hidden><span class="typing-dots"><i></i><i></i><i></i></span><span id="chatTypingText"></span></p>
+    <p class="chat-note" id="chatNote"></p>
+    <div class="chat-attach" id="chatAttach" hidden></div>
+    <div class="chat-suggest" id="chatSuggest" hidden></div>
+    <form class="chat-form" id="chatForm" autocomplete="off">
+      <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
+      <button type="submit" class="small-button" id="chatSend" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+  </section>
 </aside>
+
+<!-- A group chat: make one, or change its name, picture and people. Also "pick a person" for a new private chat. -->
+<div class="modal" id="groupModal" hidden>
+  <div class="dialog group-dialog" role="dialog" aria-labelledby="groupTitle">
+    <h2 id="groupTitle">New group</h2>
+    <div class="group-top" id="groupTop">
+      <button type="button" class="group-pic" id="groupPic" title="Change the picture"></button>
+      <div class="group-top-text">
+        <label class="input"><input id="groupName" maxlength="50" placeholder="Group name" autocomplete="off"></label>
+        <div class="group-pic-tools" id="groupPicTools">
+          <button type="button" class="link" id="groupPicChange">Change picture</button>
+          <button type="button" class="link" id="groupPicRemove">Remove picture</button>
+        </div>
+        <input type="file" id="groupPicInput" accept="image/*" hidden>
+      </div>
+    </div>
+    <h4 class="group-label" id="groupMembersLabel">People in it</h4>
+    <div class="group-members" id="groupMembers"></div>
+    <h4 class="group-label" id="groupPickLabel">Add people</h4>
+    <label class="input group-search"><input id="groupSearch" placeholder="Search names" autocomplete="off" spellcheck="false"></label>
+    <div class="group-pick" id="groupPick"></div>
+    <p class="group-note" id="groupNote"></p>
+    <div class="dialog-actions">
+      <button type="button" class="outline-button group-leave" id="groupLeave">Leave group</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="groupCancel">Cancel</button>
+      <button type="button" class="small-button" id="groupSave">Create group</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="findModal" hidden>
   <div class="dialog find-dialog" role="dialog" aria-labelledby="findTitle">

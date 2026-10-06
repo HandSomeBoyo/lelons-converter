@@ -131,6 +131,23 @@ alter table lelons.chat add column if not exists file_seconds real;
 alter table lelons.chat drop constraint if exists chat_message_check;
 alter table lelons.chat add constraint chat_message_check check (length(message) <= 500);
 create index if not exists chat_private on lelons.chat (to_id, account_id, id) where to_id is not null;
+-- (2.4.0) Group chats: a name, a picture and the people in it. Their messages have group_id set.
+create table if not exists lelons.chat_groups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(name) between 1 and 50),
+  picture text,
+  owner_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.chat_group_members (
+  group_id uuid not null references lelons.chat_groups (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (group_id, account_id)
+);
+create index if not exists chat_group_members_by_account on lelons.chat_group_members (account_id);
+alter table lelons.chat add column if not exists group_id uuid references lelons.chat_groups (id) on delete cascade;
+create index if not exists chat_in_group on lelons.chat (group_id, id) where group_id is not null;
 
 create table if not exists lelons.chat_reactions (
   message_id bigint not null references lelons.chat (id) on delete cascade,
@@ -151,6 +168,8 @@ alter table lelons.favorites enable row level security;
 alter table lelons.presence enable row level security;
 alter table lelons.chat enable row level security;
 alter table lelons.chat_reactions enable row level security;
+alter table lelons.chat_groups enable row level security;
+alter table lelons.chat_group_members enable row level security;
 revoke all on all tables in schema lelons from anon, authenticated;
 
 -- ---- helpers (not reachable from the app directly)
@@ -201,7 +220,8 @@ create or replace function lelons.listed(file text) returns boolean
   language sql stable security definer set search_path = '' as
   $$ select exists (select 1 from lelons.sounds where path = file)
          or exists (select 1 from lelons.accounts where avatar = file)
-         or exists (select 1 from lelons.chat c where c.file = listed.file) $$;
+         or exists (select 1 from lelons.chat c where c.file = listed.file)
+         or exists (select 1 from lelons.chat_groups g where g.picture = listed.file) $$;
 
 create or replace function lelons.delete_ticket(file text) returns void
   language sql security definer set search_path = '' as
@@ -407,9 +427,33 @@ drop function if exists public.lelons_chat_list(text, bigint);
 drop function if exists public.lelons_chat_delete(text, bigint);
 
 -- Who a chat message can be seen by: everyone (to_id empty), or the two people in a private chat.
+-- (2.4.0: or the people in its group)
 create or replace function lelons.chat_sees(c lelons.chat, me uuid) returns boolean
   language sql stable set search_path = '' as
-  $$ select c.to_id is null or c.to_id = me or c.account_id = me $$;
+  $$ select case when c.group_id is not null
+                 then exists (select 1 from lelons.chat_group_members m where m.group_id = c.group_id and m.account_id = me)
+                 else c.to_id is null or c.to_id = me or c.account_id = me end $$;
+
+-- (2.4.0) A group chat is asked for as "g:" and its id (where a username goes otherwise).
+-- Its id, after checking you're in it; null when it isn't a group.
+create or replace function lelons.group_of(with_user text, me uuid) returns uuid
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  gid uuid;
+begin
+  if with_user is null or with_user not like 'g:%' then
+    return null;
+  end if;
+  begin
+    gid := substr(with_user, 3)::uuid;
+  exception when others then
+    raise exception 'no group' using hint = 'nogroup';
+  end;
+  if not exists (select 1 from lelons.chat_group_members m where m.group_id = gid and m.account_id = me) then
+    raise exception 'no group' using hint = 'nogroup';
+  end if;
+  return gid;
+end $$;
 
 -- Send a chat message (everyone with an account can chat). to_user: a private message to them.
 -- sound: a Library sound to share; file: a clip uploaded with a 'chat' ticket.
@@ -421,6 +465,7 @@ declare
   me lelons.accounts := lelons.who(token);
   text_in text := btrim(coalesce(message, ''));
   target uuid;
+  gid uuid := lelons.group_of(to_user, me.id);
 begin
   if length(text_in) < 1 and sound is null and file is null then
     return json_build_object('ok', false, 'error', 'short');
@@ -428,7 +473,7 @@ begin
   if length(text_in) > 500 then
     return json_build_object('ok', false, 'error', 'long');
   end if;
-  if to_user is not null then
+  if to_user is not null and gid is null then
     select a.id into target from lelons.accounts a where lower(a.username) = lower(btrim(to_user));
     if target is null then
       return json_build_object('ok', false, 'error', 'nobody');
@@ -454,14 +499,38 @@ begin
                            and c.created_at > now() - interval '1 day') >= 50 then
     return json_build_object('ok', false, 'error', 'daily');
   end if;
-  insert into lelons.chat (account_id, message, to_id, sound_id, file, file_name, file_seconds)
-  values (me.id, text_in, target, sound, file,
+  insert into lelons.chat (account_id, message, to_id, group_id, sound_id, file, file_name, file_seconds)
+  values (me.id, text_in, target, gid, sound, file,
           left(btrim(coalesce((select s.name from lelons.sounds s where s.id = sound), file_name, '')), 120), file_seconds);
   delete from lelons.tickets t where t.path = file;
   -- Only the newest 5000 messages are kept.
   delete from lelons.chat c where c.id < (select min(x.id) from (select id from lelons.chat order by id desc limit 5000) x);
   return json_build_object('ok', true);
 end $$;
+
+-- (2.4.0) Your group chats, newest message first, and one group with the people in it.
+create or replace function lelons.groups_json(me uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'picture', g.picture,
+                                             'last_id', g.last_id, 'last_message', g.last_message, 'last_mine', g.last_mine,
+                                             'people', g.people) order by coalesce(g.last_id, 0) desc, g.created_at desc), '[]'::json)
+  from (select x.*, (select c.id from lelons.chat c where c.group_id = x.id order by c.id desc limit 1) last_id,
+               (select c.message from lelons.chat c where c.group_id = x.id order by c.id desc limit 1) last_message,
+               (select c.account_id = me from lelons.chat c where c.group_id = x.id order by c.id desc limit 1) last_mine,
+               (select count(*) from lelons.chat_group_members m2 where m2.group_id = x.id) people
+        from lelons.chat_groups x
+        where exists (select 1 from lelons.chat_group_members m where m.group_id = x.id and m.account_id = me)) g
+$$;
+
+create or replace function lelons.group_json(gid uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select json_build_object('id', g.id, 'name', g.name, 'picture', g.picture, 'owner', o.username,
+    'members', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'role', a.role)
+                                         order by m.added_at, lower(a.username))
+                         from lelons.chat_group_members m join lelons.accounts a on a.id = m.account_id
+                         where m.group_id = g.id), '[]'::json))
+  from lelons.chat_groups g left join lelons.accounts o on o.id = g.owner_id where g.id = gid
+$$;
 
 -- One conversation (the chat with everyone, or the private chat with with_user): messages newer than
 -- "after" (0: the newest 100) oldest first, the reactions and ids of the newest 150 (so changes and
@@ -471,8 +540,9 @@ returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
   peer uuid;
+  gid uuid := lelons.group_of(with_user, me.id);
 begin
-  if with_user is not null then
+  if with_user is not null and gid is null then
     select a.id into peer from lelons.accounts a where lower(a.username) = lower(btrim(with_user));
     if peer is null then
       raise exception 'nobody' using hint = 'nobody';
@@ -490,7 +560,8 @@ begin
         'file', m.file, 'file_name', m.file_name, 'file_seconds', m.file_seconds) order by m.id)
       from (select * from lelons.chat c
             where c.id > coalesce(after, 0)
-              and (case when peer is null then c.to_id is null
+              and (case when gid is not null then c.group_id = gid
+                        when peer is null then c.to_id is null and c.group_id is null
                         else (c.account_id = me.id and c.to_id = peer) or (c.account_id = peer and c.to_id = me.id) end)
             order by c.id desc limit 100) m
       join lelons.accounts a on a.id = m.account_id
@@ -503,7 +574,8 @@ begin
               from lelons.chat_reactions cr join lelons.accounts ra on ra.id = cr.account_id
               where cr.message_id = r.id group by cr.emoji order by min(cr.emoji)) x)))
       from (select c.id from lelons.chat c
-            where (case when peer is null then c.to_id is null
+            where (case when gid is not null then c.group_id = gid
+                        when peer is null then c.to_id is null and c.group_id is null
                         else (c.account_id = me.id and c.to_id = peer) or (c.account_id = peer and c.to_id = me.id) end)
             order by c.id desc limit 150) r), '[]'::json),
     'private', coalesce((
@@ -515,7 +587,9 @@ begin
             from lelons.chat c where c.to_id is not null and (c.account_id = me.id or c.to_id = me.id)
             order by case when c.account_id = me.id then c.to_id else c.account_id end, c.id desc) p
       join lelons.accounts a on a.id = p.other), '[]'::json),
-    'everyone_last', (select max(c.id) from lelons.chat c where c.to_id is null),
+    'everyone_last', (select max(c.id) from lelons.chat c where c.to_id is null and c.group_id is null),
+    'groups', lelons.groups_json(me.id),
+    'group', case when gid is null then null else lelons.group_json(gid) end,
     'names', coalesce((select json_agg(a.username order by lower(a.username)) from lelons.accounts a), '[]'::json));
 end $$;
 
@@ -546,7 +620,7 @@ declare
   gone text;
 begin
   delete from lelons.chat c where c.id = message_id
-    and (c.account_id = me.id or (c.to_id is null and me.role in ('owner', 'admin')))
+    and (c.account_id = me.id or (c.to_id is null and c.group_id is null and me.role in ('owner', 'admin')))
   returning c.file into gone;
   if gone is not null then
     perform lelons.delete_ticket(gone);
@@ -570,7 +644,7 @@ begin
     'last_seen', them.last_seen, 'me', them.id = me.id,
     'online', exists (select 1 from lelons.presence p where p.account_id = them.id and p.seen_at > now() - interval '150 seconds'),
     'sounds', (select count(*) from lelons.sounds s where s.uploader_id = them.id),
-    'messages', (select count(*) from lelons.chat c where c.account_id = them.id and c.to_id is null),
+    'messages', (select count(*) from lelons.chat c where c.account_id = them.id and c.to_id is null and c.group_id is null),
     'recent', coalesce((select json_agg(json_build_object('id', s.id, 'name', s.name, 'category', s.category,
                                                           'path', s.path, 'seconds', s.seconds, 'created_at', s.created_at)
                                         order by s.created_at desc)
@@ -870,7 +944,7 @@ begin
       select json_agg(json_build_object('id', m.id, 'message', m.message, 'created_at', m.created_at,
                                         'username', a.username, 'avatar', a.avatar,
                                         'sound_name', s.name, 'file_name', m.file_name) order by m.id)
-      from (select * from lelons.chat c where c.to_id is null order by c.id desc limit 3) m
+      from (select * from lelons.chat c where c.to_id is null and c.group_id is null order by c.id desc limit 3) m
       join lelons.accounts a on a.id = m.account_id
       left join lelons.sounds s on s.id = m.sound_id), '[]'::json) end,
     'activity', case when me.id is null then '[]'::json else lelons.activity() end);
@@ -960,7 +1034,7 @@ language plpgsql stable security definer set search_path = '' as $$
 declare
   peer uuid;
 begin
-  if with_user is null then
+  if with_user is null or with_user like 'g:%' then  -- (a group: see group_of)
     return null;
   end if;
   select a.id into peer from lelons.accounts a where lower(a.username) = lower(btrim(with_user));
@@ -975,7 +1049,7 @@ create or replace function public.lelons_chat_typing(token text, with_user text 
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
-  key uuid := coalesce(lelons.peer_of(with_user), '00000000-0000-0000-0000-000000000000'::uuid);
+  key uuid := coalesce(lelons.group_of(with_user, me.id), lelons.peer_of(with_user), '00000000-0000-0000-0000-000000000000'::uuid);
 begin
   if stop then
     delete from lelons.chat_typing t where t.account_id = me.id and t.to_key = key;
@@ -991,23 +1065,26 @@ returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
   peer uuid := lelons.peer_of(with_user);
+  gid uuid := lelons.group_of(with_user, me.id);
   zero uuid := '00000000-0000-0000-0000-000000000000'::uuid;
 begin
   if seen_id is not null then
-    insert into lelons.chat_seen as x (account_id, peer_key, last_id) values (me.id, coalesce(peer, zero), seen_id)
+    insert into lelons.chat_seen as x (account_id, peer_key, last_id) values (me.id, coalesce(gid, peer, zero), seen_id)
     on conflict (account_id, peer_key) do update set last_id = greatest(x.last_id, excluded.last_id), seen_at = now();
   end if;
   return json_build_object(
     'typing', coalesce((select json_agg(a.username order by lower(a.username))
                         from lelons.chat_typing t join lelons.accounts a on a.id = t.account_id
                         where t.at > now() - interval '6 seconds' and t.account_id <> me.id
-                          and (case when peer is null then t.to_key = zero else t.account_id = peer and t.to_key = me.id end)),
+                          and (case when gid is not null then t.to_key = gid
+                                    when peer is null then t.to_key = zero else t.account_id = peer and t.to_key = me.id end)),
                        '[]'::json),
     'seen', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'last_id', x.last_id)
                                       order by x.seen_at desc)
                       from lelons.chat_seen x join lelons.accounts a on a.id = x.account_id
                       where x.account_id <> me.id and x.seen_at > now() - interval '30 days'
-                        and (case when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)),
+                        and (case when gid is not null then x.peer_key = gid
+                                  when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)),
                      '[]'::json));
 end $$;
 
@@ -1424,6 +1501,93 @@ begin
   return public.lelons_doc_comments(token, doc.id);
 end $$;
 
+-- ---- Group chats (2.4.0)
+
+-- what: create (name, usernames), rename (name), picture (a file uploaded with an 'avatar' ticket, or
+-- null to take it off), add (usernames), remove (one username; the owner only), leave.
+-- Everyone in a group can rename it, change its picture and add people. Returns the group, or for
+-- create its id too. A group nobody is left in is deleted.
+drop function if exists public.lelons_chat_group(text, text, uuid, text, text[], text);
+create or replace function public.lelons_chat_group(token text, what text, group_id uuid default null,
+                                                    group_name text default null, usernames text[] default null,
+                                                    picture text default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  g lelons.chat_groups;
+  clean text := left(btrim(coalesce(group_name, '')), 50);
+  old_picture text;
+  them uuid;
+  n int;
+begin
+  if what = 'create' then
+    if clean = '' then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if (select count(*) from lelons.chat_groups x where x.owner_id = me.id and x.created_at > now() - interval '1 day') >= 20 then
+      return json_build_object('ok', false, 'error', 'daily');
+    end if;
+    insert into lelons.chat_groups (name, owner_id) values (clean, me.id) returning * into g;
+    insert into lelons.chat_group_members (group_id, account_id) values (g.id, me.id);
+  else
+    select x.* into g from lelons.chat_groups x where x.id = lelons_chat_group.group_id;
+    if g.id is null or not exists (select 1 from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me.id) then
+      return json_build_object('ok', false, 'error', 'nogroup');
+    end if;
+  end if;
+  if what in ('create', 'add') then
+    insert into lelons.chat_group_members (group_id, account_id)
+    select g.id, a.id from lelons.accounts a
+    where lower(a.username) in (select lower(btrim(u)) from unnest(coalesce(usernames, '{}'::text[])) u)
+    on conflict do nothing;
+    if (select count(*) from lelons.chat_group_members m where m.group_id = g.id) > 50 then
+      raise exception 'too many people' using hint = 'many';
+    end if;
+  elsif what = 'rename' then
+    if clean = '' then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    update lelons.chat_groups x set name = clean where x.id = g.id;
+  elsif what = 'picture' then
+    if picture is not null and (picture not like 'avatars/%' or not exists
+        (select 1 from lelons.tickets t where t.path = picture and t.kind = 'upload' and t.account_id = me.id)) then
+      raise exception 'wrong file';
+    end if;
+    old_picture := g.picture;
+    update lelons.chat_groups x set picture = lelons_chat_group.picture where x.id = g.id;
+    delete from lelons.tickets t where t.path = lelons_chat_group.picture;
+    if old_picture is not null then
+      perform lelons.delete_ticket(old_picture);
+    end if;
+  elsif what = 'remove' then
+    select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(usernames[1], '')));
+    if g.owner_id is distinct from me.id or them is null or them = me.id then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    delete from lelons.chat_group_members m where m.group_id = g.id and m.account_id = them;
+  elsif what = 'leave' then
+    delete from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me.id;
+    select count(*) into n from lelons.chat_group_members m where m.group_id = g.id;
+    if n = 0 then
+      if g.picture is not null then
+        perform lelons.delete_ticket(g.picture);
+      end if;
+      -- (clips sent in it go too)
+      perform lelons.delete_ticket(c.file) from lelons.chat c where c.group_id = g.id and c.file is not null;
+      delete from lelons.chat_groups x where x.id = g.id;
+      return json_build_object('ok', true, 'gone', true, 'old_picture', g.picture);
+    end if;
+    if g.owner_id = me.id then  -- the person who's been in it longest takes over
+      update lelons.chat_groups x set owner_id = (select m.account_id from lelons.chat_group_members m
+                                                  where m.group_id = g.id order by m.added_at limit 1) where x.id = g.id;
+    end if;
+    return json_build_object('ok', true, 'gone', true);
+  elsif what <> 'create' then
+    raise exception 'bad what';
+  end if;
+  return json_build_object('ok', true, 'id', g.id, 'group', lelons.group_json(g.id), 'old_picture', old_picture);
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -1447,7 +1611,8 @@ begin
     'lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean, jsonb)', 'lelons_doc_close(text, uuid)',
     'lelons_doc_invite(text, uuid, text[])', 'lelons_doc_answer(text, uuid, boolean)',
     'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)', 'lelons_doc_comments(text, uuid)',
-    'lelons_doc_comment(text, uuid, text, bigint, text, text, text)'] loop
+    'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
+    'lelons_chat_group(text, text, uuid, text, text[], text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

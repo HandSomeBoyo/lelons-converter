@@ -78,6 +78,8 @@ FRIENDLY = {
     "too_many": "The library has as many accounts as it can take.",
     "nobody": "There's no account with that name any more.",
     "owner": "The owner's account can't be deleted.",
+    "nogroup": "That group is gone, or you're not in it any more.",
+    "many": "A group can have up to 50 people.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
@@ -343,8 +345,15 @@ class Library:
             if m.get("file"):
                 m["fileUrl"] = public_url(m["file"])
             messages.append(m)
+        group = result.get("group")
+        if group:
+            group = {**group, "pictureUrl": public_url(group["picture"]) if group.get("picture") else "",
+                     "members": [pictured(m) for m in group.get("members") or []]}
         return {"messages": messages, "recent": result.get("recent") or [],
                 "private": [pictured(p) for p in result.get("private") or []],
+                "groups": [{**g, "pictureUrl": public_url(g["picture"]) if g.get("picture") else ""}
+                           for g in result.get("groups") or []],
+                "group": group,
                 "everyoneLast": result.get("everyone_last") or 0,
                 "names": result.get("names") or [],
                 "online": presence.remember(result.get("online"))}
@@ -398,6 +407,48 @@ class Library:
             if os.path.exists(mp3):
                 os.remove(mp3)
         return {"file": file, "file_name": _clean_name(name, 120), "file_seconds": round(seconds, 2)}
+
+    def chat_group(self, what, group_id=None, name=None, usernames=None, picture=None):
+        """Make a group chat, rename it, add or remove people, or leave it (see lelons_chat_group)."""
+        if what not in ("create", "rename", "add", "remove", "leave", "picture"):
+            raise Error("That didn't work. Try again.")
+        names = [str(u) for u in usernames or [] if str(u).strip()][:50]
+        result = _rpc("lelons_chat_group", token=self._token(), what=what, group_id=str(group_id) if group_id else None,
+                      group_name=str(name) if name is not None else None, usernames=names or None, picture=picture) or {}
+        if not result.get("ok"):
+            raise Error({"name": "Give the group a name.",
+                         "daily": "You've made a lot of groups today. Try again tomorrow.",
+                         "denied": "Only the person who made the group can remove people.",
+                         }.get(result.get("error")) or FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
+        if result.get("old_picture"):
+            self._remove_file(result["old_picture"])
+        group = result.get("group")
+        if group:
+            result["group"] = {**group, "pictureUrl": public_url(group["picture"]) if group.get("picture") else "",
+                               "members": [{**m, "avatarUrl": public_url(m["avatar"]) if m.get("avatar") else ""}
+                                           for m in group.get("members") or []]}
+        return result
+
+    def set_group_picture(self, group_id, data):
+        """A group chat's picture from an image file's bytes: cut to a square and made small."""
+        import io
+
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
+                out = io.BytesIO()
+                im.save(out, "JPEG", quality=88)
+        except (OSError, ValueError, Image.DecompressionBombError):
+            raise Error("That isn't a picture the app can open.") from None
+        path = self._put_file("avatar", out.getvalue(), "image/jpeg")
+        try:
+            return self.chat_group("picture", group_id, picture=path)
+        except Error:
+            self._remove_file(path)
+            raise
 
     def chat_typing(self, with_user=None, stop=False):
         _rpc("lelons_chat_typing", token=self._token(), with_user=str(with_user) if with_user else None, stop=bool(stop))
