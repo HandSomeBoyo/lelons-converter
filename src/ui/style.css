@@ -2083,3 +2083,146 @@ html { scroll-padding-top: 76px; }  /* jumping to a section doesn't hide it unde
 :root[data-theme="light"] .modal > .dialog { background: var(--g-fill), color-mix(in srgb, var(--panel) 96%, transparent); }
 .outline-button:hover:not(:disabled), .lib-out-buttons .small-button:hover, .acct-logout:hover, .acct-danger:hover { box-shadow: none; }
 @media (prefers-reduced-transparency: reduce) { .chat-panel, .modal > .dialog { background: var(--panel); } }
+
+/* ================================================================ 1.35.0: Apple-inspired design
+   Calm and flat like Apple's own apps: one clean font (Inter, which is close to Apple's San Francisco),
+   big bold titles with a grey second line, grouped lists in rounded cards, capsule buttons,
+   iOS-style switches, Apple's own greys, and glass only on things that float. */
+@font-face { font-family: InterVar; src: url(fonts/intervariable.woff2) format("woff2"); font-weight: 100 900; font-display: block; }
+
+:root {
+  --head: InterVar, Inter, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --bg: #0f0f11; --panel: #1c1c1e; --panel2: #2c2c2e; --line: rgba(84, 84, 88, .42); --line2: rgba(84, 84, 88, .7);
+  --text: #f5f5f7; --muted: #98989f; --bars: #3a3a3c; --bars-hover: #636366; --wave: #d1d1d6;
+  --red: #ff6961; --green: #30d158; --switch-on: #30d158;
+  --r-xs: 8px; --r-sm: 12px; --r: 18px;
+}
+:root[data-theme="black"] { --bg: #000; --panel: #1c1c1e; --panel2: #2c2c2e; --line: rgba(84, 84, 88, .42); --line2: rgba(84, 84, 88, .7); }
+:root[data-theme="light"] {
+  --bg: #f2f2f7; --panel: #ffffff; --panel2: #e9e9ee; --line: rgba(60, 60, 67, .14); --line2: rgba(60, 60, 67, .26);
+  --text: #1d1d1f; --muted: #6e6e73; --bars: #c7c7cc; --bars-hover: #8e8e93; --wave: #3a3a3c;
+  --red: #ff3b30; --green: #248a3d; --switch-on: #34c759;
+}
+
+body {
+  font: 14px/1.42 InterVar, Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-optical-sizing: auto; font-feature-settings: "cv11", "ss03"; letter-spacing: -.006em;
+  background-image: none;
+}
+:root[data-theme="black"] body { background-image: none; }
+
+/* Titles: big, bold, tight, with the second line in grey (like apple.com) */
+.headline { font: 700 46px/1.04 var(--head); letter-spacing: -.035em; margin-bottom: 26px; }
+.headline em { color: var(--muted); }
+.word { font: 700 21px var(--head); letter-spacing: -.025em; }
+.word span { font-weight: 500; }
+.dialog h2 { font: 700 26px var(--head); letter-spacing: -.03em; }
+h2, h3, .home-head h2, .section-title { letter-spacing: -.02em; }
+.set-block h3, .home-label, .lib-label { font-family: var(--head); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+
+/* Cards: plain grey fills with soft round corners, no outlines */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview {
+  background: var(--panel); box-shadow: none; border-radius: var(--r);
+}
+:root[data-theme="light"] .home-card, :root[data-theme="light"] .home-stats div, :root[data-theme="light"] .channel-card,
+:root[data-theme="light"] .stats-card, :root[data-theme="light"] .upload-card, :root[data-theme="light"] .acct-card,
+:root[data-theme="light"] .copy-card, :root[data-theme="light"] .preview, :root[data-theme="light"] .playlist {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 16px rgba(0, 0, 0, .04);
+}
+.channel-card:hover, .home-card:hover { background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, .22); transform: translateY(-2px); }
+.copy-match { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--red) 55%, transparent); }
+.dropzone { border-radius: var(--r); background: var(--panel); border: 1.5px dashed var(--line2); }
+
+/* Fields: filled, rounded, no edge; a soft ring when you type */
+.input, .toggle button, .quality, .chips button, .lib-tools .find-open, .side-item.lib-cat {
+  background: var(--panel); box-shadow: none;
+}
+.input { border-radius: var(--r-sm); border: 0; }
+.input:focus-within { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .28); }
+.toggle, .chips { border-radius: var(--r-sm); }
+
+/* Buttons: capsules. The main one is filled, the others are soft grey with colored text. */
+.convert, .small-button { border-radius: 999px; box-shadow: none; font-weight: 600; letter-spacing: -.01em; }
+.convert:hover:not(:disabled), .small-button:hover:not(:disabled) { filter: brightness(1.08); box-shadow: none; }
+.ghost-button, .outline-button, .lib-out-buttons .small-button {
+  border-radius: 999px; border: 0; background: var(--panel2); color: var(--text); box-shadow: none;
+}
+.ghost-button:hover, .outline-button:hover:not(:disabled), .lib-out-buttons .small-button:hover { background: color-mix(in srgb, var(--panel2) 80%, var(--text)); border: 0; }
+.link, .link-button { color: var(--accent); }
+.head-button, .online-pill { background: var(--panel); box-shadow: none; }
+.head-button:hover, .online-pill:hover { background: var(--panel2); }
+
+/* The Library list: one grouped card, rows split by thin lines that start after the play button (like iOS) */
+.sound-list { background: var(--panel); border-radius: var(--r); padding: 4px 0; overflow: hidden; }
+.sound { border-radius: 0; margin: 0; padding-left: 14px; padding-right: 14px; }
+.sound + .sound { border-top: 0; box-shadow: inset 62px 0 0 var(--panel), inset 0 1px 0 var(--line); }
+.sound:hover, .sound.playing { background: color-mix(in srgb, var(--panel2) 70%, var(--panel)); box-shadow: none; }
+.sound + .sound:hover, .sound + .sound.playing { box-shadow: none; }
+.sound .play { background: var(--panel2); }
+:root[data-theme="light"] .sound-list { box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 16px rgba(0, 0, 0, .04); }
+:root[data-theme="light"] .sound + .sound { box-shadow: inset 62px 0 0 var(--panel), inset 0 1px 0 var(--line); }
+
+/* iOS switches instead of tick boxes */
+.check input[type=checkbox] {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 40px; height: 24px; margin: 0;
+  border: 0; border-radius: 999px; background: var(--panel2); cursor: pointer;
+  transition: background-color .3s var(--ease);
+}
+:root[data-theme="light"] .check input[type=checkbox] { background: #e3e3e8; }
+.check input[type=checkbox]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; margin: 0; border: 0; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .3), 0 0 1px rgba(0, 0, 0, .2); transform: none;
+  transition: transform .35s var(--spring);
+}
+.check input[type=checkbox]:checked { background: var(--switch-on); }
+.check input[type=checkbox]:checked::after { transform: translateX(16px); width: 20px; height: 20px; border: 0; }
+.check input[type=checkbox]:active::after { width: 24px; }
+.check input[type=checkbox]:checked:active::after { transform: translateX(12px); }
+
+/* Settings: each part is its own rounded group, the switch sits on the right like on an iPhone */
+.settings-dialog { width: min(500px, 100%); }
+.settings-dialog .set-block { margin-top: 20px; }
+.settings-dialog .set-block > .check, .settings-dialog .set-block > .volume-row, .settings-dialog .set-block > .size-row {
+  display: flex; width: 100%; box-sizing: border-box; padding: 12px 14px; background: var(--panel2); border-radius: var(--r-sm);
+}
+:root[data-theme="light"] .settings-dialog .set-block > .check,
+:root[data-theme="light"] .settings-dialog .set-block > .volume-row,
+:root[data-theme="light"] .settings-dialog .set-block > .size-row { background: #f2f2f7; }
+.settings-dialog .set-block > .check:has(input[type=checkbox]) { justify-content: space-between; }
+.settings-dialog .set-block > .check > input { order: 2; margin-left: auto; }
+.settings-dialog .set-block > .check + .check { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; box-shadow: inset 0 1px 0 var(--line); }
+.settings-dialog .set-block > .check:has(+ .check) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.set-help { padding: 0 4px; }
+
+/* Theme and color pickers: soft cards */
+.theme-picks button { border-radius: var(--r-sm); border: 0; background: var(--panel2); }
+.theme-picks button.active { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Tab bar: Apple's segmented look (the open tab is a white-ish pill, its icon in the text color) */
+.tabs button.active svg { color: currentColor; }
+
+/* Floating glass, a little calmer */
+.dialog { border-radius: 24px; }
+.modal { background: rgba(0, 0, 0, .45); }
+:root[data-theme="light"] .modal { background: rgba(0, 0, 0, .18); }
+
+/* Library category pills: grey capsules, the chosen one filled */
+.side-item.lib-cat { background: var(--panel); }
+#setSaveBlock.set-block > .check { width: 100%; margin-bottom: 0; }
+.settings-dialog .volume-row { max-width: none; }
+/* Choices (radio buttons) look like iOS lists: a tick on the right of the chosen row */
+#setSaveBlock .check { justify-content: flex-start; gap: 6px; }
+#setSaveBlock .check input[type=radio] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0 0 0 auto; border: 0; background: none; box-shadow: none; }
+#setSaveBlock .check input[type=radio]:checked { background: none; }
+#setSaveBlock .check input[type=radio]:checked::after {
+  content: ""; display: block; width: 6px; height: 11px; margin: 1px 0 0 6px; border: solid var(--accent); border-width: 0 2.4px 2.4px 0;
+  border-radius: 1px; background: none; transform: rotate(45deg);
+}
+
+:root[data-theme="light"] .check input[type=checkbox]:checked { background: var(--switch-on); }
+/* Yellow and other light accents are hard to read as text on white: links and ticks get a deeper shade */
+:root[data-theme="light"] { --accent-text: color-mix(in srgb, var(--accent) 62%, #000); }
+:root[data-theme="light"] .link, :root[data-theme="light"] .link-button, :root[data-theme="light"] .home-link,
+:root[data-theme="light"] .find-open { color: var(--accent-text); }
+:root[data-theme="light"] #setSaveBlock .check input[type=radio]:checked::after { border-color: var(--accent-text); }

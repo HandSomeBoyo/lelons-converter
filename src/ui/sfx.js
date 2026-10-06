@@ -354,6 +354,7 @@ function moveCatsPill() {
   markCatsOverflow();
 }
 window.addEventListener("resize", moveCatsPill);
+document.fonts && document.fonts.ready.then(moveCatsPill); // (the pills get their real width once the font is in)
 
 // In a small window the pills don't all fit: they scroll sideways (the mouse wheel works too),
 // and the edges fade out so you can see there are more.
