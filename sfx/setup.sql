@@ -1041,6 +1041,306 @@ language sql stable security definer set search_path = '' as $$
   ) x
 $$;
 
+-- ---- Docs (1.36.0): documents and movie scripts you write together with people you invite.
+-- (Local docs never come here: they stay on your own computer.)
+
+create table if not exists lelons.docs (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references lelons.accounts (id) on delete cascade,
+  title text not null default 'Untitled document' check (length(title) <= 150),
+  kind text not null default 'doc' check (kind in ('doc', 'script')),
+  rev bigint not null default 0,          -- goes up by one with every change
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references lelons.accounts (id) on delete set null
+);
+alter table lelons.docs add column if not exists settings jsonb not null default '{}'::jsonb;  -- page size, font... (1.36.0)
+-- A document is a list of blocks (paragraphs, headings, lists...), each saved on its own,
+-- so people can write in different parts at the same time.
+create table if not exists lelons.doc_blocks (
+  doc_id uuid not null references lelons.docs (id) on delete cascade,
+  id text not null check (length(id) between 1 and 40),
+  pos text collate "C" not null check (length(pos) between 1 and 1000),  -- sorts the blocks (text order, like the app)
+  html text not null default '' check (length(html) <= 600000),
+  rev bigint not null,
+  deleted boolean not null default false,
+  primary key (doc_id, id)
+);
+create index if not exists doc_blocks_rev on lelons.doc_blocks (doc_id, rev);
+-- Who's in a document: invited (joined = false) until they say yes.
+create table if not exists lelons.doc_members (
+  doc_id uuid not null references lelons.docs (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  joined boolean not null default false,
+  invited_by uuid references lelons.accounts (id) on delete set null,
+  invited_at timestamptz not null default now(),
+  primary key (doc_id, account_id)
+);
+create index if not exists doc_members_account on lelons.doc_members (account_id);
+-- Who has the document open right now, and where they're writing.
+create table if not exists lelons.doc_here (
+  doc_id uuid not null references lelons.docs (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  block text,
+  typed_at timestamptz,
+  at timestamptz not null default now(),
+  primary key (doc_id, account_id)
+);
+alter table lelons.docs enable row level security;
+alter table lelons.doc_blocks enable row level security;
+alter table lelons.doc_members enable row level security;
+alter table lelons.doc_here enable row level security;
+revoke all on lelons.docs, lelons.doc_blocks, lelons.doc_members, lelons.doc_here from anon, authenticated;
+
+-- The document, if this account may open it (made it, or was invited and joined). Nobody else,
+-- not even the owner of the app.
+create or replace function lelons.doc_for(me uuid, doc uuid) returns lelons.docs
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  found lelons.docs;
+begin
+  select d.* into found from lelons.docs d where d.id = doc
+    and (d.owner_id = me or exists (select 1 from lelons.doc_members m where m.doc_id = d.id and m.account_id = me and m.joined));
+  if found.id is null then
+    raise exception 'no such document' using hint = 'doc_gone';
+  end if;
+  return found;
+end $$;
+
+create or replace function lelons.doc_people(doc lelons.docs) returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(json_build_object('username', a.username, 'avatar', a.avatar,
+                                             'owner', a.id = doc.owner_id, 'joined', a.id = doc.owner_id or m.joined)
+                           order by a.id <> doc.owner_id, lower(a.username)), '[]'::json)
+  from lelons.accounts a left join lelons.doc_members m on m.doc_id = doc.id and m.account_id = a.id
+  where a.id = doc.owner_id or m.account_id is not null
+$$;
+
+-- The first few blocks, for the little page picture in the list.
+create or replace function lelons.doc_preview(doc uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(left(b.html, 2000) order by b.pos collate "C", b.id), '[]'::json)
+  from (select x.html, x.pos, x.id from lelons.doc_blocks x where x.doc_id = doc and not x.deleted
+        order by x.pos collate "C", x.id limit 14) b
+$$;
+
+-- Your shared documents, and the invitations waiting for an answer.
+create or replace function public.lelons_docs(token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return json_build_object(
+    'docs', coalesce((select json_agg(json_build_object('id', d.id, 'title', d.title, 'kind', d.kind,
+                                        'mine', d.owner_id = me.id, 'updated_at', d.updated_at,
+                                        'updated_by', (select a.username from lelons.accounts a where a.id = d.updated_by),
+                                        'people', lelons.doc_people(d), 'preview', lelons.doc_preview(d.id), 'settings', d.settings)
+                                      order by d.updated_at desc)
+                      from lelons.docs d
+                      where d.owner_id = me.id
+                         or exists (select 1 from lelons.doc_members m where m.doc_id = d.id and m.account_id = me.id and m.joined)),
+                     '[]'::json),
+    'invites', coalesce((select json_agg(json_build_object('id', d.id, 'title', d.title, 'kind', d.kind, 'at', m.invited_at,
+                                           'from', coalesce(a.username, '?'), 'avatar', a.avatar)
+                                         order by m.invited_at desc)
+                         from lelons.doc_members m join lelons.docs d on d.id = m.doc_id
+                         left join lelons.accounts a on a.id = m.invited_by
+                         where m.account_id = me.id and not m.joined),
+                        '[]'::json));
+end $$;
+
+-- Everyone you could invite.
+create or replace function public.lelons_doc_people(token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar) order by lower(a.username))
+                   from lelons.accounts a where a.id <> me.id), '[]'::json);
+end $$;
+
+-- Writes blocks (each {id, pos, html, deleted}) into a document. Only for the functions below.
+create or replace function lelons.doc_write(doc uuid, me uuid, changes jsonb) returns bigint
+language plpgsql security definer set search_path = '' as $$
+declare
+  new_rev bigint;
+  change jsonb;
+begin
+  if jsonb_typeof(coalesce(changes, '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(changes, '[]'::jsonb)) > 3000 then
+    raise exception 'bad changes' using hint = 'bad_input';
+  end if;
+  update lelons.docs set rev = rev + 1, updated_at = now(), updated_by = me where id = doc returning rev into new_rev;
+  for change in select * from jsonb_array_elements(coalesce(changes, '[]'::jsonb)) loop
+    if coalesce(length(change->>'id'), 0) not between 1 and 40 or coalesce(length(change->>'pos'), 0) not between 1 and 1000
+       or length(coalesce(change->>'html', '')) > 600000 then
+      raise exception 'bad block' using hint = 'bad_input';
+    end if;
+    insert into lelons.doc_blocks as b (doc_id, id, pos, html, rev, deleted)
+    values (doc, change->>'id', change->>'pos', coalesce(change->>'html', ''), new_rev, coalesce((change->>'deleted')::boolean, false))
+    on conflict (doc_id, id) do update set pos = excluded.pos, html = excluded.html, rev = excluded.rev, deleted = excluded.deleted;
+  end loop;
+  if (select count(*) from lelons.doc_blocks b where b.doc_id = doc and not b.deleted) > 5000 then
+    raise exception 'too long' using hint = 'doc_long';
+  end if;
+  if (select coalesce(sum(length(b.html)), 0) from lelons.doc_blocks b where b.doc_id = doc and not b.deleted) > 20000000 then
+    raise exception 'too big' using hint = 'doc_big';
+  end if;
+  return new_rev;
+end $$;
+
+-- A new shared document (blocks: what's in it to start with, like a template or a local doc).
+drop function if exists public.lelons_doc_create(text, text, text, jsonb);
+create or replace function public.lelons_doc_create(token text, title text, kind text, blocks jsonb default '[]'::jsonb,
+                                                    doc_settings jsonb default '{}'::jsonb)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc uuid;
+begin
+  if (select count(*) from lelons.docs d where d.owner_id = me.id) >= 300 then
+    raise exception 'too many docs' using hint = 'doc_many';
+  end if;
+  if kind not in ('doc', 'script') then
+    raise exception 'bad kind' using hint = 'bad_input';
+  end if;
+  if jsonb_typeof(coalesce(doc_settings, '{}'::jsonb)) <> 'object' or length(coalesce(doc_settings, '{}'::jsonb)::text) > 4000 then
+    raise exception 'bad settings' using hint = 'bad_input';
+  end if;
+  insert into lelons.docs (owner_id, title, kind, updated_by, settings)
+  values (me.id, left(coalesce(nullif(btrim(title), ''), 'Untitled document'), 150), kind, me.id, coalesce(doc_settings, '{}'::jsonb))
+  returning id into doc;
+  perform lelons.doc_write(doc, me.id, blocks);
+  return doc;
+end $$;
+
+-- Opening a document: everything in it.
+create or replace function public.lelons_doc_open(token text, doc_id uuid)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs := lelons.doc_for(me.id, doc_id);
+begin
+  return json_build_object('id', doc.id, 'title', doc.title, 'kind', doc.kind, 'rev', doc.rev, 'settings', doc.settings,
+    'mine', doc.owner_id = me.id, 'people', lelons.doc_people(doc),
+    'blocks', coalesce((select json_agg(json_build_object('id', b.id, 'pos', b.pos, 'html', b.html) order by b.pos collate "C", b.id)
+                        from lelons.doc_blocks b where b.doc_id = doc.id and not b.deleted), '[]'::json));
+end $$;
+
+-- While a document is open (about every second): send your changes, get everyone else's
+-- (all blocks changed after since_rev), and say where you're writing.
+drop function if exists public.lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean);
+create or replace function public.lelons_doc_sync(token text, doc_id uuid, since_rev bigint, changes jsonb default '[]'::jsonb,
+                                                  new_title text default null, at_block text default null, typing boolean default false,
+                                                  new_settings jsonb default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs := lelons.doc_for(me.id, doc_id);
+  now_rev bigint;
+begin
+  if jsonb_array_length(coalesce(changes, '[]'::jsonb)) > 0 then
+    perform lelons.doc_write(doc.id, me.id, changes);
+  end if;
+  if new_title is not null and left(coalesce(nullif(btrim(new_title), ''), 'Untitled document'), 150) <> doc.title then
+    update lelons.docs d set title = left(coalesce(nullif(btrim(new_title), ''), 'Untitled document'), 150),
+      rev = d.rev + 1, updated_at = now(), updated_by = me.id where d.id = doc.id;
+  end if;
+  if new_settings is not null and jsonb_typeof(new_settings) = 'object' and length(new_settings::text) <= 4000
+     and new_settings <> doc.settings then
+    update lelons.docs d set settings = new_settings, rev = d.rev + 1, updated_at = now(), updated_by = me.id where d.id = doc.id;
+  end if;
+  insert into lelons.doc_here as h (doc_id, account_id, block, typed_at, at)
+  values (doc.id, me.id, left(at_block, 40), case when typing then now() end, now())
+  on conflict on constraint doc_here_pkey do update set block = excluded.block, at = now(),
+    typed_at = case when typing then now() else h.typed_at end;
+  -- The revision first, then the blocks: a change saved in between comes again next time, never not at all.
+  select d.rev, d.title, d.settings into now_rev, doc.title, doc.settings from lelons.docs d where d.id = doc.id;
+  return json_build_object('rev', now_rev, 'title', doc.title, 'settings', doc.settings,
+    'blocks', coalesce((select json_agg(json_build_object('id', b.id, 'pos', b.pos, 'html', b.html, 'deleted', b.deleted, 'rev', b.rev))
+                        from lelons.doc_blocks b where b.doc_id = doc.id and b.rev > coalesce(since_rev, 0)), '[]'::json),
+    'here', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'block', h.block,
+                                                        'typing', h.typed_at > now() - interval '4 seconds')
+                                      order by lower(a.username))
+                      from lelons.doc_here h join lelons.accounts a on a.id = h.account_id
+                      where h.doc_id = doc.id and h.account_id <> me.id and h.at > now() - interval '10 seconds'), '[]'::json),
+    'people', lelons.doc_people(doc));
+end $$;
+
+-- Closing a document.
+create or replace function public.lelons_doc_close(token text, doc_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  delete from lelons.doc_here h where h.doc_id = lelons_doc_close.doc_id and h.account_id = me.id;
+end $$;
+
+-- The one who made a document invites people (by username).
+create or replace function public.lelons_doc_invite(token text, doc_id uuid, usernames text[])
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs := lelons.doc_for(me.id, doc_id);
+begin
+  if doc.owner_id <> me.id then
+    raise exception 'not yours' using hint = 'denied';
+  end if;
+  insert into lelons.doc_members (doc_id, account_id, invited_by)
+  select doc.id, a.id, me.id from lelons.accounts a
+  where lower(a.username) = any (select lower(btrim(u)) from unnest(coalesce(usernames, '{}')) u) and a.id <> me.id
+  on conflict on constraint doc_members_pkey do nothing;
+  if (select count(*) from lelons.doc_members m where m.doc_id = doc.id) > 50 then
+    raise exception 'too many people' using hint = 'doc_people';
+  end if;
+  return lelons.doc_people(doc);
+end $$;
+
+-- Saying yes (join) or no to an invitation.
+create or replace function public.lelons_doc_answer(token text, doc_id uuid, join_it boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if join_it then
+    update lelons.doc_members m set joined = true where m.doc_id = lelons_doc_answer.doc_id and m.account_id = me.id;
+  else
+    delete from lelons.doc_members m where m.doc_id = lelons_doc_answer.doc_id and m.account_id = me.id and not m.joined;
+  end if;
+  if not found then
+    raise exception 'no invite' using hint = 'doc_gone';
+  end if;
+end $$;
+
+-- The one who made it takes someone out; anyone else can only take themselves out (leave).
+create or replace function public.lelons_doc_remove(token text, doc_id uuid, username text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs;
+  them uuid;
+begin
+  select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(lelons_doc_remove.username));
+  select d.* into doc from lelons.docs d where d.id = lelons_doc_remove.doc_id;
+  if doc.id is null or them is null or them = doc.owner_id or (doc.owner_id <> me.id and them <> me.id) then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  delete from lelons.doc_members m where m.doc_id = doc.id and m.account_id = them;
+  delete from lelons.doc_here h where h.doc_id = doc.id and h.account_id = them;
+  return lelons.doc_people(doc);
+end $$;
+
+-- Only the one who made a document can delete it (for everyone).
+create or replace function public.lelons_doc_delete(token text, doc_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  delete from lelons.docs d where d.id = lelons_doc_delete.doc_id and d.owner_id = me.id;
+  if not found then
+    raise exception 'not yours' using hint = 'denied';
+  end if;
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -1059,7 +1359,11 @@ begin
     'lelons_home(text)', 'lelons_set_channels(text, text[])',
     'lelons_edit_sound(text, uuid, text, text)', 'lelons_channel_log(text, text, bigint, int)',
     'lelons_channel_history(text, int)', 'lelons_chat_typing(text, text, boolean)',
-    'lelons_chat_live(text, text, bigint)'] loop
+    'lelons_chat_live(text, text, bigint)', 'lelons_docs(text)', 'lelons_doc_people(text)',
+    'lelons_doc_create(text, text, text, jsonb, jsonb)', 'lelons_doc_open(text, uuid)',
+    'lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean, jsonb)', 'lelons_doc_close(text, uuid)',
+    'lelons_doc_invite(text, uuid, text[])', 'lelons_doc_answer(text, uuid, boolean)',
+    'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

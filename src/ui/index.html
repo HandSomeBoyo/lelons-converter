@@ -79,6 +79,7 @@
     <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
     <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
     <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
+    <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
     <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
     <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
   </nav>
@@ -450,6 +451,92 @@
           </form>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="docsTab" hidden>
+    <div id="docsHome">
+      <h1 class="headline">Write it down.<br><em>Scripts, notes and plans.</em></h1>
+      <div class="docs-switch" id="docsSwitch">
+        <button type="button" data-where="local" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>Local</button>
+        <button type="button" data-where="collab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.9c1.6.7 2.7 2.2 3 4.6"/></svg>Collab<b class="tab-badge" id="docsCollabBadge" hidden></b></button>
+        <span class="docs-switch-pill" aria-hidden="true"></span>
+      </div>
+      <p class="docs-where" id="docsWhere"></p>
+      <div class="docs-invites" id="docsInvites" hidden></div>
+      <div class="lib-out docs-out" id="docsLoggedOut" hidden>
+        <p>Log in to write documents together with your friends.</p>
+        <div class="lib-out-buttons">
+          <button type="button" class="convert" id="docsOutLogin">Log in</button>
+          <button type="button" class="small-button" id="docsOutSignup">Create account</button>
+        </div>
+      </div>
+      <div id="docsMain">
+        <h3 class="docs-label">Start something new</h3>
+        <div class="docs-templates" id="docsTemplates"></div>
+        <div class="docs-list-head">
+          <h3 class="docs-label" id="docsListTitle">Your documents</h3>
+          <span class="spacer"></span>
+          <button type="button" class="docs-sort" id="docsSort" title="Sort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/></svg><span>Newest first</span></button>
+          <label class="input docs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="docsSearch" placeholder="Search" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="docs-grid" id="docsGrid"></div>
+        <p class="docs-empty" id="docsEmpty" hidden></p>
+      </div>
+      <div class="lib-menu docs-card-menu" id="docsCardMenu" hidden></div>
+    </div>
+
+    <div class="doc-editor" id="docEditor" hidden>
+      <div class="doc-top">
+        <button type="button" class="icon-button doc-back" id="docBack" title="Back to your documents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span class="doc-kind" id="docKind"></span>
+        <div class="doc-name">
+          <div class="doc-name-row">
+            <input id="docTitle" maxlength="150" spellcheck="false" autocomplete="off">
+            <span class="doc-saved" id="docSaved"></span>
+          </div>
+          <nav class="doc-menubar" id="docMenubar"></nav>
+        </div>
+        <div class="doc-here" id="docHere"></div>
+        <button type="button" class="outline-button doc-save" id="docSave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4 4 9-9"/></svg><span>Saved</span></button>
+        <button type="button" class="small-button doc-share" id="docShare"></button>
+      </div>
+      <div class="doc-toolbar" id="docToolbar"></div>
+      <div class="doc-find" id="docFind" hidden>
+        <label class="input"><input id="docFindText" placeholder="Find in document" autocomplete="off" spellcheck="false"></label>
+        <span class="doc-find-count" id="docFindCount"></span>
+        <button type="button" class="icon-button" id="docFindPrev" title="Previous (Shift+Enter)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button type="button" class="icon-button" id="docFindNext" title="Next (Enter)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+        <label class="input"><input id="docReplaceText" placeholder="Replace with" autocomplete="off" spellcheck="false"></label>
+        <button type="button" class="outline-button" id="docReplaceOne">Replace</button>
+        <button type="button" class="outline-button" id="docReplaceAll">Replace all</button>
+        <button type="button" class="icon-button" id="docFindClose" title="Close (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+      <div class="doc-body">
+        <aside class="doc-outline" id="docOutline">
+          <h4 id="docOutlineTitle"></h4>
+          <div id="docOutlineList"></div>
+        </aside>
+        <div class="doc-canvas" id="docCanvas">
+          <div class="doc-page" id="docPage">
+            <div class="doc-text" id="docText" contenteditable="true" spellcheck="true"></div>
+          </div>
+        </div>
+      </div>
+      <div class="doc-status">
+        <button type="button" class="doc-count" id="docCount" title="Word count"></button>
+        <span class="doc-hint" id="docHint"></span>
+        <div class="doc-zoom" id="docZoomBox">
+          <button type="button" class="doc-zoom-step" id="docZoomOut" title="Zoom out">−</button>
+          <button type="button" class="doc-zoom-now" id="docZoom" title="Zoom">100%</button>
+          <button type="button" class="doc-zoom-step" id="docZoomIn" title="Zoom in">+</button>
+        </div>
+      </div>
+      <button type="button" class="doc-focus-exit" id="docFocusExit">Exit focus mode <kbd>Esc</kbd></button>
+      <div class="doc-pop" id="docPop" hidden></div>
+      <div class="doc-suggest" id="docSuggest" hidden></div>
+      <div class="doc-float" id="docFloat" hidden></div>
+      <input type="file" id="docImageFile" accept="image/*" hidden>
     </div>
   </section>
 
@@ -881,6 +968,63 @@
   </div>
 </div>
 
+<div class="modal" id="docInviteModal" hidden>
+  <div class="dialog small-dialog doc-invite-dialog" role="dialog" aria-labelledby="docInviteTitle">
+    <h2 id="docInviteTitle">Invite people</h2>
+    <p class="sub" id="docInviteSub">They get an invitation in their app. Only the people in here can open this document.</p>
+    <h3 class="docs-label">In this document</h3>
+    <div class="doc-people" id="docPeople"></div>
+    <div id="docInviteAdd">
+      <h3 class="docs-label">Invite</h3>
+      <label class="input docs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="docInviteSearch" placeholder="Find someone" autocomplete="off" spellcheck="false"></label>
+      <div class="doc-people doc-pick" id="docInvitePick"></div>
+    </div>
+    <p class="acct-note" id="docInviteNote"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="outline-button" id="docInviteCancel">Close</button>
+      <button type="button" class="small-button" id="docInviteSend" disabled>Invite</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docSetupModal" hidden>
+  <div class="dialog doc-setup-dialog" role="dialog" aria-labelledby="docSetupTitle">
+    <h2 id="docSetupTitle">Page setup</h2>
+    <p class="sub">For this whole document. Changes show right away.</p>
+    <div class="doc-setup" id="docSetup"></div>
+    <div class="dialog-actions">
+      <button type="button" class="link" id="docSetupReset">Back to normal</button>
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docSetupDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docInfoModal" hidden>
+  <div class="dialog doc-info-dialog" role="dialog" aria-labelledby="docInfoTitle">
+    <h2 id="docInfoTitle"></h2>
+    <div class="doc-info" id="docInfo"></div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docInfoDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docAskModal" hidden>
+  <div class="dialog small-dialog" role="dialog" aria-labelledby="docAskTitle">
+    <h2 id="docAskTitle"></h2>
+    <p class="sub" id="docAskText"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="outline-button doc-ask-other" id="docAskOther" hidden></button>
+      <button type="button" class="outline-button" id="docAskNo">Cancel</button>
+      <button type="button" class="small-button" id="docAskYes"></button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="settingsModal" hidden>
   <div class="dialog settings-dialog" role="dialog" aria-labelledby="settingsHeading">
     <h2 id="settingsHeading">Settings</h2>
@@ -975,6 +1119,7 @@
 <script src="home.js"></script>
 <script src="stats.js"></script>
 <script src="copyright.js"></script>
+<script src="docs.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

@@ -33,6 +33,7 @@ import files  # noqa: E402
 import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
+import docs  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -219,6 +220,9 @@ def install_app_update():
         return
     time.sleep(2.5)  # let the window show "Opening the installer..." and close itself
     state.set(quit=True)  # close so the installer can replace the app's files
+
+
+docs_saved = set()  # files saved from the Docs tab (allowed for "show in folder")
 
 
 def show_in_folder(path):
@@ -662,6 +666,70 @@ class Handler(BaseHTTPRequestHandler):
             pagecache.put("account", result.get("account"))
         self.send_json({"ok": True, **result})
 
+    def handle_docs(self, action, data):
+        """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        doc_id = data.get("id")
+        collab = data.get("where") == "collab"
+        try:
+            if action == "list":
+                result = {"local": docs.local_list()}
+                if data.get("collab"):
+                    try:
+                        result.update(collab=docs.collab_list())
+                    except sfx.LoggedOut:
+                        result.update(collab=None)
+                    except (docs.Error, sfx.Error) as e:
+                        result.update(collab=None, collabError=str(e))
+            elif action == "create":
+                args = (data.get("title"), data.get("kind"), data.get("blocks"), data.get("settings"))
+                result = {"id": docs.collab_create(*args) if collab else docs.local_create(*args)["id"]}
+            elif action == "open":
+                result = {"doc": docs.collab_open(doc_id) if collab else docs.local_open(doc_id)}
+            elif action == "save":  # a local doc
+                result = {"updated": docs.local_save(doc_id, data.get("title"), data.get("blocks"), data.get("settings"))}
+            elif action == "sync":  # a collab doc that's open
+                result = docs.collab_sync(doc_id, data.get("since"), data.get("changes"), data.get("title"),
+                                          data.get("block"), data.get("typing"), data.get("settings"))
+            elif action == "close":
+                docs.collab_close(doc_id)
+                result = {}
+            elif action == "delete":
+                docs.collab_delete(doc_id) if collab else docs.local_delete(doc_id)
+                result = {}
+            elif action == "people":
+                result = {"people": docs.collab_people()}
+            elif action == "invite":
+                result = {"people": docs.collab_invite(doc_id, data.get("usernames"))}
+            elif action == "answer":
+                docs.collab_answer(doc_id, data.get("join"))
+                result = {}
+            elif action == "remove":
+                result = {"people": docs.collab_remove(doc_id, data.get("username"))}
+            elif action == "export":
+                path = docs.export(save_folder(data), data.get("title"), data.get("ext"), data.get("text"))
+                result = {"path": path, "fileName": os.path.basename(path)}
+            elif action == "show":
+                path = str(data.get("path") or "")
+                if path in docs_saved and os.path.isfile(path):
+                    show_in_folder(path)
+                result = {}
+            elif action == "open-link":  # ctrl+click on a link in a document
+                url = str(data.get("url") or "")
+                if re.fullmatch(r"(https?://|mailto:)[^\s]+", url, re.I):
+                    webbrowser.open(url)
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (docs.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't save that. Try another folder."})
+        if action == "export":
+            docs_saved.add(result["path"])
+        self.send_json({"ok": True, **result})
+
     def handle_post(self):
         length = int(self.headers.get("Content-Length") or 0)
         if self.path == "/api/file-add":  # the body is the file itself
@@ -853,6 +921,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path.startswith("/api/sfx-"):
             self.handle_sfx(self.path[len("/api/sfx-"):], data)
+        elif self.path.startswith("/api/docs-"):
+            self.handle_docs(self.path[len("/api/docs-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})
