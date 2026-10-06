@@ -1121,6 +1121,7 @@ create or replace function lelons.doc_preview(doc uuid) returns json
 language sql stable security definer set search_path = '' as $$
   select coalesce(json_agg(left(b.html, 2000) order by b.pos collate "C", b.id), '[]'::json)
   from (select x.html, x.pos, x.id from lelons.doc_blocks x where x.doc_id = doc and not x.deleted
+          and x.id not like '%~%' -- (only the first page; the others and their names have a ~ in the id)
         order by x.pos collate "C", x.id limit 14) b
 $$;
 

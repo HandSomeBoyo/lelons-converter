@@ -25,7 +25,14 @@ const docInFlight = new Map();   // id -> html being sent right now
 let docTitleDirty = false;
 let docSettingsDirty = false;
 let docDirty = false;        // changed since the last Save (nothing is saved until you press Save)
-let docSaveWanted = false;   // (collab) the next sync sends your changes
+let docSaveWanted = false;
+// Pages: a document can have more pages (and pages under pages). Their blocks have ids "<page>~<id>";
+// a page's name is a block "t~<page>". Only the page you're on is on screen; the rest wait in docStore.
+let docTab = "";               // the page on screen ("" = the document's first page)
+const docStore = new Map();    // id -> {pos, html} for everything not on screen
+const docTabsOpen = new Set(); // pages whose pages-under are folded away (it's "closed" really)
+const docTabOf = (id) => id.startsWith("t~") ? null : id.includes("~") ? id.slice(0, id.indexOf("~")) : "";
+const docNewId = () => (docTab ? docTab + "~" : "") + newBlockId();   // (collab) the next sync sends your changes
 let docSyncTimer = 0;
 let docSyncBusy = false;
 let docSyncAgain = false;
@@ -100,6 +107,9 @@ const DOC_ICONS = {
   sort: '<path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/>',
   comment: '<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7.5L7 21v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5z"/><path d="M8 10h8M8 13.5h5"/>',
   check: '<path d="M5.5 12.5l4 4 9-9"/>',
+  moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
@@ -649,7 +659,12 @@ async function openDoc(where, id, opts = {}) {
   docTitleDirty = false; docSettingsDirty = false; docDirty = false; docSaveWanted = false; docHere = []; docFailed = 0;
   document.execCommand("defaultParagraphSeparator", false, "p");
   docApplying = true;
-  docsText.replaceChildren(...(d.blocks || []).map(blockFromHtml));
+  docTab = ""; docStore.clear(); docTabsOpen.clear();
+  const here = [];
+  for (const b of d.blocks || []) {
+    if (docTabOf(b.id) === "") here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
+  }
+  docsText.replaceChildren(...here.map(blockFromHtml));
   docsText.classList.toggle("script", doc.kind === "script");
   docsText.classList.toggle("numbers", doc.kind === "script" && loadPref("docSceneNumbers") === "1");
   docsText.spellcheck = loadPref("docSpelling") !== "0";
@@ -671,6 +686,7 @@ async function openDoc(where, id, opts = {}) {
   docSaveState();
   $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
   drawGuide();
+  drawTabs();
   docNotesOpenDoc();
   docFit();
   docCount();
@@ -960,12 +976,21 @@ function noteCard(c) {
   card.className = "doc-note" + (c.resolved ? " resolved" : "") + (c.id === docNotesActive ? " active" : "");
   card.dataset.note = c.id;
   const replies = docNotes.filter((x) => x.parent === c.id);
-  const gone = c.block && c.quote && !docNotesRanges.has(c.id) && !c.resolved;
+  const page = c.block ? docTabOf(c.block) : null;
+  const elsewhere = page !== null && page !== docTab && docStore.has(c.block); // on another page of this document
+  const gone = c.block && c.quote && !docNotesRanges.has(c.id) && !c.resolved && !elsewhere;
   card.innerHTML = `<div class="doc-note-quote" hidden></div><div class="doc-note-msgs"></div>
     <div class="doc-note-reply" hidden><textarea rows="2" maxlength="2000" data-key="reply-${c.id}" placeholder="Reply..."></textarea>
       <div class="doc-note-actions"><span class="spacer"></span><button type="button" class="small-button">Reply</button></div></div>`;
   const q = card.querySelector(".doc-note-quote");
   if (c.quote) { q.hidden = false; q.textContent = c.quote; q.classList.toggle("gone", !!gone); if (gone) q.title = "These words aren't in the document any more"; }
+  if (elsewhere) {
+    const t = docTabsList().find((x) => x.id === page);
+    q.classList.add("elsewhere");
+    q.title = "Go to the page";
+    q.dataset.page = "On " + (page === "" ? $("docTitle").value.trim() || "the first page" : t ? t.title : "another page");
+    q.addEventListener("click", () => { docShowTab(page); docNotesPick(c.id, true); });
+  }
   card.querySelector(".doc-note-msgs").append(...[c, ...replies].map((m, i) => noteMsg(m, i === 0 ? c : null)));
   if (!c.resolved) {
     const rep = card.querySelector(".doc-note-reply");
@@ -1028,6 +1053,196 @@ function noteMsg(m, root) {
   el.append(body);
   return el;
 }
+
+// ---------------------------------------------------------------- pages (and pages under pages)
+
+function docTabMeta(html) {
+  const m = /^<!--tab (.*)-->$/s.exec(html || "");
+  try { return m ? JSON.parse(m[1]) : null; } catch (e) { return null; }
+}
+const docTabHtml = (t) => "<!--tab " + JSON.stringify({ title: t.title, parent: t.parent || "" }).replace(/[-<>]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "-->";
+
+// [{id, title, parent, pos}] in order. parent "" = at the top, "0" = under the first page.
+function docTabsList() {
+  const list = [];
+  for (const [id, b] of docStore) {
+    if (!id.startsWith("t~")) continue;
+    const meta = docTabMeta(b.html);
+    if (meta) list.push({ id: id.slice(2), title: String(meta.title || "Untitled page").slice(0, 100), parent: String(meta.parent || ""), pos: b.pos });
+  }
+  const ids = new Set(list.map((t) => t.id));
+  for (const t of list) if (t.parent && t.parent !== "0" && !ids.has(t.parent)) t.parent = ""; // its page is gone
+  return list.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
+}
+
+function drawTabs() {
+  if (!doc) return;
+  if ($("docTabsList").querySelector(".doc-tab-input")) return; // (not while you're naming a page; it draws again after)
+  const list = docTabsList();
+  const box = $("docTabsList");
+  const rows = [];
+  const kids = (parent) => list.filter((t) => t.parent === parent);
+  const row = (t, depth) => {
+    const under = kids(t.id === "" ? "0" : t.id);
+    const r = document.createElement("div");
+    r.className = "doc-tab-row" + (t.id === docTab ? " on" : "");
+    r.style.setProperty("--depth", depth);
+    r.dataset.tab = t.id;
+    r.innerHTML = `<button type="button" class="doc-tab-fold" ${under.length ? "" : "hidden"}><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 9.5h8l-4 5z"/></svg></button>
+      <button type="button" class="doc-tab-name">${docIcon("doc")}<span></span></button>
+      <button type="button" class="doc-tab-more" title="More">${docIcon("more")}</button>`;
+    r.querySelector(".doc-tab-name span").textContent = t.title;
+    r.querySelector(".doc-tab-name").title = t.title;
+    const closed = docTabsOpen.has(t.id || "0");
+    r.classList.toggle("closed", closed);
+    r.querySelector(".doc-tab-fold").addEventListener("click", () => { docTabsOpen.has(t.id || "0") ? docTabsOpen.delete(t.id || "0") : docTabsOpen.add(t.id || "0"); drawTabs(); });
+    r.querySelector(".doc-tab-name").addEventListener("click", () => docShowTab(t.id));
+    r.querySelector(".doc-tab-name").addEventListener("dblclick", () => docRenameTab(t.id));
+    r.querySelector(".doc-tab-more").addEventListener("click", (e) => { e.stopPropagation(); docTabMenu(t, r.querySelector(".doc-tab-more")); });
+    rows.push(r);
+    if (!closed) for (const k of under) row(k, depth + 1);
+  };
+  row({ id: "", title: $("docTitle").value.trim() || "Untitled document" }, 0);
+  for (const t of kids("")) row(t, 0);
+  box.replaceChildren(...rows);
+  $("docTabsHint").hidden = list.length > 0;
+}
+$("docTitle").addEventListener("input", () => { const r = $("docTabsList").querySelector('[data-tab=""] .doc-tab-name span'); if (r) r.textContent = $("docTitle").value.trim() || "Untitled document"; });
+
+// Shows another page (the one on screen goes back into the store, changes and all).
+function docShowTab(id) {
+  if (!doc || id === docTab) return;
+  docUndoCommit();
+  docApplying = true;
+  for (const el of docsText.children) docStore.set(el.dataset.id, { pos: el.dataset.pos, html: blockHtml(el) });
+  docsText.replaceChildren();
+  docTab = id;
+  const mine = [];
+  for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
+  mine.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
+  for (const b of mine) docStore.delete(b.id);
+  docsText.replaceChildren(...mine.map(blockFromHtml));
+  docNormalize();
+  docObserver.takeRecords();
+  docApplying = false;
+  docUndoReset();
+  docHidePops();
+  drawTabs();
+  drawOutline();
+  docCount();
+  drawHereMarks();
+  if (doc.where === "collab") { docNotesMark(); if (!$("docNotes").hidden) drawNotes(); }
+  window.scrollTo(0, 0);
+  docsText.focus({ preventScroll: true });
+  if (docsText.firstElementChild) docPutCaret(docsText.firstElementChild, 0);
+}
+
+function docAddTab(parent) {
+  if (!doc) return;
+  const list = docTabsList();
+  const id = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
+  const last = list.length ? list[list.length - 1].pos : "";
+  const pos = posBetween(last, null);
+  docStore.set("t~" + id, { pos, html: docTabHtml({ title: "Untitled page", parent }) });
+  docPending.add("t~" + id);
+  if (parent) docTabsOpen.delete(parent);
+  docMarkDirty();
+  docShowTab(id);
+  docRenameTab(id);
+}
+$("docTabAdd").addEventListener("click", () => docAddTab(""));
+
+function docRenameTab(id) {
+  if (id === "") { $("docTitle").focus(); $("docTitle").select(); return; }
+  const r = $("docTabsList").querySelector(`[data-tab="${CSS.escape(id)}"]`);
+  const b = docStore.get("t~" + id);
+  if (!r || !b) return;
+  const meta = docTabMeta(b.html) || {};
+  const name = r.querySelector(".doc-tab-name span");
+  const input = Object.assign(document.createElement("input"), { className: "doc-tab-input", value: meta.title || "", maxLength: 100 });
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (keep) => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    input.remove();
+    const now = docStore.get("t~" + id);
+    if (keep && title && now && title !== meta.title) {
+      docStore.set("t~" + id, { pos: now.pos, html: docTabHtml({ ...docTabMeta(now.html), title }) });
+      docPending.add("t~" + id);
+      docMarkDirty();
+    }
+    drawTabs();
+    docsText.focus({ preventScroll: true });
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
+async function docDeleteTab(id) {
+  const list = docTabsList();
+  const gone = new Set([id]);
+  for (let more = true; more;) { more = false; for (const t of list) if (!gone.has(t.id) && gone.has(t.parent)) { gone.add(t.id); more = true; } }
+  const t = list.find((x) => x.id === id);
+  const yes = await docAsk(`Delete "${t ? t.title : "this page"}"?`,
+    gone.size > 1 ? `The ${gone.size - 1 === 1 ? "page" : gone.size - 1 + " pages"} under it ${gone.size - 1 === 1 ? "is" : "are"} deleted too.` + (doc.where === "collab" ? " For everyone in this document." : "")
+      : doc.where === "collab" ? "It's deleted for everyone in this document." : "Everything on it is deleted.", "Delete");
+  if (!yes || !doc) return;
+  if (gone.has(docTab)) docShowTab("");
+  for (const bid of [...docStore.keys()]) {
+    const page = bid.startsWith("t~") ? bid.slice(2) : docTabOf(bid);
+    if (gone.has(page)) { docStore.delete(bid); docPending.delete(bid); docDeleted.add(bid); }
+  }
+  docMarkDirty();
+  drawTabs();
+}
+
+const docTabMenuEl = Object.assign(document.createElement("div"), { className: "lib-menu docs-card-menu doc-tab-menu", hidden: true });
+document.body.append(docTabMenuEl);
+document.addEventListener("mousedown", (e) => { if (!docTabMenuEl.hidden && !docTabMenuEl.contains(e.target) && !e.target.closest(".doc-tab-more")) docTabMenuEl.hidden = true; });
+function docTabMenu(t, button) {
+  const menu = docTabMenuEl;
+  if (!menu.hidden && menu.dataset.id === "tab:" + t.id) { menu.hidden = true; return; }
+  const item = (icon, label, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "lib-menu-item " + cls });
+    b.innerHTML = docIcon(icon) + "<span></span>";
+    b.querySelector("span").textContent = label;
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; fn(); });
+    return b;
+  };
+  const items = [item("plus", "Add a page under this", () => docAddTab(t.id === "" ? "0" : t.id)), item("rename", "Rename", () => docRenameTab(t.id))];
+  if (t.id !== "") items.push(item("trash", "Delete", () => docDeleteTab(t.id), "danger"));
+  menu.dataset.id = "tab:" + t.id;
+  menu.replaceChildren(...items);
+  menu.hidden = false;
+  const r = button.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top = Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8) + "px";
+}
+
+// ---------------------------------------------------------------- dark page (just for you, the document keeps its paper)
+
+const docDark = () => loadPref("docDarkPage") === "1";
+function docSetDark(on) {
+  savePref("docDarkPage", on ? "1" : "0");
+  $("docPage").dataset.dark = on ? "1" : "";
+  drawDarkButton();
+}
+function drawDarkButton() {
+  const on = docDark(), b = $("docDarkButton");
+  b.innerHTML = docIcon(on ? "sun" : "moon");
+  b.title = on ? "Light page (white)" : "Dark page (black)";
+  b.classList.toggle("on", on);
+}
+$("docDarkButton").addEventListener("mousedown", (e) => e.preventDefault());
+$("docDarkButton").addEventListener("click", () => docSetDark(!docDark()));
+drawDarkButton();
 
 // ---------------------------------------------------------------- the writing guide (next to the page)
 
@@ -1185,7 +1400,7 @@ function docNormalize() {
     }
     const el = node;
     if (!el.dataset.id || seen.has(el.dataset.id)) {
-      el.dataset.id = newBlockId();
+      el.dataset.id = docNewId();
       delete el.dataset.pos;
     }
     seen.add(el.dataset.id);
@@ -1219,7 +1434,7 @@ function docNormalize() {
     const para = document.createElement("p");
     if (doc && doc.kind === "script") para.className = "sp-action";
     para.append(document.createElement("br"));
-    para.dataset.id = newBlockId();
+    para.dataset.id = docNewId();
     para.dataset.pos = posBetween("", null);
     docsText.append(para);
     docMarkChanged(para.dataset.id);
@@ -1310,6 +1525,7 @@ async function docSave() {
 async function docSaveLocalOnce() {
   const d = doc;
   const blocks = [...docsText.children].map((el) => ({ id: el.dataset.id, pos: el.dataset.pos, html: blockHtml(el) }));
+  for (const [id, b] of docStore) blocks.push({ id, pos: b.pos, html: b.html }); // the other pages
   const title = $("docTitle").value;
   docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
   docSaveState("Saving...");
@@ -1387,9 +1603,10 @@ async function docSyncOnce() {
   const changes = [];
   if (send) for (const id of docPending) {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`);
-    if (!el) continue;
-    const html = blockHtml(el);
-    changes.push({ id, pos: el.dataset.pos, html });
+    const kept = el ? null : docStore.get(id); // (on another page)
+    if (!el && !kept) continue;
+    const html = el ? blockHtml(el) : kept.html;
+    changes.push({ id, pos: el ? el.dataset.pos : kept.pos, html });
     docInFlight.set(id, html);
   }
   if (send) for (const id of docDeleted) changes.push({ id, pos: "0", html: "", deleted: true });
@@ -1459,9 +1676,14 @@ function docApplyRemote(blocks) {
   if (!blocks.length) return;
   const caret = docSaveCaret();
   docApplying = true;
-  let touched = false;
+  let touched = false, pages = false;
   for (const b of blocks) {
     if (docPending.has(b.id) || docDeleted.has(b.id)) continue;
+    if (docTabOf(b.id) !== docTab) { // a page's name, or what's on another page
+      if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
+      if (docTabOf(b.id) === null) pages = true;
+      continue;
+    }
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(b.id)}"]`);
     if (b.deleted) {
       if (el) { el.remove(); touched = true; }
@@ -1484,6 +1706,10 @@ function docApplyRemote(blocks) {
   }
   docObserver.takeRecords();
   docApplying = false;
+  if (pages) {
+    if (docTab && !docStore.has("t~" + docTab)) docShowTab(""); // the page you were on was deleted
+    drawTabs();
+  }
 }
 
 // Puts a block where its position says.
@@ -2052,11 +2278,12 @@ function docHidePops() {
   $("docPop").hidden = true;
   $("docSuggest").hidden = true;
   $("docsCardMenu").hidden = true;
+  docTabMenuEl.hidden = true;
   for (const b of $("docMenubar").children) b.classList.remove("open");
 }
 document.addEventListener("mousedown", (e) => {
   if (!doc) return;
-  if (!$("docPop").contains(e.target) && !$("docMenubar").contains(e.target)) docHidePops();
+  if (!$("docPop").contains(e.target) && !$("docMenubar").contains(e.target) && !docTabMenuEl.contains(e.target)) docHidePops();
   if (!$("docSuggest").contains(e.target)) $("docSuggest").hidden = true;
 });
 
@@ -2874,8 +3101,10 @@ $("docShare").addEventListener("click", () => {
 async function docCopyTo(where) {
   if (where === "collab" && !sfxUser()) return docToast("Log in first to share documents.");
   // The copy is made of what's on the page now (saved or not), then the original asks about its changes.
+  if (docTab) docShowTab("");
   let pos = "";
   const blocks = [...docsText.children].map((el) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: blockHtml(el) }; });
+  for (const [id, b] of docStore) blocks.push({ id, pos: b.pos, html: b.html }); // the other pages, as they are
   const title = where === doc.where ? `Copy of ${$("docTitle").value}` : $("docTitle").value;
   const kind = doc.kind, settings = doc.settings;
   if (!(await docLeave())) return;
@@ -3282,6 +3511,7 @@ function docApplySettings() {
   const size = DOC_PAGES[s.page] || DOC_PAGES.letter;
   const margin = doc.kind === "script" ? 96 : DOC_MARGINS[s.margins].px;
   page.dataset.paper = s.paper;
+  page.dataset.dark = docDark() ? "1" : "";
   page.style.setProperty("--page-w", size.w + "px");
   page.style.setProperty("--page-h", size.h + "px");
   page.style.setProperty("--pad-x", margin + "px");
@@ -3429,13 +3659,14 @@ function docMenuItems(name) {
     { label: "Find and replace", icon: "find", key: "Ctrl+H", fn: () => docOpenFind(true) },
   ];
   if (name === "view") return [
-    { label: script ? "Scenes on the side" : "Outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
+    { label: script ? "Pages and scenes on the side" : "Pages and outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
     script ? { label: "Scene numbers", icon: "numbersScene", on: docsText.classList.contains("numbers"), fn: () => docCommand("numbers-scene") } : null,
     docTypeOf(doc).guide ? { label: "Writing guide", icon: "quote", on: !$("docGuide").hidden, fn: () => docShowGuide($("docGuide").hidden) } : null,
     { label: "Focus mode", icon: "focus", fn: () => docFocus(true) },
     "-",
     { label: "Zoom", icon: "zoom", more: "zoom" },
     { label: "Paper color", icon: "paper", more: "paper" },
+    { label: "Dark page", icon: "moon", on: docDark(), fn: () => docSetDark(!docDark()) },
   ];
   if (name === "insert") return script ? [
     doc.where === "collab" ? { label: "Comment", icon: "comment", key: "Ctrl+Alt+M", fn: () => docNotesNew() } : null,

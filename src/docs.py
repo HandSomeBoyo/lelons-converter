@@ -100,7 +100,7 @@ def _write(doc):
 def _summary(doc):
     blocks = doc.get("blocks") or []
     return {"id": doc["id"], "title": _title(doc.get("title")), "kind": doc.get("kind", "doc"),
-            "updated_at": doc.get("updated", 0), "preview": [b["html"][:2000] for b in blocks[:14]],
+            "updated_at": doc.get("updated", 0), "preview": [b["html"][:2000] for b in [b for b in blocks if "~" not in b["id"]][:14]],
             "settings": doc.get("settings") or {}}
 
 

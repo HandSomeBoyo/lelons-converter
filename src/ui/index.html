@@ -498,6 +498,7 @@
           <nav class="doc-menubar" id="docMenubar"></nav>
         </div>
         <div class="doc-here" id="docHere"></div>
+        <button type="button" class="icon-button doc-notes-button doc-dark-button" id="docDarkButton" title="Dark page"></button>
         <button type="button" class="icon-button doc-notes-button" id="docNotesButton" title="Comments" hidden></button>
         <button type="button" class="outline-button doc-save" id="docSave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4 4 9-9"/></svg><span>Saved</span></button>
         <button type="button" class="small-button doc-share" id="docShare"></button>
@@ -515,6 +516,11 @@
       </div>
       <div class="doc-body">
         <aside class="doc-outline" id="docOutline">
+          <div class="doc-tabs" id="docTabs">
+            <div class="doc-tabs-head"><h4>Pages</h4><button type="button" class="doc-tabs-add" id="docTabAdd" title="Add a page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></button></div>
+            <div id="docTabsList"></div>
+            <p class="doc-tabs-hint" id="docTabsHint">Press + to add a page. Use ··· on a page to add a page under it.</p>
+          </div>
           <h4 id="docOutlineTitle"></h4>
           <div id="docOutlineList"></div>
         </aside>
