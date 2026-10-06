@@ -45,6 +45,15 @@ def put(key, value):
             _timer.start()
 
 
+def flush():
+    """The app is closing: write what's waiting now."""
+    with _lock:
+        timer = _timer
+    if timer is not None:
+        timer.cancel()
+        _write()
+
+
 def forget():
     """Logged out or someone else logged in: what was shown isn't theirs."""
     with _lock:

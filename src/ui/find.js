@@ -31,6 +31,8 @@ const findSaving = new Set(); // ids being downloaded (a second click does nothi
 function playFind(r) {
   if (findPlaying === r.id && findAudio.src) {
     if (!findAudio.paused) return findAudio.pause();
+  } else if (findAudio.src === r.preview && findAudio.currentTime > 0 && !findAudio.ended) {
+    findPlaying = r.id; // paused earlier: go on from there
   } else {
     findAudio.src = r.preview;
     findPlaying = r.id;
@@ -190,8 +192,9 @@ function drawFind() {
   // While a new search runs, the old results stay (a bit faded) instead of the list going blank.
   list.classList.toggle("stale", findBusy && !findLoadingMore);
   setChildren(list, findResults.map(findRow));
-  for (const id of findRows.keys()) if (!findResults.some((r) => r.id === id)) findRows.delete(id);
-  if (findPlaying && !findRows.has(findPlaying)) { findAudio.pause(); findPlaying = null; }
+  const ids = new Set(findResults.map((r) => r.id));
+  for (const id of findRows.keys()) if (!ids.has(id)) findRows.delete(id);
+  // (A sound that's playing goes on in the player bar even when it's not in the new results.)
   $("findMore").hidden = !findMore || !findResults.length;
   $("findMore").disabled = findBusy;
   $("findMore").textContent = findBusy && findLoadingMore ? "Loading..." : "Show more";

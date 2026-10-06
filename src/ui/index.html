@@ -337,19 +337,20 @@
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
-      <aside class="lib-side" id="sfxSide" aria-label="Browse the library">
-        <div class="side-group" id="sfxBrowse"></div>
-        <h3 class="side-head">Categories</h3>
-        <div class="side-group" id="sfxCats"></div>
-        <h3 class="side-head">Uploaded by</h3>
-        <div class="side-group side-people" id="sfxPeople"></div>
-      </aside>
       <div class="lib-main">
+        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
         <div class="lib-tools">
           <label class="input history-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
             <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
           </label>
+          <div class="lib-people">
+            <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
+              <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
+          </div>
           <label class="quality lib-sort" title="Sort by">
             <span>Sort</span>
             <select id="sfxSort">

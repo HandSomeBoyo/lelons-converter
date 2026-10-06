@@ -11,7 +11,7 @@ profileAudio.addEventListener("ended", () => { profilePlaying = null; drawProfil
 registerPlayer(profileAudio, () => { profileAudio.pause(); profilePlaying = null; drawProfileSounds(); });
 for (const type of ["play", "pause"]) profileAudio.addEventListener(type, () => { if (profilePlaying) drawProfileSounds(); });
 
-// Play one of their sounds (click again to pause), shown in the player bar.
+// Play one of their sounds (click again to pause).
 function playProfileSound(s) {
   if (profilePlaying === s.id && profileAudio.src) {
     if (!profileAudio.paused) return profileAudio.pause();
@@ -20,22 +20,6 @@ function playProfileSound(s) {
     profilePlaying = s.id;
   }
   profileAudio.play().catch(() => {});
-  const list = (profileShown && profileShown.recent) || [];
-  const who = profileShown && profileShown.username;
-  const step = (n) => () => {
-    const at = list.findIndex((x) => x.id === s.id);
-    const other = list[(at + n + list.length) % list.length];
-    if (other && other.id !== s.id) playProfileSound(other);
-  };
-  showPlayer(profileAudio, librarySoundPlayer(s.id, {
-    key: s.id,
-    title: s.name,
-    sub: [who, CAT_NAMES[s.category]].filter(Boolean).join(" · "),
-    avatar: { url: profileShown && profileShown.avatarUrl, name: who || s.name },
-    toggle: () => playProfileSound(s),
-    next: list.length > 1 ? step(1) : null,
-    prev: list.length > 1 ? step(-1) : null,
-  }));
   drawProfileSounds();
 }
 
@@ -116,7 +100,9 @@ function drawProfileSounds() {
 
 function closeProfile() {
   $("profileModal").hidden = true;
-  profileShown = null; // (a sound that's playing goes on, in the player bar)
+  profileAudio.pause();
+  profilePlaying = null;
+  profileShown = null;
 }
 
 $("profileClose").addEventListener("click", closeProfile);

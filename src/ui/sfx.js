@@ -217,6 +217,17 @@ $("libLogout").addEventListener("click", logOut);
 
 // ---- the list
 
+// The same sound keeps the same object, so its row (and the player bar, if it's playing) is kept.
+function mergeSounds(list) {
+  const old = new Map(sfxSounds.map((x) => [x.id, x]));
+  sfxSounds = list.map((x) => {
+    const was = old.get(x.id);
+    if (!was) return x;
+    for (const key of Object.keys(was)) if (!(key in x)) delete was[key];
+    return Object.assign(was, x);
+  });
+}
+
 async function loadSfx() {
   if (sfxLoading) return;
   sfxLoading = true;
@@ -229,14 +240,7 @@ async function loadSfx() {
   const res = await api("/api/sfx-list", {}).catch(() => ({ ok: false, error: "Couldn't load the sounds." }));
   sfxLoading = false;
   if (res.ok) {
-    // The same sound keeps the same object, so its row (and what's playing on it) is kept.
-    const old = new Map(sfxSounds.map((x) => [x.id, x]));
-    sfxSounds = res.sounds.map((x) => {
-      const was = old.get(x.id);
-      if (!was) return x;
-      for (const key of Object.keys(was)) if (!(key in x)) delete was[key];
-      return Object.assign(was, x);
-    });
+    mergeSounds(res.sounds);
     sfxError = "";
   } else if (sfxLoggedOut(res)) {
     return;
@@ -272,6 +276,28 @@ function sideButton(label, count, active, onclick, extraClass = "", key = extraC
   return b;
 }
 
+// Category pills at the top of the Library (like Artlist), each with its own little icon.
+const CAT_ICONS = {
+  all: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+  favorites: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>',
+  sfx: '<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>',
+  music: '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  memes: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>',
+  ambience: '<path d="M3 9c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0"/>',
+  other: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+};
+
+function catPill(value, label, count) {
+  const b = sideButton(label, count, sfxCategory === value, () => { sfxCategory = value; }, "lib-cat cat-" + value, "cat|" + value);
+  if (!b.dataset.icon) {
+    b.dataset.icon = "1";
+    b.setAttribute("role", "tab");
+    b.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${CAT_ICONS[value] || CAT_ICONS.other}</svg>`);
+  }
+  b.setAttribute("aria-selected", sfxCategory === value);
+  return b;
+}
+
 function drawSfxSide() {
   const counts = { all: sfxSounds.length, favorites: 0 };
   const people = new Map(); // uploader -> {count, avatar}
@@ -282,12 +308,9 @@ function drawSfxSide() {
     who.count++;
     people.set(s.uploader, who);
   }
-  const pick = (value) => () => { sfxCategory = value; };
-  setChildren($("sfxBrowse"), [
-    sideButton("All sounds", counts.all, sfxCategory === "all", pick("all"), "side-all"),
-    sideButton("Favorites", counts.favorites, sfxCategory === "favorites", pick("favorites"), "fav-chip")]);
-  setChildren($("sfxCats"), Object.entries(sfxAccount.categories).map(([value, label]) =>
-    sideButton(label, counts[value] || 0, sfxCategory === value, pick(value), "cat-" + value)));
+  setChildren($("sfxCats"), [$("sfxCatsPill"), catPill("all", "All", counts.all), catPill("favorites", "Favorites", counts.favorites),
+    ...Object.entries(sfxAccount.categories).map(([value, label]) => catPill(value, label, counts[value] || 0))]);
+  moveCatsPill();
   if (sfxUploader && sfxSounds.length && !people.has(sfxUploader)) sfxUploader = "";
   const names = [...people.keys()].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: "base" }));
   setChildren($("sfxPeople"), [
@@ -304,7 +327,34 @@ function drawSfxSide() {
       }
       return b;
     })]);
+  // The people button shows who's picked (or the first few faces).
+  const faces = sfxUploader ? [sfxUploader] : names.slice(0, 3);
+  const sig = faces.map((n) => n + (people.get(n) || {}).avatar).join("|");
+  if ($("sfxPeopleFaces").dataset.sig !== sig) {
+    $("sfxPeopleFaces").dataset.sig = sig;
+    $("sfxPeopleFaces").replaceChildren(...faces.map((n) => avatarEl((people.get(n) || {}).avatar, n, "tiny")));
+  }
+  $("sfxPeopleText").textContent = sfxUploader || "Everyone";
+  $("sfxPeopleButton").classList.toggle("picked", !!sfxUploader);
 }
+
+// The highlight slides to the picked category.
+function moveCatsPill() {
+  const active = $("sfxCats").querySelector(".lib-cat.active");
+  const pill = $("sfxCatsPill");
+  if (!active || !active.offsetWidth) { pill.style.opacity = 0; return; }
+  pill.style.opacity = 1;
+  pill.style.width = active.offsetWidth + "px";
+  pill.style.transform = `translateX(${active.offsetLeft}px)`;
+}
+window.addEventListener("resize", moveCatsPill);
+
+const peoplePop = $("sfxPeoplePop");
+smoothHidden(peoplePop);
+$("sfxPeopleButton").addEventListener("click", (e) => { e.stopPropagation(); peoplePop.hidden = !peoplePop.hidden; });
+$("sfxPeople").addEventListener("click", () => { peoplePop.hidden = true; });
+document.addEventListener("click", (e) => { if (!peoplePop.hidden && !peoplePop.contains(e.target)) peoplePop.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !peoplePop.hidden) peoplePop.hidden = true; });
 
 const SORTS = {
   newest: (a, b) => b.created_at.localeCompare(a.created_at),
@@ -386,7 +436,8 @@ function drawSfx() {
     rows.push(more);
   }
   setChildren($("sfxList"), rows);
-  for (const id of sfxRows.keys()) if (!sfxSounds.some((s) => s.id === id)) sfxRows.delete(id);
+  const ids = new Set(sfxSounds.map((s) => s.id));
+  for (const id of sfxRows.keys()) if (!ids.has(id)) sfxRows.delete(id);
   const what = sfxCategory === "all" ? "All sounds" : sfxCategory === "favorites" ? "Favorites"
     : sfxAccount.categories[sfxCategory] || "Sounds";
   $("sfxShowing").textContent = `${what}${sfxUploader ? " from " + sfxUploader : ""} · ${shown.length} sound${shown.length === 1 ? "" : "s"}`;
@@ -558,19 +609,6 @@ $("sfxSearch").addEventListener("input", drawSfx);
 
 const sfxAudio = $("sfxAudio");
 
-// The player bar for a Library sound played somewhere else (Home, a profile, the chat): if it's
-// in the Library, the bar also gets its waveform, the star and download.
-function librarySoundPlayer(id, meta) {
-  const sound = sfxSounds.find((s) => s.id === id);
-  if (!sound) return meta;
-  return {
-    peaks: () => sound.peaks || sfxPeaks.get(sound.path),
-    download: () => downloadSfx(sound),
-    favorite: { on: () => sound.favorite, toggle: () => toggleSfxFavorite(sound) },
-    ...meta,
-  };
-}
-
 // The sounds in the list right now, in order (for next and previous in the player bar).
 let sfxShown = [];
 
@@ -593,27 +631,31 @@ function sfxPlayerMeta(sound) {
     prev: () => { const n = sfxNeighbour(sound, -1); if (n) playSfx(n); },
     download: () => downloadSfx(sound),
     favorite: { on: () => sound.favorite, toggle: () => toggleSfxFavorite(sound) },
-    seek: (fraction) => playSfx(sound, fraction),
+    // (Jumping doesn't start a paused sound, like any player.)
+    seek: (fraction) => {
+      if (sfxPlaying === sound.id && sfxAudio.duration) sfxAudio.currentTime = fraction * sfxAudio.duration;
+      else playSfx(sound, fraction);
+    },
   };
 }
 
 // Click the playing sound again to pause it (it stays where it was), and again to go on.
+// Where to start a sound that's still loading (only for that sound, not the next one clicked).
+let sfxSeekWanted = null;
+
 function playSfx(sound, from = null) {
   if (sfxPlaying === sound.id && from === null) {
     if (!sfxAudio.paused) return sfxAudio.pause();
     showPlayer(sfxAudio, sfxPlayerMeta(sound));
     return sfxAudio.play().catch(() => {});
   }
-  const start = () => {
-    if (from !== null && sfxAudio.duration) sfxAudio.currentTime = from * sfxAudio.duration;
-  };
   if (sfxPlaying !== sound.id) {
     sfxPlaying = sound.id;
+    sfxSeekWanted = from === null ? null : { id: sound.id, from };
     sfxAudio.src = sound.url;
-    if (from !== null) sfxAudio.addEventListener("loadedmetadata", start, { once: true });
     drawSfx();
-  } else {
-    start();
+  } else if (from !== null && sfxAudio.duration) {
+    sfxAudio.currentTime = from * sfxAudio.duration;
   }
   showPlayer(sfxAudio, sfxPlayerMeta(sound));
   sfxAudio.play().catch((e) => {
@@ -631,6 +673,11 @@ function stopSfx() {
 }
 
 sfxAudio.addEventListener("ended", stopSfx);
+sfxAudio.addEventListener("loadedmetadata", () => {
+  const want = sfxSeekWanted;
+  sfxSeekWanted = null;
+  if (want && want.id === sfxPlaying && sfxAudio.duration) sfxAudio.currentTime = want.from * sfxAudio.duration;
+});
 // Paused from the player bar (or Space): the row's button follows.
 for (const type of ["play", "pause"]) sfxAudio.addEventListener(type, () => { if (sfxPlaying) drawSfx(); });
 registerPlayer(sfxAudio, stopSfx);
@@ -683,6 +730,7 @@ async function fetchPeaks() {
           wave.querySelector(".bars").replaceChildren();
           drawSoundWave(wave, sound);
         }
+        playerRefresh();
       }
       fetchPeaks();
     });
@@ -911,7 +959,7 @@ async function saveEditSound() {
   $("editSoundSave").disabled = false;
   if (sfxLoggedOut(res)) return closeEditSound();
   if (!res.ok) return void ($("editSoundNote").textContent = res.error);
-  sfxSounds = res.sounds;
+  mergeSounds(res.sounds);
   closeEditSound();
   drawSfx();
 }

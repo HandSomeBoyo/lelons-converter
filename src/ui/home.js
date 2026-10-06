@@ -11,7 +11,7 @@ homeAudio.addEventListener("ended", () => { homePlaying = null; drawHomeSounds()
 registerPlayer(homeAudio, () => { homeAudio.pause(); homePlaying = null; drawHomeSounds(); });
 for (const type of ["play", "pause"]) homeAudio.addEventListener(type, () => { if (homePlaying) drawHomeSounds(); });
 
-// Play an upload from the Activity card (click again to pause), shown in the player bar.
+// Play an upload from the Activity card (click again to pause).
 function playHome(item) {
   if (homePlaying === item.id && homeAudio.src) {
     if (!homeAudio.paused) return homeAudio.pause();
@@ -20,21 +20,6 @@ function playHome(item) {
     homePlaying = item.id;
   }
   homeAudio.play().catch(() => {});
-  const uploads = homeData ? activityItems().filter((i) => i.kind === "upload") : [];
-  const step = (n) => () => {
-    const at = uploads.findIndex((i) => i.id === item.id);
-    const other = uploads[(at + n + uploads.length) % uploads.length];
-    if (other && other.id !== item.id) playHome(other);
-  };
-  showPlayer(homeAudio, librarySoundPlayer(item.id, {
-    key: item.id,
-    title: item.name,
-    sub: [item.username, CAT_NAMES[item.category]].filter(Boolean).join(" · "),
-    avatar: { url: item.avatarUrl, name: item.username || item.name },
-    toggle: () => playHome(item),
-    next: uploads.length > 1 ? step(1) : null,
-    prev: uploads.length > 1 ? step(-1) : null,
-  }));
   drawHomeSounds();
 }
 const homeCards = new Map(); // video id -> {el, sig}

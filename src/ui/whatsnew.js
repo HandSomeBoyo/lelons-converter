@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.29.0", items: [
+    "The Library has cleaner categories: pills at the top (like Artlist), and \"Uploaded by\" is now one small button next to Sort. The list gets the whole width.",
+    "The player bar now only shows in the Library, so it never covers the other tabs. Leave the Library and the sound pauses; come back and press play to go on.",
+    "The tour has a new, much more natural voice. Turn on \"Voice\" in How to use to hear it.",
+    "Lots of small fixes: the Find sounds player, jumping in a sound, settings sometimes not saving on Windows, the chat taking a moment when switching, \"typing...\" staying after you closed the chat, and a faster Library search.",
+  ] },
   { version: "1.28.0", items: [
     "A player at the bottom, like Artlist: see what's playing, pause and go on where you were, skip to the next sound, jump around in the waveform, star it, download it and set the volume.",
     "Sounds keep playing when you close the chat, a profile or Find sounds. Press Space to pause.",

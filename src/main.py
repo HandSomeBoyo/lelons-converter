@@ -59,7 +59,7 @@ CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
     ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
-    ".ico": "image/x-icon", ".woff2": "font/woff2",
+    ".ico": "image/x-icon", ".woff2": "font/woff2", ".mp3": "audio/mpeg",
 }
 
 # pythonw has no console, so there's nowhere for text output to go.
@@ -1088,6 +1088,7 @@ def clean_up():
     files.clean_up()
     sfx.clean_drag_copies()
     sfx.waveforms.save()  # waveforms not written down yet
+    pagecache.flush()
     clips.clean_up()
 
 

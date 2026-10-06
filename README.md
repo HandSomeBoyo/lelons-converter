@@ -63,8 +63,8 @@ to drag** and drag the clip straight into your editor. Moving the lines makes
 the clip again by itself. Clips are kept in `%LOCALAPPDATA%\LelonsConverter\Clips`.
 
 In the Library, click the star on a sound to add it to your **Favorites**. The
-panel on the left picks what you see: all sounds, your favorites, a category,
-or one person's uploads. **Sort** lists them favorites first, newest, oldest,
+pills at the top pick what you see: all sounds, your favorites or a category. The
+people button next to Sort shows only one person's uploads. **Sort** lists them favorites first, newest, oldest,
 by name, by length or by uploader.
 
 **Live chat:** the "online" button at the top right shows how many people have
@@ -101,7 +101,9 @@ others, Creative Commons) and meme sounds (Myinstants). Listen, download as MP3,
 "Add to Library", which opens the upload window with the sound ready.
 
 **How to use** (in the question mark menu at the top) plays a short animated tour of the app. It opens
-by itself the first time. The Voice button reads it out loud with Windows' own voice.
+by itself the first time. The Voice button reads it out loud. The voice is recorded with
+[Piper](https://github.com/rhasspy/piper) (the "Lessac" voice) by build/make_tour_voice.py and kept
+in src/ui/voice/; run it again when the tour's words change.
 
 **Where to save:** the app asks with a folder picker every time you convert or
 download. In Settings, "Always save to" picks one folder instead. The round
@@ -115,8 +117,8 @@ Light) and an accent color too. **Size** makes the whole app bigger or smaller
 (or hold Ctrl and scroll, or press Ctrl and + or -; Ctrl and 0 resets it).
 **Updates** (turn automatic updates on or off, or check now) are in Settings too.
 
-**The player bar** shows at the bottom as soon as any sound plays (Library, Find
-sounds, Home, the chat or a profile), like on Artlist: play/pause (it carries on
+**The player bar** shows at the bottom of the Library as soon as a Library or Find
+sounds sound plays, like on Artlist (leaving the Library pauses it): play/pause (it carries on
 where you paused), previous and next, a waveform to click or drag through, the
 time, the star, download, the volume for every sound in the app (the speaker
 mutes), and X to stop. Space pauses and plays when you're not typing.

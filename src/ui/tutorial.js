@@ -1,5 +1,5 @@
 // "How to use": a short animated tour of the app. Opens by itself once (the first time the app
-// opens with it), and again from the help menu at the top. It can read itself out loud with Windows' own voice.
+// opens with it), and again from the help menu at the top. It can read itself out loud (recorded voice in ui/voice/, see build/make_tour_voice.py).
 // Uses $, api() from app.js and loadPref(), savePref() from theme.js.
 
 const TOUR = [
@@ -176,7 +176,7 @@ function showScene(i) {
   setTourPaused(false);
   drawTourBars();
   tourLeft = scene.seconds * 1000;
-  speak(scene.say);
+  speak(scene);
   runTourTimer();
 }
 
@@ -211,15 +211,22 @@ function togglePause() {
     clearTimeout(tourTimer);
     tourLeft = Math.max(0, tourLeft - (Date.now() - tourStarted));
     setTourPaused(true);
+    tourVoiceAudio.pause();
     if (window.speechSynthesis) speechSynthesis.pause();
   } else {
     setTourPaused(false);
+    if (!tourSpeechDone && tourVoiceAudio.src && tourVoiceAudio.paused) tourVoiceAudio.play().catch(() => {});
     if (window.speechSynthesis) speechSynthesis.resume();
     runTourTimer();
   }
 }
 
-// ---- the voice over: Windows' own voices, nothing to download
+// ---- the voice over: a recorded voice (made with build/make_tour_voice.py), or Windows' own
+// voice if a recording can't play.
+
+const tourVoiceAudio = new Audio();
+tourVoiceAudio.preload = "auto";
+tourVoiceAudio.addEventListener("ended", () => { tourSpeechDone = true; });
 
 function tourVoicePick() {
   const voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
@@ -227,21 +234,35 @@ function tourVoicePick() {
   return english.find((v) => /natural|online/i.test(v.name)) || english.find((v) => /aria|jenny|zira|female/i.test(v.name)) || english[0] || null;
 }
 
-function speak(text) {
-  tourSpeechDone = true;
-  if (!tourVoice || !window.speechSynthesis) return;
+function speakWithWindows(text) {
+  if (!window.speechSynthesis) { tourSpeechDone = true; return; }
   const line = new SpeechSynthesisUtterance(text);
   const voice = tourVoicePick();
   if (voice) line.voice = voice;
   line.rate = 1.02;
   line.volume = typeof volumeLevel === "function" ? Math.max(0.15, Math.sqrt(volumeLevel())) : 1;
-  tourSpeechDone = false;
   line.onend = line.onerror = () => { tourSpeechDone = true; };
   speechSynthesis.speak(line);
 }
 
+function speak(scene) {
+  stopSpeaking();
+  if (!tourVoice) return;
+  tourSpeechDone = false;
+  const asked = scene.key;
+  tourVoiceAudio.src = "voice/" + scene.key + ".mp3";
+  tourVoiceAudio.play().catch((e) => {
+    if (e && e.name === "AbortError") return; // the next scene came first
+    if (TOUR[tourAt] && TOUR[tourAt].key === asked && !tourSpeechDone) speakWithWindows(scene.say);
+  });
+  // The next scene's voice loads now, so it starts right away.
+  const next = TOUR[TOUR.indexOf(scene) + 1];
+  if (next) fetch("voice/" + next.key + ".mp3").catch(() => {});
+}
+
 function stopSpeaking() {
   tourSpeechDone = true;
+  tourVoiceAudio.pause();
   if (window.speechSynthesis) speechSynthesis.cancel();
 }
 
@@ -255,10 +276,9 @@ $("tourVoice").addEventListener("click", () => {
   tourVoice = !tourVoice;
   savePref("tourVoice", tourVoice);
   drawVoiceButton();
-  if (tourVoice) speak(TOUR[tourAt].say);
+  if (tourVoice) speak(TOUR[tourAt]);
   else stopSpeaking();
 });
-$("tourVoice").hidden = !window.speechSynthesis;
 if (window.speechSynthesis) speechSynthesis.getVoices(); // starts loading the list
 drawVoiceButton();
 

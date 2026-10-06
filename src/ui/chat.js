@@ -137,8 +137,11 @@ function closeChat() {
   $("chatPanel").hidden = true;
   $("chatOpen").classList.remove("open");
   $("chatOpen").hidden = !onlineInfo;
-  $("chatSuggest").hidden = true; // (a sound that's playing goes on, in the player bar)
+  $("chatSuggest").hidden = true;
+  stopChatAudio();
+  sendTyping(true);
 }
+window.addEventListener("pagehide", () => sendTyping(true));
 
 function switchChat(name) {
   sendTyping(true); // (in the chat being left)
@@ -235,12 +238,16 @@ async function loadChat() {
   if (chatBusy) return;
   chatBusy = true;
   const asked = chatWith;
+  const askedFor = chatUserId;
+  let stale = false;
   try {
     const res = await api("/api/sfx-chat", { after: chatLastId, with: chatWith || null }).catch(() => null);
-    if (res && asked === chatWith && !sfxLoggedOut(res)) addChat(res);
+    // Switched to another chat (or account) while waiting: this answer is for the old one.
+    stale = asked !== chatWith || askedFor !== chatUserId;
+    if (res && !stale && !sfxLoggedOut(res)) addChat(res);
   } finally {
     chatBusy = false;
-    pollChat(chatIsOpen() && !document.hidden ? 2500 : document.hidden ? 60000 : 20000);
+    pollChat(stale ? 0 : chatIsOpen() && !document.hidden ? 2500 : document.hidden ? 60000 : 20000);
   }
 }
 
@@ -406,7 +413,7 @@ function stopChatAudio() {
 registerPlayer(chatAudio, stopChatAudio);
 for (const type of ["play", "pause"]) chatAudio.addEventListener(type, () => { if (chatPlaying !== null) drawChat(true); });
 
-// Play a sound or clip from a message (click again to pause), shown in the player bar.
+// Play a sound or clip from a message (click again to pause).
 function playChatSound(m, url, name) {
   if (chatPlaying === m.id && chatAudio.src) {
     if (!chatAudio.paused) return chatAudio.pause();
@@ -415,14 +422,6 @@ function playChatSound(m, url, name) {
     chatPlaying = m.id;
   }
   chatAudio.play().catch(() => {});
-  const meta = {
-    key: "chat" + m.id,
-    title: name,
-    sub: `${m.sound ? "Library sound" : "Clip"} · sent by ${m.username || "someone"}`,
-    avatar: { url: m.avatarUrl, name: m.username || name },
-    toggle: () => playChatSound(m, url, name),
-  };
-  showPlayer(chatAudio, m.sound ? librarySoundPlayer(m.sound.id, meta) : meta);
   drawChat(true);
 }
 

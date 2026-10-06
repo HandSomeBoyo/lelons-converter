@@ -1,5 +1,4 @@
-// The player bar at the bottom (like Artlist): whatever sound plays, in the Library, Find sounds,
-// Home, the chat or a profile, shows here with play/pause, previous/next, a waveform to jump around
+// The player bar at the bottom of the Library (like Artlist): a Library or Find sounds sound shows here with play/pause, previous/next, a waveform to jump around
 // in, the time, favorite, download and the volume. Loaded after volume.js.
 // Uses clock() from app.js, appPlayers from volume.js and avatarEl(), SFX_ICONS from sfx.js (only once something plays).
 //
@@ -44,11 +43,22 @@ function showPlayer(audio, meta) {
     void playerBar.offsetWidth;
     playerBar.classList.add("pb-new");
   }
-  if (playerBar.hidden) {
-    playerBar.hidden = false;
-    document.body.classList.add("has-player");
-  }
+  playerTabChanged();
   drawPlayerState();
+}
+
+// The bar is only on the Library tab. Going to another tab pauses the sound (the bar keeps it, so
+// it goes on from there when you come back and press play).
+function playerTabChanged() {
+  const show = !!playerMeta && !pbEl("sfxTab").hidden;
+  if (!show && playerAudio && !playerAudio.paused) playerAudio.pause();
+  // Home's own little player stops when you leave Home (there's no bar there to stop it).
+  if (typeof homeAudio !== "undefined" && pbEl("homeTab").hidden && !homeAudio.paused) {
+    const stop = appPlayers.get(homeAudio);
+    if (stop) stop();
+  }
+  playerBar.hidden = !show;
+  document.body.classList.toggle("has-player", show);
 }
 
 // Is this the sound in the bar, and is it actually playing (not paused)?
@@ -87,14 +97,19 @@ function drawPlayerPeaks() {
   pbEl("pbWave").classList.toggle("flat", !peaks);
 }
 
+// Only what changed is written (this runs every frame while playing).
+let playerShown = { clip: "", now: "", total: "" };
 function drawPlayerTime() {
   const a = playerAudio;
   if (!a) return;
   const total = Number.isFinite(a.duration) ? a.duration : 0;
   const done = total ? Math.min(1, a.currentTime / total) : 0;
-  pbEl("pbDone").style.clipPath = `inset(0 ${(100 - done * 100).toFixed(2)}% 0 0)`;
-  pbEl("pbNow").textContent = clock(a.currentTime || 0, false);
-  pbEl("pbTotal").textContent = clock(total, false);
+  const clip = `inset(0 ${(100 - done * 100).toFixed(1)}% 0 0)`;
+  const now = clock(a.currentTime || 0, false);
+  const all = clock(total, false);
+  if (clip !== playerShown.clip) pbEl("pbDone").style.clipPath = playerShown.clip = clip;
+  if (now !== playerShown.now) pbEl("pbNow").textContent = playerShown.now = now;
+  if (all !== playerShown.total) pbEl("pbTotal").textContent = playerShown.total = all;
 }
 
 function playerTick() {

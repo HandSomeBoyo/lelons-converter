@@ -1,6 +1,7 @@
 """Remembers the user's choices (save folder, quality) between runs."""
 
 import json
+import time
 import os
 import threading
 
@@ -35,12 +36,31 @@ def is_valid_quality(fmt, quality):
     return fmt in QUALITIES and quality in [value for value, _ in QUALITIES[fmt]]
 
 
+_read_cache = {"stamp": None, "text": ""}
+
+
+def _read():
+    """The settings file's text. It's read on almost every request (the chat polls), so it's only
+    read from disk again when it changed, which also keeps it from being open while it's replaced."""
+    try:
+        st = os.stat(SETTINGS_FILE)
+        stamp = (st.st_mtime_ns, st.st_size)
+        if stamp != _read_cache["stamp"]:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
+                text = f.read()
+            _read_cache.update(stamp=stamp, text=text)
+        return _read_cache["text"]
+    except OSError:
+        return ""
+
+
 def load():
     settings = {}
     try:
-        with open(SETTINGS_FILE, encoding="utf-8") as f:
-            settings = json.load(f)
-    except (OSError, ValueError):
+        settings = json.loads(_read() or "{}")
+        if not isinstance(settings, dict):
+            settings = {}
+    except ValueError:
         pass
     if not os.path.isdir(settings.get("folder") or ""):
         settings["folder"] = DEFAULT_FOLDER
@@ -74,4 +94,12 @@ def save(**changes):
         temp = SETTINGS_FILE + ".new"
         with open(temp, "w", encoding="utf-8") as f:
             json.dump(settings, f)
-        os.replace(temp, SETTINGS_FILE)
+        # Windows refuses to replace a file another part of the app has open for a moment: try again.
+        for attempt in range(8):
+            try:
+                os.replace(temp, SETTINGS_FILE)
+                break
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(0.05)

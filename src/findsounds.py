@@ -52,6 +52,7 @@ def _get(url, timeout=20):
 def _remember(url, title):
     found_id = uuid.uuid5(uuid.NAMESPACE_URL, url).hex[:16]
     with _lock:
+        _found.pop(found_id, None)  # seen again: moves to the end, so it's not the next to be dropped
         _found[found_id] = {"url": url, "title": title}
         if len(_found) > 2000:
             for key in list(_found)[:500]:

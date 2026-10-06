@@ -25,6 +25,7 @@ function showTab(tab) {
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
   if (tab === "sfx" && typeof openSfx === "function") openSfx();
   if (tab === "account" && typeof openAccount === "function") openAccount();
+  if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
