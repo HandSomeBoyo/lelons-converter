@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.34.0", items: [
+    "Liquid glass everywhere: cards, buttons, menus, popups, the chat and the player are all frosted glass now.",
+    "The player floats at the bottom of the Library as a glass bar, and the page softly blurs behind popups.",
+    "Fixed: the tab bar no longer covers Settings or other popups, and the chat no longer hides the player's buttons.",
+    "Fixed: in a small window the Library categories scroll sideways instead of getting cut off, plus a few smaller fixes.",
+  ] },
   { version: "1.33.0", items: [
     "New tabs: a floating glass bar at the top (like Artlist) that's much easier to see, and it stays with you when you scroll.",
     "Every tab has its own little icon, and a glass bubble slides smoothly to the one you pick.",
