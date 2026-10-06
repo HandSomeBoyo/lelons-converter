@@ -573,7 +573,7 @@ class Handler(BaseHTTPRequestHandler):
                 library.remove_person(data.get("id"))
                 result = {"people": library.people()}
             elif action == "list":
-                result = {"sounds": library.sounds()}
+                result = {"sounds": library.sounds(), "songsChecking": library.songs_checking()}
             elif action == "peaks":
                 result = {"peaks": sfx.waveforms.get(str(data.get("path") or ""))}
             elif action == "feedback-send":
@@ -886,7 +886,9 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/copyright-sound":  # a Library sound
             try:
                 path = sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"))
-                copyright_check.checker.add_path(path, str(data.get("name") or os.path.basename(path)))
+                sound_id = str(data.get("id") or "")
+                copyright_check.checker.add_path(path, str(data.get("name") or os.path.basename(path)),
+                                                 done=sfx.song_check.remember(sound_id) if sound_id else None)
                 self.send_json({"ok": True})
             except (ValueError, sfx.Error) as e:
                 self.send_json({"ok": False, "error": str(e)})
@@ -1209,6 +1211,7 @@ def main():
     # Chores that can wait until the window is up (so it opens sooner).
     def after_start():
         names.remove_leftovers(state.folder)
+        sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
         if state.auto_update:
             start_background(check_for_updates)

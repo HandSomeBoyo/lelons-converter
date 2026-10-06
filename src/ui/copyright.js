@@ -3,13 +3,16 @@
 
 let copyItems = [];
 let copyTimer = null;
+let copyRun = 0; // only the newest load keeps the polling going (else each one starts its own)
 const copyRows = new Map(); // id -> {el, sig}
 
 function openCopyright() { loadCopyright(); }
 
 async function loadCopyright() {
   clearTimeout(copyTimer);
+  const mine = ++copyRun;
   const res = await api("/api/copyright-list", {}).catch(() => null);
+  if (mine !== copyRun) return; // a newer load took over
   if (res && res.ok) copyItems = res.items;
   drawCopyright();
   // Quick while something is being checked; not at all while the tab is closed.
@@ -111,7 +114,7 @@ function copyTakesDrop(files) {
 // The shield button on a Library sound.
 async function checkSoundCopyright(sound) {
   showTab("copyright");
-  const res = await api("/api/copyright-sound", { url: sound.url, name: sound.name }).catch(() => ({ ok: false, error: "Couldn't get that sound." }));
+  const res = await api("/api/copyright-sound", { url: sound.url, name: sound.name, id: sound.id }).catch(() => ({ ok: false, error: "Couldn't get that sound." }));
   if (!res.ok) alert(res.error);
   loadCopyright();
 }

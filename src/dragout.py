@@ -75,9 +75,8 @@ def _set_drag_image(data, png, offset):
                                   byref(folder_picker.GUID(IID_DRAG_SOURCE_HELPER)), byref(helper)) >= 0 and helper:
             x, y = offset if offset else (width // 6, height // 2)
             image = SHDRAGIMAGE(width, height, min(max(int(x), 0), width), min(max(int(y), 0), height), hbmp, 0xFFFFFFFF)
-            folder_picker.call(helper, INITIALIZE_FROM_BITMAP, byref(image), data,
-                               argtypes=(POINTER(SHDRAGIMAGE), c_void_p))
-            used = True  # Windows owns the bitmap now
+            used = folder_picker.call(helper, INITIALIZE_FROM_BITMAP, byref(image), data,
+                                      argtypes=(POINTER(SHDRAGIMAGE), c_void_p)) >= 0  # then Windows owns the bitmap
     except OSError:
         pass
     finally:

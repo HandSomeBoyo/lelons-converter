@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.32.0", items: [
+    "The Library checks its sounds for you: anything that turns out to be a known song says \"Most likely copyrighted\" right under its name, with the song and artist.",
+    "It happens in the background and is shared, so a sound is only ever checked once for everyone.",
+    "The Copyright tab is still there for your own files, and the shield button on a sound still checks it right away.",
+  ] },
   { version: "1.31.0", items: [
     "New Copyright tab: drop in a song or sound and the app tells you if it's a known (copyrighted) song, with the title and artist. You can also check any Library sound with the shield button.",
     "No more double uploads: the Library won't take a sound with the same name, or the exact same file, as one that's already there.",

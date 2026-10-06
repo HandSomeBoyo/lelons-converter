@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
+import copycheck
 import media
 import names
 import settings
@@ -64,6 +65,7 @@ FRIENDLY = {
     "full": "The library is full. Delete some old sounds first.",
     "denied": "Your account isn't allowed to do that. Ask the owner.",
     "gone": "Someone already deleted that sound.",
+    "bad_input": "Something about that wasn't right. Try again.",
     "same_name": "There's already a sound with that name. Pick another name.",
     "same_file": "That sound is already in the Library.",
     # what log in and create account can answer
@@ -551,9 +553,14 @@ class Library:
         rows = _rpc("lelons_list", token=self._token()) or []
         with waveforms.lock:
             known = waveforms._load()
-            return [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
-                     "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
-                     "peaks": known.get(row["path"])} for row in rows]
+            sounds = [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+                       "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
+                       "peaks": known.get(row["path"])} for row in rows]
+        song_check.want(sounds, self._token)
+        return song_check.fill_in(sounds)
+
+    def songs_checking(self):
+        return song_check.waiting_count()
 
     def edit(self, sound_id, name, category):
         name = _clean_name(name)
@@ -709,7 +716,7 @@ class Library:
         token = self._token()
         with self.lock:
             item = self.uploads.get(str(upload_id))
-            if not item:
+            if not item or (item["copied"] and not item["path"]):
                 raise Error("That file is gone. Pick it again.")
             if item["status"] == "uploading":
                 return
@@ -769,6 +776,12 @@ class Library:
         except Exception as e:
             message = str(e) if isinstance(e, Error) else "Couldn't make an MP3 out of that file."
             self._set(item, status="error", message=message)
+            if item["copied"]:  # nothing reads it again, and it can be a big file
+                try:
+                    os.remove(item["path"])
+                except OSError:
+                    pass
+                self._set(item, path="")
         else:
             self._set(item, status="done", progress=100, message="Uploaded! Everyone can hear it now.")
             timer = threading.Timer(8, self.forget, args=(item["id"],))  # the message goes away by itself
@@ -790,6 +803,96 @@ class Library:
 
 
 library = Library()
+
+
+class SongCheck:
+    """Checks the Library sounds nobody checked yet for known (copyrighted) songs, one at a time in
+    the background, and saves the answer in the Library so everyone's app sees it (and nobody checks
+    that sound again). Short sounds are skipped: the song database can't match them anyway."""
+
+    SHORT = 8  # seconds
+    RETRY = 15 * 60  # after the song database couldn't be reached
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.waiting = {}  # id -> sound, in the order they came
+        self.found = {}  # id -> answer (until the list from the Library has it too)
+        self.failed_at = 0.0
+        self.thread = None
+
+    def want(self, sounds, token):
+        with self.lock:
+            if time.time() - self.failed_at < self.RETRY:
+                return
+            for sound in sounds:
+                if sound.get("copyright") is None and sound["id"] not in self.found:
+                    self.waiting.setdefault(sound["id"], sound)
+            if self.waiting and not (self.thread and self.thread.is_alive()):
+                self.thread = threading.Thread(target=self._run, args=(token,), daemon=True)
+                self.thread.start()
+
+    def fill_in(self, sounds):
+        with self.lock:
+            for sound in sounds:
+                if sound.get("copyright") is not None:
+                    self.found.pop(sound["id"], None)
+                elif sound["id"] in self.found:
+                    sound["copyright"] = self.found[sound["id"]]
+        return sounds
+
+    def remember(self, sound_id):
+        """Save the answer of a check the user asked for by hand, so everyone's Library shows it."""
+        def save(answer):
+            try:
+                _rpc("lelons_set_copyright", token=library._token(), sound_id=sound_id, result=answer)
+            except Exception:
+                return
+            with self.lock:
+                self.found[sound_id] = answer
+                self.waiting.pop(sound_id, None)
+        return save
+
+    def waiting_count(self):
+        with self.lock:
+            return len(self.waiting)
+
+    def _next(self):
+        with self.lock:
+            return next(iter(self.waiting.values()), None)
+
+    def _run(self, token):
+        while (sound := self._next()) is not None:
+            try:
+                if (sound.get("seconds") or 0) < self.SHORT:
+                    answer = {"match": None, "short": True}
+                else:
+                    if not copycheck.fpcalc():
+                        raise copycheck.Error("missing fpcalc")
+                    try:
+                        path = library.drag_copy(sound["url"], sound["name"])
+                    except Error:
+                        with self.lock:  # (gone from storage, say) skipped until the app opens again
+                            self.found[sound["id"]] = None
+                            self.waiting.pop(sound["id"], None)
+                        continue
+                    try:
+                        found = copycheck.fingerprint(path)
+                    except copycheck.Error:
+                        found = None
+                    answer = {"match": copycheck.lookup(*found)} if found else {"match": None, "unreadable": True}
+                _rpc("lelons_set_copyright", token=token(), sound_id=sound["id"], result=answer)
+                with self.lock:
+                    self.found[sound["id"]] = answer
+                    self.waiting.pop(sound["id"], None)
+            except Exception:
+                # No internet, the song database is down, logged out...: try again later, from the start.
+                with self.lock:
+                    self.failed_at = time.time()
+                    self.waiting.clear()
+                return
+
+
+song_check = SongCheck()
 
 
 class Presence:

@@ -19,8 +19,10 @@ function openStats() {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("statsTab").hidden) loadStats(); });
 
+let statsRun = 0; // only the newest load keeps the polling going
 async function loadStats() {
   clearTimeout(statsTimer);
+  const mine = ++statsRun;
   drawStatsRange();
   const days = statsDays;
   try {
@@ -38,6 +40,7 @@ async function loadStats() {
       }
     }
   } catch (e) { /* the app is closing */ }
+  if (mine !== statsRun) return;
   const waiting = statsData && statsData.channels.some((c) => c.loading);
   statsTimer = setTimeout(() => { if (!$("statsTab").hidden && !document.hidden) loadStats(); }, waiting ? 2500 : 60000);
 }

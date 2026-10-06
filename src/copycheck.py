@@ -95,23 +95,23 @@ def lookup(seconds, fp):
                                    "meta": "recordings releasegroups compress", "format": "json"}).encode()
     request = urllib.request.Request(LOOKUP, data=body, method="POST", headers={
         "Content-Type": "application/x-www-form-urlencoded", "User-Agent": f"UltimateRecording/{version.VERSION}"})
-    with _lookup_lock:  # AcoustID asks for at most 3 lookups a second
-        wait = _last_lookup + 0.4 - time.time()
-        if wait > 0:
-            time.sleep(wait)
-        _last_lookup = time.time()
+    with _lookup_lock:  # AcoustID asks for at most 3 lookups a second (just the waiting, not the asking,
+        wait = _last_lookup + 0.4 - time.time()  # so one slow answer doesn't hold up everyone else)
+        _last_lookup = max(time.time(), _last_lookup + 0.4)
+    if wait > 0:
+        time.sleep(wait)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            answer = json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as e:
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                answer = json.loads(response.read() or b"{}")
-        except urllib.error.HTTPError as e:
-            try:
-                answer = json.loads(e.read() or b"{}")
-            except ValueError:
-                answer = {}
-            if not answer.get("error"):
-                raise Error("The song database didn't answer. Try again in a bit.") from None
-        except (urllib.error.URLError, OSError, ValueError):
-            raise Error("Couldn't reach the song database. Check your internet connection.") from None
+            answer = json.loads(e.read() or b"{}")
+        except ValueError:
+            answer = {}
+        if not answer.get("error"):
+            raise Error("The song database didn't answer. Try again in a bit.") from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise Error("Couldn't reach the song database. Check your internet connection.") from None
     if answer.get("status") != "ok":
         message = (answer.get("error") or {}).get("message", "")
         if "api key" in message.lower() or "client" in message.lower():
@@ -147,7 +147,7 @@ class Checker:
         self.items = []
         self.ids = 0
 
-    def add(self, name, stream, length):
+    def add(self, name, stream, length, done=None):
         os.makedirs(FOLDER, exist_ok=True)
         path = os.path.join(FOLDER, f"in-{uuid.uuid4().hex[:8]}{os.path.splitext(name)[1].lower()[:10]}")
         left = length
@@ -165,26 +165,28 @@ class Checker:
             if os.path.exists(path):
                 os.remove(path)
             raise Error("The file wasn't copied all the way.")
-        return self._start(os.path.basename(name), path, temporary=True)
+        return self._start(os.path.basename(name), path, temporary=True, done=done)
 
-    def add_path(self, path, name=None):
-        return self._start(name or os.path.basename(path), path, temporary=False)
+    def add_path(self, path, name=None, done=None):
+        return self._start(name or os.path.basename(path), path, temporary=False, done=done)
 
-    def _start(self, name, path, temporary):
+    def _start(self, name, path, temporary, done=None):
         with self.lock:
             self.ids += 1
             item = {"id": str(self.ids), "name": name, "status": "listening", "message": "Listening...",
                     "seconds": 0, "match": None, "tags": {}, "at": time.time()}
             self.items.insert(0, item)
-            del self.items[30:]
-        threading.Thread(target=self._check, args=(item, path, temporary), daemon=True).start()
+            if len(self.items) > 30:  # only finished ones are forgotten; a check never vanishes mid-way
+                busy = [i for i in self.items if i["status"] in ("listening", "checking")]
+                self.items = (self.items[:30] + [i for i in busy if i not in self.items[:30]])[:60]
+        threading.Thread(target=self._check, args=(item, path, temporary, done), daemon=True).start()
         return dict(item)
 
     def _set(self, item, **changes):
         with self.lock:
             item.update(changes)
 
-    def _check(self, item, path, temporary):
+    def _check(self, item, path, temporary, done=None):
         try:
             tags = tags_of(path)
             seconds = media.probe(path)["duration"]
@@ -193,6 +195,11 @@ class Checker:
             self._set(item, status="checking", message="Looking it up...")
             match = lookup(fp_seconds, fp)
             self._set(item, status="done", match=match, message="")
+            if done:
+                try:
+                    done({"match": match})
+                except Exception:
+                    pass
         except Error as e:
             self._set(item, status="error", message=str(e))
         except Exception:

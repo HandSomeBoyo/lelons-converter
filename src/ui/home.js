@@ -28,8 +28,10 @@ const homeNumbers = new Map(); // channel url -> the subscriber number shown, so
 
 function homeVisible() { return !$("homeTab").hidden && !document.hidden; }
 
+let homeRun = 0; // only the newest load keeps the polling going
 async function loadHome() {
   clearTimeout(homeTimer);
+  const mine = ++homeRun;
   try {
     const res = await api("/api/home", {});
     if (res.ok) {
@@ -37,6 +39,7 @@ async function loadHome() {
       drawHome();
     }
   } catch (e) { /* the app is closing */ }
+  if (mine !== homeRun) return;
   // Again soon while a channel is still loading the first time, else every half a minute.
   const waiting = homeData && homeData.channels.some((c) => c.loading);
   homeTimer = setTimeout(() => { if (homeVisible()) loadHome(); }, waiting ? 2500 : 30000);

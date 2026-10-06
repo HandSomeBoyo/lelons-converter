@@ -145,6 +145,12 @@ with [Chromaprint](https://acoustid.org/chromaprint) and looks them up on
 shows its title and artist, which means it's most likely copyrighted. Short sound effects
 and memes usually can't be matched, so "No known song found" doesn't promise it's free to use.
 
+In the **Library** itself, the app quietly checks the sounds nobody has checked yet
+(longest first-come first, short ones are skipped) and writes the answer back to Supabase
+(`lelons.sounds.copyright`, via `lelons_set_copyright`), so each sound is only checked once
+for everyone. A sound that turns out to be a known song shows **"Most likely copyrighted"**
+under its name with the song and artist.
+
 **No double uploads:** the Library won't take a sound with the same name, or the exact same
 file (checked by its fingerprint, `sounds.source_hash`), as one that's already there.
 

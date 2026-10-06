@@ -229,6 +229,7 @@ function mergeSounds(list) {
   });
 }
 
+let sfxSongTimer = 0;
 async function loadSfx() {
   if (sfxLoading) return;
   sfxLoading = true;
@@ -240,9 +241,12 @@ async function loadSfx() {
   }
   const res = await api("/api/sfx-list", {}).catch(() => ({ ok: false, error: "Couldn't load the sounds." }));
   sfxLoading = false;
+  clearTimeout(sfxSongTimer);
   if (res.ok) {
     mergeSounds(res.sounds);
     sfxError = "";
+    // Sounds still being checked for songs: look again in a bit (only while the Library is open).
+    if (res.songsChecking) sfxSongTimer = setTimeout(() => { if (!$("sfxTab").hidden && !document.hidden) loadSfx(); }, 5000);
   } else if (sfxLoggedOut(res)) {
     return;
   } else {
@@ -379,10 +383,13 @@ const sfxDownloading = new Set(); // ids being downloaded (a second click does n
 
 function rowFor(sound) {
   const note = sfxNotes.get(sound.id);
-  const sig = [sound.name, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
-    note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload].join("|");
+  const sig = [sound.name, sound.category, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
+    note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload,
+    sfxSongMatch(sound) ? sfxSongMatch(sound).title + "/" + sfxSongMatch(sound).artist : ""].join("|");
   const kept = sfxRows.get(sound.id);
   if (kept && kept.sig === sig && kept.sound === sound) return kept.el;
+  // A row being dragged right now keeps its node (a new one would lose the drag and the animation).
+  if (kept && kept.el.classList.contains("drag-lift")) return kept.el;
   const el = sfxRow(sound);
   sfxRows.set(sound.id, { el, sig, sound });
   return el;
@@ -454,6 +461,12 @@ function sfxSep() {
   return Object.assign(document.createElement("span"), { className: "sep", textContent: "·" });
 }
 
+// The Library's song check (done in the background by the app, saved for everyone): the song, or null.
+function sfxSongMatch(sound) {
+  const c = sound.copyright;
+  return c && c.match ? c.match : null;
+}
+
 function sfxRow(sound) {
   const el = document.createElement("div");
   el.className = "sound" + (sfxPlaying === sound.id ? " playing" : "");
@@ -484,6 +497,17 @@ function sfxRow(sound) {
   play.innerHTML = sfxPlaying === sound.id ? SFX_ICONS.pause : SFX_ICONS.play;
   play.onclick = () => playSfx(sound);
   el.querySelector(".title").textContent = el.querySelector(".title").title = sound.name;
+  const song = sfxSongMatch(sound);
+  if (song) {
+    const flag = document.createElement("div");
+    flag.className = "song-flag";
+    const what = [song.title && `"${song.title}"`, song.artist && "by " + song.artist].filter(Boolean).join(" ");
+    flag.innerHTML = SFX_ICONS.shield + "<span></span>";
+    flag.querySelector("span").textContent = "Most likely copyrighted" + (what ? ": " + what : "");
+    flag.title = "The song checker found this in a song database" + (what ? ` (${what})` : "") +
+      ". Using it in a video can get a copyright claim.";
+    el.querySelector(".title").after(flag);
+  }
   const meta = el.querySelector(".meta");
   const note = sfxNotes.get(sound.id);
   if (note) {
@@ -696,6 +720,7 @@ sfxAudio.addEventListener("timeupdate", () => {
 
 const sfxPeaks = new Map(); // path -> peaks
 const sfxPeaksWanted = [];
+const sfxPeaksBeingMade = new Set(); // paths asked for right now (so they're not asked for twice)
 const sfxPeaksFailed = new Set(); // not tried again until the tab is opened again
 let sfxPeaksBusy = 0;
 
@@ -709,7 +734,7 @@ function drawSoundWave(wave, sound) {
     bars.append(bar);
   }
   wave.classList.toggle("loading", !peaks);
-  if (!peaks && !sfxPeaksWanted.includes(sound.path) && !sfxPeaksFailed.has(sound.path)) {
+  if (!peaks && !sfxPeaksWanted.includes(sound.path) && !sfxPeaksBeingMade.has(sound.path) && !sfxPeaksFailed.has(sound.path)) {
     sfxPeaksWanted.push(sound.path);
     fetchPeaks();
   }
@@ -719,8 +744,10 @@ async function fetchPeaks() {
   while (sfxPeaksBusy < 2 && sfxPeaksWanted.length) {
     const path = sfxPeaksWanted.shift();
     sfxPeaksBusy++;
+    sfxPeaksBeingMade.add(path);
     api("/api/sfx-peaks", { path }).catch(() => ({ ok: false })).then((res) => {
       sfxPeaksBusy--;
+      sfxPeaksBeingMade.delete(path);
       if (!res.ok) sfxPeaksFailed.add(path);
       if (res.ok) {
         sfxPeaks.set(path, res.peaks);

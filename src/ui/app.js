@@ -134,14 +134,10 @@ function dragCard(el, what) {
     }
     if (info.sub) {
       c.font = "500 11px Inter, 'Segoe UI', sans-serif";
-      const tw = c.measureText(info.sub).width;
       c.fillStyle = muted;
       c.textAlign = "right";
       c.fillText(info.sub, right, 16);
       c.textAlign = "left";
-      if (tw > 0) {
-        // keep the name clear of it
-      }
     }
   } else {
     c.font = "500 12px Inter, 'Segoe UI', sans-serif";

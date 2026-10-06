@@ -83,6 +83,9 @@ alter table lelons.sounds drop column if exists owner_hash;
 -- (1.31.0) What the uploaded file was, so the same file can't go in twice.
 alter table lelons.sounds add column if not exists source_hash text;
 create index if not exists sounds_source_hash on lelons.sounds (source_hash);
+-- (1.32.0) The song check: null = not checked yet, {"match": null} = no known song,
+-- {"match": {title, artist, album, link, score}} = most likely a copyrighted song.
+alter table lelons.sounds add column if not exists copyright jsonb;
 
 -- Bug reports and wishes people send to the owner.
 create table if not exists lelons.feedback (
@@ -287,17 +290,19 @@ begin
   return json_build_object('ok', true);
 end $$;
 
-drop function if exists public.lelons_list(text);  -- (it gained a column: favorite)
+drop function if exists public.lelons_list(text);  -- (it gained columns: favorite, copyright)
 create or replace function public.lelons_list(token text)
 returns table (id uuid, name text, category text, path text, seconds real, bytes int,
-               uploader text, uploader_avatar text, created_at timestamptz, mine boolean, favorite boolean)
+               uploader text, uploader_avatar text, created_at timestamptz, mine boolean, favorite boolean,
+               copyright jsonb)
 language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
 begin
   return query select s.id, s.name, s.category, s.path, s.seconds, s.bytes,
                       coalesce(a.username, s.uploader), a.avatar, s.created_at, s.uploader_id is not distinct from me.id,
-                      exists (select 1 from lelons.favorites f where f.account_id = me.id and f.sound_id = s.id)
+                      exists (select 1 from lelons.favorites f where f.account_id = me.id and f.sound_id = s.id),
+                      s.copyright
                from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
                order by s.created_at desc limit 5000;
 end $$;
@@ -574,6 +579,20 @@ begin
 end $$;
 
 -- Star or unstar a sound, just for you.
+-- The song check's answer for a sound. Any app that checked it may fill it in once; the owner
+-- and admins may also check again.
+create or replace function public.lelons_set_copyright(token text, sound_id uuid, result jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if jsonb_typeof(result) is distinct from 'object' or length(result::text) > 2000 then
+    raise exception 'bad result' using hint = 'bad_input';
+  end if;
+  update lelons.sounds s set copyright = result
+  where s.id = lelons_set_copyright.sound_id and (s.copyright is null or me.role in ('owner', 'admin'));
+end $$;
+
 create or replace function public.lelons_favorite(token text, sound_id uuid, starred boolean)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
@@ -616,7 +635,8 @@ end $$;
 create or replace function lelons.same_sound(sound_name text, sound_hash text, except_id uuid default null)
 returns text language sql stable security definer set search_path = '' as $$
   select case
-    when exists (select 1 from lelons.sounds s where lower(btrim(s.name)) = lower(btrim(sound_name))
+    when btrim(coalesce(sound_name, '')) <> '' and exists (select 1 from lelons.sounds s
+                 where lower(btrim(s.name)) = lower(btrim(sound_name))
                  and s.id is distinct from except_id) then 'same_name'
     when sound_hash is not null and exists (select 1 from lelons.sounds s where s.source_hash = sound_hash
                  and s.id is distinct from except_id) then 'same_file'
@@ -647,6 +667,7 @@ returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
   new_id uuid;
+  clash text;
 begin
   if me.role not in ('owner', 'admin') then
     raise exception 'not allowed' using hint = 'denied';
@@ -661,8 +682,12 @@ begin
   if (select coalesce(sum(s.bytes), 0) from lelons.sounds s) + sound_bytes > 950 * 1024 * 1024 then
     raise exception 'storage full' using hint = 'full';
   end if;
-  if lelons.same_sound(sound_name, sound_hash) is not null then
-    raise exception 'already in the library' using hint = lelons.same_sound(sound_name, sound_hash);
+  if btrim(coalesce(sound_name, '')) = '' then
+    raise exception 'no name' using hint = 'bad_input';
+  end if;
+  clash := lelons.same_sound(sound_name, sound_hash);
+  if clash is not null then
+    raise exception 'already in the library' using hint = clash;
   end if;
   insert into lelons.sounds (name, category, path, seconds, bytes, uploader, uploader_id, source_hash)
   values (btrim(sound_name), sound_category, file, sound_seconds, sound_bytes, me.username, me.id, sound_hash)
@@ -1024,7 +1049,7 @@ declare
 begin
   foreach f in array array['lelons_signup(text, text)', 'lelons_login(text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
-    'lelons_add(text, text, text, text, real, int, text)', 'lelons_sound_check(text, text, text)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
+    'lelons_add(text, text, text, text, real, int, text)', 'lelons_sound_check(text, text, text)', 'lelons_set_copyright(text, uuid, jsonb)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
     'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)',
     'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',

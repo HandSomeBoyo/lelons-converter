@@ -1888,3 +1888,14 @@ body.has-player .chat-panel { bottom: 72px; }
 .copy-x { flex: none; opacity: 0; transition: opacity .2s; }
 .copy-card:hover .copy-x { opacity: 1; }
 .copy-note { margin: 22px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; max-width: 640px; }
+
+/* ---- 1.32.0: the Library's song check, under a sound's name */
+.song-flag {
+  display: flex; align-items: center; gap: 5px; margin: 2px 0 1px; min-width: 0;
+  font-size: 12px; font-weight: 600; color: var(--red);
+  animation: songFlagIn .45s var(--ease-out, ease-out) both;
+}
+.song-flag svg { width: 13px; height: 13px; flex: none; }
+.song-flag span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes songFlagIn { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .song-flag { animation: none; } }
