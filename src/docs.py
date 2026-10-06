@@ -46,6 +46,17 @@ def _clean_blocks(blocks):
     return out
 
 
+def _settings(value):
+    """The page settings (page size, font...) as the page sent them: a small dict of plain values."""
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for key, v in list(value.items())[:30]:
+        if isinstance(key, str) and len(key) <= 30 and (isinstance(v, (int, float, bool)) or (isinstance(v, str) and len(v) <= 120)):
+            out[key] = v
+    return out
+
+
 def _title(text):
     return re.sub(r"\s+", " ", str(text or "")).strip()[:150] or "Untitled document"
 
@@ -89,7 +100,8 @@ def _write(doc):
 def _summary(doc):
     blocks = doc.get("blocks") or []
     return {"id": doc["id"], "title": _title(doc.get("title")), "kind": doc.get("kind", "doc"),
-            "updated_at": doc.get("updated", 0), "preview": [b["html"][:2000] for b in blocks[:14]]}
+            "updated_at": doc.get("updated", 0), "preview": [b["html"][:2000] for b in blocks[:14]],
+            "settings": doc.get("settings") or {}}
 
 
 _summaries = {}  # id -> ((mtime, size), summary): the list is asked for often, the files can be big
@@ -116,8 +128,8 @@ def local_list():
     return docs
 
 
-def local_create(title, kind, blocks):
-    doc = {"id": uuid.uuid4().hex, "title": _title(title), "kind": kind if kind in KINDS else "doc",
+def local_create(title, kind, blocks, settings_=None):
+    doc = {"id": uuid.uuid4().hex, "title": _title(title), "kind": kind if kind in KINDS else "doc", "settings": _settings(settings_),
            "created": time.time(), "updated": time.time(), "blocks": _clean_blocks(blocks)}
     with _lock:
         _write(doc)
@@ -128,11 +140,13 @@ def local_open(doc_id):
     return _read(doc_id)
 
 
-def local_save(doc_id, title, blocks):
+def local_save(doc_id, title, blocks, settings_=None):
     with _lock:
         doc = _read(doc_id)
         if title is not None:
             doc["title"] = _title(title)
+        if settings_ is not None:
+            doc["settings"] = _settings(settings_)
         if blocks is not None:
             doc["blocks"] = _clean_blocks(blocks)
         doc["updated"] = time.time()
@@ -180,9 +194,9 @@ def collab_list():
                         for i in result.get("invites") or []]}
 
 
-def collab_create(title, kind, blocks):
+def collab_create(title, kind, blocks, settings_=None):
     return _rpc("lelons_doc_create", title=_title(title), kind=kind if kind in KINDS else "doc",
-                blocks=_clean_blocks(blocks))
+                blocks=_clean_blocks(blocks), doc_settings=_settings(settings_))
 
 
 def collab_open(doc_id):
@@ -190,7 +204,7 @@ def collab_open(doc_id):
     return {**doc, "people": _with_avatars(doc.get("people"))}
 
 
-def collab_sync(doc_id, since, changes, title, block, typing):
+def collab_sync(doc_id, since, changes, title, block, typing, settings_=None):
     clean = []
     for change in changes if isinstance(changes, list) else []:
         if isinstance(change, dict) and change.get("id") and change.get("pos") and len(str(change["pos"])) <= 1000:
@@ -202,7 +216,8 @@ def collab_sync(doc_id, since, changes, title, block, typing):
         since = 0
     result = _rpc("lelons_doc_sync", doc_id=str(doc_id), since_rev=since, changes=clean,
                   new_title=_title(title) if title is not None else None,
-                  at_block=str(block)[:40] if block else None, typing=bool(typing))
+                  at_block=str(block)[:40] if block else None, typing=bool(typing),
+                  new_settings=_settings(settings_) if settings_ is not None else None)
     return {**result, "here": _with_avatars(result.get("here")), "people": _with_avatars(result.get("people"))}
 
 

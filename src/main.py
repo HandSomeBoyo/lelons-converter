@@ -681,15 +681,15 @@ class Handler(BaseHTTPRequestHandler):
                     except (docs.Error, sfx.Error) as e:
                         result.update(collab=None, collabError=str(e))
             elif action == "create":
-                args = (data.get("title"), data.get("kind"), data.get("blocks"))
+                args = (data.get("title"), data.get("kind"), data.get("blocks"), data.get("settings"))
                 result = {"id": docs.collab_create(*args) if collab else docs.local_create(*args)["id"]}
             elif action == "open":
                 result = {"doc": docs.collab_open(doc_id) if collab else docs.local_open(doc_id)}
             elif action == "save":  # a local doc
-                result = {"updated": docs.local_save(doc_id, data.get("title"), data.get("blocks"))}
+                result = {"updated": docs.local_save(doc_id, data.get("title"), data.get("blocks"), data.get("settings"))}
             elif action == "sync":  # a collab doc that's open
                 result = docs.collab_sync(doc_id, data.get("since"), data.get("changes"), data.get("title"),
-                                          data.get("block"), data.get("typing"))
+                                          data.get("block"), data.get("typing"), data.get("settings"))
             elif action == "close":
                 docs.collab_close(doc_id)
                 result = {}

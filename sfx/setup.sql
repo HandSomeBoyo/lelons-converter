@@ -1054,6 +1054,7 @@ create table if not exists lelons.docs (
   updated_at timestamptz not null default now(),
   updated_by uuid references lelons.accounts (id) on delete set null
 );
+alter table lelons.docs add column if not exists settings jsonb not null default '{}'::jsonb;  -- page size, font... (1.36.0)
 -- A document is a list of blocks (paragraphs, headings, lists...), each saved on its own,
 -- so people can write in different parts at the same time.
 create table if not exists lelons.doc_blocks (
@@ -1133,7 +1134,7 @@ begin
     'docs', coalesce((select json_agg(json_build_object('id', d.id, 'title', d.title, 'kind', d.kind,
                                         'mine', d.owner_id = me.id, 'updated_at', d.updated_at,
                                         'updated_by', (select a.username from lelons.accounts a where a.id = d.updated_by),
-                                        'people', lelons.doc_people(d), 'preview', lelons.doc_preview(d.id))
+                                        'people', lelons.doc_people(d), 'preview', lelons.doc_preview(d.id), 'settings', d.settings)
                                       order by d.updated_at desc)
                       from lelons.docs d
                       where d.owner_id = me.id
@@ -1188,7 +1189,9 @@ begin
 end $$;
 
 -- A new shared document (blocks: what's in it to start with, like a template or a local doc).
-create or replace function public.lelons_doc_create(token text, title text, kind text, blocks jsonb default '[]'::jsonb)
+drop function if exists public.lelons_doc_create(text, text, text, jsonb);
+create or replace function public.lelons_doc_create(token text, title text, kind text, blocks jsonb default '[]'::jsonb,
+                                                    doc_settings jsonb default '{}'::jsonb)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
@@ -1200,8 +1203,12 @@ begin
   if kind not in ('doc', 'script') then
     raise exception 'bad kind' using hint = 'bad_input';
   end if;
-  insert into lelons.docs (owner_id, title, kind, updated_by)
-  values (me.id, left(coalesce(nullif(btrim(title), ''), 'Untitled document'), 150), kind, me.id) returning id into doc;
+  if jsonb_typeof(coalesce(doc_settings, '{}'::jsonb)) <> 'object' or length(coalesce(doc_settings, '{}'::jsonb)::text) > 4000 then
+    raise exception 'bad settings' using hint = 'bad_input';
+  end if;
+  insert into lelons.docs (owner_id, title, kind, updated_by, settings)
+  values (me.id, left(coalesce(nullif(btrim(title), ''), 'Untitled document'), 150), kind, me.id, coalesce(doc_settings, '{}'::jsonb))
+  returning id into doc;
   perform lelons.doc_write(doc, me.id, blocks);
   return doc;
 end $$;
@@ -1213,7 +1220,7 @@ declare
   me lelons.accounts := lelons.who(token);
   doc lelons.docs := lelons.doc_for(me.id, doc_id);
 begin
-  return json_build_object('id', doc.id, 'title', doc.title, 'kind', doc.kind, 'rev', doc.rev,
+  return json_build_object('id', doc.id, 'title', doc.title, 'kind', doc.kind, 'rev', doc.rev, 'settings', doc.settings,
     'mine', doc.owner_id = me.id, 'people', lelons.doc_people(doc),
     'blocks', coalesce((select json_agg(json_build_object('id', b.id, 'pos', b.pos, 'html', b.html) order by b.pos collate "C", b.id)
                         from lelons.doc_blocks b where b.doc_id = doc.id and not b.deleted), '[]'::json));
@@ -1221,8 +1228,10 @@ end $$;
 
 -- While a document is open (about every second): send your changes, get everyone else's
 -- (all blocks changed after since_rev), and say where you're writing.
+drop function if exists public.lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean);
 create or replace function public.lelons_doc_sync(token text, doc_id uuid, since_rev bigint, changes jsonb default '[]'::jsonb,
-                                                  new_title text default null, at_block text default null, typing boolean default false)
+                                                  new_title text default null, at_block text default null, typing boolean default false,
+                                                  new_settings jsonb default null)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
@@ -1236,13 +1245,17 @@ begin
     update lelons.docs d set title = left(coalesce(nullif(btrim(new_title), ''), 'Untitled document'), 150),
       rev = d.rev + 1, updated_at = now(), updated_by = me.id where d.id = doc.id;
   end if;
+  if new_settings is not null and jsonb_typeof(new_settings) = 'object' and length(new_settings::text) <= 4000
+     and new_settings <> doc.settings then
+    update lelons.docs d set settings = new_settings, rev = d.rev + 1, updated_at = now(), updated_by = me.id where d.id = doc.id;
+  end if;
   insert into lelons.doc_here as h (doc_id, account_id, block, typed_at, at)
   values (doc.id, me.id, left(at_block, 40), case when typing then now() end, now())
   on conflict on constraint doc_here_pkey do update set block = excluded.block, at = now(),
     typed_at = case when typing then now() else h.typed_at end;
   -- The revision first, then the blocks: a change saved in between comes again next time, never not at all.
-  select d.rev, d.title into now_rev, doc.title from lelons.docs d where d.id = doc.id;
-  return json_build_object('rev', now_rev, 'title', doc.title,
+  select d.rev, d.title, d.settings into now_rev, doc.title, doc.settings from lelons.docs d where d.id = doc.id;
+  return json_build_object('rev', now_rev, 'title', doc.title, 'settings', doc.settings,
     'blocks', coalesce((select json_agg(json_build_object('id', b.id, 'pos', b.pos, 'html', b.html, 'deleted', b.deleted, 'rev', b.rev))
                         from lelons.doc_blocks b where b.doc_id = doc.id and b.rev > coalesce(since_rev, 0)), '[]'::json),
     'here', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'block', h.block,
@@ -1347,8 +1360,8 @@ begin
     'lelons_edit_sound(text, uuid, text, text)', 'lelons_channel_log(text, text, bigint, int)',
     'lelons_channel_history(text, int)', 'lelons_chat_typing(text, text, boolean)',
     'lelons_chat_live(text, text, bigint)', 'lelons_docs(text)', 'lelons_doc_people(text)',
-    'lelons_doc_create(text, text, text, jsonb)', 'lelons_doc_open(text, uuid)',
-    'lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean)', 'lelons_doc_close(text, uuid)',
+    'lelons_doc_create(text, text, text, jsonb, jsonb)', 'lelons_doc_open(text, uuid)',
+    'lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean, jsonb)', 'lelons_doc_close(text, uuid)',
     'lelons_doc_invite(text, uuid, text[])', 'lelons_doc_answer(text, uuid, boolean)',
     'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)'] loop
     execute format('revoke execute on function public.%s from public', f);

@@ -23,7 +23,9 @@ const docPending = new Set();    // block ids changed here and not saved/sent ye
 const docDeleted = new Set();    // block ids deleted here and not sent yet
 const docInFlight = new Map();   // id -> html being sent right now
 let docTitleDirty = false;
-let docSaveTimer = 0;
+let docSettingsDirty = false;
+let docDirty = false;        // changed since the last Save (nothing is saved until you press Save)
+let docSaveWanted = false;   // (collab) the next sync sends your changes
 let docSyncTimer = 0;
 let docSyncBusy = false;
 let docSyncAgain = false;
@@ -72,6 +74,31 @@ const DOC_ICONS = {
   copy: '<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.5"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/>',
   download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
   leave: '<path d="M14 4.5h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-4M10 16l4-4-4-4M14 12H4"/>',
+  blank: '',
+  save: '<path d="M5.5 4h10l3 3v11.5a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M8.5 4v4.5h6V4M8.5 20v-6h7v6"/>',
+  rename: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  page: '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 7.5h7M8.5 7.5v9h7v-9" stroke-dasharray="2 2"/>',
+  cut: '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.3 15.7 17 4M15.7 15.7 7 4"/>',
+  paste: '<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h4"/>',
+  selectAll: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M8.5 9.5h7M8.5 14.5h7"/>',
+  focus: '<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/><circle cx="12" cy="12" r="2.5"/>',
+  zoom: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5"/>',
+  paper: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  omega: '<path d="M5 19.5h4.5v-2.2A7 7 0 0 1 12 4.5a7 7 0 0 1 2.5 12.8v2.2H19"/>',
+  emoji: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4.2 4.2 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.8"/>',
+  sup: '<path d="m4 8 8 10M12 8l-8 10M16 5.5a2 2 0 1 1 3.4 1.4L16 10.5h4"/>',
+  sub: '<path d="m4 6 8 10M12 6 4 16M16 15.5a2 2 0 1 1 3.4 1.4L16 20.5h4"/>',
+  textCase: '<path d="M3 17.5 7 6.5l4 11M4.4 14h5.2M16.5 11.5a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6M19.3 11v6.5"/>',
+  spacing: '<path d="M10 6h10M10 12h10M10 18h10M5 4.5v15M3 7l2-2.5L7 7M3 17l2 2.5 2-2.5"/>',
+  count: '<path d="M5 4.5h14M5 9.5h14M5 14.5h8"/><path d="M15.5 17.5l2 2 3.5-4"/>',
+  spell: '<path d="M3.5 15 7 5.5l3.5 9.5M4.6 12h4.8M13 15V5.5h3a2.4 2.4 0 0 1 0 4.8h-3M13 10.3h3.5a2.4 2.4 0 0 1 0 4.7H13M4 19.5l2 1.5 3.5-3"/>',
+  character: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.7 7-5.7s6.2 2.1 7 5.7"/>',
+  font: '<path d="M4 19.5 9.5 5h1L16 19.5M6 14.5h8M17 10.5c1-.7 1.8-1 2.8-1 1.4 0 2.2.8 2.2 2.2v7.8M22 15.5c-3.4 0-5 .9-5 2.5 0 1 .8 1.6 1.9 1.6 1.5 0 3.1-1 3.1-3"/>',
+  quote: '<path d="M5 17.5c2.5-1 4-3.4 4-6.5V7H5v4h4M14 17.5c2.5-1 4-3.4 4-6.5V7h-4v4h4"/>',
+  heading: '<path d="M6 4.5v15M15 4.5v15M6 12h9M18.5 10l2-1.5v11"/>',
+  sort: '<path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/>',
+  open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
 
@@ -222,6 +249,44 @@ const DOC_TEMPLATES = [
       "</tbody></table>",
       p(""),
     ] },
+  { key: "youtube", kind: "doc", name: "Video script", note: "For YouTube: hook, parts and ending", title: "Video script",
+    blocks: () => [
+      '<h1 class="doc-title">Video title</h1>', p("Length: about 8 minutes · Upload: ", "doc-subtitle"),
+      "<h2>Hook (first 15 seconds)</h2>", p("Say the most interesting thing first, so people keep watching."),
+      "<h2>Intro</h2>", p("Who you are and what this video gives them."),
+      '<table class="doc-table"><tbody><tr><th>Part</th><th>What I say</th><th>On screen</th></tr>' +
+      ["Part 1", "Part 2", "Part 3"].map((t) => `<tr><td><b>${t}</b></td><td><br></td><td><br></td></tr>`).join("") + "</tbody></table>",
+      "<h2>Ending</h2>", p("Sum it up, ask them to subscribe, and point to the next video."),
+      "<h2>Before uploading</h2>", '<ul class="checklist"><li>Thumbnail</li><li>Title and description</li><li>Music and sound effects</li><li>Captions</li></ul>',
+    ] },
+  { key: "treatment", kind: "doc", name: "Treatment", note: "The whole film told like a story", title: "Treatment",
+    blocks: () => [
+      '<h1 class="doc-title">Title</h1>', p("A treatment by " + (sfxUser() ? sfxUser().username : "you"), "doc-subtitle"),
+      "<h2>Logline</h2>", p("One or two sentences that sell the film."),
+      "<h2>Synopsis</h2>", p("Tell the whole story in the present tense, from start to end, like you're telling a friend."),
+      "<h2>Characters</h2>", "<ul><li><b>Name</b>: age, who they are, what they want, what's in their way</li><li><b>Name</b>: </li></ul>",
+      "<h2>Look and feel</h2>", p("Colors, light, camera, music. Films this feels like."),
+      "<h2>Why this film</h2>", p("Why you want to make it, and why now."),
+    ] },
+  { key: "storyboard", kind: "doc", name: "Storyboard", note: "A picture and notes for every shot", title: "Storyboard",
+    blocks: () => [
+      '<h1 class="doc-title">Storyboard</h1>', p("Scene: ", "doc-subtitle"),
+      '<table class="doc-table"><tbody><tr><th>Shot</th><th>Picture</th><th>What happens</th><th>Sound</th><th>Camera</th></tr>' +
+      [1, 2, 3, 4].map((n) => `<tr><td>${n}</td><td><br><br><br><br></td><td><br></td><td><br></td><td><br></td></tr>`).join("") + "</tbody></table>",
+      p("Tip: click in a Picture box and add a drawing or a photo with Insert, Picture."),
+    ] },
+  { key: "callsheet", kind: "doc", name: "Call sheet", note: "Who, where and when for a shoot day", title: "Call sheet",
+    blocks: () => [
+      '<h1 class="doc-title">Call sheet</h1>', p("Production name · Day 1 of 1", "doc-subtitle"),
+      '<table class="doc-table"><tbody><tr><th>Date</th><th>Crew call</th><th>Location</th><th>Weather</th></tr><tr><td><br></td><td><br></td><td><br></td><td><br></td></tr></tbody></table>',
+      "<h2>Schedule</h2>",
+      '<table class="doc-table"><tbody><tr><th>Time</th><th>Scene</th><th>What</th><th>Who</th></tr>' +
+      ["08:00", "09:00", "12:30", "13:30"].map((t, i) => `<tr><td>${t}</td><td><br></td><td>${["Set up", "Scene 1", "Lunch", "Scene 2"][i]}</td><td><br></td></tr>`).join("") + "</tbody></table>",
+      "<h2>Cast and crew</h2>",
+      '<table class="doc-table"><tbody><tr><th>Name</th><th>Role</th><th>Call time</th><th>Phone</th></tr>' +
+      [1, 2, 3].map(() => "<tr><td><br></td><td><br></td><td><br></td><td><br></td></tr>").join("") + "</tbody></table>",
+      "<h2>Notes</h2>", p("Parking, food, things to bring."),
+    ] },
 ];
 
 function templateBlocks(t) {
@@ -235,10 +300,7 @@ function templateBlocks(t) {
 // ---------------------------------------------------------------- the Docs home (the lists)
 
 function docsTabChanged(tab) {
-  if (tab !== "docs") {
-    if (doc) docFlushNow();
-    return;
-  }
+  if (tab !== "docs") return; // the document stays open as it is (nothing is saved without Save)
   if (!doc) loadDocsList();
 }
 
@@ -280,7 +342,13 @@ function drawInvitesBadge() {
   if (news.length && !(docsWhere === "collab" && !$("docsTab").hidden && !doc)) {
     docToast(news.length === 1 ? `${news[0].from} invited you to write "${news[0].title}" with them.` : `You're invited to ${news.length} documents.`);
     const look = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "See it" });
-    look.onclick = () => { $("docToast").classList.remove("show"); if (doc) closeDoc(); showTab("docs"); docsSwitchTo("collab"); };
+    look.onclick = async () => {
+      $("docToast").classList.remove("show");
+      showTab("docs");
+      if (doc && !(await docLeave())) return;
+      if (doc) closeDoc();
+      docsSwitchTo("collab");
+    };
     $("docToast").append(" ", look);
   }
   for (const badge of [$("docsTabBadge"), $("docsCollabBadge")]) {
@@ -378,6 +446,10 @@ function drawDocsHome() {
   const search = $("docsSearch").value.trim().toLowerCase();
   let list = collab ? (docsCollab ? docsCollab.docs : []) : docsLocal;
   if (search) list = list.filter((d) => d.title.toLowerCase().includes(search));
+  const sort = loadPref("docsSort") || "new";
+  list = [...list].sort(sort === "name" ? (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" })
+    : sort === "old" ? (a, b) => whenOf(a) - whenOf(b) : (a, b) => whenOf(b) - whenOf(a));
+  $("docsSort").querySelector("span").textContent = DOCS_SORTS[sort];
   $("docsListTitle").textContent = collab ? "Shared with you" : "On this computer";
   setChildren($("docsGrid"), list.map(docCard));
   $("docsEmpty").hidden = list.length > 0;
@@ -391,15 +463,15 @@ function drawDocsHome() {
 const docCards = new Map();
 function docCard(d) {
   const collab = docsWhere === "collab";
-  const sig = JSON.stringify([d.title, d.updated_at, d.preview, d.people && d.people.map((x) => x.username), d.updated_by]);
+  const sig = JSON.stringify([d.title, d.updated_at, d.preview, d.people && d.people.map((x) => x.username), d.updated_by, d.settings]);
   return keptNode(docCards, docsWhere + d.id, sig, () => {
     const card = document.createElement("div");
     card.className = "doc-card";
     card.tabIndex = 0;
     card.innerHTML = `<span class="doc-thumb ${d.kind === "script" ? "is-script" : ""}"><span class="doc-thumb-page"></span></span>
       <div class="doc-card-info"><span class="doc-card-icon"></span><div><b></b><small></small></div>
-      <button type="button" class="icon-button doc-card-more" title="More">${docIcon("trash")}</button></div>`;
-    drawThumb(card.querySelector(".doc-thumb-page"), d.preview || [], d.kind);
+      <button type="button" class="icon-button doc-card-more" title="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg></button></div>`;
+    drawThumb(card.querySelector(".doc-thumb-page"), d.preview || [], d.kind, d.settings);
     card.querySelector(".doc-card-icon").innerHTML = docIcon(d.kind === "script" ? "script" : "doc");
     card.querySelector(".doc-card-info b").textContent = d.title;
     const when = timeAgo(whenOf(d));
@@ -411,13 +483,7 @@ function docCard(d) {
       card.querySelector(".doc-card-info > div").append(faces);
     }
     const more = card.querySelector(".doc-card-more");
-    if (collab && !d.mine) {
-      more.innerHTML = docIcon("leave");
-      more.title = "Leave this document";
-    } else {
-      more.title = "Delete";
-    }
-    more.addEventListener("click", (e) => { e.stopPropagation(); docCardRemove(d, collab); });
+    more.addEventListener("click", (e) => { e.stopPropagation(); docCardMenu(d, collab, more); });
     const open = () => openDoc(collab ? "collab" : "local", d.id);
     card.addEventListener("click", open);
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
@@ -437,10 +503,15 @@ async function docCardRemove(d, collab) {
     : await api("/api/docs-delete", { id: d.id, where: collab ? "collab" : "local" }).catch(() => null);
   if (!res || !res.ok) docToast((res && res.error) || "That didn't work. Try again.");
   loadDocsList();
+  return !!(res && res.ok);
 }
 
 // The little page picture: the first blocks, drawn small.
-function drawThumb(page, htmls, kind) {
+function drawThumb(page, htmls, kind, settings) {
+  const s = { ...docDefaults(kind), ...docCleanSettings(settings) };
+  page.dataset.paper = s.paper;
+  page.style.setProperty("--doc-font", docFontCss(s.font));
+  page.style.setProperty("--doc-line", s.line);
   const text = document.createElement("div");
   text.className = "doc-text thumb" + (kind === "script" ? " script" : "");
   for (const html of htmls) {
@@ -524,14 +595,15 @@ async function openDoc(where, id, opts = {}) {
   }
   const d = res.doc;
   doc = { where, id, kind: d.kind === "script" ? "script" : "doc", title: d.title, mine: where === "local" || d.mine,
-          people: d.people || [], rev: d.rev || 0 };
+          people: d.people || [], rev: d.rev || 0, settings: docCleanSettings(d.settings), fresh: !!opts.fresh };
   docPending.clear(); docDeleted.clear(); docInFlight.clear();
-  docTitleDirty = false; docHere = []; docFailed = 0;
+  docTitleDirty = false; docSettingsDirty = false; docDirty = false; docSaveWanted = false; docHere = []; docFailed = 0;
   document.execCommand("defaultParagraphSeparator", false, "p");
   docApplying = true;
   docsText.replaceChildren(...(d.blocks || []).map(blockFromHtml));
   docsText.classList.toggle("script", doc.kind === "script");
   docsText.classList.toggle("numbers", doc.kind === "script" && loadPref("docSceneNumbers") === "1");
+  docsText.spellcheck = loadPref("docSpelling") !== "0";
   docNormalize();
   docObserver.takeRecords();
   docApplying = false;
@@ -543,10 +615,11 @@ async function openDoc(where, id, opts = {}) {
   $("docEditor").hidden = false;
   document.body.classList.add("doc-open");
   buildToolbar();
+  docApplySettings();
   drawShare();
   drawHere();
-  drawMenu();
-  docSetSaved(where === "local" ? "Saved on this computer" : "Saved");
+  drawMenubar();
+  docSaveState();
   $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
   docFit();
   docCount();
@@ -563,12 +636,13 @@ async function openDoc(where, id, opts = {}) {
   if (where === "collab") docSyncSoon(50);
 }
 
+// Closes the document as it is: what wasn't saved is gone (ask first with docLeave()).
 async function closeDoc(quiet) {
   if (!doc) return;
   const was = doc;
-  await docFlushNow();
   clearTimeout(docSyncTimer);
-  clearTimeout(docSaveTimer);
+  docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
+  document.body.classList.remove("doc-focus");
   if (was.where === "collab") api("/api/docs-close", { id: was.id }).catch(() => null);
   doc = null;
   docHidePops();
@@ -583,7 +657,36 @@ async function closeDoc(quiet) {
   drawDocsHome();
   loadDocsList();
 }
-$("docBack").addEventListener("click", () => closeDoc());
+$("docBack").addEventListener("click", async () => { if (await docLeave()) closeDoc(); });
+
+// Before leaving the document: changes that weren't saved? Ask. Says if it's OK to go.
+async function docLeave() {
+  if (!doc) return true;
+  const d = doc;
+  if (docSaving) await docSaving;
+  while (docSyncBusy && doc === d) await docSyncRunning;
+  if (doc !== d) return true;
+  if (!docDirty) {
+    if (d.fresh) await docForgetFresh(d);
+    return true;
+  }
+  const answer = await docAsk(`Save "${$("docTitle").value || "Untitled document"}"?`,
+    d.fresh ? "You haven't saved this new document yet. If you don't save it, it's gone."
+      : "You have changes that aren't saved. If you don't save them, they're gone.",
+    "Save", { other: "Don't save" });
+  if (doc !== d) return true;
+  if (!answer) return false;
+  if (answer === "other") {
+    if (d.fresh) await docForgetFresh(d);
+    return true;
+  }
+  return docSave();
+}
+
+// A new document that was never saved isn't kept.
+async function docForgetFresh(d) {
+  await api("/api/docs-delete", { id: d.id, where: d.where }).catch(() => null);
+}
 
 // ---------------------------------------------------------------- keeping the blocks in order
 
@@ -683,6 +786,8 @@ function docBlockOf(node) {
 const docObserver = new MutationObserver((records) => {
   if (!doc || docApplying) return;
   const gone = [];
+  // (the editing box's own look changing isn't a change to the document)
+  if (records.every((r) => r.target === docsText && r.type === "attributes")) return;
   for (const r of records) {
     if (r.target === docsText) {
       for (const n of r.removedNodes) if (n.nodeType === 1 && n.dataset && n.dataset.id) gone.push(n.dataset.id);
@@ -708,76 +813,80 @@ docObserver.observe(docsText, { childList: true, subtree: true, characterData: t
 function docChanged() {
   docUndoSoon();
   docCountSoon();
-  if (doc.where === "local") {
-    docSetSaved("Saving...");
-    clearTimeout(docSaveTimer);
-    docSaveTimer = setTimeout(docSaveLocal, 700);
+  docMarkDirty();
+  if (doc.where === "collab") docSyncSoon(400); // (only tells the others you're writing there; the words go on Save)
+}
+
+function docMarkDirty() {
+  if (!doc) return;
+  if (!docDirty) { docDirty = true; docSaveState(); }
+}
+
+// ---------------------------------------------------------------- saving (only when you press Save)
+
+let docSaving = null; // the local save on its way
+async function docSave() {
+  if (!doc) return false;
+  const d = doc;
+  docUndoCommit();
+  let ok;
+  if (d.where === "local") {
+    if (docSaving) await docSaving;
+    if (doc !== d) return false;
+    docSaving = docSaveLocalOnce();
+    try { ok = await docSaving; } finally { docSaving = null; }
   } else {
-    docSetSaved("Saving...");
-    docSyncSoon(250);
+    while (docSyncBusy && doc === d) await docSyncRunning;
+    if (doc !== d) return false;
+    clearTimeout(docSyncTimer);
+    docSaveWanted = true;
+    docSyncRunning = docSyncOnce();
+    ok = await docSyncRunning;
   }
+  if (ok && doc === d) {
+    d.fresh = false;
+    const b = $("docSave");
+    b.classList.remove("saved-pop"); void b.offsetWidth; b.classList.add("saved-pop");
+  }
+  return !!ok && doc === d;
 }
 
-// ---------------------------------------------------------------- saving (local)
-
-let docSaving = null; // the local save on its way: saves go one after the other, so an older one never wins
-async function docSaveLocal() {
-  clearTimeout(docSaveTimer);
-  if (docSaving) await docSaving;
-  if (!doc || doc.where !== "local" || !(docPending.size || docDeleted.size || docTitleDirty)) return;
-  docSaving = docSaveLocalOnce();
-  try { await docSaving; } finally { docSaving = null; }
-}
 async function docSaveLocalOnce() {
   const d = doc;
   const blocks = [...docsText.children].map((el) => ({ id: el.dataset.id, pos: el.dataset.pos, html: blockHtml(el) }));
   const title = $("docTitle").value;
-  docPending.clear(); docDeleted.clear(); docTitleDirty = false;
-  const res = await api("/api/docs-save", { id: d.id, title, blocks }).catch(() => null);
-  if (doc !== d) return;
-  if (res && res.ok) docSetSaved("Saved on this computer");
-  else {
-    docSetSaved((res && res.error) || "Couldn't save. Trying again...", true);
-    docTitleDirty = true;
-    docPending.add("*");
-    docSaveTimer = setTimeout(docSaveLocal, 3000);
-  }
+  docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
+  docSaveState("Saving...");
+  const res = await api("/api/docs-save", { id: d.id, title, blocks, settings: d.settings }).catch(() => null);
+  if (doc !== d) return false;
+  if (res && res.ok) { d.title = title; docSaveState(); return true; }
+  docDirty = true; docTitleDirty = true; docSettingsDirty = true;
+  docSaveState((res && res.error) || "Couldn't save. Try again.", true);
+  return false;
 }
 
-// Called before leaving the document or the tab (and when the app closes): save what's left now.
-async function docFlushNow() {
-  if (!doc) return;
-  if (doc.where === "local") {
-    if (docSaving) await docSaving;
-    if (docPending.size || docDeleted.size || docTitleDirty) await docSaveLocal();
-  } else {
-    // Let the one on its way finish, then send what was typed meanwhile (twice at most, in case it fails once).
-    for (let i = 0; i < 3 && doc && (docSyncBusy || docPending.size || docDeleted.size || docTitleDirty); i++) {
-      if (docSyncBusy) await docSyncRunning; else await docSync();
-    }
-  }
-}
-// The app is closing: a fetch might not make it, a beacon does.
+// The app is closing: nothing is saved (only Save saves), but the others should see you left.
 window.addEventListener("pagehide", () => {
   if (!doc) return;
-  if (doc.where === "local" && (docPending.size || docDeleted.size || docTitleDirty)) {
-    const blocks = [...docsText.children].map((el) => ({ id: el.dataset.id, pos: el.dataset.pos, html: blockHtml(el) }));
-    navigator.sendBeacon("/api/docs-save", new Blob([JSON.stringify({ id: doc.id, title: $("docTitle").value, blocks })], { type: "application/json" }));
-  } else if (doc.where === "collab") {
-    const changes = [...docPending].map((id) => docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`)).filter(Boolean)
-      .map((el) => ({ id: el.dataset.id, pos: el.dataset.pos, html: blockHtml(el) }))
-      .concat([...docDeleted].map((id) => ({ id, pos: "0", html: "", deleted: true })));
-    if (changes.length || docTitleDirty) {
-      navigator.sendBeacon("/api/docs-sync", new Blob([JSON.stringify({ id: doc.id, since: doc.rev, changes, title: docTitleDirty ? $("docTitle").value : null })], { type: "application/json" }));
-    }
-    navigator.sendBeacon("/api/docs-close", new Blob([JSON.stringify({ id: doc.id })], { type: "application/json" }));
-  }
+  const send = (path, data) => navigator.sendBeacon(path, new Blob([JSON.stringify(data)], { type: "application/json" }));
+  if (doc.where === "collab") send("/api/docs-close", { id: doc.id });
+  if (doc.fresh) send("/api/docs-delete", { id: doc.id, where: doc.where }); // a new document that was never saved
 });
 
-function docSetSaved(text, bad) {
-  $("docSaved").textContent = text;
+// The little line under the title, and the Save button.
+function docSaveState(text, bad) {
+  if (!doc) return;
+  const b = $("docSave");
+  b.classList.toggle("dirty", docDirty);
+  b.title = docDirty ? "Save your changes (Ctrl+S)" : "Everything is saved";
+  b.querySelector("span").textContent = docDirty ? "Save" : "Saved";
+  $("docSaved").textContent = text || (docDirty ? (doc.fresh ? "Not saved yet" : "Unsaved changes")
+    : doc.where === "local" ? "Saved on this computer" : "Saved for everyone");
   $("docSaved").classList.toggle("bad", !!bad);
+  $("docSaved").classList.toggle("dirty", docDirty && !bad);
 }
+function docSetSaved(text, bad) { docSaveState(text, bad); }
+$("docSave").addEventListener("click", () => docSave());
 
 // ---------------------------------------------------------------- live together (collab)
 
@@ -804,7 +913,6 @@ function docSync() {
 
 // A document that's gone (deleted, you were taken out, or logged out): what wasn't sent can't be any more.
 function docGone(text) {
-  docPending.clear(); docDeleted.clear(); docTitleDirty = false;
   docToast(text);
   closeDoc();
 }
@@ -812,22 +920,27 @@ function docGone(text) {
 async function docSyncOnce() {
   docSyncBusy = true;
   const d = doc;
+  const send = docSaveWanted; // your changes only go out when you press Save
+  docSaveWanted = false;
   const changes = [];
-  for (const id of docPending) {
+  if (send) for (const id of docPending) {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`);
     if (!el) continue;
     const html = blockHtml(el);
     changes.push({ id, pos: el.dataset.pos, html });
     docInFlight.set(id, html);
   }
-  for (const id of docDeleted) changes.push({ id, pos: "0", html: "", deleted: true });
-  const sentPending = new Set(docPending), sentDeleted = new Set(docDeleted);
-  docPending.clear(); docDeleted.clear();
-  const title = docTitleDirty ? $("docTitle").value : null;
-  docTitleDirty = false;
+  if (send) for (const id of docDeleted) changes.push({ id, pos: "0", html: "", deleted: true });
+  const sentPending = send ? new Set(docPending) : new Set(), sentDeleted = send ? new Set(docDeleted) : new Set();
+  const title = send && docTitleDirty ? $("docTitle").value : null;
+  const settings = send && docSettingsDirty ? d.settings : null;
+  if (send) {
+    docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
+    docSaveState("Saving...");
+  }
   const caret = docCaretBlock();
   const typing = Date.now() - docLastTyped < 3000 && docTypedBlock && caret && caret.dataset.id === docTypedBlock;
-  const res = await api("/api/docs-sync", { id: d.id, since: d.rev, changes, title, block: caret ? caret.dataset.id : null, typing })
+  const res = await api("/api/docs-sync", { id: d.id, since: d.rev, changes, title, block: caret ? caret.dataset.id : null, typing, settings })
     .catch(() => null);
   docSyncBusy = false;
   docInFlight.clear();
@@ -835,21 +948,29 @@ async function docSyncOnce() {
   if (!res || !res.ok) {
     if (res && res.loggedOut) return docGone(res.error);
     if (res && res.error && /isn't there any more|not in it/.test(res.error)) return docGone(res.error);
-    // Not sent: keep the changes for next time.
+    docFailed++;
+    docSyncSoon(Math.min(10000, 1000 * 2 ** Math.min(docFailed, 3)));
+    if (!send) { if (!docDirty) docSaveState("Offline. Trying again...", true); return false; }
+    // Not saved: keep the changes for the next Save.
     for (const id of sentPending) if (!docDeleted.has(id)) docPending.add(id);
     for (const id of sentDeleted) if (!docPending.has(id)) docDeleted.add(id);
     if (title !== null) docTitleDirty = true;
-    docFailed++;
-    docSetSaved(res && res.error ? res.error : "Offline. Your changes are kept and saved when you're back.", true);
-    docSyncSoon(Math.min(10000, 1000 * 2 ** Math.min(docFailed, 3)));
-    return;
+    if (settings !== null) docSettingsDirty = true;
+    docDirty = true;
+    docSaveState(res && res.error ? res.error : "Couldn't save: you seem to be offline. Try again in a moment.", true);
+    return false;
   }
   docFailed = 0;
   docApplyRemote(res.blocks || []);
   d.rev = Math.max(d.rev, res.rev || 0);
+  if (send && title !== null) d.title = title;
   if (res.title && res.title !== d.title) {
     d.title = res.title;
     if (document.activeElement !== $("docTitle") && !docTitleDirty) $("docTitle").value = res.title;
+  }
+  if (res.settings && !docSettingsDirty && JSON.stringify(docCleanSettings(res.settings)) !== JSON.stringify(d.settings)) {
+    d.settings = docCleanSettings(res.settings);
+    docApplySettings();
   }
   if (res.people) {
     const before = JSON.stringify(d.people.map((x) => [x.username, x.joined]));
@@ -858,14 +979,15 @@ async function docSyncOnce() {
   }
   docHere = res.here || [];
   drawHere();
-  if (!docPending.size && !docDeleted.size && !docTitleDirty) docSetSaved("Saved");
-  if (docSyncAgain || docPending.size || docDeleted.size || docTitleDirty) {
+  if (send || $("docSaved").classList.contains("bad")) docSaveState();
+  if (docSyncAgain) {
     docSyncAgain = false;
     docSyncSoon(150);
   } else {
     // About every second while someone else is in it, a bit slower when you're alone.
     docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.length ? 900 : 2000);
   }
+  return true;
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && doc) docSyncSoon(50); });
 
@@ -1119,13 +1241,8 @@ function docUndoButtons() {
 
 // ---------------------------------------------------------------- the toolbar
 
-const DOC_FONTS = [
-  ["InterVar, Inter, sans-serif", "Inter"], ["Arial", "Arial"], ["Calibri", "Calibri"], ["Georgia", "Georgia"],
-  ["'Times New Roman'", "Times New Roman"], ["Verdana", "Verdana"], ["'Trebuchet MS'", "Trebuchet MS"],
-  ["'Courier Prime', 'Courier New', monospace", "Courier Prime"], ["'Comic Sans MS'", "Comic Sans MS"],
-];
 const DOC_STYLES_LIST = [
-  ["p", "Normal text"], ["title", "Title"], ["subtitle", "Subtitle"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"],
+  ["p", "Normal text"], ["title", "Title"], ["subtitle", "Subtitle"], ["h1", "Heading 1"], ["h2", "Heading 2"], ["h3", "Heading 3"], ["blockquote", "Quote"],
 ];
 const SCRIPT_NAMES = {
   scene: "Scene heading", action: "Action", character: "Character", paren: "Parenthetical", dialogue: "Dialogue",
@@ -1148,7 +1265,8 @@ function buildToolbar() {
   const sep = '<span class="doc-sep"></span>';
   const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), tb("print", "print", "Print or save as PDF (Ctrl+P)"), sep];
   if (script) {
-    parts.push(`<button type="button" class="doc-select doc-element" data-pop="element" title="What this line is (Tab changes it)"><span>Action</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
+    parts.push(`<button type="button" class="doc-select doc-element" data-pop="element" title="What this line is (Tab changes it)"><span>Action</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`,
+      `<button type="button" class="doc-select doc-font" data-pop="font" title="Font"><span>Courier Prime</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
       tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"), sep,
       tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("numbers-scene", "numbersScene", "Scene numbers"), sep,
       tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Scenes"));
@@ -1160,7 +1278,8 @@ function buildToolbar() {
       `<button type="button" class="doc-tool doc-color" data-pop="color" title="Text color">${docIcon("color")}<i></i></button>`,
       `<button type="button" class="doc-tool doc-color hl" data-pop="highlight" title="Highlight">${docIcon("highlight")}<i></i></button>`, sep,
       tb("link", "link", "Link (Ctrl+K)"), tb("image", "image", "Picture"), `<button type="button" class="doc-tool" data-pop="table" title="Table">${docIcon("table")}</button>`, sep,
-      `<button type="button" class="doc-tool doc-align" data-pop="align" title="Line up the text">${docIcon("left")}</button>`, sep,
+      `<button type="button" class="doc-tool doc-align" data-pop="align" title="Line up the text">${docIcon("left")}</button>`,
+      `<button type="button" class="doc-tool" data-pop="spacing" title="Line spacing">${docIcon("spacing")}</button>`, sep,
       tb("checklist", "checklist", "Checklist"), tb("insertUnorderedList", "bullets", "Bullets"), tb("insertOrderedList", "numbers", "Numbered list"),
       tb("outdent", "outdent", "Less indent"), tb("indent", "indent", "More indent"), sep,
       tb("removeFormat", "clear", "Clear formatting (Ctrl+\\)"), tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Outline"));
@@ -1280,6 +1399,13 @@ function docToolState() {
   if (outline) outline.classList.toggle("on", !$("docOutline").hidden);
   const numbers = $("docToolbar").querySelector('[data-cmd="numbers-scene"]');
   if (numbers) numbers.classList.toggle("on", docsText.classList.contains("numbers"));
+  const font = $("docToolbar").querySelector(".doc-font span");
+  if (font) {
+    const node = inside ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode) : docsText;
+    const fam = getComputedStyle(node).fontFamily.split(",")[0].replace(/["']/g, "").trim();
+    font.textContent = fam === "InterVar" ? "Inter" : fam;
+    font.style.fontFamily = docFontCss(font.textContent);
+  }
   if (doc.kind === "script") {
     const kind = block ? docScriptKind(block) : "action";
     $("docToolbar").querySelector(".doc-element span").textContent = SCRIPT_NAMES[kind] || "Title page";
@@ -1294,9 +1420,6 @@ function docToolState() {
     const node = inside ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode) : null;
     if (node) {
       const cs = getComputedStyle(node);
-      const font = $("docToolbar").querySelector(".doc-font span");
-      const fam = cs.fontFamily.split(",")[0].replace(/["']/g, "").trim();
-      font.textContent = fam === "InterVar" ? "Inter" : fam;
       if (document.activeElement !== $("docSize")) $("docSize").value = Math.round(parseFloat(cs.fontSize) * 0.75 * 2) / 2;
       $("docToolbar").querySelector(".doc-color i").style.background = cs.color;
     }
@@ -1351,14 +1474,64 @@ function docOpenPop(kind, button) {
     b.className = "doc-pop-item" + (opts.on ? " on" : "");
     if (opts.style) b.setAttribute("style", opts.style);
     if (opts.cls) b.classList.add(opts.cls);
-    b.innerHTML = `<span></span>${opts.key ? `<kbd>${opts.key}</kbd>` : ""}`;
+    b.innerHTML = `<span></span>${opts.key ? `<kbd>${opts.key}</kbd>` : ""}${opts.more ? '<i class="doc-pop-more"></i>' : ""}`;
     b.querySelector("span").textContent = label;
+    if (opts.icon) { b.insertAdjacentHTML("afterbegin", docIcon(opts.icon)); b.classList.add("with-icon"); }
+    if (opts.disabled) b.disabled = true;
     b.addEventListener("mousedown", (e) => e.preventDefault());
-    b.addEventListener("click", () => { docHidePops(); docBackToRange(); fn(); });
-    pop.append(b);
+    b.addEventListener("click", () => {
+      docHidePops(); docBackToRange();
+      if (opts.more) setTimeout(() => docOpenPop(opts.more, button)); else fn();
+    });
+    (opts.into || pop).append(b);
     return b;
   };
-  if (kind === "style") {
+  const line = () => pop.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
+  const head = (text) => pop.append(Object.assign(document.createElement("p"), { className: "doc-pop-head", textContent: text }));
+  if (kind.startsWith("menu-")) {
+    button.classList.add("open");
+    for (const entry of docMenuItems(kind.slice(5))) {
+      if (!entry) continue;
+      if (entry === "-") { if (pop.lastChild && !pop.lastChild.classList.contains("lib-menu-line")) line(); continue; }
+      item(entry.label, entry.fn, { icon: entry.icon || "blank", key: entry.key, on: entry.on, more: entry.more, cls: entry.danger ? "danger" : "", disabled: entry.disabled });
+    }
+    if (pop.lastChild && pop.lastChild.classList.contains("lib-menu-line")) pop.lastChild.remove();
+  } else if (kind === "spacing") {
+    head("Line spacing");
+    const now = docSettings().line;
+    for (const [v, label] of DOC_LINES) item(label, () => docSetSetting("line", v), { on: v === now });
+  } else if (kind === "zoom") {
+    const now = loadPref("docZoom") || "fit";
+    item("Fit to window", () => docSetZoom("fit"), { on: now === "fit" });
+    for (const z of DOC_ZOOMS) item(z + "%", () => docSetZoom(String(z)), { on: now === String(z) });
+  } else if (kind === "paper") {
+    head("Paper color");
+    const now = docSettings().paper;
+    for (const [key, label] of Object.entries(DOC_PAPERS)) {
+      const b = item(label, () => docSetSetting("paper", key), { on: key === now });
+      b.insertAdjacentHTML("afterbegin", `<i class="doc-paper-dot" data-paper="${key}"></i>`);
+      b.classList.add("with-icon");
+    }
+  } else if (kind === "case") {
+    item("UPPERCASE", () => docChangeCase("upper"));
+    item("lowercase", () => docChangeCase("lower"));
+    item("Title Case", () => docChangeCase("title"));
+    item("Sentence case", () => docChangeCase("sentence"));
+  } else if (kind === "special" || kind === "emoji") {
+    const grid = document.createElement("div");
+    grid.className = "doc-chars" + (kind === "emoji" ? " emoji" : "");
+    for (const ch of kind === "emoji" ? DOC_EMOJI : DOC_SPECIAL) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = ch;
+      b.title = ch;
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => { docHidePops(); docBackToRange(); docInsertText(ch); });
+      grid.append(b);
+    }
+    head(kind === "emoji" ? "Emoji" : "Special characters");
+    pop.append(grid);
+  } else if (kind === "style") {
     for (const [key, label] of DOC_STYLES_LIST) item(label, () => docSetStyle(key), { cls: "st-" + key });
   } else if (kind === "align") {
     const now = ["justifyLeft", "justifyCenter", "justifyRight", "justifyFull"].find((c) => { try { return document.queryCommandState(c); } catch (e) { return false; } });
@@ -1368,7 +1541,7 @@ function docOpenPop(kind, button) {
       b.classList.add("with-icon");
     }
   } else if (kind === "font") {
-    for (const [value, label] of DOC_FONTS) item(label, () => docExec("fontName", value), { style: `font-family: ${value}` });
+    docFontPop(pop, item, head);
   } else if (kind === "element") {
     const block = docCaretBlock();
     const now = block ? docScriptKind(block) : "";
@@ -1413,18 +1586,22 @@ function docOpenPop(kind, button) {
   pop.hidden = false;
   const r = button.getBoundingClientRect(), box = $("docEditor").getBoundingClientRect();
   pop.style.left = Math.max(0, Math.min(r.left - box.left, box.width - pop.offsetWidth - 4)) + "px";
-  pop.style.top = r.bottom - box.top + 6 + "px";
+  const below = r.bottom - box.top + 6;
+  // (from the zoom box at the bottom: open upwards)
+  pop.style.top = (r.bottom + pop.offsetHeight + 10 > innerHeight && r.top > pop.offsetHeight + 20 ? r.top - box.top - pop.offsetHeight - 6 : below) + "px";
+  const search = pop.querySelector("input");
+  if (search) search.focus();
 }
 
 function docHidePops() {
   $("docPop").hidden = true;
   $("docSuggest").hidden = true;
-  $("docMenu").hidden = true;
+  $("docsCardMenu").hidden = true;
+  for (const b of $("docMenubar").children) b.classList.remove("open");
 }
 document.addEventListener("mousedown", (e) => {
   if (!doc) return;
-  if (!$("docPop").contains(e.target)) $("docPop").hidden = true;
-  if (!$("docMenu").contains(e.target) && e.target !== $("docMenuButton") && !$("docMenuButton").contains(e.target)) $("docMenu").hidden = true;
+  if (!$("docPop").contains(e.target) && !$("docMenubar").contains(e.target)) docHidePops();
   if (!$("docSuggest").contains(e.target)) $("docSuggest").hidden = true;
 });
 
@@ -1694,7 +1871,9 @@ docsText.addEventListener("keydown", (e) => {
   if (ctrl && key === "k" && doc.kind !== "script") { e.preventDefault(); return docLink(); }
   if (ctrl && key === "\\") { e.preventDefault(); return docCommand("removeFormat"); }
   if (ctrl && e.key === "Enter") { e.preventDefault(); return docCommand("pagebreak"); }
-  if (ctrl && key === "s") { e.preventDefault(); return docFlushNow(); }
+  if (ctrl && key === "s") { e.preventDefault(); return docSave(); }
+  if (ctrl && e.shiftKey && key === "c") { e.preventDefault(); return docWordCount(); }
+  if (ctrl && (e.key === "." || e.key === ",") && doc.kind !== "script") { e.preventDefault(); return docCommand(e.key === "." ? "superscript" : "subscript"); }
   if (!ctrl && !/^(Arrow|Page|Home|End|Escape|Tab|Shift|Control|Alt|Meta|CapsLock|F\d)/.test(e.key) && docsText.querySelector(":scope > .doc-held") && docBlockHeld(e.key)) { e.preventDefault(); return; }
   if (ctrl && (key === "x" || key === "v") && docsText.querySelector(":scope > .doc-held") && docBlockHeld()) { e.preventDefault(); return; }
   if (doc.kind === "script" && docScriptKey(e)) return;
@@ -1724,11 +1903,11 @@ docsText.addEventListener("keydown", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (!doc || $("docEditor").hidden || !(e.ctrlKey || e.metaKey) || docsText.contains(e.target)) return;
-  if (!$("docsTab").hidden && document.querySelector(".modal:not([hidden])")) return;
+  if ([...document.querySelectorAll(".modal:not([hidden])")].some((m) => m.getClientRects().length)) return;
   const key = e.key.toLowerCase();
   if (key === "f" || key === "h") { e.preventDefault(); docOpenFind(); }
   if (key === "p") { e.preventDefault(); docPrint(); }
-  if (key === "s") { e.preventDefault(); docFlushNow(); }
+  if (key === "s") { e.preventDefault(); docSave(); }
   if ((key === "z" || key === "y") && e.target === document.body) { e.preventDefault(); docUndoGo(key === "y" || e.shiftKey ? 1 : -1); }
 });
 
@@ -2090,10 +2269,14 @@ function docCount() {
 // The page fits the window: smaller windows get a smaller page (like zooming out).
 function docFit() {
   if (!doc) return;
-  const canvas = $("docCanvas");
-  const room = canvas.clientWidth - 24;
-  const zoom = Math.min(1, Math.max(0.45, room / 816));
-  $("docPage").style.zoom = zoom < 0.999 ? zoom : "";
+  const width = (DOC_PAGES[docSettings().page] || DOC_PAGES.letter).w;
+  const room = $("docCanvas").clientWidth - 24;
+  const fit = Math.min(1, Math.max(0.45, room / width));
+  const want = loadPref("docZoom") || "fit";
+  const zoom = want === "fit" ? fit : Math.max(0.25, Math.min(3, +want / 100 || 1));
+  $("docPage").style.zoom = Math.abs(zoom - 1) > 0.001 ? zoom : "";
+  $("docZoom").textContent = Math.round(zoom * 100) + "%";
+  $("docZoom").title = want === "fit" ? "Zoom (fits the window)" : "Zoom";
 }
 window.addEventListener("resize", () => { if (doc) docFit(); });
 
@@ -2203,15 +2386,13 @@ function docCloseFind() {
 $("docTitle").addEventListener("input", () => {
   if (!doc) return;
   docTitleDirty = true;
-  docSetSaved("Saving...");
-  if (doc.where === "local") { clearTimeout(docSaveTimer); docSaveTimer = setTimeout(docSaveLocal, 700); }
-  else docSyncSoon(500);
+  docMarkDirty();
 });
 $("docTitle").addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); docsText.focus(); }
 });
 $("docTitle").addEventListener("blur", () => {
-  if (doc && !$("docTitle").value.trim()) { $("docTitle").value = "Untitled document"; docTitleDirty = true; docChanged(); }
+  if (doc && !$("docTitle").value.trim()) { $("docTitle").value = "Untitled document"; docTitleDirty = true; docMarkDirty(); }
 });
 
 function drawShare() {
@@ -2229,59 +2410,19 @@ function drawShare() {
 }
 $("docShare").addEventListener("click", () => {
   if (!doc) return;
-  if (doc.where === "local") return docToggleMenu();
+  if (doc.where === "local") return docOpenPop("menu-file", $("docMenubar").firstElementChild);
   openInvite();
 });
 
-function drawMenu() {
-  const menu = $("docMenu");
-  menu.replaceChildren();
-  const item = (icon, label, fn, cls = "") => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "lib-menu-item " + cls;
-    b.innerHTML = docIcon(icon) + "<span></span>";
-    b.querySelector("span").textContent = label;
-    b.addEventListener("click", () => { menu.hidden = true; fn(); });
-    menu.append(b);
-  };
-  const line = () => menu.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
-  item("print", "Print or save as PDF", docPrint);
-  item("download", "Download for Word (.doc)", () => docExport("doc"));
-  if (doc.kind === "script") item("download", "Download as Fountain (.fountain)", () => docExport("fountain"));
-  item("download", "Download as text (.txt)", () => docExport("txt"));
-  line();
-  if (doc.where === "local") {
-    if (sfxUser()) item("people", "Share a copy in Collab", () => docCopyTo("collab"));
-  } else {
-    item("lock", "Save a copy in Local", () => docCopyTo("local"));
-  }
-  item("copy", "Make a copy", () => docCopyTo(doc.where));
-  line();
-  if (doc.where === "collab" && !doc.mine) item("leave", "Leave this document", () => docCardRemove({ id: doc.id, title: doc.title, mine: false }, true).then(() => closeDoc()), "danger");
-  else item("trash", "Delete", async () => {
-    const d = doc;
-    const yes = await docAsk("Delete this document?", d.where === "collab" ? `"${$("docTitle").value}" is deleted for everyone in it. This can't be undone.` : `"${$("docTitle").value}" is deleted from this computer. This can't be undone.`, "Delete");
-    if (!yes || doc !== d) return;
-    const res = await api("/api/docs-delete", { id: d.id, where: d.where }).catch(() => null);
-    if (!res || !res.ok) return docToast((res && res.error) || "That didn't work. Try again.");
-    docPending.clear(); docDeleted.clear(); docTitleDirty = false;
-    closeDoc();
-  }, "danger");
-}
-function docToggleMenu() {
-  const menu = $("docMenu");
-  menu.hidden = !menu.hidden;
-}
-$("docMenuButton").addEventListener("click", (e) => { e.stopPropagation(); docToggleMenu(); });
-
 async function docCopyTo(where) {
   if (where === "collab" && !sfxUser()) return docToast("Log in first to share documents.");
-  await docFlushNow();
+  // The copy is made of what's on the page now (saved or not), then the original asks about its changes.
   let pos = "";
   const blocks = [...docsText.children].map((el) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: blockHtml(el) }; });
   const title = where === doc.where ? `Copy of ${$("docTitle").value}` : $("docTitle").value;
-  const res = await api("/api/docs-create", { where, title, kind: doc.kind, blocks }).catch(() => null);
+  const kind = doc.kind, settings = doc.settings;
+  if (!(await docLeave())) return;
+  const res = await api("/api/docs-create", { where, title, kind, blocks, settings }).catch(() => null);
   if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the copy.");
   await openDoc(where, res.id);
   docToast(where === "collab" ? "Copied to Collab. Now invite people with the Invite button." : where === "local" ? "Saved a copy on this computer." : "Made a copy.");
@@ -2373,7 +2514,11 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!$("docInviteModal").hidden) $("docInviteModal").hidden = true;
   else if (!$("docAskModal").hidden) docAskClose(false);
-  else if (doc && (!$("docPop").hidden || !$("docMenu").hidden)) docHidePops();
+  else if (!$("docSetupModal").hidden) $("docSetupModal").hidden = true;
+  else if (!$("docInfoModal").hidden) $("docInfoModal").hidden = true;
+  else if (!$("docsCardMenu").hidden) $("docsCardMenu").hidden = true;
+  else if (doc && !$("docPop").hidden) docHidePops();
+  else if (doc && document.body.classList.contains("doc-focus")) docFocus(false);
 });
 $("docInviteCancel").addEventListener("click", () => ($("docInviteModal").hidden = true));
 $("docInviteModal").addEventListener("mousedown", (e) => { if (e.target === $("docInviteModal")) $("docInviteModal").hidden = true; });
@@ -2396,10 +2541,12 @@ $("docInviteSend").addEventListener("click", async () => {
 // ---- small questions
 
 let docAskDone = null;
-function docAsk(title, text, yes) {
+function docAsk(title, text, yes, opts = {}) {
   $("docAskTitle").textContent = title;
   $("docAskText").textContent = text;
   $("docAskYes").textContent = yes;
+  $("docAskOther").hidden = !opts.other;
+  $("docAskOther").textContent = opts.other || "";
   $("docAskYes").classList.toggle("danger", /Delete|Leave/.test(yes));
   $("docAskModal").querySelector(".doc-ask-input") && $("docAskModal").querySelector(".doc-ask-input").remove();
   $("docAskModal").hidden = false;
@@ -2424,6 +2571,7 @@ function docAskClose(answer) {
 }
 $("docAskYes").addEventListener("click", () => docAskClose(true));
 $("docAskNo").addEventListener("click", () => docAskClose(false));
+$("docAskOther").addEventListener("click", () => docAskClose("other"));
 
 function docToast(text) {
   let t = $("docToast");
@@ -2446,7 +2594,12 @@ function docPrint() {
   docHidePops();
   document.body.classList.add("doc-printing");
   document.title = $("docTitle").value; // the PDF's file name
-  const done = () => { document.body.classList.remove("doc-printing"); document.title = "Ultimate Recording"; window.removeEventListener("afterprint", done); };
+  // The paper size and margins of this document.
+  const s = docSettings();
+  const margin = doc.kind === "script" ? "1in" : DOC_MARGINS[s.margins].px / 96 + "in";
+  const style = Object.assign(document.createElement("style"), { id: "docPrintPage", textContent: `@media print { @page { size: ${(DOC_PAGES[s.page] || DOC_PAGES.letter).css}; margin: ${margin}; } }` });
+  document.head.append(style);
+  const done = () => { document.body.classList.remove("doc-printing"); document.title = "Ultimate Recording"; style.remove(); window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);
   const caret = docSaveCaret();
   docsText.blur(); // (no blinking caret on the paper)
@@ -2553,10 +2706,14 @@ function docAsWord() {
     if (copy.tagName === "UL" && copy.classList.contains("checklist")) copy.querySelectorAll("li").forEach((li) => li.prepend(li.classList.contains("checked") ? "☑ " : "☐ "));
     return copy.outerHTML;
   }).join("\n");
+  const s = docSettings();
+  const size = s.page === "a4" ? "21cm 29.7cm" : "8.5in 11in";
+  const margin = DOC_MARGINS[s.margins].px / 96 + "in";
+  const font = docFontCss(s.font).replace(/^InterVar, /, "");
   const css = script ? `
-    @page { size: 8.5in 11in; margin: 1in 1in 1in 1.5in; }
-    body { font-family: "Courier Prime", "Courier New", monospace; font-size: 12pt; }
-    p { margin: 0; line-height: 1; }
+    @page { size: ${size}; margin: 1in 1in 1in 1.5in; }
+    body { font-family: ${font}; font-size: ${s.size}pt; }
+    p { margin: 0; line-height: ${s.line}; }
     .sp-scene, .sp-action, .sp-shot, .sp-transition, .sp-character, .sp-centered { margin-top: 12pt; }
     .sp-scene, .sp-shot, .sp-character, .sp-transition, .sp-title { text-transform: uppercase; }
     .sp-scene { font-weight: bold; }
@@ -2567,8 +2724,8 @@ function docAsWord() {
     .sp-centered, .sp-title { text-align: center; }
     .sp-title { margin-top: 3in; font-weight: bold; }
     .sp-contact { margin-top: 3in; }` : `
-    @page { size: 8.5in 11in; margin: 1in; }
-    body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+    @page { size: ${size}; margin: ${margin}; }
+    body { font-family: ${s.font === "Inter" ? "Calibri, Arial, sans-serif" : font}; font-size: ${s.size}pt; line-height: ${s.line}; }
     h1 { font-size: 20pt; } h2 { font-size: 16pt; } h3 { font-size: 14pt; }
     .doc-title { font-size: 26pt; } .doc-subtitle { font-size: 15pt; color: #666; }
     table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 4pt 6pt; } th { background: #eee; }
@@ -2589,6 +2746,633 @@ async function docExport(ext) {
   const show = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Show in folder" });
   show.onclick = () => api("/api/docs-show", { path: res.path }).catch(() => null);
   t.append(" ", show);
+}
+
+// ---------------------------------------------------------------- page settings (size, margins, paper, font)
+
+const DOC_PAGES = {
+  letter: { name: "Letter", note: "8.5 × 11 in", w: 816, h: 1056, css: "letter" },
+  a4: { name: "A4", note: "21 × 29.7 cm", w: 794, h: 1123, css: "A4" },
+};
+const DOC_MARGINS = { narrow: { name: "Narrow", note: "0.5 in", px: 48 }, normal: { name: "Normal", note: "1 in", px: 96 }, wide: { name: "Wide", note: "1.5 in", px: 144 } };
+const DOC_PAPERS = { white: "White", cream: "Cream", grey: "Soft grey", night: "Night" };
+const DOC_LINES = [["1", "Single"], ["1.15", "1.15"], ["1.5", "1.5"], ["2", "Double"]];
+const DOC_ZOOMS = [50, 75, 90, 100, 125, 150, 200];
+
+// [name, kind, comes with the app]
+const DOC_FONT_LIST = [
+  ["Inter", "sans", 1], ["Roboto", "sans", 1], ["Open Sans", "sans", 1], ["Lato", "sans", 1], ["Montserrat", "sans", 1],
+  ["Poppins", "sans", 1], ["Nunito", "sans", 1], ["Lora", "serif", 1], ["Merriweather", "serif", 1], ["Playfair Display", "serif", 1],
+  ["Source Serif 4", "serif", 1], ["EB Garamond", "serif", 1], ["Courier Prime", "mono", 1], ["Caveat", "hand", 1],
+  ["Arial", "sans"], ["Calibri", "sans"], ["Segoe UI", "sans"], ["Verdana", "sans"], ["Tahoma", "sans"], ["Trebuchet MS", "sans"],
+  ["Century Gothic", "sans"], ["Franklin Gothic Medium", "sans"], ["Candara", "sans"], ["Corbel", "sans"], ["Bahnschrift", "sans"], ["Impact", "sans"],
+  ["Times New Roman", "serif"], ["Georgia", "serif"], ["Cambria", "serif"], ["Constantia", "serif"], ["Garamond", "serif"],
+  ["Palatino Linotype", "serif"], ["Book Antiqua", "serif"], ["Sitka Text", "serif"],
+  ["Courier New", "mono"], ["Consolas", "mono"], ["Lucida Console", "mono"],
+  ["Comic Sans MS", "hand"], ["Segoe Print", "hand"], ["Segoe Script", "hand"], ["Ink Free", "hand"],
+];
+const DOC_FALLBACK = { sans: "Arial, sans-serif", serif: "Georgia, serif", mono: "'Courier New', monospace", hand: "cursive" };
+
+function docDefaults(kind) {
+  return kind === "script"
+    ? { font: "Courier Prime", size: 12, line: "1", margins: "normal", page: "letter", paper: "white" }
+    : { font: "Inter", size: 11, line: "1.5", margins: "normal", page: "letter", paper: "white" };
+}
+// Only what's known and makes sense (the settings come from the file or from other people).
+function docCleanSettings(s) {
+  const out = {};
+  if (!s || typeof s !== "object") return out;
+  if (typeof s.font === "string" && s.font.trim() && s.font.length <= 60) out.font = s.font.replace(/[^\w\s-]/g, "").trim();
+  if (+s.size >= 6 && +s.size <= 40) out.size = Math.round(+s.size * 2) / 2;
+  if (DOC_LINES.some(([v]) => v === String(s.line))) out.line = String(s.line);
+  if (Object.hasOwn(DOC_MARGINS, s.margins)) out.margins = s.margins;
+  if (Object.hasOwn(DOC_PAGES, s.page)) out.page = s.page;
+  if (Object.hasOwn(DOC_PAPERS, s.paper)) out.paper = s.paper;
+  return out;
+}
+function docSettings() { return doc ? { ...docDefaults(doc.kind), ...doc.settings } : docDefaults("doc"); }
+
+function docFontCss(name) {
+  if (name === "Inter") return "InterVar, Inter, Arial, sans-serif";
+  const f = DOC_FONT_LIST.find((x) => x[0] === name);
+  return `"${name}", ${DOC_FALLBACK[f ? f[1] : "sans"]}`;
+}
+
+// Is a Windows font on this computer? (Text in it is a different width than in the fallback.)
+const docFontsThere = new Map();
+function docFontThere(name) {
+  const f = DOC_FONT_LIST.find((x) => x[0] === name);
+  if (f && f[2]) return true;
+  if (docFontsThere.has(name)) return docFontsThere.get(name);
+  const ctx = (docFontThere.canvas ||= document.createElement("canvas")).getContext("2d");
+  const sample = "mmmmmmmmmmlli WWW 0123456789";
+  let there = false;
+  for (const base of ["monospace", "serif", "sans-serif"]) {
+    ctx.font = `40px ${base}`;
+    const plain = ctx.measureText(sample).width;
+    ctx.font = `40px "${name}", ${base}`;
+    if (ctx.measureText(sample).width !== plain) { there = true; break; }
+  }
+  docFontsThere.set(name, there);
+  return there;
+}
+
+function docApplySettings() {
+  if (!doc) return;
+  const s = docSettings(), page = $("docPage");
+  const size = DOC_PAGES[s.page] || DOC_PAGES.letter;
+  const margin = doc.kind === "script" ? 96 : DOC_MARGINS[s.margins].px;
+  page.dataset.paper = s.paper;
+  page.style.setProperty("--page-w", size.w + "px");
+  page.style.setProperty("--page-h", size.h + "px");
+  page.style.setProperty("--pad-x", margin + "px");
+  page.style.setProperty("--pad-y", margin + "px");
+  page.style.setProperty("--doc-font", docFontCss(s.font));
+  page.style.setProperty("--doc-size", s.size + "pt");
+  page.style.setProperty("--doc-line", s.line);
+  docFit();
+  docToolState();
+  if (!$("docSetupModal").hidden) drawPageSetup();
+}
+
+function docSetSetting(key, value) {
+  if (!doc) return;
+  const next = { ...doc.settings, [key]: value };
+  if (docDefaults(doc.kind)[key] === value) delete next[key];
+  doc.settings = docCleanSettings(next);
+  docSettingsDirty = true;
+  docMarkDirty();
+  docApplySettings();
+}
+
+// ---- the font menu: for the selected text, or the whole document
+
+let docFontWhole = false;
+function docFontPop(pop, item, head) {
+  const range = docKeepRange && !docKeepRange.collapsed ? docKeepRange : null;
+  const whole = !range || docFontWhole;
+  const now = docSettings().font;
+  const top = document.createElement("div");
+  top.className = "doc-font-top";
+  if (range) {
+    top.innerHTML = '<div class="doc-seg"><button type="button" data-w="0">Selected text</button><button type="button" data-w="1">Whole document</button></div>';
+    top.querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", (b.dataset.w === "1") === whole);
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => { docFontWhole = b.dataset.w === "1"; const btn = $("docToolbar").querySelector(".doc-font"); docHidePops(); docBackToRange(); docOpenPop("font", btn || $("docMenubar").children[4]); });
+    });
+  } else {
+    top.innerHTML = '<p class="doc-pop-note">For the whole document. Select text first to change just that part.</p>';
+  }
+  const search = Object.assign(document.createElement("input"), { placeholder: "Search fonts", spellcheck: false, autocomplete: "off" });
+  const label = document.createElement("label");
+  label.className = "input doc-font-search";
+  label.append(search);
+  top.append(label);
+  pop.append(top);
+  const list = document.createElement("div");
+  list.className = "doc-font-list";
+  pop.append(list);
+  const pick = (name) => {
+    const recent = [name, ...docRecentFonts().filter((f) => f !== name)].slice(0, 4);
+    savePref("docRecentFonts", JSON.stringify(recent));
+    if (whole) {
+      docSetSetting("font", name);
+      docToast(`The whole document is now in ${name}.`);
+    } else {
+      docExec("fontName", docFontCss(name));
+    }
+  };
+  const add = (title, names) => {
+    if (!names.length) return;
+    const h = Object.assign(document.createElement("p"), { className: "doc-pop-head", textContent: title });
+    list.append(h);
+    for (const name of names) {
+      const b = item(name, () => pick(name), { style: `font-family: ${docFontCss(name)}`, on: whole && name === now, into: list });
+      b.dataset.font = name.toLowerCase();
+    }
+  };
+  const recent = docRecentFonts().filter(docFontThere);
+  add("Recent", recent);
+  add("Comes with the app", DOC_FONT_LIST.filter((f) => f[2]).map((f) => f[0]));
+  add("On this computer", DOC_FONT_LIST.filter((f) => !f[2] && docFontThere(f[0])).map((f) => f[0]));
+  search.addEventListener("input", () => {
+    const q = search.value.trim().toLowerCase();
+    const seen = new Set();
+    for (const el of list.children) {
+      if (el.tagName === "P") { el.hidden = !!q; continue; }
+      const show = !q || el.dataset.font.includes(q);
+      el.hidden = !show || (q && seen.has(el.dataset.font));
+      if (show) seen.add(el.dataset.font);
+    }
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); const first = [...list.children].find((el) => el.tagName === "BUTTON" && !el.hidden); if (first) first.click(); }
+    if (e.key === "Escape") { docHidePops(); docBackToRange(); }
+  });
+}
+function docRecentFonts() {
+  try { return JSON.parse(loadPref("docRecentFonts") || "[]").filter((f) => typeof f === "string"); } catch (e) { return []; }
+}
+
+// ---------------------------------------------------------------- the menu bar (File, Edit, View...)
+
+const DOC_MENUS = [["file", "File"], ["edit", "Edit"], ["view", "View"], ["insert", "Insert"], ["format", "Format"], ["tools", "Tools"]];
+function drawMenubar() {
+  const bar = $("docMenubar");
+  if (bar.children.length) return;
+  for (const [key, label] of DOC_MENUS) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-menubar-item", textContent: label });
+    b.dataset.menu = key;
+    b.addEventListener("mousedown", (e) => e.preventDefault()); // keep the selection
+    b.addEventListener("click", () => docOpenPop("menu-" + key, b));
+    // Like real menus: once one is open, moving over the others opens them.
+    b.addEventListener("mouseenter", () => {
+      const pop = $("docPop");
+      if (!pop.hidden && pop.dataset.kind.startsWith("menu-") && pop.dataset.kind !== "menu-" + key) { docHidePops(); docOpenPop("menu-" + key, b); }
+    });
+    bar.append(b);
+  }
+}
+
+function docMenuItems(name) {
+  const script = doc.kind === "script";
+  const range = docKeepRange && !docKeepRange.collapsed;
+  const isOn = (cmd) => { try { return document.queryCommandState(cmd); } catch (e) { return false; } };
+  if (name === "file") return [
+    { label: script ? "New script" : "New document", icon: "plus", fn: docNewFromMenu },
+    { label: "Make a copy", icon: "copy", fn: () => docCopyTo(doc.where) },
+    doc.where === "local" ? (sfxUser() ? { label: "Share a copy in Collab", icon: "people", fn: () => docCopyTo("collab") } : null)
+      : { label: "Save a copy in Local", icon: "lock", fn: () => docCopyTo("local") },
+    "-",
+    { label: "Save", icon: "save", key: "Ctrl+S", fn: docSave },
+    { label: "Rename", icon: "rename", fn: () => { $("docTitle").focus(); $("docTitle").select(); } },
+    "-",
+    { label: "Page setup", icon: "page", fn: openPageSetup },
+    { label: "Print or save as PDF", icon: "print", key: "Ctrl+P", fn: docPrint },
+    { label: "Download for Word (.doc)", icon: "download", fn: () => docExport("doc") },
+    script ? { label: "Download as Fountain (.fountain)", icon: "download", fn: () => docExport("fountain") } : null,
+    { label: "Download as text (.txt)", icon: "download", fn: () => docExport("txt") },
+    "-",
+    doc.where === "collab" && !doc.mine
+      ? { label: "Leave this document", icon: "leave", danger: true, fn: () => docCardRemove({ id: doc.id, title: doc.title, mine: false }, true).then((gone) => gone && closeDoc()) }
+      : { label: "Delete", icon: "trash", danger: true, fn: docDeleteOpen },
+  ];
+  if (name === "edit") return [
+    { label: "Undo", icon: "undo", key: "Ctrl+Z", fn: () => docUndoGo(-1), disabled: docUndoAt <= 0 && !docUndoDirty.size },
+    { label: "Redo", icon: "redo", key: "Ctrl+Y", fn: () => docUndoGo(1), disabled: docUndoAt >= docUndo.length - 1 },
+    "-",
+    { label: "Cut", icon: "cut", key: "Ctrl+X", fn: () => { if (!docBlockHeld()) document.execCommand("cut"); }, disabled: !range },
+    { label: "Copy", icon: "copy", key: "Ctrl+C", fn: () => document.execCommand("copy"), disabled: !range },
+    { label: "Paste", icon: "paste", key: "Ctrl+V", fn: docPasteFromMenu },
+    { label: "Select all", icon: "selectAll", key: "Ctrl+A", fn: () => { docsText.focus(); document.execCommand("selectAll"); } },
+    "-",
+    { label: "Find and replace", icon: "find", key: "Ctrl+H", fn: () => docOpenFind(true) },
+  ];
+  if (name === "view") return [
+    { label: script ? "Scenes on the side" : "Outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
+    script ? { label: "Scene numbers", icon: "numbersScene", on: docsText.classList.contains("numbers"), fn: () => docCommand("numbers-scene") } : null,
+    { label: "Focus mode", icon: "focus", fn: () => docFocus(true) },
+    "-",
+    { label: "Zoom", icon: "zoom", more: "zoom" },
+    { label: "Paper color", icon: "paper", more: "paper" },
+  ];
+  if (name === "insert") return script ? [
+    { label: "Page break", icon: "pagebreak", key: "Ctrl+Enter", fn: () => docCommand("pagebreak") },
+    { label: "Today's date", icon: "calendar", fn: docInsertDate },
+    { label: "Special character", icon: "omega", more: "special" },
+    { label: "Emoji", icon: "emoji", more: "emoji" },
+  ] : [
+    { label: "Picture", icon: "image", fn: () => docCommand("image") },
+    { label: "Table", icon: "table", more: "table" },
+    { label: "Link", icon: "link", key: "Ctrl+K", fn: () => docCommand("link") },
+    "-",
+    { label: "Checklist", icon: "checklist", fn: () => docCommand("checklist") },
+    { label: "Line", icon: "hr", fn: () => { if (!docBlockHeld()) docInsertBlockAfter("<hr>"); } },
+    { label: "Page break", icon: "pagebreak", key: "Ctrl+Enter", fn: () => docCommand("pagebreak") },
+    "-",
+    { label: "Today's date", icon: "calendar", fn: docInsertDate },
+    { label: "Special character", icon: "omega", more: "special" },
+    { label: "Emoji", icon: "emoji", more: "emoji" },
+  ];
+  if (name === "format") return [
+    { label: "Bold", icon: "bold", key: "Ctrl+B", on: isOn("bold"), fn: () => docCommand("bold") },
+    { label: "Italic", icon: "italic", key: "Ctrl+I", on: isOn("italic"), fn: () => docCommand("italic") },
+    { label: "Underline", icon: "underline", key: "Ctrl+U", on: isOn("underline"), fn: () => docCommand("underline") },
+    script ? null : { label: "Strikethrough", icon: "strike", on: isOn("strikeThrough"), fn: () => docCommand("strikeThrough") },
+    script ? null : { label: "Superscript", icon: "sup", key: "Ctrl+.", on: isOn("superscript"), fn: () => docCommand("superscript") },
+    script ? null : { label: "Subscript", icon: "sub", key: "Ctrl+,", on: isOn("subscript"), fn: () => docCommand("subscript") },
+    { label: "Text case", icon: "textCase", more: "case" },
+    "-",
+    script ? { label: "Line type", icon: "script", more: "element" } : { label: "Text style", icon: "heading", more: "style" },
+    { label: "Font", icon: "font", more: "font" },
+    script ? null : { label: "Text color", icon: "color", more: "color" },
+    script ? null : { label: "Align", icon: "left", more: "align" },
+    script ? null : { label: "Line spacing", icon: "spacing", more: "spacing" },
+    "-",
+    { label: "Page setup", icon: "page", fn: openPageSetup },
+    { label: "Clear formatting", icon: "clear", key: "Ctrl+\\", fn: () => docCommand("removeFormat") },
+  ];
+  if (name === "tools") return [
+    { label: "Word count", icon: "count", key: "Ctrl+Shift+C", fn: docWordCount },
+    script ? { label: "Characters in this script", icon: "character", fn: docCharacters } : null,
+    { label: "Check spelling", icon: "spell", on: docsText.spellcheck, fn: docToggleSpelling },
+  ];
+  return [];
+}
+
+async function docNewFromMenu() {
+  const t = DOC_TEMPLATES.find((x) => x.key === (doc.kind === "script" ? "script" : "blank"));
+  const where = doc.where;
+  if (!(await docLeave())) return;
+  closeDoc(true);
+  docsWhere = where;
+  newDoc(t);
+}
+
+async function docDeleteOpen() {
+  const d = doc;
+  const yes = await docAsk("Delete this document?", d.where === "collab" ? `"${$("docTitle").value}" is deleted for everyone in it. This can't be undone.` : `"${$("docTitle").value}" is deleted from this computer. This can't be undone.`, "Delete");
+  if (!yes || doc !== d) return;
+  const res = await api("/api/docs-delete", { id: d.id, where: d.where }).catch(() => null);
+  if (!res || !res.ok) return docToast((res && res.error) || "That didn't work. Try again.");
+  closeDoc();
+}
+
+async function docPasteFromMenu() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) return;
+    if (docBlockHeld()) return;
+    if (doc.kind === "script") docPasteScript(text); else document.execCommand("insertText", false, text);
+  } catch (e) {
+    docToast("Press Ctrl+V to paste.");
+  }
+}
+
+function docInsertText(text) {
+  if (!doc || docBlockHeld()) return;
+  if (!docsText.contains(getSelection().anchorNode)) { docsText.focus(); docPutCaret(docsText.lastElementChild, "end"); }
+  document.execCommand("insertText", false, text);
+}
+function docInsertDate() {
+  docInsertText(new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }));
+}
+
+const DOC_SPECIAL = "— – … • · © ® ™ ° ± × ÷ ≈ ≠ ≤ ≥ → ← ↑ ↓ ⇒ ★ ☆ ♥ ♪ ✓ ✗ € £ ¥ ¢ § ¶ † « » “ ” ‘ ’ ½ ⅓ ¼ ¾ ² ³ µ".split(" ");
+const DOC_EMOJI = "😀 😂 🥹 😍 😎 🤔 😮 😢 😡 🙏 👍 👎 👏 🙌 💪 👀 🔥 ✨ 🎉 ❤️ 💔 ⭐ ✅ ❌ ⚠️ ❓ 💡 📌 📝 📅 ⏰ 🎬 🎥 📷 🎞️ 🎤 🎧 🎵 🎭 💬 📍 🚗 🏠 🌙 ☀️ 🌧️ 🌊 🌲".split(" ");
+
+// UPPERCASE, lowercase... of the selected text.
+function docChangeCase(mode) {
+  const sel = getSelection();
+  if (!sel.rangeCount || sel.isCollapsed || !docsText.contains(sel.anchorNode)) return docToast("Select some text first.");
+  if (docBlockHeld()) return;
+  const range = sel.getRangeAt(0);
+  const saved = docSaveCaret();
+  docUndoCommit();
+  const root = range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) if (range.intersectsNode(walker.currentNode)) nodes.push(walker.currentNode);
+  let capNext = true;
+  for (const n of nodes) {
+    const start = n === range.startContainer ? range.startOffset : 0;
+    const end = n === range.endContainer ? range.endOffset : n.data.length;
+    const part = n.data.slice(start, end);
+    let out = "";
+    if (mode === "upper") out = part.toUpperCase();
+    else if (mode === "lower") out = part.toLowerCase();
+    else {
+      for (const ch of part) {
+        if (/\p{L}/u.test(ch)) { out += capNext ? ch.toUpperCase() : ch.toLowerCase(); capNext = false; }
+        else {
+          out += ch;
+          if (mode === "title" ? /[\s([{"“‘\/-]/.test(ch) : /[.!?]/.test(ch)) capNext = true;
+        }
+      }
+    }
+    if (out !== part) n.data = n.data.slice(0, start) + out + n.data.slice(end);
+  }
+  docRestoreCaret(saved);
+  docUndoCommit();
+}
+
+function docToggleSpelling() {
+  docsText.spellcheck = !docsText.spellcheck;
+  savePref("docSpelling", docsText.spellcheck ? "1" : "0");
+  // (the browser only redraws the red lines when the text is touched)
+  const caret = docSaveCaret();
+  docsText.blur();
+  docsText.focus();
+  docRestoreCaret(caret);
+}
+
+// ---- zoom and focus mode
+
+function docSetZoom(z) {
+  savePref("docZoom", z);
+  docFit();
+}
+function docZoomStep(up) {
+  const now = Math.round(parseFloat($("docZoom").textContent) || 100);
+  const next = up ? DOC_ZOOMS.find((z) => z > now) : [...DOC_ZOOMS].reverse().find((z) => z < now);
+  if (next) docSetZoom(String(next));
+}
+$("docZoomIn").addEventListener("click", () => docZoomStep(true));
+$("docZoomOut").addEventListener("click", () => docZoomStep(false));
+$("docZoom").addEventListener("mousedown", (e) => e.preventDefault());
+$("docZoom").addEventListener("click", (e) => { e.stopPropagation(); docOpenPop("zoom", $("docZoom")); });
+$("docCount").addEventListener("click", () => docWordCount());
+
+function docFocus(on) {
+  document.body.classList.toggle("doc-focus", on);
+  if (on) docToast("Focus mode. Press Esc to come back.");
+  docHidePops();
+  requestAnimationFrame(docFit);
+  docsText.focus({ preventScroll: true });
+}
+$("docFocusExit").addEventListener("click", () => docFocus(false));
+
+// ---- page setup
+
+function openPageSetup() {
+  drawPageSetup();
+  $("docSetupModal").hidden = false;
+}
+function drawPageSetup() {
+  if (!doc) return;
+  const s = docSettings(), box = $("docSetup");
+  const seg = (key, options, now) => {
+    const el = document.createElement("div");
+    el.className = "doc-seg wide";
+    for (const [value, label, note] of options) {
+      const b = Object.assign(document.createElement("button"), { type: "button" });
+      b.innerHTML = `<b></b>${note ? "<small></small>" : ""}`;
+      b.querySelector("b").textContent = label;
+      if (note) b.querySelector("small").textContent = note;
+      b.classList.toggle("on", String(value) === String(now));
+      b.addEventListener("click", () => docSetSetting(key, value));
+      el.append(b);
+    }
+    return el;
+  };
+  const row = (label, ...content) => {
+    const r = document.createElement("div");
+    r.className = "doc-setup-row";
+    r.append(Object.assign(document.createElement("span"), { className: "doc-setup-label", textContent: label }), ...content);
+    return r;
+  };
+  const rows = [row("Page size", seg("page", Object.entries(DOC_PAGES).map(([k, p]) => [k, p.name, p.note]), s.page))];
+  if (doc.kind !== "script") rows.push(row("Margins", seg("margins", Object.entries(DOC_MARGINS).map(([k, m]) => [k, m.name, m.note]), s.margins)));
+  const papers = document.createElement("div");
+  papers.className = "doc-papers";
+  for (const [key, label] of Object.entries(DOC_PAPERS)) {
+    const b = Object.assign(document.createElement("button"), { type: "button", title: label });
+    b.innerHTML = `<i class="doc-paper-dot" data-paper="${key}"></i><span></span>`;
+    b.querySelector("span").textContent = label;
+    b.classList.toggle("on", key === s.paper);
+    b.addEventListener("click", () => docSetSetting("paper", key));
+    papers.append(b);
+  }
+  rows.push(row("Paper", papers));
+  const font = document.createElement("select");
+  font.className = "doc-setup-font";
+  for (const name of DOC_FONT_LIST.map((f) => f[0]).filter(docFontThere)) {
+    const o = Object.assign(document.createElement("option"), { value: name, textContent: name });
+    o.style.fontFamily = docFontCss(name);
+    font.append(o);
+  }
+  if (![...font.options].some((o) => o.value === s.font)) font.prepend(Object.assign(document.createElement("option"), { value: s.font, textContent: s.font }));
+  font.value = s.font;
+  font.style.fontFamily = docFontCss(s.font);
+  font.addEventListener("change", () => docSetSetting("font", font.value));
+  const size = document.createElement("div");
+  size.className = "doc-stepper";
+  size.innerHTML = '<button type="button" title="Smaller">−</button><span></span><button type="button" title="Bigger">+</button>';
+  size.querySelector("span").textContent = s.size + " pt";
+  const [down, up] = size.querySelectorAll("button");
+  down.addEventListener("click", () => docSetSetting("size", Math.max(6, s.size - (s.size > 12 ? 2 : 1))));
+  up.addEventListener("click", () => docSetSetting("size", Math.min(40, s.size + (s.size >= 12 ? 2 : 1))));
+  rows.push(row("Font", font, size));
+  rows.push(row("Line spacing", seg("line", DOC_LINES, s.line)));
+  if (doc.kind === "script") rows.push(Object.assign(document.createElement("p"), { className: "doc-setup-note", textContent: "Scripts keep the standard screenplay margins, so they look right to everyone who reads them." }));
+  box.replaceChildren(...rows);
+}
+$("docSetupDone").addEventListener("click", () => { $("docSetupModal").hidden = true; docsText.focus({ preventScroll: true }); });
+$("docSetupReset").addEventListener("click", () => {
+  if (!doc || !Object.keys(doc.settings).length) return;
+  doc.settings = {};
+  docSettingsDirty = true;
+  docMarkDirty();
+  docApplySettings();
+});
+$("docSetupModal").addEventListener("mousedown", (e) => { if (e.target === $("docSetupModal")) $("docSetupModal").hidden = true; });
+
+// ---- word count and the characters of a script
+
+function docShowInfo(title, rows, extra) {
+  $("docInfoTitle").textContent = title;
+  const box = $("docInfo");
+  box.replaceChildren();
+  for (const [label, value] of rows) {
+    const r = document.createElement("div");
+    r.className = "doc-info-row";
+    r.append(Object.assign(document.createElement("span"), { textContent: label }), Object.assign(document.createElement("b"), { textContent: value }));
+    box.append(r);
+  }
+  if (extra) box.append(extra);
+  $("docInfoModal").hidden = false;
+}
+$("docInfoDone").addEventListener("click", () => { $("docInfoModal").hidden = true; docsText.focus({ preventScroll: true }); });
+$("docInfoModal").addEventListener("mousedown", (e) => { if (e.target === $("docInfoModal")) $("docInfoModal").hidden = true; });
+
+function docTextStats(text) {
+  const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
+  return { words, chars: [...text.replace(/\n/g, "")].length, noSpaces: [...text.replace(/\s/g, "")].length };
+}
+
+function docWordCount() {
+  if (!doc) return;
+  const all = docTextStats(docsText.innerText);
+  const sel = docRange();
+  const picked = sel && !sel.collapsed ? docTextStats(sel.toString()) : null;
+  const n = (x) => x.toLocaleString();
+  const rows = [];
+  if (picked) rows.push(["Selected words", n(picked.words)]);
+  rows.push(["Words", n(all.words)], ["Characters", n(all.chars)], ["Characters without spaces", n(all.noSpaces)]);
+  if (doc.kind === "script") {
+    const pages = Math.max(1, Math.round(docScriptLines() / 55));
+    const scenes = docsText.querySelectorAll(":scope > .sp-scene").length;
+    rows.push(["Pages (about)", n(pages)], ["Screen time (about)", `${pages} min`], ["Scenes", n(scenes)], ["Speaking characters", n(docCharacterList().length)]);
+  } else {
+    const s = docSettings(), size = DOC_PAGES[s.page] || DOC_PAGES.letter, margin = DOC_MARGINS[s.margins].px;
+    const pages = Math.max(1, Math.ceil(docsText.scrollHeight / (size.h - 2 * margin)) + docsText.querySelectorAll(":scope > hr.page-break").length);
+    const paragraphs = [...docsText.children].filter((el) => el.textContent.trim() && el.tagName !== "HR").length;
+    rows.push(["Paragraphs", n(paragraphs)], ["Pages (about)", n(pages)], ["Reading time", `${Math.max(1, Math.round(all.words / 230))} min`],
+      ["Speaking time", `${Math.max(1, Math.round(all.words / 150))} min`]);
+  }
+  docShowInfo("Word count", rows);
+}
+
+// How many lines the script has (a page is about 55 lines; one page is about one minute of film).
+function docScriptLines() {
+  let lines = 0;
+  for (const el of docsText.children) {
+    if (el.classList.contains("page-break")) { lines = Math.ceil(lines / 55) * 55; continue; }
+    const k = docScriptKind(el);
+    const width = k === "dialogue" ? 35 : k === "paren" ? 25 : 60;
+    lines += Math.max(1, Math.ceil(el.textContent.length / width)) + (k === "dialogue" || k === "paren" ? 0 : 1);
+  }
+  return lines;
+}
+
+// Who speaks in the script, and how much.
+function docCharacterList() {
+  const people = new Map();
+  for (const el of docsText.querySelectorAll(":scope > .sp-character")) {
+    const name = el.textContent.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim().toUpperCase();
+    if (!name) continue;
+    const p = people.get(name) || { name, lines: 0, words: 0, first: el };
+    p.lines++;
+    for (let next = el.nextElementSibling; next && /sp-(dialogue|paren)/.test(next.className); next = next.nextElementSibling) {
+      if (next.classList.contains("sp-dialogue")) p.words += docTextStats(next.textContent).words;
+    }
+    people.set(name, p);
+  }
+  return [...people.values()].sort((a, b) => b.lines - a.lines || a.name.localeCompare(b.name));
+}
+
+function docCharacters() {
+  const list = docCharacterList();
+  const box = document.createElement("div");
+  box.className = "doc-cast";
+  if (!list.length) box.append(Object.assign(document.createElement("p"), { className: "docs-empty", textContent: "Nobody speaks yet. Write a character name (Tab twice on an empty line) and their lines." }));
+  const most = list.length ? list[0].lines : 1;
+  for (const p of list) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-cast-row" });
+    b.innerHTML = `<span class="doc-avatar tiny"></span><b></b><i><em></em></i><small></small>`;
+    b.querySelector(".doc-avatar").textContent = p.name[0];
+    b.querySelector(".doc-avatar").style.setProperty("--who", docColor(p.name));
+    b.querySelector("b").textContent = p.name;
+    b.querySelector("em").style.width = Math.max(4, (p.lines / most) * 100) + "%";
+    b.querySelector("small").textContent = `${p.lines} ${p.lines === 1 ? "time" : "times"} · ${p.words.toLocaleString()} words`;
+    b.title = "Go to the first time they speak";
+    b.addEventListener("click", () => {
+      $("docInfoModal").hidden = true;
+      p.first.scrollIntoView({ block: "center", behavior: "smooth" });
+      docsText.focus({ preventScroll: true });
+      docPutCaret(p.first, "end");
+    });
+    box.append(b);
+  }
+  docShowInfo("Characters", [], box);
+}
+
+// ---------------------------------------------------------------- the "..." on a document on the Docs home
+
+const DOCS_SORTS = { new: "Newest first", old: "Oldest first", name: "Name A to Z" };
+$("docsSort").addEventListener("click", () => {
+  const keys = Object.keys(DOCS_SORTS);
+  savePref("docsSort", keys[(keys.indexOf(loadPref("docsSort") || "new") + 1) % keys.length]);
+  drawDocsHome();
+});
+
+function docCardMenu(d, collab, button) {
+  const menu = $("docsCardMenu");
+  if (!menu.hidden && menu.dataset.id === d.id) { menu.hidden = true; return; }
+  menu.dataset.id = d.id;
+  menu.replaceChildren();
+  const item = (icon, label, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "lib-menu-item " + cls });
+    b.innerHTML = docIcon(icon) + "<span></span>";
+    b.querySelector("span").textContent = label;
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; fn(); });
+    menu.append(b);
+  };
+  const line = () => menu.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
+  item("open", "Open", () => openDoc(collab ? "collab" : "local", d.id));
+  item("rename", "Rename", () => docCardRename(d, collab));
+  item("copy", "Make a copy", () => docCardCopy(d, collab, collab ? "collab" : "local"));
+  if (!collab && sfxUser()) item("people", "Share a copy in Collab", () => docCardCopy(d, collab, "collab"));
+  if (collab) item("lock", "Save a copy in Local", () => docCardCopy(d, collab, "local"));
+  line();
+  if (collab && !d.mine) item("leave", "Leave this document", () => docCardRemove(d, collab), "danger");
+  else item("trash", "Delete", () => docCardRemove(d, collab), "danger");
+  menu.hidden = false;
+  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
+  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
+  menu.style.top = r.bottom - box.top + 6 + "px";
+}
+document.addEventListener("mousedown", (e) => {
+  const menu = $("docsCardMenu");
+  if (!menu.hidden && !menu.contains(e.target) && !e.target.closest(".doc-card-more")) menu.hidden = true;
+});
+
+async function docCardRename(d, collab) {
+  const title = await docAskText("Rename", "What should this document be called?", d.title);
+  if (title === null || !title.trim() || title.trim() === d.title) return;
+  const res = collab
+    ? await api("/api/docs-sync", { id: d.id, since: Number.MAX_SAFE_INTEGER, changes: [], title: title.trim() }).catch(() => null)
+    : await api("/api/docs-save", { id: d.id, title: title.trim() }).catch(() => null);
+  if (collab) api("/api/docs-close", { id: d.id }).catch(() => null);
+  if (!res || !res.ok) return docToast((res && res.error) || "Couldn't rename it. Try again.");
+  d.title = title.trim();
+  loadDocsList();
+}
+
+async function docCardCopy(d, collab, where) {
+  if (where === "collab" && !sfxUser()) return docToast("Log in first to share documents.");
+  const res = await api("/api/docs-open", { where: collab ? "collab" : "local", id: d.id }).catch(() => null);
+  if (collab) api("/api/docs-close", { id: d.id }).catch(() => null);
+  if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the copy.");
+  let pos = "";
+  const blocks = [...(res.doc.blocks || [])].sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0))
+    .map((b) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: b.html }; });
+  const same = where === (collab ? "collab" : "local");
+  const made = await api("/api/docs-create", { where, title: same ? `Copy of ${d.title}` : d.title, kind: res.doc.kind, blocks, settings: res.doc.settings || {} }).catch(() => null);
+  if (!made || !made.ok) return docToast((made && made.error) || "Couldn't make the copy.");
+  docToast(where === "collab" && !same ? "Copied to Collab. Open it and invite people with the Invite button." : where === "local" && !same ? "Saved a copy on this computer." : "Made a copy.");
+  if (!same) docsSwitchTo(where); else loadDocsList();
 }
 
 // The tab may already be open (the app opens on the tab used last).
