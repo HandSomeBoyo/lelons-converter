@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.33.0", items: [
+    "New tabs: a floating glass bar at the top (like Artlist) that's much easier to see, and it stays with you when you scroll.",
+    "Every tab has its own little icon, and a glass bubble slides smoothly to the one you pick.",
+    "In a small window the tabs show just their icons. Point at one to see its name.",
+  ] },
   { version: "1.32.0", items: [
     "The Library checks its sounds for you: anything that turns out to be a known song says \"Most likely copyrighted\" right under its name, with the song and artist.",
     "It happens in the background and is shared, so a sound is only ever checked once for everyone.",
