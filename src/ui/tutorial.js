@@ -1,13 +1,13 @@
 // "How to use": a short animated tour of the app. Opens by itself once (the first time the app
-// opens with it), and again from the help menu at the top. It can read itself out loud (recorded voice in ui/voice/, see build/make_tour_voice.py).
+// opens with it), and again from the help menu at the top. It can read itself out loud (a recorded Kokoro voice in ui/voice/, see build/make_tour_voice.py).
 // Uses $, api() from app.js and loadPref(), savePref() from theme.js.
 
 const TOUR = [
   {
     key: "welcome", seconds: 5,
-    title: "Welcome to Lelons Converter",
+    title: "Welcome to Ultimate Recording",
     text: "A quick tour of everything you can do. It only takes a minute.",
-    say: "Welcome to Lelons Converter! Here's a quick tour of everything you can do.",
+    say: "Hey, welcome to Ultimate Recording! Let me show you around. It only takes a minute.",
     html: `<div class="t-center">
       <div class="t-logo"><svg viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg><i></i><i></i></div>
       <div class="t-words"><span>Paste.</span><span>Convert.</span><span>Done.</span></div>
@@ -17,7 +17,7 @@ const TOUR = [
     key: "paste", seconds: 8,
     title: "Paste a link, pick a format",
     text: "Paste a YouTube or TikTok link, pick MP3, MP4 or GIF, and press Convert. It asks where to save.",
-    say: "Paste a link from YouTube, TikTok and more. Pick a format, like MP3 or MP4, and press Convert. You'll pick where it's saved.",
+    say: "First, paste a link from YouTube, TikTok, or pretty much anywhere. Pick a format, like MP3 or MP4, and hit Convert. Then just choose where to save it.",
     html: `<div class="t-app">
       <div class="t-input"><span class="t-typed">youtube.com/watch?v=dQw4w9WgXcQ</span><b class="t-caret"></b></div>
       <div class="t-button t-convert">Convert →</div>
@@ -31,7 +31,7 @@ const TOUR = [
     key: "trim", seconds: 7.5,
     title: "Keep only the part you want",
     text: "Click Trim, drag the start and end, and play your part before you convert.",
-    say: "Only want part of it? Click Trim, then drag the start and the end. Press play to hear your part.",
+    say: "Only need part of it? Click Trim, and drag the start and the end. Press play to check your part.",
     html: `<div class="t-trim">
       <div class="t-wave">${"<i></i>".repeat(56)}</div>
       <div class="t-shade left"></div><div class="t-shade right"></div>
@@ -44,7 +44,7 @@ const TOUR = [
     key: "drag", seconds: 7,
     title: "Drag it straight into your editor",
     text: "Finished files, Library sounds and clips can be dragged right into DaVinci Resolve, Premiere or a folder.",
-    say: "When it's done, drag the file straight into DaVinci Resolve, Premiere, or any folder.",
+    say: "When it's done, you can drag the file straight into DaVinci Resolve, Premiere, or any folder.",
     html: `<div class="t-drag">
       <div class="t-file"><span class="t-note">♪</span><b>Song.mp3</b></div>
       <div class="t-editor"><div class="t-editor-top"><i></i><i></i><i></i><span>Timeline</span></div>
@@ -58,7 +58,7 @@ const TOUR = [
     key: "library", seconds: 7.5,
     title: "Share sounds with the crew",
     text: "The Library holds everyone's sounds. Play, download, favorite, or fix one with the pencil.",
-    say: "The Library holds sounds from the whole crew. Play them, download them, star your favorites, or fix one with the pencil.",
+    say: "The Library has sounds from the whole crew. Play them, download them, and star your favorites. Need something new? Try Find sounds.",
     html: `<div class="t-lib">
       ${[["Vine boom", "Memes", "Bob"], ["Chill beat", "Music", "Lelon"], ["Door slam", "SFX", "Kim"]].map(([n, c, u], i) => `
       <div class="t-row" style="--i:${i}"><span class="t-play${i === 0 ? " on" : ""}"></span>
@@ -71,7 +71,7 @@ const TOUR = [
     key: "crew", seconds: 7.5,
     title: "Home, chat and live subscribers",
     text: "Home shows our channels' subscribers live and who's online. Chat with everyone, send sounds and react.",
-    say: "Home shows our channels' subscribers, live, plus who's online. Open the chat to talk, send sounds, and react.",
+    say: "Home shows our channels' subscribers, live, and who's online right now. Open the chat to talk, send sounds, and react.",
     html: `<div class="t-crew">
       <div class="t-counter"><div class="t-digits">${[1, 6, 9, 3, 9, 7].map((d, i) => (i === 3 ? '<span class="t-comma">,</span>' : "") +
         `<span class="t-digit" style="--d:${d};--i:${i}"><span>${"0123456789".split("").map((x) => `<i>${x}</i>`).join("")}</span></span>`).join("")}</div>
@@ -88,9 +88,9 @@ const TOUR = [
     key: "yours", seconds: 7.5,
     title: "Make it yours",
     text: "In Settings: themes, colors, size and volume. The speaker at the top changes the volume too.",
-    say: "Make it yours. In Settings you can pick a theme and a color, make the app bigger, and turn the volume down.",
+    say: "And make it yours! In Settings, you can pick a theme and a color, change the size, and set the volume.",
     html: `<div class="t-yours">
-      <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>Lelons</b></div>
+      <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>Ultimate</b></div>
         <div class="t-win-line w1"></div><div class="t-win-line w2"></div><div class="t-win-button"></div></div>
       <div class="t-controls">
         <div class="t-swatches">${["#ffcf3f", "#ff8a3d", "#ef5350", "#ec5fa8", "#9b7bf7", "#4d9ef7", "#22b8a5", "#5cc15c"].map((c, i) => `<i style="--c:${c};--i:${i}"></i>`).join("")}</div>
@@ -103,7 +103,7 @@ const TOUR = [
     key: "done", seconds: 5,
     title: "You're all set!",
     text: "You can watch this again any time: click the question mark at the top, then \"How to use\".",
-    say: "You're all set! You can watch this again any time. Click the question mark at the top, then How to use.",
+    say: "That's it, you're all set! Want to watch this again? Just click the question mark at the top.",
     html: `<div class="t-center">
       <svg class="t-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
       <div class="t-words"><span>Have fun!</span></div>

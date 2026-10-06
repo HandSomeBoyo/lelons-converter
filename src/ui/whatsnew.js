@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.30.0", items: [
+    "Lelons Converter is now called Ultimate Recording! Same app, same account, same settings and history, just a new name.",
+    "The new shortcut is on your desktop and in the Start menu. The old ones are removed for you.",
+    "An even better tour voice: warmer and much more like a real person, with friendlier words.",
+  ] },
   { version: "1.29.0", items: [
     "The Library has cleaner categories: pills at the top (like Artlist), and \"Uploaded by\" is now one small button next to Sort. The list gets the whole width.",
     "The player bar now only shows in the Library, so it never covers the other tabs. Leave the Library and the sound pauses; come back and press play to go on.",

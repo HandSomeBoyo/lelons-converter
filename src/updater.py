@@ -64,7 +64,7 @@ def check():
 
 def download_and_run(url, version, on_progress):
     """Download the new installer and open it. The app should close right after."""
-    path = os.path.join(tempfile.gettempdir(), f"Lelons Converter Setup {version}.exe")
+    path = os.path.join(tempfile.gettempdir(), f"Ultimate Recording Setup {version}.exe")
     with _get(url, timeout=30) as response, open(path + ".part", "wb") as out:
         total = int(response.headers.get("Content-Length") or 0)
         done = 0

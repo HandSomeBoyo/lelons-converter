@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds dist/Lelons Converter Setup.exe from a Linux machine.
+# Builds dist/Ultimate Recording Setup.exe from a Linux machine.
 # Needs: curl, unzip, python3 with pip, and nsis (sudo apt install nsis)
 set -euo pipefail
 
 PYTHON_VERSION="3.14.8"
 WEBVIEW2_VERSION="1.0.4258.31"  # Microsoft's WebView2 SDK, for the app's window
-RCEDIT_VERSION="2.0.0"          # sets the name and icon of "Lelons Converter.exe"
+RCEDIT_VERSION="2.0.0"          # sets the name and icon of "Ultimate Recording.exe"
 PY="${PY:-python3}"  # any Python that has pip
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/build/work"
@@ -54,30 +54,30 @@ WV="$WORK/webview2-$WEBVIEW2_VERSION.nupkg"
 unzip -q -o -j "$WV" "build/native/x64/WebView2Loader.dll" -d "$STAGE/app"
 
 WINE="${WINE:-$(command -v wine64 || command -v wine || ls /usr/lib/wine/wine64 2>/dev/null || true)}"
-[ -n "$WINE" ] || { echo "Wine is needed to name Lelons Converter.exe"; exit 1; }
+[ -n "$WINE" ] || { echo "Wine is needed to name Ultimate Recording.exe"; exit 1; }
 
-echo "==> Making Lelons Converter.exe"
+echo "==> Making Ultimate Recording.exe"
 # Python's own pythonw.exe under the app's name, with the app's icon and
-# details, so Windows (Task Manager, the taskbar) shows it as Lelons Converter.
+# details, so Windows (Task Manager, the taskbar) shows it as Ultimate Recording.
 # Changing the file breaks Python's signature on it, so that is taken off.
 RC="$WORK/rcedit-$RCEDIT_VERSION.exe"
 [ -f "$RC" ] || curl -sSL -o "$RC" "https://github.com/electron/rcedit/releases/download/v$RCEDIT_VERSION/rcedit-x64.exe"
-EXE="$STAGE/runtime/Lelons Converter.exe"
+EXE="$STAGE/runtime/Ultimate Recording.exe"
 "$PY" "$ROOT/build/unsign.py" "$STAGE/runtime/pythonw.exe" "$EXE"
 { yes 2>/dev/null || true; } | WINEDEBUG=-all "$WINE" "$RC" "$EXE" \
   --set-icon "$ROOT/assets/icon.ico" \
   --set-file-version "$VERSION" --set-product-version "$VERSION" \
-  --set-version-string FileDescription "Lelons Converter" \
-  --set-version-string ProductName "Lelons Converter" \
+  --set-version-string FileDescription "Ultimate Recording" \
+  --set-version-string ProductName "Ultimate Recording" \
   --set-version-string CompanyName "Lelon" \
   --set-version-string LegalCopyright "Lelon. Built on Python, by the Python Software Foundation." \
-  --set-version-string InternalName "Lelons Converter" \
-  --set-version-string OriginalFilename "Lelons Converter.exe" | cat
+  --set-version-string InternalName "Ultimate Recording" \
+  --set-version-string OriginalFilename "Ultimate Recording.exe" | cat
 
 # (Python code is turned into its faster-loading form by the installer, on
 # the PC itself, which keeps the download smaller. See installer.nsi.)
 
 echo "==> Making the installer"
-(cd "$ROOT/installer" && makensis -V2 -DAPP_VERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$ROOT/dist/Lelons Converter Setup.exe" installer.nsi)
+(cd "$ROOT/installer" && makensis -V2 -DAPP_VERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$ROOT/dist/Ultimate Recording Setup.exe" installer.nsi)
 
 ls -lh "$ROOT/dist"

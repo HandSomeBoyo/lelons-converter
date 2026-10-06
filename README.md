@@ -1,17 +1,19 @@
-# Lelons Converter
+# Ultimate Recording
+
+(Called Lelons Converter before version 1.30.0.)
 
 Convert YouTube videos to MP3 or MP4, without sketchy converter websites.
 
 ## Installing
 
-Run **Lelons Converter Setup.exe**. It installs the app for your Windows
+Run **Ultimate Recording Setup.exe**. It installs the app for your Windows
 account (no admin needed) and adds it to the Desktop and Start menu. Nothing
 else needs installing: Python, yt-dlp and ffmpeg all come inside the app.
 
 Windows may say "Windows protected your PC" the first time, because the app
 isn't from a big company. Click **More info**, then **Run anyway**.
 
-To remove it: Settings > Apps > Installed apps > Lelons Converter > Uninstall.
+To remove it: Settings > Apps > Installed apps > Ultimate Recording > Uninstall.
 
 ## Using it
 
@@ -102,7 +104,7 @@ others, Creative Commons) and meme sounds (Myinstants). Listen, download as MP3,
 
 **How to use** (in the question mark menu at the top) plays a short animated tour of the app. It opens
 by itself the first time. The Voice button reads it out loud. The voice is recorded with
-[Piper](https://github.com/rhasspy/piper) (the "Lessac" voice) by build/make_tour_voice.py and kept
+[Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (the "Heart" voice, Apache 2.0) by build/make_tour_voice.py and kept
 in src/ui/voice/; run it again when the tour's words change.
 
 **Where to save:** the app asks with a folder picker every time you convert or
@@ -166,7 +168,7 @@ where the creator allows it).
 ## What's in this folder
 
 ```
-Lelons Converter/
+Ultimate Recording/
 ├── README.md            this file
 ├── src/                 the app itself
 │   ├── main.py          starts the app, opens the window, handles button clicks
@@ -199,15 +201,15 @@ Lelons Converter/
 ## How it works
 
 The window is the app's own window with a WebView2 page inside (WebView2 is
-part of Windows, the same thing Edge uses), so Task Manager shows "Lelons
+part of Windows, the same thing Edge uses), so Task Manager shows "Ultimate
 Converter". It opens where you left it last time. If WebView2 is missing, an
 Edge app window is used instead. `main.py` runs a small server on your own computer that only the window can
 talk to. When you click Convert, it uses yt-dlp to download the video and
 ffmpeg to turn it into MP3 or MP4.
 
-When installed, the app lives in `%LOCALAPPDATA%\Programs\Lelons Converter`
+When installed, the app lives in `%LOCALAPPDATA%\Programs\Ultimate Recording`
 with its own copy of Python in `runtime\` and the app's code in `app\`. Your settings are in
-`%LOCALAPPDATA%\LelonsConverter` (the download history is `history.json` there).
+`%LOCALAPPDATA%\LelonsConverter` (the old name, kept so nothing is lost; the download history is `history.json` there).
 
 ## Updates
 
@@ -222,16 +224,16 @@ updates every time it opens. **Check for updates** checks right away.
 
 To publish a new version: raise `VERSION` in `src/version.py`, build the
 installer, then create a GitHub Release tagged like `v1.3.0` with
-`Lelons Converter Setup.exe` attached.
+`Ultimate Recording Setup.exe` attached.
 
 ## Building the installer
 
 `build/build.sh` runs on Linux (it needs `nsis` and `wine`). It downloads
 Python for Windows, adds yt-dlp, ffmpeg, deno and Microsoft's WebView2Loader.dll,
-and packs everything into `dist/Lelons Converter Setup.exe`.
+and packs everything into `dist/Ultimate Recording Setup.exe`.
 
-The app's shortcut starts `runtime\Lelons Converter.exe` with `app\main.py`.
+The app's shortcut starts `runtime\Ultimate Recording.exe` with `app\main.py`.
 That's Python's own `pythonw.exe`, renamed and given the app's icon and details
 with rcedit (`build/unsign.py` takes off Python's signature first, since the
-change would break it). So Windows shows the app as Lelons Converter, without a
+change would break it). So Windows shows the app as Ultimate Recording, without a
 homemade launcher program, which virus scanners are most suspicious of.

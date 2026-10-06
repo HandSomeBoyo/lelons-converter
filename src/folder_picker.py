@@ -66,7 +66,7 @@ def release(obj):
 
 def find_app_window():
     """The app's own window, so the picker opens on top of it."""
-    return windll.user32.FindWindowW(None, "Lelons Converter") or None
+    return windll.user32.FindWindowW(None, "Ultimate Recording") or None
 
 
 def pick_folder(current, title="Where should files be saved?"):

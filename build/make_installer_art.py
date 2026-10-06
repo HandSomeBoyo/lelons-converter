@@ -43,8 +43,8 @@ def welcome():
     img.paste(glow)
     d = ImageDraw.Draw(img)
     mark(d, w / 2 - 56, 144, 112)
-    d.text((w / 2, 330), "Lelons", font=font(52, 700), fill=TEXT, anchor="mm")
-    d.text((w / 2, 384), "Converter", font=font(40, 400), fill=MUTED, anchor="mm")
+    d.text((w / 2, 330), "Ultimate", font=font(46, 700), fill=TEXT, anchor="mm")
+    d.text((w / 2, 384), "Recording", font=font(40, 400), fill=MUTED, anchor="mm")
     d.rounded_rectangle((w / 2 - 22, 430, w / 2 + 22, 436), radius=3, fill=ACCENT)
     img.save(os.path.join(OUT, "welcome.bmp"))
 
