@@ -2,7 +2,7 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "1.36.0", items: [
+  { version: "2.0.0", items: [
     "New Docs tab: write documents and movie scripts right in the app, with a page that looks like Google Docs.",
     "Local docs stay private on your computer. Collab docs let you invite people with an account, and only the people who joined can see them.",
     "Templates for a movie script, video script, treatment, storyboard and call sheet, plus fonts, page setup (Letter or A4, margins, paper colour) and zoom.",
