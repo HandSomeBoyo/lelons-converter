@@ -101,6 +101,12 @@ function moveTabLine() {
 
 new MutationObserver(moveTabLine).observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class"] });
 new MutationObserver(moveTabLine).observe(document.getElementById("accountTab"), { attributes: true, attributeFilter: ["hidden"] });
-window.addEventListener("resize", moveTabLine);
+// Resizing the window: the glass follows at once (no slide, no stretch).
+window.addEventListener("resize", () => {
+  tabLine.classList.remove("ready", "moving");
+  tabLine.style.transform = "";
+  moveTabLine();
+  requestAnimationFrame(() => tabLine.classList.add("ready"));
+});
 document.fonts && document.fonts.ready.then(moveTabLine);
 moveTabLine();

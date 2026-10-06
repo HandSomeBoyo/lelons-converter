@@ -1735,9 +1735,9 @@ button.stats-bar:hover .stats-bar-track { background: var(--line2); }
   background: color-mix(in srgb, var(--panel) 92%, transparent); border-top: 1px solid var(--line);
   backdrop-filter: blur(18px) saturate(1.3); animation: pb-up .45s var(--ease) both;
 }
-.player-bar.leaving { animation: pb-down .25s ease-in both; pointer-events: none; }
-@keyframes pb-up { from { transform: translateY(100%); } }
-@keyframes pb-down { to { transform: translateY(100%); } }
+.player-bar.leaving { animation: pb-down .2s ease-in both; pointer-events: none; }
+@keyframes pb-up { from { transform: translateY(calc(100% + 24px)); } }
+@keyframes pb-down { to { transform: translateY(calc(100% + 24px)); } }
 body.has-player main { padding-bottom: 100px; }
 body.has-player .chat-panel { bottom: 72px; }
 
@@ -1965,3 +1965,121 @@ body.has-player .chat-panel { bottom: 72px; }
   .tabs button svg { width: 19px; height: 19px; }
 }
 @media (prefers-reduced-motion: reduce) { .tabs .tab-line.moving { animation: none; } }
+
+/* ---- 1.34.0: liquid glass everywhere (the same glass as the tabs), and a clear stacking order */
+:root {
+  --g-fill: linear-gradient(180deg, rgba(255, 255, 255, .065), rgba(255, 255, 255, .02) 60%, rgba(255, 255, 255, .015));
+  --g-edge: rgba(255, 255, 255, .085);
+  --g-shine: rgba(255, 255, 255, .10);
+  --g-float: color-mix(in srgb, var(--panel) 74%, transparent);
+  --g-blur: blur(28px) saturate(175%);
+  --g-shadow: 0 18px 48px rgba(0, 0, 0, .45), 0 3px 10px rgba(0, 0, 0, .25);
+  /* layers, bottom to top: page < tab bar < player < header menus < chat < popups < profile < drop badge */
+  --z-tabs: 15; --z-player: 18; --z-header: 30; --z-chat: 90; --z-modal: 100; --z-profile: 110; --z-badge: 200;
+}
+:root[data-theme="light"] {
+  --g-fill: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(255, 255, 255, .55));
+  --g-edge: rgba(0, 0, 0, .07);
+  --g-shine: rgba(255, 255, 255, .95);
+  --g-float: rgba(255, 255, 255, .72);
+  --g-shadow: 0 16px 40px rgba(40, 30, 10, .14), 0 2px 8px rgba(40, 30, 10, .08);
+}
+
+/* A soft light far behind everything, so the glass has something to catch. */
+body {
+  background-image:
+    radial-gradient(900px 520px at 12% -8%, rgba(var(--accent-rgb), .07), transparent 70%),
+    radial-gradient(800px 600px at 105% 20%, rgba(120, 140, 255, .045), transparent 70%);
+  background-attachment: fixed;
+}
+:root[data-theme="black"] body { background-image: radial-gradient(900px 520px at 12% -8%, rgba(var(--accent-rgb), .05), transparent 70%); }
+
+/* The stacking order (the tab bar was on top of Settings and other popups) */
+.tabs { z-index: var(--z-tabs); }
+.top { position: relative; }
+.account-panel, .help-pop, .volume-pop { z-index: var(--z-header); }
+.player-bar { z-index: var(--z-player); }
+.chat-panel { z-index: var(--z-chat); }
+.modal { z-index: var(--z-modal); }
+#profileModal { z-index: var(--z-profile); }
+.drop-badge { z-index: var(--z-badge); }
+
+/* Cards on the page: frosted glass with a light top edge */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .dropzone {
+  background: var(--g-fill), var(--panel);
+  box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine);
+  border-color: transparent;
+}
+.dropzone { box-shadow: none; border-color: color-mix(in srgb, var(--text) 16%, transparent); }
+.channel-card:hover, .home-card:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent), inset 0 1px 0 var(--g-shine), 0 10px 28px rgba(0, 0, 0, .22); }
+.copy-match { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent), inset 0 1px 0 var(--g-shine); }
+
+/* Fields and pickers: a thin glass rim */
+.input, .toggle button, .quality, .chips button, .lib-tools .find-open, .side-item.lib-cat {
+  background: var(--g-fill), var(--panel);
+  box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine);
+}
+.input:focus-within { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .55), inset 0 1px 0 var(--g-shine), 0 0 0 4px rgba(var(--accent-rgb), .12); }
+.side-item.lib-cat.active, .toggle button.active, .chips button.active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent), inset 0 1px 0 rgba(255, 255, 255, .25), 0 4px 12px rgba(0, 0, 0, .25); }
+
+/* Floating things (popups, menus, chat, player): see-through glass that blurs what's behind */
+.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .chat-panel, .player-bar, .chat-msg .msg-tools {
+  background: var(--g-fill), var(--g-float);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine), var(--g-shadow);
+}
+.dialog { border-radius: 22px; }
+.account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu { border-radius: 16px; }
+.chat-panel { border-radius: 22px 0 0 22px; box-shadow: inset 1px 0 0 var(--g-edge), inset 0 1px 0 var(--g-shine), -18px 0 48px rgba(0, 0, 0, .4); }
+.player-bar {
+  left: 12px; right: 12px; bottom: 12px; border-radius: 20px;
+  box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine), var(--g-shadow);
+}
+body.has-player main { padding-bottom: 112px; }
+body.has-player .chat-panel { bottom: 96px; border-radius: 22px 0 0 22px; }
+.lib-menu button:hover, .help-pop button:hover, .people-pop button:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+
+/* Behind a popup the page blurs a little, like iOS */
+.modal { background: color-mix(in srgb, var(--overlay) 80%, transparent); -webkit-backdrop-filter: blur(10px) saturate(120%); backdrop-filter: blur(10px) saturate(120%); }
+
+/* The header's round buttons and the online pill: little glass chips */
+.head-button, .online-pill {
+  background: var(--g-fill), color-mix(in srgb, var(--panel) 60%, transparent);
+  box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine);
+  border-color: transparent;
+}
+.head-button { border-radius: 50%; }
+.head-button:hover, .online-pill:hover { background: var(--g-fill), color-mix(in srgb, var(--panel2) 85%, transparent); color: var(--text); }
+
+/* The main yellow buttons get a glassy shine on top */
+.convert, .small-button:not(.ghost-button):not(.outline-button) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.convert:hover:not(:disabled), .small-button:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 8px 22px rgba(var(--accent-rgb), .3); }
+
+/* Rows in the Library: a glass card when you point at one or it's playing */
+.sound:hover, .sound.playing { background: var(--g-fill), var(--panel); box-shadow: inset 0 0 0 1px var(--g-edge), inset 0 1px 0 var(--g-shine); }
+
+:root[data-theme="light"] .modal { background: rgba(30, 28, 24, .28); }
+:root[data-theme="light"] .convert, :root[data-theme="light"] .small-button:not(.ghost-button):not(.outline-button) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 2px 6px rgba(40, 30, 10, .12); }
+@media (prefers-reduced-transparency: reduce) {
+  .dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .chat-panel, .player-bar, .tabs { background: var(--panel); }
+}
+/* (a menu inside a glass panel is part of that panel, not a second pane of glass) */
+.account-panel .lib-menu { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; border-radius: 0; padding: 0; }
+/* the chat is for reading: thicker glass */
+.chat-panel { background: var(--g-fill), color-mix(in srgb, var(--panel) 92%, transparent); }
+.lib-cats.more-right { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent); }
+.lib-cats.more-left { -webkit-mask-image: linear-gradient(90deg, transparent, #000 56px); mask-image: linear-gradient(90deg, transparent, #000 56px); }
+.lib-cats.more-left.more-right { -webkit-mask-image: linear-gradient(90deg, transparent, #000 56px, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(90deg, transparent, #000 56px, #000 calc(100% - 56px), transparent); }
+
+/* (fixes from the check) */
+html { scroll-padding-top: 76px; }  /* jumping to a section doesn't hide it under the tab bar */
+:root[data-theme="light"] .tabs button.active svg { color: var(--text); }
+.can-drag.drag-lift, .sound.can-drag.drag-lift { box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), .55); }
+.channel-card:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.modal > .dialog { background: var(--g-fill), color-mix(in srgb, var(--panel) 95%, transparent); }
+:root[data-theme="light"] .modal > .dialog { background: var(--g-fill), color-mix(in srgb, var(--panel) 96%, transparent); }
+.outline-button:hover:not(:disabled), .lib-out-buttons .small-button:hover, .acct-logout:hover, .acct-danger:hover { box-shadow: none; }
+@media (prefers-reduced-transparency: reduce) { .chat-panel, .modal > .dialog { background: var(--panel); } }

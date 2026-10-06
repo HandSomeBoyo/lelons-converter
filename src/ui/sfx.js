@@ -351,8 +351,27 @@ function moveCatsPill() {
   pill.style.opacity = 1;
   pill.style.width = active.offsetWidth + "px";
   pill.style.transform = `translateX(${active.offsetLeft}px)`;
+  markCatsOverflow();
 }
 window.addEventListener("resize", moveCatsPill);
+
+// In a small window the pills don't all fit: they scroll sideways (the mouse wheel works too),
+// and the edges fade out so you can see there are more.
+function markCatsOverflow() {
+  const box = $("sfxCats");
+  box.classList.toggle("more-right", box.scrollLeft + box.clientWidth < box.scrollWidth - 2);
+  box.classList.toggle("more-left", box.scrollLeft > 2);
+}
+$("sfxCats").addEventListener("scroll", markCatsOverflow, { passive: true });
+$("sfxCats").addEventListener("wheel", (e) => {
+  const box = $("sfxCats");
+  if (box.scrollWidth <= box.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  const max = box.scrollWidth - box.clientWidth;  // at the end already: let the page scroll
+  if ((e.deltaY > 0 && box.scrollLeft >= max - 1) || (e.deltaY < 0 && box.scrollLeft <= 0)) return;
+  e.preventDefault();
+  box.scrollLeft += e.deltaY;
+}, { passive: false });
+window.addEventListener("resize", markCatsOverflow);
 
 const peoplePop = $("sfxPeoplePop");
 smoothHidden(peoplePop);
