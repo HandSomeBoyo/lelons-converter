@@ -24,6 +24,53 @@ findAudio.addEventListener("error", () => {
   drawFind();
 });
 
+for (const type of ["play", "pause"]) findAudio.addEventListener(type, () => { if (findPlaying) drawFind(); });
+const findSaving = new Set(); // ids being downloaded (a second click does nothing)
+
+// Preview a result (click again to pause), shown in the player bar.
+function playFind(r) {
+  if (findPlaying === r.id && findAudio.src) {
+    if (!findAudio.paused) return findAudio.pause();
+  } else {
+    findAudio.src = r.preview;
+    findPlaying = r.id;
+    findNotes.delete(r.id);
+  }
+  findAudio.play().catch(() => {});
+  const step = (n) => () => {
+    const at = findResults.findIndex((x) => x.id === r.id);
+    const other = findResults[(at + n + findResults.length) % findResults.length];
+    if (other && other.id !== r.id) playFind(other);
+  };
+  showPlayer(findAudio, {
+    key: r.id,
+    title: r.title,
+    sub: [r.creator, r.site || (findSource === "memes" ? "Meme sound" : "Sound effect")].filter(Boolean).join(" · "),
+    avatar: { name: r.title },
+    toggle: () => playFind(r),
+    next: step(1),
+    prev: step(-1),
+    download: () => saveFind(r),
+  });
+  drawFind();
+}
+
+async function saveFind(r) {
+  if (findSaving.has(r.id)) return;
+  findSaving.add(r.id);
+  try {
+    const folder = await whereToSave().catch(() => "");
+    if (!folder) return;
+    findNotes.set(r.id, { text: "Downloading...", kind: "" });
+    drawFind();
+    const res = await api("/api/find-save", { id: r.id, folder }).catch(() => ({ ok: false, error: "Couldn't download it." }));
+    findNotes.set(r.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path } : { text: res.error, kind: "bad" });
+    drawFind();
+  } finally {
+    findSaving.delete(r.id);
+  }
+}
+
 function openFind() {
   $("findModal").hidden = false;
   drawFindSource();
@@ -31,9 +78,7 @@ function openFind() {
   setTimeout(() => $("findInput").focus(), 50);
 }
 function closeFind() {
-  $("findModal").hidden = true;
-  findAudio.pause();
-  findPlaying = null;
+  $("findModal").hidden = true; // (a sound that's playing goes on, in the player bar)
 }
 
 async function runFind(more = false) {
@@ -90,31 +135,9 @@ function findRow(r, i) {
     row.innerHTML = `<button type="button" class="play"></button><div class="find-info"><b></b><small></small></div>
       <div class="find-actions"><button type="button" class="icon-button" title="Download as MP3">${SFX_ICONS.download}</button></div>`;
     row.querySelector("b").textContent = row.querySelector("b").title = r.title;
-    row.querySelector(".play").onclick = () => {
-      if (findPlaying === r.id) {
-        findAudio.pause();
-        findPlaying = null;
-      } else {
-        findAudio.src = r.preview;
-        findAudio.play().catch(() => {});
-        findPlaying = r.id;
-        findNotes.delete(r.id);
-      }
-      drawFind();
-    };
+    row.querySelector(".play").onclick = () => playFind(r);
     const save = row.querySelector(".icon-button");
-    save.onclick = async () => {
-      if (save.disabled) return;
-      save.disabled = true;
-      const folder = await whereToSave().catch(() => "");
-      if (!folder) { save.disabled = false; return; }
-      findNotes.set(r.id, { text: "Downloading...", kind: "" });
-      drawFind();
-      const res = await api("/api/find-save", { id: r.id, folder }).catch(() => ({ ok: false, error: "Couldn't download it." }));
-      save.disabled = false;
-      findNotes.set(r.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path } : { text: res.error, kind: "bad" });
-      drawFind();
-    };
+    save.onclick = () => saveFind(r);
     const add = document.createElement("button");
     add.type = "button";
     add.className = "outline-button find-add";
@@ -140,13 +163,13 @@ function findRow(r, i) {
     row.querySelector(".find-actions").append(add);
     findRows.set(r.id, row);
   }
-  const playing = findPlaying === r.id;
-  row.classList.toggle("playing", playing);
+  const playing = findPlaying === r.id && !findAudio.paused;
+  row.classList.toggle("playing", findPlaying === r.id);
   const play = row.querySelector(".play");
   if (play.dataset.on !== String(playing)) {
     play.dataset.on = String(playing);
     play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
-    play.title = playing ? "Stop" : "Listen";
+    play.title = playing ? "Pause" : "Listen";
   }
   const note = findNotes.get(r.id);
   const meta = row.querySelector("small");

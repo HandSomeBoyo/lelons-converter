@@ -9,6 +9,34 @@ let homePlaying = null;
 const homeAudio = new Audio();
 homeAudio.addEventListener("ended", () => { homePlaying = null; drawHomeSounds(); });
 registerPlayer(homeAudio, () => { homeAudio.pause(); homePlaying = null; drawHomeSounds(); });
+for (const type of ["play", "pause"]) homeAudio.addEventListener(type, () => { if (homePlaying) drawHomeSounds(); });
+
+// Play an upload from the Activity card (click again to pause), shown in the player bar.
+function playHome(item) {
+  if (homePlaying === item.id && homeAudio.src) {
+    if (!homeAudio.paused) return homeAudio.pause();
+  } else {
+    homeAudio.src = item.url;
+    homePlaying = item.id;
+  }
+  homeAudio.play().catch(() => {});
+  const uploads = homeData ? activityItems().filter((i) => i.kind === "upload") : [];
+  const step = (n) => () => {
+    const at = uploads.findIndex((i) => i.id === item.id);
+    const other = uploads[(at + n + uploads.length) % uploads.length];
+    if (other && other.id !== item.id) playHome(other);
+  };
+  showPlayer(homeAudio, librarySoundPlayer(item.id, {
+    key: item.id,
+    title: item.name,
+    sub: [item.username, CAT_NAMES[item.category]].filter(Boolean).join(" · "),
+    avatar: { url: item.avatarUrl, name: item.username || item.name },
+    toggle: () => playHome(item),
+    next: uploads.length > 1 ? step(1) : null,
+    prev: uploads.length > 1 ? step(-1) : null,
+  }));
+  drawHomeSounds();
+}
 const homeCards = new Map(); // video id -> {el, sig}
 const homeEls = new Map(); // people, sounds, chat and recent files on Home -> {el, sig}
 const homeNumbers = new Map(); // channel url -> the subscriber number shown, so it rolls to the new one
@@ -256,19 +284,10 @@ function activityRow(item) {
     const play = document.createElement("button");
     play.type = "button";
     play.className = "play";
-    play.innerHTML = homePlaying === item.id ? SFX_ICONS.pause : SFX_ICONS.play;
-    play.title = homePlaying === item.id ? "Stop" : "Play";
-    play.onclick = () => {
-      if (homePlaying === item.id) {
-        homeAudio.pause();
-        homePlaying = null;
-      } else {
-        homeAudio.src = item.url;
-        homeAudio.play().catch(() => {});
-        homePlaying = item.id;
-      }
-      drawHomeSounds();
-    };
+    const playing = homePlaying === item.id && !homeAudio.paused;
+    play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
+    play.title = playing ? "Pause" : "Play";
+    play.onclick = () => playHome(item);
     row.classList.toggle("playing", homePlaying === item.id);
     row.append(play);
   } else if (item.kind === "video") {
@@ -293,7 +312,7 @@ function drawHomeSounds() {
   $("homeActivityMore").textContent = homeActivityAll ? "Show less" : "Show more";
   setChildren($("homeSounds"), shown.map((item) => {
     const key = "a" + item.kind + (item.id || item.username || item.channel) + (item.subs || "");
-    return keptNode(homeEls, key, JSON.stringify([item, item.kind === "upload" && homePlaying === item.id, sfxAgo(item.when)]),
+    return keptNode(homeEls, key, JSON.stringify([item, item.kind === "upload" && homePlaying === item.id, item.kind === "upload" && homePlaying === item.id && homeAudio.paused, sfxAgo(item.when)]),
       () => activityRow(item));
   }));
 }

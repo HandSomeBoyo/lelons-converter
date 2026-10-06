@@ -100,22 +100,28 @@ page-cache.json and puts it into the page, so it draws at once and updates in th
 others, Creative Commons) and meme sounds (Myinstants). Listen, download as MP3, or
 "Add to Library", which opens the upload window with the sound ready.
 
-**How to use** (at the bottom) plays a short animated tour of the app. It opens
+**How to use** (in the question mark menu at the top) plays a short animated tour of the app. It opens
 by itself the first time. The Voice button reads it out loud with Windows' own voice.
 
 **Where to save:** the app asks with a folder picker every time you convert or
-download. In Settings, "Always save to" picks one folder instead. The speaker
-button at the top sets the volume for every sound, and the round arrow (or F5)
-refreshes the page you're on. Uploaders, admins and the owner can change a
+download. In Settings, "Always save to" picks one folder instead. The round
+arrow at the top (or F5) refreshes the page you're on. Uploaders, admins and the owner can change a
 sound's name or category with the pencil button.
 
-**Settings** (at the bottom): **Hardware acceleration** (on by default) uses
+**Settings** (the gear at the top): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
 videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or
 Light) and an accent color too. **Size** makes the whole app bigger or smaller
 (or hold Ctrl and scroll, or press Ctrl and + or -; Ctrl and 0 resets it).
+**Updates** (turn automatic updates on or off, or check now) are in Settings too.
 
-**Send feedback** (at the bottom of the app, or in the account menu) lets anyone
+**The player bar** shows at the bottom as soon as any sound plays (Library, Find
+sounds, Home, the chat or a profile), like on Artlist: play/pause (it carries on
+where you paused), previous and next, a waveform to click or drag through, the
+time, the star, download, the volume for every sound in the app (the speaker
+mutes), and X to stop. Space pauses and plays when you're not typing.
+
+**Send feedback** (the speech bubble at the top, or in the account menu) lets anyone
 with an account report a bug or ask for something new. The Owner reads them in
 **Feedback inbox** in the account menu and can mark them done or delete them.
 

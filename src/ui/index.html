@@ -18,19 +18,24 @@
     </div>
     <div class="top-right">
       <div class="where"><span id="whereText">Saving to <strong id="folder">Downloads</strong></span> · <button class="link" id="change">Change</button></div>
-      <button type="button" class="icon-button head-button" id="settingsHead" title="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      <div class="help-menu">
+        <button type="button" class="icon-button head-button" id="helpButton" title="Help" aria-haspopup="menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.85.85c0 1.7-2.45 2.2-2.45 3.6"/><path d="M12 17h.01"/></svg>
+        </button>
+        <div class="lib-menu help-pop" id="helpPop" hidden>
+          <button type="button" id="tourOpen">How to use</button>
+          <button type="button" id="whatsNewOpen">What's new</button>
+        </div>
+      </div>
+      <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
       </button>
       <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
       </button>
-      <div class="volume">
-        <button type="button" class="icon-button head-button" id="volumeButton" title="Volume"></button>
-        <div class="volume-pop" id="volumePop" hidden>
-          <input type="range" class="volume-slider" min="0" max="100" step="1" aria-label="Volume">
-          <span class="volume-value"></span>
-        </div>
-      </div>
+      <button type="button" class="icon-button head-button" id="settingsOpen" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.54-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.54V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.54 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.54 1z"/></svg>
+      </button>
       <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
         <i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b>
       </button>
@@ -533,14 +538,43 @@
     </div>
   </section>
 
-  <footer class="footer">
-    <span><span id="version"></span> · <button class="link" id="tourOpen">How to use</button> · <button class="link" id="whatsNewOpen">What's new</button> · <button class="link" id="feedbackOpen">Send feedback</button> · <button class="link" id="settingsOpen">Settings</button></span>
-    <span>
-      <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label> ·
-      <button class="link" id="checkNow">Check for updates</button>
-    </span>
-  </footer>
 </main>
+
+<!-- The player at the bottom (like Artlist): shows whatever sound is playing anywhere in the app. -->
+<div class="player-bar" id="playerBar" hidden>
+  <div class="pb-track">
+    <span class="pb-cover" id="pbCover"></span>
+    <div class="pb-text"><b id="pbTitle"></b><span id="pbSub"></span></div>
+  </div>
+  <div class="pb-controls">
+    <button type="button" class="pb-button" id="pbPrev" title="Previous">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 5.5v13L9 12z"/><rect x="5.5" y="5.5" width="2.6" height="13" rx="1"/></svg>
+    </button>
+    <button type="button" class="pb-play" id="pbPlay" title="Play"></button>
+    <button type="button" class="pb-button" id="pbNext" title="Next">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 5.5v13L15 12z"/><rect x="15.9" y="5.5" width="2.6" height="13" rx="1"/></svg>
+    </button>
+  </div>
+  <div class="pb-seek">
+    <span class="pb-time" id="pbNow">0:00</span>
+    <div class="pb-wave" id="pbWave" title="Click or drag to jump">
+      <div class="pb-bars" id="pbBars"></div>
+      <div class="pb-bars pb-done" id="pbDone"></div>
+    </div>
+    <span class="pb-time" id="pbTotal">0:00</span>
+  </div>
+  <div class="pb-actions">
+    <button type="button" class="pb-button pb-star" id="pbStar" title="Add to your favorites"></button>
+    <button type="button" class="pb-button" id="pbDownload" title="Download as MP3"></button>
+    <div class="pb-volume">
+      <button type="button" class="pb-button" id="volumeButton" title="Mute"></button>
+      <input type="range" class="volume-slider" min="0" max="100" step="1" aria-label="Volume">
+    </div>
+    <button type="button" class="pb-button" id="pbClose" title="Stop and close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </button>
+  </div>
+</div>
 
 <!-- Trim editor: play to the spot you want and press "Set start here" / "Set end here",
      or drag the yellow lines. Clicking the waveform only moves the white playhead. -->
@@ -842,7 +876,7 @@
         <input type="range" class="volume-slider" min="0" max="100" step="1" aria-label="Volume">
         <span class="volume-value"></span>
       </div>
-      <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor. Also the speaker button at the top.</p>
+      <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor. Also in the player at the bottom.</p>
     </section>
     <section class="set-block">
       <h3>Hardware acceleration</h3>
@@ -867,6 +901,11 @@
     <section class="set-block">
       <h3>Chat</h3>
       <label class="check"><input type="checkbox" id="setChatSound"> Play a sound for new messages</label>
+    </section>
+    <section class="set-block">
+      <h3>Updates</h3>
+      <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label>
+      <p class="set-help"><span id="version"></span> · <button type="button" class="link" id="checkNow">Check for updates</button></p>
     </section>
     <section class="set-block">
       <h3>Theme</h3>
@@ -900,6 +939,7 @@
 
 <script src="motion.js"></script>
 <script src="volume.js"></script>
+<script src="player.js"></script>
 <script src="app.js"></script>
 <script src="clip.js"></script>
 <script src="images.js"></script>

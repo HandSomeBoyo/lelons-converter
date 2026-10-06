@@ -1,5 +1,5 @@
 // One volume for every sound the app plays: the Library, the chat, Home, profiles, previews and
-// the trim editor. Set with the speaker button at the top, or in Settings. Loaded before app.js.
+// the trim editor. Set in the player bar at the bottom, or in Settings. Loaded before app.js.
 
 const VOLUME_ICONS = {
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
@@ -45,21 +45,19 @@ function drawVolume() {
   for (const label of document.querySelectorAll(".volume-value")) label.textContent = percent + "%";
   const button = document.getElementById("volumeButton");
   button.innerHTML = VOLUME_ICONS[percent === 0 ? "off" : percent < 50 ? "low" : "high"];
-  button.title = `Volume: ${percent}%`;
+  button.title = percent === 0 ? "Unmute" : `Mute (volume ${percent}%)`;
 }
 
 for (const slider of document.querySelectorAll(".volume-slider")) {
   slider.addEventListener("input", () => setVolume(Number(slider.value) / 100));
 }
 
-// The little volume popup under the speaker button.
-const volumePop = document.getElementById("volumePop");
-smoothHidden(volumePop);
-document.getElementById("volumeButton").addEventListener("click", (e) => {
-  e.stopPropagation();
-  volumePop.hidden = !volumePop.hidden;
+// The speaker button in the player bar mutes, and unmutes back to where it was.
+let volumeBeforeMute = 0.6;
+document.getElementById("volumeButton").addEventListener("click", () => {
+  if (appVolume > 0) { volumeBeforeMute = appVolume; setVolume(0); } else setVolume(volumeBeforeMute || 0.6);
 });
-document.addEventListener("click", (e) => { if (!volumePop.hidden && !volumePop.contains(e.target)) volumePop.hidden = true; });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !volumePop.hidden) volumePop.hidden = true; });
-volumePop.addEventListener("wheel", (e) => { e.preventDefault(); setVolume(appVolume + (e.deltaY < 0 ? 0.05 : -0.05)); }, { passive: false });
+for (const slider of document.querySelectorAll(".volume-slider")) {
+  slider.addEventListener("wheel", (e) => { e.preventDefault(); setVolume(appVolume + (e.deltaY < 0 ? 0.05 : -0.05)); }, { passive: false });
+}
 drawVolume();

@@ -63,7 +63,6 @@ function openSettings(part) {
 function closeSettings() { $("settingsModal").hidden = true; }
 
 $("settingsOpen").addEventListener("click", () => openSettings());
-$("settingsHead").addEventListener("click", () => openSettings());
 document.querySelectorAll('input[name="saveMode"]').forEach((r) => r.addEventListener("change", () => {
   if (r.checked) changeSettings({ saveMode: r.value });
 }));
@@ -146,3 +145,11 @@ window.addEventListener("keydown", (e) => {
     refreshPage();
   }
 });
+
+// The question mark at the top: the tour and What's new.
+const helpPop = $("helpPop");
+smoothHidden(helpPop);
+$("helpButton").addEventListener("click", (e) => { e.stopPropagation(); helpPop.hidden = !helpPop.hidden; });
+helpPop.addEventListener("click", () => { helpPop.hidden = true; });
+document.addEventListener("click", (e) => { if (!helpPop.hidden && !helpPop.contains(e.target)) helpPop.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !helpPop.hidden) helpPop.hidden = true; });

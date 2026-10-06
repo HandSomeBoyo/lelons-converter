@@ -339,14 +339,16 @@ function rowFor(sound) {
 
 // Playing or not is changed on the row itself (no new row), so the list stays still.
 function markSfxPlaying(el, sound) {
-  const playing = sfxPlaying === sound.id;
-  if (el.classList.contains("playing") === playing && el.dataset.marked) return;
+  const current = sfxPlaying === sound.id;
+  const playing = current && !sfxAudio.paused;
+  if (el.classList.contains("playing") === current && el.classList.contains("paused") === (current && !playing) && el.dataset.marked) return;
   el.dataset.marked = "1";
-  el.classList.toggle("playing", playing);
+  el.classList.toggle("playing", current);
+  el.classList.toggle("paused", current && !playing);
   const play = el.querySelector(".play");
   play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
-  play.title = playing ? "Stop" : "Play";
-  if (!playing) {
+  play.title = playing ? "Pause" : "Play";
+  if (!current) {
     el.querySelectorAll(".bars i.on").forEach((bar) => bar.classList.remove("on"));
     el.querySelector(".time").textContent = clock(sound.seconds, false);
   }
@@ -368,6 +370,8 @@ function drawSfx() {
     (sfxCategory === "favorites" && s.favorite)) && (!sfxUploader || s.uploader === sfxUploader) &&
     words.every((w) => `${s.name} ${s.uploader} ${s.categoryName}`.toLowerCase().includes(w)));
   shown.sort(SORTS[sfxSort] || SORTS.favorites);
+  sfxShown = shown;
+  playerRefresh();
   const rows = shown.slice(0, sfxLimit).map((sound) => {
     const el = rowFor(sound);
     markSfxPlaying(el, sound);
@@ -476,36 +480,11 @@ function sfxRow(sound) {
     return b;
   };
   const star = add(sound.favorite ? SFX_ICONS.starOn : SFX_ICONS.star,
-    sound.favorite ? "Remove from your favorites" : "Add to your favorites (they show at the top)", async () => {
-      const on = !sound.favorite;
-      sound.favorite = on; // show it right away
-      drawSfx();
-      const res = await api("/api/sfx-favorite", { id: sound.id, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
-      if (sfxLoggedOut(res)) return;
-      if (!res.ok) {
-        sound.favorite = !on;
-        sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
-        drawSfx();
-      }
-    });
+    sound.favorite ? "Remove from your favorites" : "Add to your favorites (they show at the top)", () => toggleSfxFavorite(sound));
   star.classList.add("star");
   star.classList.toggle("on", !!sound.favorite);
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
-  add(SFX_ICONS.download, "Download as MP3", async () => {
-    if (sfxDownloading.has(sound.id)) return;
-    sfxDownloading.add(sound.id);
-    const folder = await whereToSave().finally(() => sfxDownloading.delete(sound.id));
-    if (!folder || sfxDownloading.has(sound.id)) return;
-    sfxDownloading.add(sound.id);
-    sfxNotes.set(sound.id, { text: "Downloading...", kind: "" });
-    drawSfx();
-    const res = await api("/api/sfx-download", { url: sound.url, name: sound.name, folder })
-      .catch(() => ({ ok: false, error: "Couldn't download that sound." }))
-      .finally(() => sfxDownloading.delete(sound.id));
-    sfxNotes.set(sound.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path }
-      : { text: res.error, kind: "bad" });
-    drawSfx();
-  });
+  add(SFX_ICONS.download, "Download as MP3", () => downloadSfx(sound));
   // The rest only shows when the mouse is over the row (less to look at).
   add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } })).classList.add("extra");
   if (sfxUser() && (sfxUser().canUpload || sound.mine)) {
@@ -544,14 +523,87 @@ function sfxRow(sound) {
   return el;
 }
 
+async function toggleSfxFavorite(sound) {
+  const on = !sound.favorite;
+  sound.favorite = on; // show it right away
+  drawSfx();
+  const res = await api("/api/sfx-favorite", { id: sound.id, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
+  if (sfxLoggedOut(res)) return;
+  if (!res.ok) {
+    sound.favorite = !on;
+    sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
+    drawSfx();
+  }
+}
+
+async function downloadSfx(sound) {
+  if (sfxDownloading.has(sound.id)) return;
+  sfxDownloading.add(sound.id);
+  const folder = await whereToSave().finally(() => sfxDownloading.delete(sound.id));
+  if (!folder || sfxDownloading.has(sound.id)) return;
+  sfxDownloading.add(sound.id);
+  sfxNotes.set(sound.id, { text: "Downloading...", kind: "" });
+  drawSfx();
+  const res = await api("/api/sfx-download", { url: sound.url, name: sound.name, folder })
+    .catch(() => ({ ok: false, error: "Couldn't download that sound." }))
+    .finally(() => sfxDownloading.delete(sound.id));
+  sfxNotes.set(sound.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path }
+    : { text: res.error, kind: "bad" });
+  drawSfx();
+}
+
 $("sfxSearch").addEventListener("input", drawSfx);
 
 // ---- playing
 
 const sfxAudio = $("sfxAudio");
 
+// The player bar for a Library sound played somewhere else (Home, a profile, the chat): if it's
+// in the Library, the bar also gets its waveform, the star and download.
+function librarySoundPlayer(id, meta) {
+  const sound = sfxSounds.find((s) => s.id === id);
+  if (!sound) return meta;
+  return {
+    peaks: () => sound.peaks || sfxPeaks.get(sound.path),
+    download: () => downloadSfx(sound),
+    favorite: { on: () => sound.favorite, toggle: () => toggleSfxFavorite(sound) },
+    ...meta,
+  };
+}
+
+// The sounds in the list right now, in order (for next and previous in the player bar).
+let sfxShown = [];
+
+function sfxNeighbour(sound, step) {
+  const list = sfxShown.length ? sfxShown : sfxSounds;
+  const at = list.findIndex((s) => s.id === sound.id);
+  const next = list[at === -1 ? 0 : (at + step + list.length) % list.length];
+  return next && next.id !== sound.id ? next : null;
+}
+
+function sfxPlayerMeta(sound) {
+  return {
+    key: sound.id,
+    title: sound.name,
+    sub: [sound.uploader, sound.categoryName].filter(Boolean).join(" · "),
+    avatar: { url: sound.uploaderAvatar, name: sound.uploader || sound.name },
+    peaks: () => sound.peaks || sfxPeaks.get(sound.path),
+    toggle: () => playSfx(sound),
+    next: () => { const n = sfxNeighbour(sound, 1); if (n) playSfx(n); },
+    prev: () => { const n = sfxNeighbour(sound, -1); if (n) playSfx(n); },
+    download: () => downloadSfx(sound),
+    favorite: { on: () => sound.favorite, toggle: () => toggleSfxFavorite(sound) },
+    seek: (fraction) => playSfx(sound, fraction),
+  };
+}
+
+// Click the playing sound again to pause it (it stays where it was), and again to go on.
 function playSfx(sound, from = null) {
-  if (sfxPlaying === sound.id && from === null) return stopSfx();
+  if (sfxPlaying === sound.id && from === null) {
+    if (!sfxAudio.paused) return sfxAudio.pause();
+    showPlayer(sfxAudio, sfxPlayerMeta(sound));
+    return sfxAudio.play().catch(() => {});
+  }
   const start = () => {
     if (from !== null && sfxAudio.duration) sfxAudio.currentTime = from * sfxAudio.duration;
   };
@@ -563,6 +615,7 @@ function playSfx(sound, from = null) {
   } else {
     start();
   }
+  showPlayer(sfxAudio, sfxPlayerMeta(sound));
   sfxAudio.play().catch((e) => {
     // Another sound was clicked before this one started: not an error.
     if (e && e.name === "AbortError" || sfxPlaying !== sound.id) return;
@@ -578,6 +631,8 @@ function stopSfx() {
 }
 
 sfxAudio.addEventListener("ended", stopSfx);
+// Paused from the player bar (or Space): the row's button follows.
+for (const type of ["play", "pause"]) sfxAudio.addEventListener(type, () => { if (sfxPlaying) drawSfx(); });
 registerPlayer(sfxAudio, stopSfx);
 sfxAudio.addEventListener("timeupdate", () => {
   const row = sfxPlaying && $("sfxList").querySelector(`[data-id="${sfxPlaying}"]`);

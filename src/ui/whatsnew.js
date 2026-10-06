@@ -1,7 +1,13 @@
-// "What's new": shown once after the app updates, and any time from the link at the bottom.
+// "What's new": shown once after the app updates, and any time from the question mark at the top.
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.28.0", items: [
+    "A player at the bottom, like Artlist: see what's playing, pause and go on where you were, skip to the next sound, jump around in the waveform, star it, download it and set the volume.",
+    "Sounds keep playing when you close the chat, a profile or Find sounds. Press Space to pause.",
+    "Help, Send feedback and Settings are now icons at the top. Updates moved into Settings.",
+    "A cleaner installer: no more long list of files, just a simple progress bar.",
+  ] },
   { version: "1.27.0", items: [
     "The chat shows when someone is typing, and little faces show who has seen your message.",
     "Home has a new Activity list: new sounds (play them right there), new people, new videos and channels hitting a big number.",

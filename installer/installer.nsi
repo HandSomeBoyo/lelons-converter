@@ -27,7 +27,8 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetCompressorDictSize 64
 BrandingText "${APP_NAME} ${APP_VERSION}"
-ShowInstDetails show
+ShowInstDetails nevershow
+ShowUninstDetails nevershow
 
 ; Version details shown in the file's Properties window.
 VIProductVersion "${APP_VERSION}.0"
@@ -41,12 +42,26 @@ VIAddVersionKey "LegalCopyright" "${APP_PUBLISHER}"
 !define MUI_ICON "../assets/icon.ico"
 !define MUI_UNICON "../assets/icon.ico"
 !define MUI_ABORTWARNING
+; Clean look: our own dark art on the side and top, no long file list.
+!define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome.bmp"
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_WELCOMEPAGE_TITLE "Welcome to ${APP_NAME}"
+!define MUI_WELCOMEPAGE_TEXT "Turn YouTube links into MP3 or MP4, convert files and pictures, and share sounds with friends.$\r$\n$\r$\nClick Next to install it."
+!define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "All done"
+!define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "${APP_NAME} is installed."
+!define MUI_FINISHPAGE_TITLE "${APP_NAME} is ready"
+!define MUI_FINISHPAGE_TEXT "You can find it on your desktop and in the Start menu."
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION OpenApp
 !define MUI_FINISHPAGE_RUN_TEXT "Open ${APP_NAME} now"
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipWelcomeWhenUpdating
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_HEADER_TEXT "Installing ${APP_NAME}"
+!define MUI_PAGE_HEADER_SUBTEXT "This only takes a moment."
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -76,7 +91,15 @@ FunctionEnd
   Sleep 800
 !macroend
 
+; Show one friendly line at a time instead of every file being copied.
+!macro Status TEXT
+  SetDetailsPrint textonly
+  DetailPrint "${TEXT}"
+  SetDetailsPrint none
+!macroend
+
 Section "Install"
+  !insertmacro Status "Getting things ready..."
   !insertmacro CloseRunningApp
   ; Clear out an older version first so no stale files are left behind.
   ; If something still holds a file (an app that's slow to close), close it again and wait a bit.
@@ -90,13 +113,14 @@ Section "Install"
   still_there:
   IntOp $1 $1 + 1
   IntCmp $1 6 cleared
-  DetailPrint "Waiting for Lelons Converter to close..."
+  !insertmacro Status "Waiting for Lelons Converter to close..."
   !insertmacro CloseRunningApp
   Sleep 1500
   Goto clear_old
   cleared:
   Delete "$INSTDIR\${APP_NAME}.exe"
 
+  !insertmacro Status "Installing the app..."
   SetOutPath "$INSTDIR"
   File /r "${STAGE}/*.*"
   ; Left over from testing a fix on one PC.
@@ -106,9 +130,10 @@ Section "Install"
   ; Python turns its code into a faster-loading form the first time it runs
   ; it, which would make the app's first start slow. Do it now instead.
   ; (Done here rather than shipped, so the download is smaller.)
-  DetailPrint "Getting the app ready (this takes a few seconds)..."
+  !insertmacro Status "Getting the app ready..."
   nsExec::Exec '"$INSTDIR\runtime\python.exe" -E -s -m compileall -q -j 0 --invalidation-mode unchecked-hash "$INSTDIR\runtime\Lib" "$INSTDIR\app"'
   Pop $0
+  !insertmacro Status "Adding shortcuts..."
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "${RUN_EXE}" '${RUN_ARGS}' "${RUN_ICON}"

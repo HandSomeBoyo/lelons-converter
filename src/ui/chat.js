@@ -137,8 +137,7 @@ function closeChat() {
   $("chatPanel").hidden = true;
   $("chatOpen").classList.remove("open");
   $("chatOpen").hidden = !onlineInfo;
-  $("chatSuggest").hidden = true;
-  stopChatAudio();
+  $("chatSuggest").hidden = true; // (a sound that's playing goes on, in the player bar)
 }
 
 function switchChat(name) {
@@ -405,6 +404,27 @@ function stopChatAudio() {
   if (chatPlaying !== null) { chatPlaying = null; drawChat(true); }
 }
 registerPlayer(chatAudio, stopChatAudio);
+for (const type of ["play", "pause"]) chatAudio.addEventListener(type, () => { if (chatPlaying !== null) drawChat(true); });
+
+// Play a sound or clip from a message (click again to pause), shown in the player bar.
+function playChatSound(m, url, name) {
+  if (chatPlaying === m.id && chatAudio.src) {
+    if (!chatAudio.paused) return chatAudio.pause();
+  } else {
+    chatAudio.src = url;
+    chatPlaying = m.id;
+  }
+  chatAudio.play().catch(() => {});
+  const meta = {
+    key: "chat" + m.id,
+    title: name,
+    sub: `${m.sound ? "Library sound" : "Clip"} · sent by ${m.username || "someone"}`,
+    avatar: { url: m.avatarUrl, name: m.username || name },
+    toggle: () => playChatSound(m, url, name),
+  };
+  showPlayer(chatAudio, m.sound ? librarySoundPlayer(m.sound.id, meta) : meta);
+  drawChat(true);
+}
 
 function chatAttachment(m) {
   const sound = m.sound;
@@ -423,15 +443,10 @@ function chatAttachment(m) {
   const play = document.createElement("button");
   play.type = "button";
   play.className = "play";
-  play.title = chatPlaying === m.id ? "Stop" : "Play";
-  play.innerHTML = chatPlaying === m.id ? SFX_ICONS.pause : SFX_ICONS.play;
-  play.addEventListener("click", () => {
-    if (chatPlaying === m.id) return stopChatAudio();
-    chatAudio.src = url;
-    chatAudio.play().catch(() => {});
-    chatPlaying = m.id;
-    drawChat(true);
-  });
+  const playing = chatPlaying === m.id && !chatAudio.paused;
+  play.title = playing ? "Pause" : "Play";
+  play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
+  play.addEventListener("click", () => playChatSound(m, url, name));
   const info = document.createElement("div");
   info.className = "info";
   const title = document.createElement("b");
@@ -460,7 +475,7 @@ function reactionRow(m) {
 
 function drawChat(force) {
   const list = $("chatList");
-  const sig = JSON.stringify([chatWith, chatPlaying, [...chatSure], chatMessages.map((m) => [m.id, m.reactions])]);
+  const sig = JSON.stringify([chatWith, chatPlaying, chatAudio.paused, [...chatSure], chatMessages.map((m) => [m.id, m.reactions])]);
   if (!force && sig === chatDrawn) return;
   chatDrawn = sig;
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
@@ -492,7 +507,7 @@ function drawChat(force) {
     const follow = last && last.username === m.username && new Date(m.created_at) - new Date(last.created_at) < 300000
       && new Date(last.created_at).toDateString() === day;
     // Messages that didn't change keep their element (so a click or a text selection on one survives).
-    const sig = JSON.stringify([m, follow, chatPlaying === m.id, chatSure.has(m.id), canDeleteAll, me && me.username]);
+    const sig = JSON.stringify([m, follow, chatPlaying === m.id, chatPlaying === m.id && chatAudio.paused, chatSure.has(m.id), canDeleteAll, me && me.username]);
     keys.push(m.id);
     rows.push(keptNode(chatEls, m.id, sig, () => chatMessageEl(m, follow, shownUpTo, canDeleteAll)));
     last = m;

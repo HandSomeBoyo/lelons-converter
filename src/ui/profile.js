@@ -9,6 +9,35 @@ let profilePlaying = null;
 const profileAudio = new Audio();
 profileAudio.addEventListener("ended", () => { profilePlaying = null; drawProfileSounds(); });
 registerPlayer(profileAudio, () => { profileAudio.pause(); profilePlaying = null; drawProfileSounds(); });
+for (const type of ["play", "pause"]) profileAudio.addEventListener(type, () => { if (profilePlaying) drawProfileSounds(); });
+
+// Play one of their sounds (click again to pause), shown in the player bar.
+function playProfileSound(s) {
+  if (profilePlaying === s.id && profileAudio.src) {
+    if (!profileAudio.paused) return profileAudio.pause();
+  } else {
+    profileAudio.src = s.url;
+    profilePlaying = s.id;
+  }
+  profileAudio.play().catch(() => {});
+  const list = (profileShown && profileShown.recent) || [];
+  const who = profileShown && profileShown.username;
+  const step = (n) => () => {
+    const at = list.findIndex((x) => x.id === s.id);
+    const other = list[(at + n + list.length) % list.length];
+    if (other && other.id !== s.id) playProfileSound(other);
+  };
+  showPlayer(profileAudio, librarySoundPlayer(s.id, {
+    key: s.id,
+    title: s.name,
+    sub: [who, CAT_NAMES[s.category]].filter(Boolean).join(" · "),
+    avatar: { url: profileShown && profileShown.avatarUrl, name: who || s.name },
+    toggle: () => playProfileSound(s),
+    next: list.length > 1 ? step(1) : null,
+    prev: list.length > 1 ? step(-1) : null,
+  }));
+  drawProfileSounds();
+}
 
 async function openProfile(username) {
   if (!username) return;
@@ -71,18 +100,8 @@ function drawProfileSounds() {
     const play = document.createElement("button");
     play.type = "button";
     play.className = "play";
-    play.innerHTML = profilePlaying === s.id ? SFX_ICONS.pause : SFX_ICONS.play;
-    play.addEventListener("click", () => {
-      if (profilePlaying === s.id) {
-        profileAudio.pause();
-        profilePlaying = null;
-      } else {
-        profileAudio.src = s.url;
-        profileAudio.play().catch(() => {});
-        profilePlaying = s.id;
-      }
-      drawProfileSounds();
-    });
+    play.innerHTML = profilePlaying === s.id && !profileAudio.paused ? SFX_ICONS.pause : SFX_ICONS.play;
+    play.addEventListener("click", () => playProfileSound(s));
     const info = document.createElement("div");
     info.className = "info";
     const title = document.createElement("b");
@@ -97,9 +116,7 @@ function drawProfileSounds() {
 
 function closeProfile() {
   $("profileModal").hidden = true;
-  profileAudio.pause();
-  profilePlaying = null;
-  profileShown = null;
+  profileShown = null; // (a sound that's playing goes on, in the player bar)
 }
 
 $("profileClose").addEventListener("click", closeProfile);

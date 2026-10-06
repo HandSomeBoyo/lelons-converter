@@ -1,5 +1,5 @@
 // "How to use": a short animated tour of the app. Opens by itself once (the first time the app
-// opens with it), and again from the footer. It can read itself out loud with Windows' own voice.
+// opens with it), and again from the help menu at the top. It can read itself out loud with Windows' own voice.
 // Uses $, api() from app.js and loadPref(), savePref() from theme.js.
 
 const TOUR = [
@@ -102,8 +102,8 @@ const TOUR = [
   {
     key: "done", seconds: 5,
     title: "You're all set!",
-    text: "You can watch this again any time with \"How to use\" at the bottom of the app.",
-    say: "You're all set! You can watch this again any time with How to use, at the bottom of the app.",
+    text: "You can watch this again any time: click the question mark at the top, then \"How to use\".",
+    say: "You're all set! You can watch this again any time. Click the question mark at the top, then How to use.",
     html: `<div class="t-center">
       <svg class="t-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
       <div class="t-words"><span>Have fun!</span></div>
