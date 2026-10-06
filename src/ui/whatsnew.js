@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.35.0", items: [
+    "A fresh Apple-inspired look: a cleaner font, big bold headlines and Apple's own soft greys in dark and light mode.",
+    "The Library list is one neat rounded card with thin lines between sounds, like the iPhone Settings app.",
+    "On/off options are now iPhone-style switches, and Settings is laid out in tidy grouped rows.",
+    "Rounder buttons and softer corners everywhere, plus easier-to-read links in light mode.",
+  ] },
   { version: "1.34.0", items: [
     "Liquid glass everywhere: cards, buttons, menus, popups, the chat and the player are all frosted glass now.",
     "The player floats at the bottom of the Library as a glass bar, and the page softly blurs behind popups.",
