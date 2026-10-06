@@ -2967,3 +2967,77 @@ body.doc-focus .doc-focus-exit { display: inline-flex; }
 }
 body.doc-focus .doc-guide { display: none !important; }
 @media print { body.doc-printing .doc-guide { display: none !important; } }
+
+/* 2.2.0: comments in Collab docs */
+.doc-notes-button { position: relative; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; margin-right: 4px; background: var(--panel2); }
+.doc-notes-button svg { width: 19px; height: 19px; }
+.doc-notes-button b {
+  position: absolute; top: -2px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px;
+  background: var(--accent); color: #111; font: 700 11px/18px var(--head); text-align: center;
+}
+.doc-notes-button.on { background: rgba(var(--accent-rgb), .18); color: var(--accent); }
+:root[data-theme="light"] .doc-notes-button.on { color: var(--accent-text); }
+.doc-notes { width: 300px; }
+@media (max-width: 1250px) { .doc-notes { width: 270px; } }
+.doc-notes-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.doc-notes-empty { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.doc-notes-empty b { display: block; color: var(--text); font: 600 14px var(--head); margin-bottom: 4px; }
+.doc-notes-empty svg { width: 15px; height: 15px; vertical-align: -3px; }
+.doc-note {
+  padding: 12px; border-radius: 14px; background: var(--panel2); cursor: default;
+  box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s var(--ease), opacity .2s var(--ease); animation: pop-in .25s var(--spring);
+}
+:root[data-theme="light"] .doc-note { background: #f2f2f7; }
+.doc-note.active, .doc-note-new { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .85); }
+.doc-note.resolved { opacity: .7; }
+.doc-note-quote {
+  margin: 0 0 10px; padding: 2px 0 2px 9px; border-left: 3px solid var(--accent); color: var(--muted); font-size: 12.5px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.doc-note-quote.gone { border-left-color: var(--line2); text-decoration: line-through; }
+.doc-note-msgs { display: flex; flex-direction: column; gap: 10px; }
+.doc-note-msg { display: flex; gap: 9px; }
+.doc-avatar.small { width: 26px; height: 26px; font-size: 11px; }
+.doc-note-body { flex: 1; min-width: 0; }
+.doc-note-head { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.doc-note-head b { font: 600 13px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-note-head small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.doc-note-head .spacer { flex: 1; }
+.doc-note-body p { margin: 2px 0 0; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doc-note-tool {
+  all: unset; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--muted); cursor: pointer; flex: none;
+}
+.doc-note-tool svg { width: 15px; height: 15px; }
+.doc-note-tool:hover { background: var(--panel); color: var(--text); }
+.doc-note-tool.resolve:hover { color: var(--green, #30d158); }
+.doc-note textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 38px; padding: 8px 10px; border: 0; border-radius: 10px;
+  background: var(--panel); color: var(--text); font: 13.5px/1.4 var(--body, inherit); outline: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.doc-note textarea:focus { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .8); }
+:root[data-theme="light"] .doc-note textarea { background: #fff; }
+.doc-note-reply { margin-top: 10px; }
+.doc-note-reply .doc-note-actions { display: none; }
+.doc-note-reply:focus-within .doc-note-actions { display: flex; }
+.doc-note-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.doc-note-actions .spacer { flex: 1; }
+.doc-note-actions .small-button { height: 30px; padding: 0 14px; font-size: 13px; }
+.doc-note-by { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.doc-notes-done {
+  all: unset; display: flex; align-items: center; gap: 7px; padding: 6px 4px; color: var(--muted); font: 600 12.5px var(--head); cursor: pointer;
+}
+.doc-notes-done svg { width: 14px; height: 14px; }
+.doc-notes-done:hover { color: var(--text); }
+
+.doc-add-note {
+  position: fixed; z-index: 20; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--accent); color: #111; cursor: pointer; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); animation: pop-in .2s var(--spring);
+}
+.doc-add-note svg { width: 18px; height: 18px; }
+.doc-add-note:hover { transform: scale(1.08); }
+::highlight(doc-note) { background-color: rgba(253, 216, 53, .35); }
+::highlight(doc-note-now) { background-color: rgba(253, 216, 53, .75); }
+body.doc-focus .doc-notes, body.doc-focus .doc-add-note, body.doc-focus .doc-notes-button { display: none !important; }
+@media print { body.doc-printing .doc-add-note { display: none !important; } }
+@media print { ::highlight(doc-note), ::highlight(doc-note-now) { background-color: transparent; } }

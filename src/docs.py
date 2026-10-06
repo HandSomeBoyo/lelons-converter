@@ -170,6 +170,8 @@ FRIENDLY = {
     "doc_long": "This document is as long as it can get. Start a new one for the next part.",
     "doc_big": "This document is too big. Take out some pictures.",
     "doc_people": "A document can have up to 50 people.",
+    "comment_gone": "That comment isn't there any more.",
+    "comment_many": "This document has as many comments as it can. Delete some old ones first.",
 }
 sfx.FRIENDLY.update(FRIENDLY)  # so Supabase's answers come out in these words
 
@@ -244,6 +246,30 @@ def collab_remove(doc_id, username):
 
 def collab_delete(doc_id):
     _rpc("lelons_doc_delete", doc_id=str(doc_id))
+
+
+def _comments(found):
+    return [{**c, "avatarUrl": sfx.public_url(c["avatar"]) if c.get("avatar") else ""} for c in found or []]
+
+
+def collab_comments(doc_id):
+    return _comments(_rpc("lelons_doc_comments", doc_id=str(doc_id)))
+
+
+COMMENT_ACTIONS = ("add", "reply", "edit", "resolve", "reopen", "delete")
+
+
+def collab_comment(doc_id, what, comment_id=None, block=None, quote=None, body=None):
+    if what not in COMMENT_ACTIONS:
+        raise Error("Something about that wasn't right. Try again.")
+    try:
+        comment_id = int(comment_id) if comment_id is not None else None
+    except (TypeError, ValueError):
+        comment_id = None
+    return _comments(_rpc("lelons_doc_comment", doc_id=str(doc_id), what=what, comment_id=comment_id,
+                          block=str(block)[:40] if block else None,
+                          quote=re.sub(r"\s+", " ", str(quote)).strip()[:300] if quote else None,
+                          body=str(body or "").strip()[:2000] or None))
 
 
 # ---------------------------------------------------------------- saving a copy as a file

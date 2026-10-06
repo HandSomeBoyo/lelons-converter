@@ -98,6 +98,8 @@ const DOC_ICONS = {
   quote: '<path d="M5 17.5c2.5-1 4-3.4 4-6.5V7H5v4h4M14 17.5c2.5-1 4-3.4 4-6.5V7h-4v4h4"/>',
   heading: '<path d="M6 4.5v15M15 4.5v15M6 12h9M18.5 10l2-1.5v11"/>',
   sort: '<path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/>',
+  comment: '<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7.5L7 21v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5z"/><path d="M8 10h8M8 13.5h5"/>',
+  check: '<path d="M5.5 12.5l4 4 9-9"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
@@ -669,6 +671,7 @@ async function openDoc(where, id, opts = {}) {
   docSaveState();
   $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
   drawGuide();
+  docNotesOpenDoc();
   docFit();
   docCount();
   drawOutline();
@@ -684,6 +687,348 @@ async function openDoc(where, id, opts = {}) {
   if (where === "collab") docSyncSoon(50);
 }
 
+// ---------------------------------------------------------------- comments (collab docs)
+// A comment sits on a few words (quote) in one block. They're saved right away (they don't change the text),
+// everyone in the document sees them, and they show as a yellow mark on the words.
+
+let docNotes = [];          // from Supabase: {id, parent, block, quote, body, username, at, resolved, mine, canDelete}
+let docNotesSig = "";
+let docNotesTimer = 0;
+let docNotesRun = 0;
+let docNotesDraft = null;   // the new comment being written: {block, quote}
+let docNotesShowResolved = false;
+let docNotesActive = null;  // the comment that's selected
+const docNotesRanges = new Map(); // comment id -> Range on the page
+
+function docNotesOpenDoc() {
+  const collab = doc.where === "collab";
+  $("docNotesButton").hidden = !collab;
+  docNotes = []; docNotesSig = ""; docNotesDraft = null; docNotesActive = null; docNotesShowResolved = false;
+  $("docNotes").hidden = true;
+  docNotesMark();
+  drawNotesButton();
+  if (collab) docNotesLoad();
+}
+
+function docNotesCloseDoc() {
+  clearTimeout(docNotesTimer);
+  docNotesRun++;
+  docNotes = []; docNotesRanges.clear();
+  $("docNotes").hidden = true;
+  $("docAddNote").hidden = true;
+  if (window.CSS && CSS.highlights) { CSS.highlights.delete("doc-note"); CSS.highlights.delete("doc-note-now"); }
+}
+
+async function docNotesLoad() {
+  clearTimeout(docNotesTimer);
+  const d = doc;
+  if (!d || d.where !== "collab") return;
+  const mine = ++docNotesRun;
+  const res = await api("/api/docs-comments", { id: d.id, where: "collab" }).catch(() => null);
+  if (doc !== d || mine !== docNotesRun) return;
+  if (res && res.ok) docNotesSet(res.comments);
+  docNotesTimer = setTimeout(docNotesLoad, document.hidden ? 15000 : $("docNotes").hidden ? 5000 : 2500);
+}
+
+function docNotesSet(list) {
+  const sig = JSON.stringify(list || []);
+  if (sig === docNotesSig) return;
+  docNotesSig = sig;
+  docNotes = list || [];
+  if (docNotesActive && !docNotes.some((c) => c.id === docNotesActive)) docNotesActive = null;
+  drawNotesButton();
+  docNotesMark();
+  if (!$("docNotes").hidden) drawNotes();
+}
+
+async function docNotesSend(what, data = {}) {
+  const d = doc;
+  if (!d) return false;
+  const res = await api("/api/docs-comment", { id: d.id, where: "collab", what, ...data }).catch(() => null);
+  if (doc !== d) return false;
+  if (!res || !res.ok) { docToast((res && res.error) || "That didn't work. Check your internet and try again."); return false; }
+  docNotesRun++; // an older load on its way would bring back the old list
+  docNotesSet(res.comments);
+  docNotesTimer = setTimeout(docNotesLoad, 2500);
+  return true;
+}
+
+const docNotesOpen = () => docNotes.filter((c) => !c.parent && !c.resolved);
+function drawNotesButton() {
+  const n = docNotesOpen().length;
+  const b = $("docNotesButton");
+  b.innerHTML = docIcon("comment") + (n ? `<b>${n}</b>` : "");
+  b.title = n ? `${n} open ${n === 1 ? "comment" : "comments"}` : "Comments";
+  b.classList.toggle("on", !$("docNotes").hidden);
+}
+
+// The yellow marks on the page.
+function docNotesMark() {
+  docNotesRanges.clear();
+  if (!window.CSS || !CSS.highlights) return;
+  if (!doc || doc.where !== "collab") { CSS.highlights.delete("doc-note"); CSS.highlights.delete("doc-note-now"); return; }
+  for (const c of docNotesOpen()) {
+    if (!c.block || !c.quote) continue;
+    const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(c.block)}"]`);
+    const r = el && docQuoteRange(el, c.quote);
+    if (r) docNotesRanges.set(c.id, r);
+  }
+  CSS.highlights.set("doc-note", new Highlight(...docNotesRanges.values()));
+  let now = docNotesActive && docNotesRanges.get(docNotesActive);
+  if (docNotesDraft && docNotesDraft.block && docNotesDraft.quote && !$("docNotes").hidden) { // the words you're writing about
+    const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(docNotesDraft.block)}"]`);
+    now = (el && docQuoteRange(el, docNotesDraft.quote)) || now;
+  }
+  if (now) CSS.highlights.set("doc-note-now", new Highlight(now));
+  else CSS.highlights.delete("doc-note-now");
+}
+
+// Where the words are inside a block (spaces don't have to match exactly), as a Range.
+function docQuoteRange(el, quote) {
+  const nodes = [], starts = [];
+  let text = "";
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) { starts.push(text.length); nodes.push(walker.currentNode); text += walker.currentNode.data; }
+  const norm = (t) => t.replace(/\s+/g, " ");
+  const at = norm(text).toLowerCase().indexOf(norm(quote).toLowerCase());
+  if (at < 0 || !nodes.length) return null;
+  // norm() only shortens runs of spaces; map the found place back onto the real text.
+  const map = [];
+  for (let i = 0, j = 0; i < text.length; i++) { if (!(/\s/.test(text[i]) && i > 0 && /\s/.test(text[i - 1]))) map[j++] = i; }
+  const from = map[at], to = map[at + norm(quote).length - 1] + 1;
+  if (from === undefined || isNaN(to)) return null;
+  const place = (pos) => {
+    let k = nodes.length - 1;
+    while (k > 0 && starts[k] > pos) k--;
+    return [nodes[k], Math.min(pos - starts[k], nodes[k].data.length)];
+  };
+  const r = new Range();
+  r.setStart(...place(from));
+  r.setEnd(...place(to));
+  return r;
+}
+
+function docShowNotes(on) {
+  if (!doc || doc.where !== "collab") return;
+  $("docNotes").hidden = !on;
+  if (on) { $("docGuide").hidden = true; drawNotes(); docNotesLoad(); }
+  else { docNotesDraft = null; docNotesActive = null; docNotesMark(); drawGuide(); }
+  drawNotesButton();
+  docFit();
+}
+$("docNotesClose").addEventListener("click", () => docShowNotes(false));
+
+// "Comment": on the words you selected (or the line you're on).
+let docNotesSel = null;
+function docNotesNew() {
+  if (!doc || doc.where !== "collab") return;
+  const sel = getSelection();
+  let block = null, quote = "";
+  const r = docNotesSel || (sel.rangeCount && docsText.contains(sel.anchorNode) ? sel.getRangeAt(0) : null);
+  docNotesSel = null;
+  if (r && docsText.contains(r.startContainer)) {
+    block = docBlockOf(r.startContainer);
+    quote = r.toString().replace(/\s+/g, " ").trim();
+    if (block && docBlockOf(r.endContainer) !== block) quote = (block.textContent.replace(/\s+/g, " ").trim()); // across lines: the first line
+    if (!quote && block) quote = block.textContent.replace(/\s+/g, " ").trim();
+  }
+  if (quote.length > 300) quote = quote.slice(0, 300);
+  docNotesDraft = { block: block ? block.dataset.id : null, quote };
+  docNotesActive = null;
+  $("docAddNote").hidden = true;
+  docShowNotes(true);
+  docNotesMark();
+  const box = $("docNotesList").querySelector(".doc-note-new textarea");
+  if (box) box.focus();
+}
+$("docNotesButton").addEventListener("mousedown", (e) => e.preventDefault()); // keeps the selection in the text
+$("docNotesButton").addEventListener("click", () => {
+  if (!$("docNotes").hidden) return docShowNotes(false);
+  const sel = getSelection();
+  if (sel.rangeCount && !sel.isCollapsed && docsText.contains(sel.anchorNode)) docNotesNew();
+  else docShowNotes(true);
+});
+
+// The little "Comment" button next to selected text (on the body: "fixed" inside the tab would be off).
+document.body.append($("docAddNote"));
+function docAddNoteSpot() {
+  const b = $("docAddNote");
+  const sel = getSelection();
+  if (!doc || doc.where !== "collab" || !sel.rangeCount || sel.isCollapsed || !docsText.contains(sel.anchorNode)) { b.hidden = true; return; }
+  const rect = sel.getRangeAt(0).getBoundingClientRect(), page = $("docPage").getBoundingClientRect();
+  if (!rect.height) { b.hidden = true; return; }
+  b.hidden = false;
+  b.style.top = Math.round(rect.top - 4) + "px";
+  b.style.left = Math.round(Math.min(page.right - b.offsetWidth / 2, innerWidth - b.offsetWidth - 8)) + "px";
+}
+document.addEventListener("selectionchange", () => { if (doc) docAddNoteSpot(); });
+window.addEventListener("scroll", () => { if (doc && !$("docAddNote").hidden) docAddNoteSpot(); }, { passive: true });
+$("docAddNote").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  const sel = getSelection();
+  docNotesSel = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+});
+$("docAddNote").addEventListener("click", () => docNotesNew());
+document.addEventListener("keydown", (e) => {
+  if (doc && e.ctrlKey && e.altKey && !e.shiftKey && e.key.toLowerCase() === "m") { e.preventDefault(); docNotesNew(); }
+});
+
+// Clicking marked words opens their comment.
+docsText.addEventListener("click", () => {
+  if (!doc || doc.where !== "collab" || !docNotesRanges.size) return;
+  const sel = getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return;
+  for (const [id, r] of docNotesRanges) {
+    if (r.isPointInRange(sel.anchorNode, sel.anchorOffset)) { docNotesPick(id, true); return; }
+  }
+});
+
+function docNotesPick(id, scroll) {
+  docNotesActive = id;
+  if ($("docNotes").hidden) docShowNotes(true); else drawNotes();
+  docNotesMark();
+  const card = $("docNotesList").querySelector(`[data-note="${id}"]`);
+  if (card && scroll) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function noteWhen(at) { return timeAgo(Date.parse(at) / 1000); }
+
+function drawNotes() {
+  const list = $("docNotesList");
+  const keep = document.activeElement && list.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA"
+    ? { key: document.activeElement.dataset.key, value: document.activeElement.value, at: document.activeElement.selectionStart } : null;
+  const items = [];
+  if (docNotesDraft) {
+    const box = document.createElement("div");
+    box.className = "doc-note doc-note-new";
+    box.innerHTML = `<div class="doc-note-quote" hidden></div><textarea rows="3" maxlength="2000" data-key="new" placeholder="Write a comment..."></textarea>
+      <div class="doc-note-actions"><button type="button" class="link">Cancel</button><span class="spacer"></span><button type="button" class="small-button">Comment</button></div>`;
+    const q = box.querySelector(".doc-note-quote");
+    if (docNotesDraft.quote) { q.hidden = false; q.textContent = docNotesDraft.quote; }
+    const ta = box.querySelector("textarea");
+    const send = async () => {
+      const body = ta.value.trim();
+      if (!body) return ta.focus();
+      box.querySelector(".small-button").disabled = true;
+      const draft = docNotesDraft;
+      if (await docNotesSend("add", { block: draft.block, quote: draft.quote, body })) {
+        docNotesDraft = null;
+        const mine = [...docNotes].reverse().find((c) => c.mine && !c.parent);
+        if (mine) docNotesActive = mine.id;
+        drawNotes(); docNotesMark();
+      } else box.querySelector(".small-button").disabled = false;
+    };
+    box.querySelector(".small-button").addEventListener("click", send);
+    box.querySelector(".link").addEventListener("click", () => { docNotesDraft = null; drawNotes(); docNotesMark(); });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } if (e.key === "Escape") { e.stopPropagation(); docNotesDraft = null; drawNotes(); } });
+    items.push(box);
+  }
+  const roots = docNotes.filter((c) => !c.parent);
+  const open = roots.filter((c) => !c.resolved), done = roots.filter((c) => c.resolved);
+  // Open ones in the order they are on the page, then the ones whose words aren't there any more.
+  const order = new Map([...docsText.children].map((el, i) => [el.dataset.id, i]));
+  const where = (c) => (order.has(c.block) ? order.get(c.block) : 1e9);
+  open.sort((a, b) => where(a) - where(b) || a.id - b.id);
+  for (const c of open) items.push(noteCard(c));
+  if (!open.length && !docNotesDraft && done.length) {
+    const p = document.createElement("p");
+    p.className = "doc-notes-empty";
+    p.innerHTML = "<b>All done!</b> Every comment is resolved.";
+    items.push(p);
+  } else if (!open.length && !docNotesDraft) {
+    const p = document.createElement("p");
+    p.className = "doc-notes-empty";
+    p.innerHTML = `<b>No comments yet.</b> Select some words in the document and press ${docIcon("comment")} to leave a note. Everyone in this document can see comments, and they don't change the text.`;
+    items.push(p);
+  }
+  if (done.length) {
+    const t = Object.assign(document.createElement("button"), { type: "button", className: "doc-notes-done" });
+    t.innerHTML = `${docIcon("check")}<span>${docNotesShowResolved ? "Hide" : "Show"} resolved (${done.length})</span>`;
+    t.addEventListener("click", () => { docNotesShowResolved = !docNotesShowResolved; drawNotes(); });
+    items.push(t);
+    if (docNotesShowResolved) for (const c of done.reverse()) items.push(noteCard(c));
+  }
+  list.replaceChildren(...items);
+  if (keep) {
+    const ta = list.querySelector(`textarea[data-key="${keep.key}"]`);
+    if (ta) { ta.value = keep.value; ta.focus(); ta.setSelectionRange(keep.at, keep.at); }
+  }
+}
+
+function noteCard(c) {
+  const card = document.createElement("div");
+  card.className = "doc-note" + (c.resolved ? " resolved" : "") + (c.id === docNotesActive ? " active" : "");
+  card.dataset.note = c.id;
+  const replies = docNotes.filter((x) => x.parent === c.id);
+  const gone = c.block && c.quote && !docNotesRanges.has(c.id) && !c.resolved;
+  card.innerHTML = `<div class="doc-note-quote" hidden></div><div class="doc-note-msgs"></div>
+    <div class="doc-note-reply" hidden><textarea rows="2" maxlength="2000" data-key="reply-${c.id}" placeholder="Reply..."></textarea>
+      <div class="doc-note-actions"><span class="spacer"></span><button type="button" class="small-button">Reply</button></div></div>`;
+  const q = card.querySelector(".doc-note-quote");
+  if (c.quote) { q.hidden = false; q.textContent = c.quote; q.classList.toggle("gone", !!gone); if (gone) q.title = "These words aren't in the document any more"; }
+  card.querySelector(".doc-note-msgs").append(...[c, ...replies].map((m, i) => noteMsg(m, i === 0 ? c : null)));
+  if (!c.resolved) {
+    const rep = card.querySelector(".doc-note-reply");
+    rep.hidden = false;
+    const ta = rep.querySelector("textarea");
+    const send = async () => {
+      const body = ta.value.trim();
+      if (!body) return;
+      rep.querySelector("button").disabled = true;
+      if (await docNotesSend("reply", { comment: c.id, body })) { ta.value = ""; drawNotes(); }
+      else rep.querySelector("button").disabled = false;
+    };
+    rep.querySelector("button").addEventListener("click", send);
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+    ta.addEventListener("focus", () => { if (docNotesActive !== c.id) { docNotesActive = c.id; card.classList.add("active"); docNotesMark(); } });
+  } else if (c.resolvedBy) {
+    const by = document.createElement("p");
+    by.className = "doc-note-by";
+    by.textContent = `Resolved by ${c.resolvedBy}`;
+    card.append(by);
+  }
+  card.addEventListener("click", (e) => {
+    if (e.target.closest("button, textarea")) return;
+    docNotesActive = c.id;
+    $("docNotesList").querySelectorAll(".doc-note.active").forEach((x) => x.classList.remove("active"));
+    card.classList.add("active");
+    docNotesMark();
+    const r = docNotesRanges.get(c.id);
+    if (r) {
+      const rect = r.getBoundingClientRect();
+      if (rect.top < 150 || rect.bottom > innerHeight - 60) window.scrollBy({ top: rect.top - innerHeight / 2, behavior: "smooth" });
+    }
+  });
+  return card;
+}
+
+function noteMsg(m, root) {
+  const el = document.createElement("div");
+  el.className = "doc-note-msg";
+  el.append(docAvatar({ username: m.username, avatarUrl: m.avatarUrl }, "small"));
+  const body = document.createElement("div");
+  body.className = "doc-note-body";
+  body.innerHTML = `<div class="doc-note-head"><b></b><small></small><span class="spacer"></span></div><p></p>`;
+  body.querySelector("b").textContent = m.username;
+  body.querySelector("small").textContent = noteWhen(m.at) + (m.edited ? " · edited" : "");
+  body.querySelector("p").textContent = m.body;
+  const head = body.querySelector(".doc-note-head");
+  const tool = (icon, title, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-note-tool " + cls, title });
+    b.innerHTML = docIcon(icon);
+    b.addEventListener("click", fn);
+    head.append(b);
+  };
+  if (root && !root.resolved) tool("check", "Resolve: it's done (hides it, anyone can open it again)", () => docNotesSend("resolve", { comment: root.id }), "resolve");
+  if (root && root.resolved) tool("undo", "Open it again", () => docNotesSend("reopen", { comment: root.id }));
+  if (m.canDelete) tool("trash", root ? "Delete this comment and its replies" : "Delete this reply", async () => {
+    const yes = await docAsk(root ? "Delete this comment?" : "Delete this reply?", root && docNotes.some((x) => x.parent === m.id) ? "Its replies are deleted too. This can't be undone." : "This can't be undone.", "Delete");
+    if (yes) docNotesSend("delete", { comment: m.id });
+  });
+  el.append(body);
+  return el;
+}
+
 // ---------------------------------------------------------------- the writing guide (next to the page)
 
 function drawGuide() {
@@ -691,7 +1036,7 @@ function drawGuide() {
   docsText.dataset.hint = t.hint || "";
   docsText.style.setProperty("--hint", JSON.stringify(t.hint || ""));
   docEmptyCheck();
-  $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1";
+  $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1" || !$("docNotes").hidden;
   if (!g) return;
   $("docGuideTitle").textContent = g.title;
   $("docGuideIntro").textContent = g.intro;
@@ -715,6 +1060,7 @@ function drawGuide() {
 
 function docShowGuide(on) {
   if (!doc) return;
+  if (on && !$("docNotes").hidden) { $("docNotes").hidden = true; docNotesDraft = null; drawNotesButton(); }
   savePref("docGuideOff:" + docTypeOf(doc).key, on ? "0" : "1");
   drawGuide();
   docFit();
@@ -752,6 +1098,7 @@ async function closeDoc(quiet) {
   document.body.classList.remove("doc-focus");
   if (was.where === "collab") api("/api/docs-close", { id: was.id }).catch(() => null);
   doc = null;
+  docNotesCloseDoc();
   docHidePops();
   $("docFind").hidden = true;
   docClearFind();
@@ -2351,6 +2698,7 @@ function docCountSoon() {
 function docCount() {
   if (!doc) return;
   docEmptyCheck();
+  docNotesMark();
   const text = docsText.innerText;
   const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
   let more = "";
@@ -3089,11 +3437,13 @@ function docMenuItems(name) {
     { label: "Paper color", icon: "paper", more: "paper" },
   ];
   if (name === "insert") return script ? [
+    doc.where === "collab" ? { label: "Comment", icon: "comment", key: "Ctrl+Alt+M", fn: () => docNotesNew() } : null,
     { label: "Page break", icon: "pagebreak", key: "Ctrl+Enter", fn: () => docCommand("pagebreak") },
     { label: "Today's date", icon: "calendar", fn: docInsertDate },
     { label: "Special character", icon: "omega", more: "special" },
     { label: "Emoji", icon: "emoji", more: "emoji" },
   ] : [
+    doc.where === "collab" ? { label: "Comment", icon: "comment", key: "Ctrl+Alt+M", fn: () => docNotesNew() } : null,
     { label: "Picture", icon: "image", fn: () => docCommand("image") },
     { label: "Table", icon: "table", more: "table" },
     { label: "Link", icon: "link", key: "Ctrl+K", fn: () => docCommand("link") },
