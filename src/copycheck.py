@@ -94,7 +94,7 @@ def lookup(seconds, fp):
     body = urllib.parse.urlencode({"client": version.ACOUSTID_KEY, "duration": int(round(seconds)), "fingerprint": fp,
                                    "meta": "recordings releasegroups compress", "format": "json"}).encode()
     request = urllib.request.Request(LOOKUP, data=body, method="POST", headers={
-        "Content-Type": "application/x-www-form-urlencoded", "User-Agent": f"UltimateRecording/{version.VERSION}"})
+        "Content-Type": "application/x-www-form-urlencoded", "User-Agent": f"VaultHub/{version.VERSION}"})
     with _lookup_lock:  # AcoustID asks for at most 3 lookups a second (just the waiting, not the asking,
         wait = _last_lookup + 0.4 - time.time()  # so one slow answer doesn't hold up everyone else)
         _last_lookup = max(time.time(), _last_lookup + 0.4)

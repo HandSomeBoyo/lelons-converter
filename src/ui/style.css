@@ -2547,7 +2547,7 @@ body.doc-open .footer { display: none; }
 }
 .doc-text blockquote { margin: 6pt 0; padding: 2pt 0 2pt 14px; border-left: 3px solid var(--rule, #d1d1d6); color: var(--ink2, #48484a); }
 .doc-text pre { padding: 10px 12px; border-radius: 8px; background: var(--soft, #f2f2f7); font: 10pt/1.45 "Courier Prime", Consolas, monospace; white-space: pre-wrap; }
-.doc-text a { color: var(--link, #0a66d6); text-decoration: underline; }
+.doc-text a { color: var(--link, #0a66d6); text-decoration: underline; cursor: pointer; }
 .doc-text img { max-width: 100%; height: auto; border-radius: 3px; vertical-align: bottom; cursor: default; }
 .doc-text img:hover { outline: 2px solid rgba(var(--accent-rgb), .6); }
 .doc-text hr { border: 0; height: 1px; margin: 12pt 0; background: var(--rule, #d1d1d6); }
@@ -3084,3 +3084,62 @@ body.doc-focus .doc-dark-button { display: none !important; }
 .doc-note-quote.elsewhere::before { content: attr(data-page); display: block; margin-bottom: 3px; font: 600 11px var(--head); letter-spacing: .02em; text-transform: uppercase; color: var(--muted); font-style: normal; }
 .doc-note-quote.elsewhere:hover { color: var(--text); }
 .doc-tab-menu { position: fixed; z-index: var(--z-header); }
+
+/* 2.3.0: drag pages into each other */
+.doc-tab-row.dragging { opacity: .45; }
+.doc-tab-row.drop-in { background: rgba(var(--accent-rgb), .22); box-shadow: inset 0 0 0 2px var(--accent); }
+.doc-tab-row.drop-before::before, .doc-tab-row.drop-after::after {
+  content: ""; position: absolute; left: calc(var(--depth, 0) * 14px + 6px); right: 4px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none;
+}
+.doc-tab-row.drop-before::before { top: -1px; }
+.doc-tab-row.drop-after::after { bottom: -1px; }
+.doc-tab-row[draggable="true"] { cursor: grab; }
+.doc-tab-row[draggable="true"] .doc-tab-name { cursor: pointer; }
+
+/* 2.3.0: the Docs scene in the tour */
+.t-docs { position: absolute; inset: 22px 26px; }
+.t-side { position: absolute; left: 0; top: 0; width: 160px; height: 100%; }
+.t-side small { display: block; margin: 4px 10px 8px; font: 600 11px var(--head); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.t-pg { position: absolute; left: 0; right: 0; top: calc(30px + var(--y) * 34px); height: 30px; padding: 0 10px 0 30px; border-radius: 8px; display: flex; align-items: center;
+  font-size: 13px; color: var(--muted); opacity: 0; animation: rise-card .6s var(--ease) calc(.25s + var(--y) * .12s) forwards; }
+.t-pg::before { content: ""; position: absolute; left: 11px; top: 8px; width: 10px; height: 13px; border-radius: 2px; border: 1.5px solid currentColor; opacity: .7; }
+.t-pg.on { background: rgba(var(--accent-rgb), .16); color: var(--text); font-weight: 600; }
+.t-pg-target { animation: rise-card .6s var(--ease) .37s forwards, pg-target 1s var(--ease) 5.7s both; }
+@keyframes pg-target { 0%, 100% { box-shadow: none; } 20%, 80% { box-shadow: inset 0 0 0 2px var(--accent); background: rgba(var(--accent-rgb), .18); color: var(--text); } }
+.t-pg-down { animation: rise-card .6s var(--ease) .49s forwards, pg-down .6s var(--ease) 5.2s forwards; }
+@keyframes pg-down { from { opacity: 1; } to { opacity: 1; transform: translateY(34px); } }
+.t-pg-move { animation: rise-card .6s var(--ease) .61s forwards, pg-move 1.9s var(--ease) 4.5s forwards; z-index: 2; }
+@keyframes pg-move {
+  0% { opacity: 1; transform: none; }
+  20% { opacity: 1; transform: scale(1.04); background: linear-gradient(var(--panel2), var(--panel2)) var(--bg); color: var(--text); box-shadow: 0 10px 26px rgba(0, 0, 0, .4); }
+  70% { opacity: 1; transform: translate(16px, -48px) scale(1.04); background: linear-gradient(var(--panel2), var(--panel2)) var(--bg); color: var(--text); box-shadow: 0 10px 26px rgba(0, 0, 0, .4); }
+  100% { opacity: 1; transform: translate(16px, -34px); background: transparent; box-shadow: none; }
+}
+.t-paper { position: absolute; left: 186px; right: 0; top: 0; bottom: 0; border-radius: 10px; background: #fff; color: #1d1d1f; padding: 28px 34px; box-sizing: border-box;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3); opacity: 0; animation: rise-card .7s var(--ease) .2s forwards; overflow: hidden; }
+.t-doc-title { font: 700 22px "Courier Prime", Courier, monospace; letter-spacing: .02em; margin-bottom: 16px; height: 28px; }
+.t-doc-title span { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; vertical-align: top; animation: title-type .9s steps(9, end) .8s forwards; }
+@keyframes title-type { to { width: 9.2ch; } }
+.t-doc-line { height: 9px; border-radius: 5px; background: #d9d9de; margin: 0 0 12px; width: 0; animation: line-grow .6s var(--ease) var(--d) forwards; }
+@keyframes line-grow { to { width: var(--w); } }
+.t-them { position: relative; display: flex; align-items: center; height: 22px; margin: 4px 0 12px; font: 13.5px "Courier Prime", Courier, monospace; color: #3a3a3c; }
+.t-them span { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; animation: them-type 1.6s steps(25, end) 2.5s forwards; }
+@keyframes them-type { to { width: 25ch; } }
+.t-them b { position: relative; width: 2px; height: 18px; background: #7b4fa0; margin-left: 1px; opacity: 0; animation: fade-in .2s 2.3s forwards; }
+.t-them em { position: absolute; left: 0; top: -17px; padding: 1px 6px; border-radius: 5px 5px 5px 0; background: #7b4fa0; color: #fff; font: 700 10px var(--head); font-style: normal; white-space: nowrap; }
+@keyframes fade-in { to { opacity: 1; } }
+.t-bubble { position: absolute; right: 18px; bottom: 22px; display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 14px 14px 14px 4px;
+  background: var(--accent); color: var(--ink); font-size: 13px; font-weight: 600; box-shadow: 0 10px 26px rgba(0, 0, 0, .25);
+  transform: scale(0); transform-origin: left bottom; animation: pop .6s var(--spring) 6.9s forwards; }
+.t-bubble .t-face { width: 22px; height: 22px; font-size: 11px; }
+.t-faces { position: absolute; right: 10px; top: -12px; display: flex; gap: 4px; opacity: 0; animation: rise-card .6s var(--ease) 1.2s forwards; z-index: 3; }
+.t-faces .t-face { box-shadow: 0 0 0 2px var(--bg); }
+.t-docs .t-cursor { animation: cur-docs 9s var(--ease) both; }
+@keyframes cur-docs {
+  0%, 44% { transform: translate(420px, 300px); opacity: 0; }
+  48% { transform: translate(60px, 145px); opacity: 1; }
+  51% { transform: translate(60px, 145px) scale(.85); }
+  66% { transform: translate(76px, 97px) scale(.85); }
+  71% { transform: translate(76px, 111px); opacity: 1; }
+  80%, 100% { transform: translate(300px, 260px); opacity: 0; }
+}

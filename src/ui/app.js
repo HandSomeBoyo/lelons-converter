@@ -956,7 +956,7 @@ function renderUpdatePopup(s) {
     $("updateHeading").textContent = "Update available";
     if (!$("updateInstall").disabled && modal.dataset.shown !== update.version) {
       modal.dataset.shown = update.version;
-      $("updateText").textContent = `Version ${update.version} of Ultimate Recording is ready to install. You have ${s.version}.`;
+      $("updateText").textContent = `Version ${update.version} of VaultHub is ready to install. You have ${s.version}.`;
     }
   } else if (s.appUpdateProgress < 100) {
     $("updateHeading").textContent = "Updating...";
@@ -1008,7 +1008,7 @@ async function refresh() {
     // The app isn't answering: it was closed (or is updating).
     if (++failedChecks === 6 && !closing) {
       $("notice").className = "notice error";
-      $("notice").textContent = "Ultimate Recording was closed. Close this window and open the app again.";
+      $("notice").textContent = "VaultHub was closed. Close this window and open the app again.";
     }
   }
 }

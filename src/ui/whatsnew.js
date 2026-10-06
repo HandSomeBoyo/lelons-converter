@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.3.0", items: [
+    "The app has a new name: VaultHub! Your settings, login, docs and history all stay.",
+    "Drag a page onto another page in Docs to put it under that page. Drag near the top or bottom edge to move it above or below instead.",
+    "Links in docs show a hand when you point at them, and one click opens them.",
+    "Black text is now easy to read on the dark page: it turns white (coloured text keeps its colour).",
+    "The tour has a new Docs part, and it opens once for everybody after this update. Watch it again any time from the question mark at the top.",
+  ] },
   { version: "2.2.0", items: [
     "Collab docs are live now: you see the other person typing right away, and there's no Save button to press any more.",
     "Pages in a document: add pages with the + on the left side, and pages under a page with the ··· button.",

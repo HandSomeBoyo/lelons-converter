@@ -1,4 +1,4 @@
--- Ultimate Recording (was Lelons Converter): the shared Library (accounts, roles and sounds).
+-- VaultHub (was Lelons Converter, then Ultimate Recording): the shared Library (accounts, roles and sounds).
 --
 -- Run this in your Supabase project: SQL Editor > New query > paste all of
 -- this > put your username in the line marked 1. > Run.
