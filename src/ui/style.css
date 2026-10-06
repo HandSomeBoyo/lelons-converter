@@ -2908,3 +2908,62 @@ body.doc-focus .doc-focus-exit { display: inline-flex; }
 .doc-pop[data-kind^="menu-"] { max-height: calc(100vh - 40px); }
 .doc-zoom .doc-zoom-step { width: 26px; }
 .doc-zoom .doc-zoom-now { min-width: 50px; padding: 0 4px; }
+
+/* 2.1.0: new documents start empty; "What do you want to write?" and the writing guide */
+.doc-type-dialog { width: min(640px, 100%); }
+.doc-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0 6px; }
+.doc-type {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-width: 0;
+  border-radius: 14px; background: var(--panel2); cursor: pointer; transition: background-color .2s var(--ease), transform .25s var(--spring), box-shadow .2s var(--ease);
+}
+:root[data-theme="light"] .doc-type { background: #f2f2f7; }
+.doc-type:hover, .doc-type:focus-visible { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .9); transform: translateY(-1px); }
+.doc-type:active { transform: scale(.98); }
+.doc-type-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+:root[data-theme="light"] .doc-type-icon { color: var(--accent-text); }
+.doc-type-icon svg { width: 21px; height: 21px; }
+.doc-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.doc-type-text b { font: 600 14.5px var(--head); letter-spacing: -.01em; }
+.doc-type-text small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 560px) { .doc-types { grid-template-columns: 1fr; } }
+
+.doc-guide {
+  position: sticky; top: 124px; flex: none; width: 270px; max-height: calc(100vh - 300px); overflow: auto; box-sizing: border-box;
+  padding: 16px 16px 14px; border-radius: 18px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+  animation: pop-in .3s var(--spring);
+}
+.doc-guide-head { display: flex; align-items: flex-start; gap: 8px; }
+.doc-guide-head h4 { flex: 1; margin: 2px 0 0; font: 650 15px var(--head); letter-spacing: -.01em; }
+.doc-guide-head .icon-button { width: 28px; height: 28px; margin: -4px -6px 0 0; }
+.doc-guide-head .icon-button svg { width: 15px; height: 15px; }
+.doc-guide-intro { margin: 6px 0 12px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.doc-guide-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.doc-guide-steps li { display: flex; gap: 10px; }
+.doc-guide-steps i {
+  flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+  background: rgba(var(--accent-rgb), .16); color: var(--accent); font: 700 11.5px var(--head); font-style: normal;
+}
+:root[data-theme="light"] .doc-guide-steps i { color: var(--accent-text); }
+.doc-guide-steps span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.doc-guide-steps b { font: 600 13.5px var(--head); }
+.doc-guide-steps small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.doc-guide-tables { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.doc-guide-tables:empty { display: none; }
+.doc-guide-tables .outline-button { display: flex; align-items: center; justify-content: center; gap: 7px; height: 34px; font-size: 13px; }
+.doc-guide-tables svg { width: 15px; height: 15px; }
+.doc-guide-tip { margin: 14px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--panel2); color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+:root[data-theme="light"] .doc-guide-tip { background: #f2f2f7; }
+.doc-guide-tip::before { content: "Tip: "; font-weight: 600; color: var(--text); }
+
+.doc-text.is-empty > :first-child::before {
+  content: var(--hint); position: absolute; color: var(--faint); pointer-events: none; text-transform: none; font-weight: normal;
+}
+.doc-text.is-empty > :first-child { position: relative; }
+
+@media (max-width: 1250px) { .doc-guide { width: 230px; } }
+@media (max-width: 1050px) {
+  .doc-body { flex-wrap: wrap; }
+  .doc-guide { order: -1; position: static; width: 100%; max-height: none; }
+}
+body.doc-focus .doc-guide { display: none !important; }
+@media print { body.doc-printing .doc-guide { display: none !important; } }

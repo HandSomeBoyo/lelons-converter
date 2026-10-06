@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.1.0", items: [
+    "New document now asks what you want to write: a movie script, video script, shot list, storyboard and more.",
+    "Every new document starts completely empty. A short guide next to the page explains how to write that kind of document.",
+    "Shot lists, storyboards and call sheets can add an empty table with the right columns in one click.",
+    "Close the guide with the X, and bring it back with View, Writing guide.",
+  ] },
   { version: "2.0.0", items: [
     "New Docs tab: write documents and movie scripts right in the app, with a page that looks like Google Docs.",
     "Local docs stay private on your computer. Collab docs let you invite people with an account, and only the people who joined can see them.",
