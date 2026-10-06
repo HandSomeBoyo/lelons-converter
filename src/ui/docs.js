@@ -1120,6 +1120,7 @@ async function docLeave() {
   if (docSaving) await docSaving;
   while (docSyncBusy && doc === d) await docSyncRunning;
   if (doc !== d) return true;
+  if (d.where === "collab" && docDirty) return docSave(); // live: whatever is left goes out, nothing to ask
   if (!docDirty) {
     if (d.fresh) await docForgetFresh(d);
     return true;
@@ -1268,12 +1269,13 @@ function docChanged() {
   docUndoSoon();
   docCountSoon();
   docMarkDirty();
-  if (doc.where === "collab") docSyncSoon(400); // (only tells the others you're writing there; the words go on Save)
+  if (doc.where === "collab") docSyncSoon(300); // Collab docs are live: what you write goes to the others right away
 }
 
 function docMarkDirty() {
   if (!doc) return;
   if (!docDirty) { docDirty = true; docSaveState(); }
+  if (doc.where === "collab") docSyncSoon(300); // (the title and page setup are live too)
 }
 
 // ---------------------------------------------------------------- saving (only when you press Save)
@@ -1332,22 +1334,27 @@ function docSaveState(text, bad) {
   if (!doc) return;
   const b = $("docSave");
   b.classList.toggle("dirty", docDirty);
+  b.hidden = doc.where === "collab"; // Collab docs save as you write (everyone sees it live)
   b.title = docDirty ? "Save your changes (Ctrl+S)" : "Everything is saved";
   b.querySelector("span").textContent = docDirty ? "Save" : "Saved";
-  $("docSaved").textContent = text || (docDirty ? (doc.fresh ? "Not saved yet" : "Unsaved changes")
-    : doc.where === "local" ? "Saved on this computer" : "Saved for everyone");
+  $("docSaved").textContent = text || (doc.where === "collab" ? (docDirty ? "Saving..." : "Live: everyone sees changes right away")
+    : docDirty ? (doc.fresh ? "Not saved yet" : "Unsaved changes") : "Saved on this computer");
   $("docSaved").classList.toggle("bad", !!bad);
-  $("docSaved").classList.toggle("dirty", docDirty && !bad);
+  $("docSaved").classList.toggle("dirty", docDirty && !bad && doc.where !== "collab");
 }
 function docSetSaved(text, bad) { docSaveState(text, bad); }
 $("docSave").addEventListener("click", () => docSave());
 
 // ---------------------------------------------------------------- live together (collab)
 
+let docSyncAt = 0;
 function docSyncSoon(ms) {
   if (!doc || doc.where !== "collab") return;
+  // Keep a sooner one (typing non-stop mustn't keep pushing the sending back).
+  if (docSyncTimer && docSyncAt > Date.now() && docSyncAt <= Date.now() + ms) return;
   clearTimeout(docSyncTimer);
-  docSyncTimer = setTimeout(docSync, ms);
+  docSyncAt = Date.now() + ms;
+  docSyncTimer = setTimeout(() => { docSyncTimer = 0; docSync(); }, ms);
 }
 
 function docCaretBlock() {
@@ -1374,8 +1381,9 @@ function docGone(text) {
 async function docSyncOnce() {
   docSyncBusy = true;
   const d = doc;
-  const send = docSaveWanted; // your changes only go out when you press Save
+  const asked = docSaveWanted; // Save (Ctrl+S) or leaving; otherwise changes go out on their own
   docSaveWanted = false;
+  const send = asked || docPending.size > 0 || docDeleted.size > 0 || docTitleDirty || docSettingsDirty;
   const changes = [];
   if (send) for (const id of docPending) {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`);
@@ -1390,7 +1398,7 @@ async function docSyncOnce() {
   const settings = send && docSettingsDirty ? d.settings : null;
   if (send) {
     docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
-    docSaveState("Saving...");
+    if (asked) docSaveState("Saving...");
   }
   const caret = docCaretBlock();
   const typing = Date.now() - docLastTyped < 3000 && docTypedBlock && caret && caret.dataset.id === docTypedBlock;
@@ -1415,6 +1423,7 @@ async function docSyncOnce() {
     return false;
   }
   docFailed = 0;
+  if (send && changes.length) d.fresh = false; // something was written: it's a real document now
   docApplyRemote(res.blocks || []);
   d.rev = Math.max(d.rev, res.rev || 0);
   if (send && title !== null) d.title = title;
@@ -1439,7 +1448,7 @@ async function docSyncOnce() {
     docSyncSoon(150);
   } else {
     // About every second while someone else is in it, a bit slower when you're alone.
-    docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.length ? 900 : 2000);
+    docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.some((h) => h.typing) ? 500 : docHere.length ? 800 : 2000);
   }
   return true;
 }
@@ -1554,14 +1563,6 @@ function drawHere() {
   });
   setChildren(box, faces);
   box.hidden = !faces.length;
-  // The same faces at the end of the toolbar (it stays on screen while you scroll).
-  let mini = $("docToolFaces");
-  if (!mini) {
-    mini = Object.assign(document.createElement("span"), { id: "docToolFaces", className: "doc-tool-faces" });
-    $("docToolbar").append(mini);
-  }
-  setChildren(mini, docHere.map((h) => { const f = docAvatar(h, "tiny"); f.title = h.username + (h.typing ? " is writing" : " is here"); return f; }));
-  mini.hidden = !docHere.length;
   drawHereMarks();
 }
 
@@ -1575,7 +1576,6 @@ function drawHereMarks() {
     if (el.getAttribute("style") === "") el.removeAttribute("style");
   }
   const mine = docCaretBlock();
-  const iTyped = Date.now() - docLastTyped < 1500;
   for (const h of docHere) {
     if (!h.block) continue;
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(h.block)}"]`);
@@ -1583,8 +1583,9 @@ function drawHereMarks() {
     el.classList.add("doc-other");
     el.dataset.who = el.dataset.who ? el.dataset.who + ", " + h.username : h.username;
     el.style.setProperty("--who", docColor(h.username));
-    // Someone's writing here right now: it's theirs for a moment (unless you're writing in it too).
-    if (h.typing && !(mine === el && iTyped)) {
+    // Someone's writing here right now: it's theirs for a moment. Never the line your cursor is on
+    // (that would throw your cursor somewhere else; their words still come in live).
+    if (h.typing && mine !== el) {
       el.classList.add("doc-held");
       el.setAttribute("contenteditable", "false");
     }

@@ -2696,9 +2696,6 @@ body.doc-open .footer { display: none; }
   body.doc-printing .doc-text.script .sp-scene { break-after: avoid; }
 }
 @media print { body.doc-printing .doc-text.script { padding-left: .5in; } }
-.doc-tool-faces { display: flex; align-items: center; margin: 0 2px 0 8px; }
-.doc-tool-faces .doc-avatar { width: 24px; height: 24px; font-size: 11px; box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--who); }
-.doc-tool-faces .doc-avatar + .doc-avatar { margin-left: -4px; }
 
 /* ---- Docs: page colors, menus, page setup, zoom (1.36.0, round 2) */
 .doc-page[data-paper="cream"], .doc-thumb-page[data-paper="cream"] {
