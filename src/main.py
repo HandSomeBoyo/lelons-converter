@@ -633,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}
             elif action == "edit":
-                library.edit(data.get("id"), data.get("name"), data.get("category"))
+                library.edit(data.get("id"), data.get("name"), data.get("category"), data.get("genre"))
                 result = {"sounds": library.sounds()}
             elif action == "delete":
                 library.delete(data.get("id"))
@@ -664,7 +664,7 @@ class Handler(BaseHTTPRequestHandler):
                         trim = (start, min(end, item["seconds"] or end))
                 except (TypeError, ValueError):
                     pass
-                library.upload(data.get("id"), data.get("name"), data.get("category"), trim)
+                library.upload(data.get("id"), data.get("name"), data.get("category"), trim, data.get("genre"))
                 result = {}
             elif action == "forget":
                 library.forget(data.get("id"))

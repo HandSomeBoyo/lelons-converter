@@ -343,6 +343,7 @@
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
+      <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
         <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
         <div class="lib-tools">
@@ -739,6 +740,10 @@
         <span class="opt-label">Category</span>
         <div class="chips" id="sfxCategory"></div>
       </div>
+      <div class="opt-row genre-row">
+        <span class="opt-label">Genre</span>
+        <div class="chips" id="sfxGenreChips"></div>
+      </div>
 
     </div>
     <p class="sfx-error" id="sfxUploadError"></p>
@@ -986,6 +991,7 @@
     <h2 id="editSoundTitle">Edit sound</h2>
     <label class="lib-field edit-field"><span>Name</span><input id="editSoundName" maxlength="80" spellcheck="false"></label>
     <div class="edit-field"><span class="edit-label">Category</span><div class="chips" id="editSoundCats"></div></div>
+    <div class="edit-field genre-row"><span class="edit-label">Genre</span><div class="chips" id="editSoundGenres"></div></div>
     <p class="acct-note" id="editSoundNote"></p>
     <div class="dialog-actions">
       <span class="spacer"></span>

@@ -158,7 +158,7 @@ function findRow(r, i) {
       drawFind();
       closeFind();
       openSfxUpload();
-      pickUploadCategory(findSource === "memes" ? "memes" : "sfx");
+      pickUploadCategory("sfx", findSource === "memes" ? "Memes" : "");
       $("sfxName").dataset.auto = "1";
       useSfxFile(res.file);
     };

@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.5.0", items: [
+    "Genres in the Library! Pick Music, SFX or Ambience and a list of genres shows up on the left, like Action, Chill or Whooshes.",
+    "Put a sound in a genre with the pencil button, or pick the genre when you upload.",
+    "Memes and Other are gone: meme sounds are now in SFX under Memes, and the rest is in SFX.",
+    "A new, clearer glass look: see-through glass with bright edges, all over the app.",
+  ] },
   { version: "2.4.0", items: [
     "A new logo: a white V on black.",
     "The chat is a whole page now, like Discord. Open it with the new chat button at the top.",
