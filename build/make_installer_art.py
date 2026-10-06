@@ -22,9 +22,11 @@ def font(size, weight):
 
 
 def mark(draw, x, y, size):
-    draw.rounded_rectangle((x, y, x + size, y + size), radius=size * 0.22, fill=ACCENT)
-    s = size
-    draw.polygon([(x + s * 0.36, y + s * 0.27), (x + s * 0.36, y + s * 0.73), (x + s * 0.76, y + s * 0.5)], fill=INK)
+    # The app icon (assets/icon.svg): a black rounded square with a white V.
+    draw.rounded_rectangle((x, y, x + size, y + size), radius=size * 0.24, fill="#0b0b0c", outline="#3a3a3e", width=max(1, round(size / 64)))
+    k = size / 64
+    v = [(16, 18), (26, 18), (32, 33), (38, 18), (48, 18), (36.5, 46), (27.5, 46)]
+    draw.polygon([(x + a * k, y + b * k) for a, b in v], fill="#ffffff")
 
 
 def welcome():

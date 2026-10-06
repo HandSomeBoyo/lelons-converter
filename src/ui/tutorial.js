@@ -9,7 +9,7 @@ const TOUR = [
     text: "A quick tour of everything you can do. It only takes a minute.",
     say: "Hey, welcome to VaultHub! Let me show you around. It only takes a minute.",
     html: `<div class="t-center">
-      <div class="t-logo"><svg viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg><i></i><i></i></div>
+      <div class="t-logo"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg><i></i><i></i></div>
       <div class="t-words"><span>Paste.</span><span>Convert.</span><span>Done.</span></div>
     </div>`,
   },

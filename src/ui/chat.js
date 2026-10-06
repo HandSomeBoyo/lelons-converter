@@ -1,12 +1,15 @@
-// The live chat (a panel on the right) and "3 online" at the top right.
-// The chat with everyone, private chats, Library sounds and clips in messages, reactions and @mentions.
+// The chat (a whole page, Discord style: everyone, groups and private chats on the left) and "3 online" at the top right.
+// The chat with everyone, group chats, private chats, Library sounds and clips in messages, reactions and @mentions.
 // Uses $, api(), setDrag(), DRAG_HINT, ICONS, clock() from app.js, loadPref()/savePref() from theme.js,
 // and sfxUser(), avatarEl(), sfxLoggedOut(), openLogin(), closeMenu(), SFX_ICONS from sfx.js.
 
 const chatEls = new Map(); // message id (or "day ...") -> {el, sig}, see drawChat
 const REACTIONS = ["👍", "😂", "🔥", "❤️", "😮", "😢"];
 
-let chatWith = ""; // "" = the chat with everyone, else the username of a private chat
+let chatWith = ""; // "" = the chat with everyone, "g:<id>" = a group chat, else the username of a private chat
+let chatGroups = []; // your group chats, newest message first
+let chatGroup = null; // the group chat that's open: {id, name, pictureUrl, owner, members}
+const isGroupKey = (key) => !!key && key.startsWith("g:");
 let chatMessages = [];
 let chatLastId = 0; // the newest message we have, in this conversation
 let chatLoaded = false; // the first load of this conversation is done
@@ -70,6 +73,10 @@ function drawOnline() {
 
 function unreadIn(name) {
   if (name === "") return chatEveryoneLast > (chatSeen[""] || 0);
+  if (isGroupKey(name)) {
+    const g = chatGroups.find((x) => "g:" + x.id === name);
+    return !!g && !!g.last_id && !g.last_mine && g.last_id > (chatSeen[name.toLowerCase()] || 0);
+  }
   const p = chatPrivate.find((x) => x.username === name);
   return !!p && !p.last_mine && p.last_id > (chatSeen[name.toLowerCase()] || 0);
 }
@@ -84,9 +91,12 @@ function markSeen() {
 }
 
 function drawUnread() {
-  const count = (unreadIn("") ? 1 : 0) + chatPrivate.filter((p) => unreadIn(p.username)).length;
-  $("chatUnread").hidden = !count;
-  $("chatUnread").textContent = chatMention ? "@" : count > 9 ? "9+" : count;
+  const count = (unreadIn("") ? 1 : 0) + chatPrivate.filter((p) => unreadIn(p.username)).length
+    + chatGroups.filter((g) => unreadIn("g:" + g.id)).length;
+  for (const badge of [$("chatUnread"), $("chatBadge")]) {
+    badge.hidden = !count;
+    badge.textContent = chatMention ? "@" : count > 9 ? "9+" : count;
+  }
   if (chatIsOpen()) drawConvos();
 }
 
@@ -123,6 +133,8 @@ function openChat(withUser) {
   closeMenu();
   $("chatPanel").hidden = false;
   $("chatOpen").classList.add("open");
+  $("chatButton").classList.add("open");
+  document.body.classList.add("chat-page");
   if (withUser !== undefined && withUser !== chatWith) switchChat(withUser);
   drawChatUser();
   drawOnline();
@@ -136,6 +148,8 @@ function openChat(withUser) {
 function closeChat() {
   $("chatPanel").hidden = true;
   $("chatOpen").classList.remove("open");
+  $("chatButton").classList.remove("open");
+  document.body.classList.remove("chat-page");
   $("chatOpen").hidden = !onlineInfo;
   $("chatSuggest").hidden = true;
   stopChatAudio();
@@ -149,6 +163,7 @@ function switchChat(name) {
   chatSeenBy = [];
   drawTyping();
   chatWith = name || "";
+  chatGroup = null;
   chatMessages = [];
   chatLastId = 0;
   chatLoaded = false;
@@ -167,51 +182,132 @@ function drawChatUser() {
   $("chatConvos").hidden = !user;
   if (!user) {
     $("chatNote").textContent = "";
-    $("chatPrivateHead").hidden = true;
     $("chatAttach").hidden = true;
   } else {
     drawAttach();
   }
 }
 
-// "Everyone" and your private chats, across the top of the panel.
+// The list on the left: everyone, your groups and your private chats.
+const CHAT_ICONS = {
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>',
+  hash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9.5 4 8 20M16 4l-1.5 16M4.5 9h15M4 15h15"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><path d="M16 11.5a2.8 2.8 0 1 0 0-5.6M16.5 14c2.2.3 3.6 2 4 5"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+};
+
+function groupPic(g, cls = "") {
+  const el = avatarEl(g && g.pictureUrl, (g && g.name) || "?", "group-avatar " + cls);
+  return el;
+}
+
 let convosDrawn = "";
 function drawConvos() {
   const box = $("chatConvos");
-  const sig = JSON.stringify([chatWith, chatMention, chatPrivate.map((p) => [p.username, p.avatarUrl, unreadIn(p.username)]), unreadIn("")]);
-  if (sig === convosDrawn) return;
-  convosDrawn = sig;
-  const chip = (label, name, avatar) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "convo" + (name === chatWith ? " active" : "") + (unreadIn(name) && name !== chatWith ? " unread" : "");
-    if (avatar !== undefined) b.append(avatarEl(avatar, name));
-    b.append(document.createTextNode(label));
-    if (name === "" && chatMention && chatWith !== "") b.append(Object.assign(document.createElement("b"), { className: "at", textContent: "@" }));
-    b.addEventListener("click", () => { if (name !== chatWith) switchChat(name); $("chatInput").focus(); });
-    return b;
-  };
-  const list = [chip("Everyone", "")];
-  const names = new Set();
-  for (const p of chatPrivate) {
-    names.add(p.username);
-    list.push(chip(p.username, p.username, p.avatarUrl));
+  const sig = JSON.stringify([chatWith, chatMention, chatPrivate.map((p) => [p.username, p.avatarUrl, unreadIn(p.username)]),
+    chatGroups.map((g) => [g.id, g.name, g.pictureUrl, g.people, unreadIn("g:" + g.id)]), unreadIn("")]);
+  if (sig !== convosDrawn) {
+    convosDrawn = sig;
+    const row = (key, label, pic, sub) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chat-row" + (key === chatWith ? " active" : "") + (unreadIn(key) && key !== chatWith ? " unread" : "");
+      b.append(pic);
+      const text = document.createElement("span");
+      text.className = "chat-row-text";
+      text.append(Object.assign(document.createElement("b"), { textContent: label }));
+      if (sub) text.append(Object.assign(document.createElement("small"), { textContent: sub }));
+      b.append(text);
+      if (key === "" && chatMention && chatWith !== "") b.append(Object.assign(document.createElement("i"), { className: "at", textContent: "@" }));
+      b.addEventListener("click", () => { if (key !== chatWith) switchChat(key); $("chatInput").focus(); });
+      return b;
+    };
+    const section = (title, addTitle, onAdd) => {
+      const h = document.createElement("div");
+      h.className = "chat-sec";
+      h.append(Object.assign(document.createElement("span"), { textContent: title }));
+      if (onAdd) {
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "chat-sec-add";
+        add.title = addTitle;
+        add.innerHTML = CHAT_ICONS.plus;
+        add.addEventListener("click", onAdd);
+        h.append(add);
+      }
+      return h;
+    };
+    const hash = Object.assign(document.createElement("span"), { className: "avatar chat-hash", innerHTML: CHAT_ICONS.hash });
+    const list = [section("Channels"), row("", "everyone", hash)];
+    list.push(section("Groups", "Make a group", () => openGroupModal("create")));
+    for (const g of chatGroups) list.push(row("g:" + g.id, g.name, groupPic(g), `${g.people} ${g.people === 1 ? "person" : "people"}`));
+    if (isGroupKey(chatWith) && !chatGroups.some((g) => "g:" + g.id === chatWith) && chatGroup) list.push(row(chatWith, chatGroup.name, groupPic(chatGroup)));
+    if (!chatGroups.length) list.push(Object.assign(document.createElement("p"), { className: "chat-sec-empty", textContent: "Make a group with just the people you pick." }));
+    list.push(section("Private messages", "New private message", () => openGroupModal("dm")));
+    const names = new Set();
+    for (const p of chatPrivate) {
+      names.add(p.username);
+      list.push(row(p.username, p.username, avatarEl(p.avatarUrl, p.username)));
+    }
+    // A private chat you just started (no messages yet).
+    if (chatWith && !isGroupKey(chatWith) && !names.has(chatWith)) list.push(row(chatWith, chatWith, avatarEl("", chatWith)));
+    else if (!chatPrivate.length) list.push(Object.assign(document.createElement("p"), { className: "chat-sec-empty", textContent: "Talk to one person, just you two." }));
+    setChildren(box, list);
   }
-  // A private chat you just started (no messages yet).
-  if (chatWith && !names.has(chatWith)) list.push(chip(chatWith, chatWith, ""));
-  setChildren(box, list);
-  const head = $("chatPrivateHead");
-  head.hidden = !chatWith;
-  if (chatWith) {
-    head.replaceChildren(document.createTextNode("Private chat with "));
-    const who = document.createElement("button");
-    who.type = "button";
-    who.className = "link";
-    who.textContent = chatWith;
+  drawRoom();
+  $("chatPrivateHead").hidden = true;
+  $("chatInput").placeholder = isGroupKey(chatWith) ? `Message ${chatGroup ? chatGroup.name : "the group"}...`
+    : chatWith ? `Message ${chatWith}...` : "Message everyone... (@ to mention)";
+}
+
+// The top of the chat: what you're in, and the group's buttons.
+let roomDrawn = "";
+function drawRoom() {
+  const g = isGroupKey(chatWith) ? chatGroup || chatGroups.find((x) => "g:" + x.id === chatWith) : null;
+  const sig = JSON.stringify([chatWith, g && [g.name, g.pictureUrl, (g.members || []).map((m) => m.username), g.people]]);
+  if (sig === roomDrawn) return;
+  roomDrawn = sig;
+  const room = $("chatRoom");
+  const title = document.createElement("div");
+  title.className = "chat-room-text";
+  const h = document.createElement("h3");
+  const sub = document.createElement("small");
+  let pic;
+  if (isGroupKey(chatWith)) {
+    pic = groupPic(g || { name: "?" });
+    h.textContent = g ? g.name : "Group";
+    const members = (g && g.members) || [];
+    sub.textContent = members.length ? `${members.length} ${members.length === 1 ? "person" : "people"}: ${members.map((m) => m.username).join(", ")}`
+      : g ? `${g.people} people` : "";
+  } else if (chatWith) {
+    const p = chatPrivate.find((x) => x.username === chatWith);
+    pic = avatarEl(p ? p.avatarUrl : "", chatWith);
+    const who = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: chatWith, title: "See their profile" });
     who.addEventListener("click", () => openProfile(chatWith));
-    head.append(who, document.createTextNode(". Only you two can see it."));
+    h.append(who);
+    sub.textContent = "Private chat. Only you two can see it.";
+  } else {
+    pic = Object.assign(document.createElement("span"), { className: "avatar chat-hash", innerHTML: CHAT_ICONS.hash });
+    h.textContent = "everyone";
+    sub.textContent = "Everyone with an account can read and write here.";
   }
-  $("chatInput").placeholder = chatWith ? `Message ${chatWith}...` : "Say something... (@ to mention)";
+  title.append(h, sub);
+  room.replaceChildren(pic, title);
+  const tools = [];
+  if (isGroupKey(chatWith)) {
+    const tool = (icon, label, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "icon-button";
+      b.title = label;
+      b.innerHTML = icon;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    tools.push(tool(CHAT_ICONS.people, "Add people", () => openGroupModal("edit", true)));
+    tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture and people", () => openGroupModal("edit")));
+  }
+  $("chatRoomTools").replaceChildren(...tools);
 }
 
 // Checked every few seconds while the chat is open, less often while it's closed (for the unread number).
@@ -324,6 +420,11 @@ function sendTyping(stop = false) {
 
 function addChat(res) {
   if (!res.ok) {
+    if (isGroupKey(chatWith) && /group is gone/.test(res.error || "")) {
+      switchChat("");
+      if (chatIsOpen()) $("chatNote").textContent = res.error;
+      return;
+    }
     if (chatIsOpen()) $("chatNote").textContent = res.error;
     return;
   }
@@ -338,6 +439,15 @@ function addChat(res) {
           && (p.username !== chatWith || !chatIsOpen() || document.hidden)) ding = true;
     }
   }
+  const groupsBefore = new Map(chatGroups.map((g) => [g.id, g.last_id]));
+  chatGroups = res.groups || [];
+  if (groupsBefore.size) {
+    for (const g of chatGroups) {
+      if (!g.last_mine && g.last_id > (groupsBefore.get(g.id) || 0)
+          && ("g:" + g.id !== chatWith || !chatIsOpen() || document.hidden)) ding = true;
+    }
+  }
+  if (isGroupKey(chatWith) && res.group) chatGroup = res.group;
   chatEveryoneLast = res.everyoneLast || 0;
   if (res.names) chatNames = res.names;
 
@@ -479,11 +589,13 @@ function drawChat(force) {
   chatDrawn = sig;
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
   const me = sfxUser();
-  const canDeleteAll = me && !chatWith && (me.role === "owner" || me.role === "admin");
+  const canDeleteAll = me && chatWith === "" && (me.role === "owner" || me.role === "admin");
   if (!chatMessages.length) {
     const empty = document.createElement("p");
     empty.className = "chat-empty";
-    empty.textContent = chatLoaded ? (chatWith ? `No messages with ${chatWith} yet. Say hi!` : "No messages yet. Say hi!") : "Loading...";
+    empty.textContent = !chatLoaded ? "Loading..."
+      : isGroupKey(chatWith) ? `No messages in ${chatGroup ? chatGroup.name : "this group"} yet. Say hi!`
+      : chatWith ? `No messages with ${chatWith} yet. Say hi!` : "No messages yet. Say hi!";
     list.replaceChildren(empty);
     return;
   }
@@ -676,6 +788,7 @@ function knownNames() {
   const add = (n) => { if (n && !names.has(n.toLowerCase())) names.set(n.toLowerCase(), n); };
   ((onlineInfo && onlineInfo.people) || []).forEach((p) => add(p.username));
   chatPrivate.forEach((p) => add(p.username));
+  ((chatGroup && chatGroup.members) || []).forEach((p) => add(p.username));
   [...chatMessages].reverse().forEach((m) => add(m.username));
   chatNames.forEach(add);
   if (sfxUser()) names.delete(sfxUser().username.toLowerCase());
@@ -747,14 +860,172 @@ function chatAccountChanged() {
 }
 
 $("chatOpen").addEventListener("click", (e) => { e.stopPropagation(); chatIsOpen() ? closeChat() : openChat(); });
+$("chatButton").addEventListener("click", (e) => { e.stopPropagation(); chatIsOpen() ? closeChat() : openChat(); });
 $("chatClose").addEventListener("click", closeChat);
 $("chatLogin").addEventListener("click", (e) => { e.stopPropagation(); closeChat(); openLogin("login"); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && chatIsOpen() && $("profileModal").hidden) closeChat();
+  if (e.key === "Escape" && chatIsOpen() && $("profileModal").hidden && $("groupModal").hidden) closeChat();
 });
 // Back to the window: check right away.
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && sfxUser()) { markSeen(); pollChat(300); }
 });
+
+// ---- group chats: make one, change its name, picture and people, or leave it.
+// Also "New private message" (mode "dm"): pick one person.
+
+let groupMode = "create";
+const groupPicked = new Set();
+
+function openGroupModal(mode, focusAdd = false) {
+  if (!sfxUser()) return openLogin("login");
+  groupMode = mode;
+  groupPicked.clear();
+  const g = mode === "edit" ? chatGroup : null;
+  if (mode === "edit" && !g) return;
+  $("groupTitle").textContent = mode === "create" ? "New group" : mode === "dm" ? "New private message" : "Group settings";
+  $("groupTop").hidden = mode === "dm";
+  $("groupName").value = g ? g.name : "";
+  $("groupPicTools").hidden = mode !== "edit";
+  $("groupMembersLabel").hidden = $("groupMembers").hidden = mode !== "edit";
+  $("groupPickLabel").textContent = mode === "dm" ? "Who do you want to message?" : mode === "create" ? "Who's in it?" : "Add people";
+  $("groupLeave").hidden = mode !== "edit";
+  $("groupSave").hidden = mode === "dm";
+  $("groupSave").textContent = mode === "create" ? "Create group" : "Save";
+  $("groupSearch").value = "";
+  $("groupNote").textContent = mode === "create" ? "You can add a picture once the group is made." : "";
+  drawGroupModal();
+  $("groupModal").hidden = false;
+  (mode === "create" ? $("groupName") : $("groupSearch")).focus();
+  if (focusAdd) $("groupSearch").focus();
+}
+
+function closeGroupModal() { $("groupModal").hidden = true; }
+
+function drawGroupModal() {
+  const g = groupMode === "edit" ? chatGroup : null;
+  $("groupPic").replaceChildren(groupPic(g || { name: $("groupName").value.trim() || "?" }, "big"));
+  $("groupPic").disabled = groupMode !== "edit";
+  $("groupPicRemove").hidden = !(g && g.pictureUrl);
+  const me = sfxUser();
+  const isOwner = g && me && g.owner === me.username;
+  if (g) {
+    setChildren($("groupMembers"), (g.members || []).map((m) => {
+      const row = document.createElement("div");
+      row.className = "group-member";
+      row.append(avatarEl(m.avatarUrl, m.username), Object.assign(document.createElement("span"), { textContent: m.username }));
+      if (m.username === g.owner) row.append(Object.assign(document.createElement("small"), { textContent: "Made the group" }));
+      if (isOwner && m.username !== me.username) {
+        const x = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Remove" });
+        x.addEventListener("click", () => groupAction({ what: "remove", usernames: [m.username] }));
+        row.append(x);
+      }
+      return row;
+    }));
+  }
+  const inIt = new Set(((g && g.members) || []).map((m) => m.username.toLowerCase()));
+  const typed = $("groupSearch").value.trim().toLowerCase();
+  const names = chatNames.filter((n) => (!me || n.toLowerCase() !== me.username.toLowerCase()) && !inIt.has(n.toLowerCase())
+    && (!typed || n.toLowerCase().includes(typed)));
+  const known = new Map();
+  for (const p of [...((onlineInfo && onlineInfo.people) || []), ...chatPrivate]) known.set(p.username.toLowerCase(), p.avatarUrl);
+  const rows = names.slice(0, 60).map((n) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "group-person" + (groupPicked.has(n) ? " on" : "");
+    b.append(avatarEl(known.get(n.toLowerCase()) || "", n), Object.assign(document.createElement("span"), { textContent: n }));
+    if (groupMode !== "dm") b.append(Object.assign(document.createElement("i"), { className: "group-check" }));
+    b.addEventListener("click", () => {
+      if (groupMode === "dm") { closeGroupModal(); openChat(n); return; }
+      groupPicked.has(n) ? groupPicked.delete(n) : groupPicked.add(n);
+      drawGroupModal();
+    });
+    return b;
+  });
+  if (!rows.length) rows.push(Object.assign(document.createElement("p"), { className: "group-empty", textContent: typed ? "Nobody with that name." : "Everyone is already in it." }));
+  setChildren($("groupPick"), rows);
+  if (groupMode === "create") $("groupSave").textContent = groupPicked.size ? `Create group (${groupPicked.size + 1} people)` : "Create group";
+  if (groupMode === "edit") $("groupSave").textContent = groupPicked.size ? `Save and add ${groupPicked.size}` : "Save";
+}
+
+async function groupAction(data) {
+  const res = await api("/api/sfx-chat-group", { group: chatGroup ? chatGroup.id : null, ...data })
+    .catch(() => ({ ok: false, error: "That didn't work. Check your internet connection." }));
+  if (sfxLoggedOut(res)) { closeGroupModal(); return null; }
+  if (!res.ok) { $("groupNote").textContent = res.error; return null; }
+  if (res.group && chatGroup && res.group.id === chatGroup.id) {
+    chatGroup = { ...chatGroup, ...res.group, members: (res.group.members || []).map((m) => ({ ...m, avatarUrl: m.avatarUrl || "" })) };
+  }
+  pollChat(0);
+  drawGroupModal();
+  return res;
+}
+
+$("groupSave").addEventListener("click", async () => {
+  const name = $("groupName").value.trim();
+  if (!name) { $("groupNote").textContent = "Give the group a name."; return $("groupName").focus(); }
+  $("groupSave").disabled = true;
+  try {
+    if (groupMode === "create") {
+      const res = await groupAction({ what: "create", name, usernames: [...groupPicked], group: null });
+      if (!res) return;
+      closeGroupModal();
+      switchChat("g:" + res.id);
+      openChat();
+      return;
+    }
+    if (name !== chatGroup.name && !(await groupAction({ what: "rename", name }))) return;
+    if (groupPicked.size && !(await groupAction({ what: "add", usernames: [...groupPicked] }))) return;
+    closeGroupModal();
+  } finally {
+    $("groupSave").disabled = false;
+  }
+});
+
+async function groupSetPicture(promise) {
+  $("groupNote").textContent = "Saving the picture...";
+  const res = await promise.catch(() => ({ ok: false, error: "Couldn't save the picture." }));
+  if (sfxLoggedOut(res)) return closeGroupModal();
+  if (!res.ok) { $("groupNote").textContent = res.error; return; }
+  $("groupNote").textContent = "";
+  if (res.group && chatGroup) chatGroup = { ...chatGroup, ...res.group };
+  roomDrawn = convosDrawn = "";
+  drawGroupModal();
+  pollChat(0);
+}
+const groupPickPicture = async () => {
+  if (groupMode !== "edit" || !chatGroup) return;
+  const res = await api("/api/sfx-group-picture-pick", { group: chatGroup.id }).catch(() => ({ ok: false, fallback: true }));
+  if (res.fallback) return $("groupPicInput").click(); // not on Windows: the browser's own picker
+  if (res.ok && !res.group) return; // picked nothing
+  groupSetPicture(Promise.resolve(res));
+};
+$("groupPic").addEventListener("click", groupPickPicture);
+$("groupPicChange").addEventListener("click", groupPickPicture);
+$("groupPicInput").addEventListener("change", () => {
+  const file = $("groupPicInput").files[0];
+  $("groupPicInput").value = "";
+  if (file && chatGroup) groupSetPicture(fetch("/api/sfx-group-picture-upload",
+    { method: "POST", body: file, headers: { "X-Group": chatGroup.id } }).then((r) => r.json()));
+});
+$("groupPicRemove").addEventListener("click", () => groupSetPicture(api("/api/sfx-group-picture-remove", { group: chatGroup.id })));
+$("groupLeave").addEventListener("click", async () => {
+  if (!chatGroup || !confirm(`Leave "${chatGroup.name}"? You won't see its messages any more.`)) return;
+  const res = await groupAction({ what: "leave" });
+  if (!res) return;
+  closeGroupModal();
+  switchChat("");
+});
+$("groupSearch").addEventListener("input", drawGroupModal);
+$("groupSearch").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const first = $("groupPick").querySelector(".group-person");
+  if (first) { e.preventDefault(); first.click(); }
+});
+$("groupName").addEventListener("input", () => { if (groupMode === "create") drawGroupModal(); });
+$("groupName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("groupSave").click(); } });
+$("groupCancel").addEventListener("click", closeGroupModal);
+$("groupModal").addEventListener("click", (e) => { if (e.target === $("groupModal")) closeGroupModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("groupModal").hidden) { e.stopPropagation(); closeGroupModal(); } });
 
 pollChat(1500);

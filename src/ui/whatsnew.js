@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.4.0", items: [
+    "A new logo: a white V on black.",
+    "The chat is a whole page now, like Discord. Open it with the new chat button at the top.",
+    "On the left you'll find the everyone chat, your groups and your private messages.",
+    "Make your own groups with the + next to Groups, and only the people you pick can see them. Add more people later, rename the group or leave it from the buttons at the top.",
+    "Give a group its own picture: open Group settings and click the picture.",
+    "Start a private chat with anyone using the + next to Private messages.",
+  ] },
   { version: "2.3.0", items: [
     "The app has a new name: VaultHub! Your settings, login, docs and history all stay.",
     "Drag a page onto another page in Docs to put it under that page. Drag near the top or bottom edge to move it above or below instead.",

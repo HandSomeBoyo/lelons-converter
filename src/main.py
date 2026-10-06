@@ -597,6 +597,25 @@ class Handler(BaseHTTPRequestHandler):
                         raise sfx.Error("Make the clip first.")
                 library.chat_send(data.get("message"), data.get("with"), data.get("sound"), clip)
                 result = library.chat(data.get("after"), data.get("with"))
+            elif action == "chat-group":
+                result = library.chat_group(data.get("what"), data.get("group"), data.get("name"), data.get("usernames"))
+            elif action == "group-picture-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a picture for the group", [
+                        ("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp"), ("All files", "*.*")])
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if not paths:
+                    return self.send_json({"ok": True, "group": None})
+                if os.path.getsize(paths[0]) > 30 * 1024 * 1024:
+                    raise sfx.Error("That picture is too big.")
+                with open(paths[0], "rb") as f:
+                    result = library.set_group_picture(data.get("group"), f.read())
+            elif action == "group-picture-remove":
+                result = library.chat_group("picture", data.get("group"))
             elif action == "chat-typing":
                 library.chat_typing(data.get("with"), data.get("stop"))
                 result = {}
@@ -765,6 +784,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/sfx-group-picture-upload":  # the body is the group chat's new picture
+            if length > 30 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            group = self.headers.get("X-Group") or ""
+            try:
+                return self.send_json({"ok": True, **sfx.library.set_group_picture(group, self.rfile.read(length))})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/sfx-picture":  # the body is the new profile picture
             if length > 30 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})
