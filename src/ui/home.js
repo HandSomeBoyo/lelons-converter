@@ -245,7 +245,7 @@ function activityRow(item) {
   if (item.kind === "upload") {
     face = avatarEl(item.avatarUrl, item.username);
     line.append(b(item.username || "Someone"), " uploaded ", b(item.name));
-    meta.textContent = `${CAT_NAMES[item.category] || "Other"} · ${clock(item.seconds, false)} · ${sfxAgo(item.at)}`;
+    meta.textContent = `${CAT_NAMES[item.category] || "SFX"} · ${clock(item.seconds, false)} · ${sfxAgo(item.at)}`;
     setDrag(row, { kind: "sound", url: item.url, name: item.name });
     row.title = DRAG_HINT;
   } else if (item.kind === "joined") {

@@ -28,7 +28,19 @@ import version
 import waveform
 
 BUCKET = "lelons-sounds"
-CATEGORIES = {"sfx": "SFX", "music": "Music", "memes": "Memes", "ambience": "Ambience", "other": "Other"}
+CATEGORIES = {"sfx": "SFX", "music": "Music", "ambience": "Ambience"}  # (Memes and Other became SFX in 2.5.0)
+# The genres you can pick inside each category (the Library's left side, like Artlist).
+GENRES = {
+    "music": ["Action", "Cinematic", "Epic", "Horror", "Chill", "Happy", "Sad", "Hip Hop", "Electronic"],
+    "sfx": ["Whooshes", "Hits & Impacts", "Explosions", "Clicks & UI", "Footsteps", "Horror", "Funny", "Memes"],
+    "ambience": ["Nature", "Rain & Weather", "City", "Indoor", "Creepy", "Sci-fi"],
+}
+
+
+def _genre(category, genre):
+    """The genre if it belongs to the category, else "" (no genre)."""
+    genre = str(genre or "").strip()
+    return genre if genre in GENRES.get(category, []) else ""
 MAX_BYTES = 10 * 1024 * 1024  # the storage refuses bigger files
 FOLDER = os.path.join(waveform.FOLDER, "sfx")  # deleted when the app closes
 PEAKS_FILE = os.path.join(settings.DATA_DIR, "sfx-waveforms.json")
@@ -254,7 +266,7 @@ class Library:
 
     def account(self):
         """Who's logged in (asks Supabase), or None."""
-        base = {"configured": configured(), "categories": CATEGORIES, "roles": ROLES}
+        base = {"configured": configured(), "categories": CATEGORIES, "genres": GENRES, "roles": ROLES}
         if not configured() or not settings.load().get("library_token"):
             return {**base, "user": None}
         try:
@@ -495,12 +507,12 @@ class Library:
             "channels": result.get("channels"),
             "loggedIn": bool(result.get("logged_in")),
             "isOwner": bool(result.get("is_owner")),
-            "sounds": [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+            "sounds": [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "SFX"),
                         "uploaderAvatar": pictured(row.get("uploader_avatar"))}
                        for row in result.get("sounds") or []],
             "chat": [{**m, "avatarUrl": pictured(m.get("avatar"))} for m in result.get("chat") or []],
             "activity": [{**item, "avatarUrl": pictured(item.get("avatar")),
-                          **({"url": public_url(item["path"]), "categoryName": CATEGORIES.get(item.get("category"), "Other")}
+                          **({"url": public_url(item["path"]), "categoryName": CATEGORIES.get(item.get("category"), "SFX")}
                              if item.get("kind") == "upload" and item.get("path") else {})}
                          for item in result.get("activity") or []],
         }
@@ -604,7 +616,7 @@ class Library:
         rows = _rpc("lelons_list", token=self._token()) or []
         with waveforms.lock:
             known = waveforms._load()
-            sounds = [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "Other"),
+            sounds = [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "SFX"),
                        "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
                        "peaks": known.get(row["path"])} for row in rows]
         song_check.want(sounds, self._token)
@@ -613,13 +625,14 @@ class Library:
     def songs_checking(self):
         return song_check.waiting_count()
 
-    def edit(self, sound_id, name, category):
+    def edit(self, sound_id, name, category, genre=""):
         name = _clean_name(name)
         if not name:
             raise Error("Give the sound a name.")
         if category not in CATEGORIES:
             raise Error("Pick a category.")
-        _rpc("lelons_edit_sound", token=self._token(), sound_id=str(sound_id), sound_name=name, sound_category=category)
+        _rpc("lelons_edit_sound", token=self._token(), sound_id=str(sound_id), sound_name=name, sound_category=category,
+             sound_genre=_genre(category, genre))
 
     def delete(self, sound_id):
         self._remove_file(_rpc("lelons_delete", token=self._token(), sound_id=str(sound_id)))
@@ -758,7 +771,7 @@ class Library:
         with self.lock:
             return any(i["status"] == "uploading" for i in self.uploads.values())
 
-    def upload(self, upload_id, name, category, trim=None):
+    def upload(self, upload_id, name, category, trim=None, genre=""):
         name = _clean_name(name)
         if not name:
             raise Error("Give the sound a name.")
@@ -784,7 +797,7 @@ class Library:
             if item["status"] == "uploading":
                 return
             item.update(status="uploading", message="Getting it ready...", progress=0, name=name)
-        threading.Thread(target=self._upload, args=(item, token, category, trim), daemon=True).start()
+        threading.Thread(target=self._upload, args=(item, token, category, trim, _genre(category, genre)), daemon=True).start()
 
     @staticmethod
     def sound_hash(item, trim):
@@ -799,7 +812,7 @@ class Library:
         with self.lock:
             item.update(changes)
 
-    def _upload(self, item, token, category, trim):
+    def _upload(self, item, token, category, trim, genre=""):
         seconds = (trim[1] - trim[0]) if trim else item["seconds"]
         # As good as fits in 10 MB (most sounds are short, so 192 kbps).
         kbps = min(192, int(MAX_BYTES * 0.95 * 8 / max(seconds, 1) / 1000))
@@ -819,7 +832,8 @@ class Library:
                 path = self._put_file("sound", f.read(), "audio/mpeg")
             try:
                 _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
-                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size, sound_hash=self.sound_hash(item, trim))
+                     file=path, sound_seconds=round(seconds, 2), sound_bytes=size, sound_hash=self.sound_hash(item, trim),
+                     sound_genre=genre or None)
             except Exception:
                 self._remove_file(path)  # uploaded, but it didn't make it into the list: nothing uses it
                 raise

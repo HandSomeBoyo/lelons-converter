@@ -91,7 +91,7 @@ function drawProfileSounds() {
     const title = document.createElement("b");
     title.textContent = s.name;
     const sub = document.createElement("span");
-    sub.textContent = `${CAT_NAMES[s.category] || "Other"} · ${clock(s.seconds, false)} · ${sfxAgo(s.created_at)}`;
+    sub.textContent = `${CAT_NAMES[s.category] || "SFX"} · ${clock(s.seconds, false)} · ${sfxAgo(s.created_at)}`;
     info.append(title, sub);
     row.append(play, info);
     return row;

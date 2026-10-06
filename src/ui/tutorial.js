@@ -60,7 +60,7 @@ const TOUR = [
     text: "The Library holds everyone's sounds. Play, download, favorite, or fix one with the pencil.",
     say: "The Library has sounds from the whole crew. Play them, download them, and star your favorites. Need something new? Try Find sounds.",
     html: `<div class="t-lib">
-      ${[["Vine boom", "Memes", "Bob"], ["Chill beat", "Music", "Lelon"], ["Door slam", "SFX", "Kim"]].map(([n, c, u], i) => `
+      ${[["Vine boom", "SFX · Memes", "Bob"], ["Chill beat", "Music · Chill", "Lelon"], ["Door slam", "SFX", "Kim"]].map(([n, c, u], i) => `
       <div class="t-row" style="--i:${i}"><span class="t-play${i === 0 ? " on" : ""}"></span>
         <div class="t-row-text"><b>${n}</b><small><em>${c}</em> · ${u}</small></div>
         <div class="t-mini-wave">${"<i></i>".repeat(18)}</div>
