@@ -1899,3 +1899,69 @@ body.has-player .chat-panel { bottom: 72px; }
 .song-flag span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes songFlagIn { from { opacity: 0; transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .song-flag { animation: none; } }
+
+/* ---- 1.33.0: the tabs as a floating bar of liquid glass (like Artlist), with icons */
+.tabs {
+  --glass: rgba(255, 255, 255, .055);
+  --glass-edge: rgba(255, 255, 255, .11);
+  --glass-shine: rgba(255, 255, 255, .16);
+  --lens-top: rgba(255, 255, 255, .24);
+  --lens-bottom: rgba(255, 255, 255, .07);
+  --lens-edge: rgba(255, 255, 255, .22);
+  position: sticky; top: 12px; z-index: 40;
+  align-self: center; display: flex; gap: 2px; width: max-content; max-width: 100%;
+  margin: -4px auto 30px; padding: 5px; border: 0; border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .09), var(--glass) 55%, rgba(255, 255, 255, .03)),
+              color-mix(in srgb, var(--panel) 72%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), inset 0 1px 0 var(--glass-shine),
+              0 12px 34px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .25);
+}
+.tabs button {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 17px; margin: 0; border: 0; border-radius: 999px;
+  font: 600 14.5px var(--head); letter-spacing: -.005em; white-space: nowrap;
+  color: color-mix(in srgb, var(--text) 78%, transparent);
+  transition: color .3s var(--ease), background-color .3s var(--ease), transform .35s var(--spring);
+}
+.tabs button svg { width: 17px; height: 17px; flex: none; opacity: .85; transition: color .3s var(--ease), opacity .3s; }
+.tabs button:hover { color: var(--text); background: rgba(255, 255, 255, .05); }
+.tabs button:active { transform: scale(.95); transition-duration: .12s; }
+.tabs button.active { color: var(--text); background: transparent; border-bottom-color: transparent; }
+.tabs button.active svg { color: var(--accent); opacity: 1; }
+.tabs button:focus-visible { outline: 2px solid rgba(var(--accent-rgb), .7); outline-offset: 1px; }
+
+/* the glass "lens" that slides under the open tab */
+.tabs .tab-line {
+  top: 5px; bottom: 5px; height: auto; border-radius: 999px; z-index: 0;
+  background: linear-gradient(180deg, var(--lens-top), var(--lens-bottom));
+  box-shadow: inset 0 0 0 1px var(--lens-edge), inset 0 1px 0 rgba(255, 255, 255, .38),
+              inset 0 -6px 14px rgba(255, 255, 255, .05), 0 6px 16px rgba(0, 0, 0, .35);
+}
+.tabs .tab-line::after { /* the shine across the top, like light on glass */
+  content: ""; position: absolute; inset: 1px 6% auto; height: 50%; border-radius: 999px 999px 40% 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .13), transparent);
+  pointer-events: none;
+}
+.tabs .tab-line.ready { transition: transform .55s var(--ease), width .55s var(--ease), opacity .2s; }
+.tabs .tab-line.moving { animation: lens-stretch .55s var(--ease); }
+@keyframes lens-stretch { 35% { scale: 1.06 .9; } 70% { scale: .99 1.03; } }
+
+:root[data-theme="light"] .tabs {
+  --glass: rgba(255, 255, 255, .5); --glass-edge: rgba(0, 0, 0, .08); --glass-shine: rgba(255, 255, 255, .9);
+  --lens-top: rgba(255, 255, 255, .98); --lens-bottom: rgba(255, 255, 255, .7); --lens-edge: rgba(0, 0, 0, .07);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), inset 0 1px 0 var(--glass-shine), 0 10px 28px rgba(40, 30, 10, .12);
+}
+:root[data-theme="light"] .tabs button:hover { background: rgba(0, 0, 0, .04); }
+:root[data-theme="light"] .tabs .tab-line { box-shadow: inset 0 0 0 1px var(--lens-edge), 0 4px 12px rgba(40, 30, 10, .14); }
+:root[data-theme="light"] .tabs .tab-line::after { display: none; }
+
+/* smaller windows: a bit tighter, then icons only (the name shows when you point at it) */
+@media (max-width: 1060px) { .tabs button { padding: 9px 13px; gap: 7px; font-size: 14px; } }
+@media (max-width: 860px) {
+  .tabs button { padding: 9px 12px; }
+  .tabs button span { display: none; }
+  .tabs button svg { width: 19px; height: 19px; }
+}
+@media (prefers-reduced-motion: reduce) { .tabs .tab-line.moving { animation: none; } }
