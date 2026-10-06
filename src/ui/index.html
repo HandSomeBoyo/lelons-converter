@@ -522,6 +522,16 @@
             <div class="doc-text" id="docText" contenteditable="true" spellcheck="true"></div>
           </div>
         </div>
+        <aside class="doc-guide" id="docGuide" hidden>
+          <div class="doc-guide-head">
+            <h4 id="docGuideTitle"></h4>
+            <button type="button" class="icon-button" id="docGuideClose" title="Hide the guide (View, Writing guide brings it back)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+          </div>
+          <p class="doc-guide-intro" id="docGuideIntro"></p>
+          <ol class="doc-guide-steps" id="docGuideSteps"></ol>
+          <div class="doc-guide-tables" id="docGuideTables"></div>
+          <p class="doc-guide-tip" id="docGuideTip"></p>
+        </aside>
       </div>
       <div class="doc-status">
         <button type="button" class="doc-count" id="docCount" title="Word count"></button>
@@ -997,6 +1007,18 @@
       <button type="button" class="link" id="docSetupReset">Back to normal</button>
       <span class="spacer"></span>
       <button type="button" class="small-button" id="docSetupDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docTypeModal" hidden>
+  <div class="dialog doc-type-dialog" role="dialog" aria-labelledby="docTypeTitle">
+    <h2 id="docTypeTitle">What do you want to write?</h2>
+    <p class="sub" id="docTypeWhere"></p>
+    <div class="doc-types" id="docTypes"></div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docTypeCancel">Cancel</button>
     </div>
   </div>
 </div>

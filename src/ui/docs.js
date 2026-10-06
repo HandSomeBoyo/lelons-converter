@@ -212,89 +212,122 @@ function blockHtml(el) {
   return copy.outerHTML;
 }
 
-// ---------------------------------------------------------------- templates
+// ---------------------------------------------------------------- kinds of documents
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const p = (text, cls) => `<p${cls ? ` class="${cls}"` : ""}>${text ? esc(text) : "<br>"}</p>`;
 
-const DOC_TEMPLATES = [
-  { key: "blank", kind: "doc", name: "Blank document", note: "An empty page", title: "Untitled document", blocks: () => [p("")] },
-  { key: "script", kind: "script", name: "Movie script", note: "Formatted like a real screenplay", title: "Untitled script",
-    blocks: () => [
-      p("UNTITLED", "sp-title"), p("Written by", "sp-centered"), p(sfxUser() ? sfxUser().username : "Your name", "sp-centered"),
-      p("Your email or phone", "sp-contact"), '<hr class="page-break">',
-      p("FADE IN:", "sp-transition"),
-      p("INT. COFFEE SHOP - DAY", "sp-scene"),
-      p("Rain runs down the windows. MAYA (20s, paint on her sleeves) stares at a blank notebook.", "sp-action"),
-      p("SAM", "sp-character"), p("still nothing?", "sp-paren"), p("I've written one word. And I don't even like it.", "sp-dialogue"),
-      p("MAYA", "sp-character"), p("Then cross it out and write a better one.", "sp-dialogue"),
-      p("She smiles, and starts to write.", "sp-action"),
-      p("CUT TO:", "sp-transition"),
-    ] },
-  { key: "outline", kind: "doc", name: "Story outline", note: "Logline, characters and acts", title: "Story outline",
-    blocks: () => [
-      '<h1 class="doc-title">Story outline</h1>', p("A short film by " + (sfxUser() ? sfxUser().username : "you"), "doc-subtitle"),
-      "<h2>Logline</h2>", p("When [someone] wants [something], they have to [do something hard], or else [what's at stake]."),
-      "<h2>Characters</h2>", "<ul><li><b>Name</b>: who they are and what they want</li><li><b>Name</b>: who they are and what they want</li></ul>",
-      "<h2>Act 1: The setup</h2>", p("Where we are, who we follow, and what kicks the story off."),
-      "<h2>Act 2: The trouble</h2>", p("What gets in the way, and how it gets worse."),
-      "<h2>Act 3: The end</h2>", p("The big moment, and how things are different after."),
-      "<h2>To do</h2>", '<ul class="checklist"><li>Write the first draft</li><li>Find locations</li><li>Ask the crew</li></ul>',
-    ] },
-  { key: "shots", kind: "doc", name: "Shot list", note: "Plan every shot for the shoot day", title: "Shot list",
-    blocks: () => [
-      '<h1 class="doc-title">Shot list</h1>', p("Shoot day: ", "doc-subtitle"),
-      '<table class="doc-table"><tbody><tr><th>Shot</th><th>Scene</th><th>What we see</th><th>Size</th><th>Camera</th><th>Done</th></tr>' +
-      [1, 2, 3, 4, 5].map((n) => `<tr><td>${n}</td><td><br></td><td><br></td><td>${["Wide", "Medium", "Close-up", "Insert", "Wide"][n - 1]}</td><td>${["Tripod", "Handheld", "Tripod", "Tripod", "Drone"][n - 1]}</td><td><br></td></tr>`).join("") +
-      "</tbody></table>",
-      p(""),
-    ] },
-  { key: "youtube", kind: "doc", name: "Video script", note: "For YouTube: hook, parts and ending", title: "Video script",
-    blocks: () => [
-      '<h1 class="doc-title">Video title</h1>', p("Length: about 8 minutes · Upload: ", "doc-subtitle"),
-      "<h2>Hook (first 15 seconds)</h2>", p("Say the most interesting thing first, so people keep watching."),
-      "<h2>Intro</h2>", p("Who you are and what this video gives them."),
-      '<table class="doc-table"><tbody><tr><th>Part</th><th>What I say</th><th>On screen</th></tr>' +
-      ["Part 1", "Part 2", "Part 3"].map((t) => `<tr><td><b>${t}</b></td><td><br></td><td><br></td></tr>`).join("") + "</tbody></table>",
-      "<h2>Ending</h2>", p("Sum it up, ask them to subscribe, and point to the next video."),
-      "<h2>Before uploading</h2>", '<ul class="checklist"><li>Thumbnail</li><li>Title and description</li><li>Music and sound effects</li><li>Captions</li></ul>',
-    ] },
-  { key: "treatment", kind: "doc", name: "Treatment", note: "The whole film told like a story", title: "Treatment",
-    blocks: () => [
-      '<h1 class="doc-title">Title</h1>', p("A treatment by " + (sfxUser() ? sfxUser().username : "you"), "doc-subtitle"),
-      "<h2>Logline</h2>", p("One or two sentences that sell the film."),
-      "<h2>Synopsis</h2>", p("Tell the whole story in the present tense, from start to end, like you're telling a friend."),
-      "<h2>Characters</h2>", "<ul><li><b>Name</b>: age, who they are, what they want, what's in their way</li><li><b>Name</b>: </li></ul>",
-      "<h2>Look and feel</h2>", p("Colors, light, camera, music. Films this feels like."),
-      "<h2>Why this film</h2>", p("Why you want to make it, and why now."),
-    ] },
-  { key: "storyboard", kind: "doc", name: "Storyboard", note: "A picture and notes for every shot", title: "Storyboard",
-    blocks: () => [
-      '<h1 class="doc-title">Storyboard</h1>', p("Scene: ", "doc-subtitle"),
-      '<table class="doc-table"><tbody><tr><th>Shot</th><th>Picture</th><th>What happens</th><th>Sound</th><th>Camera</th></tr>' +
-      [1, 2, 3, 4].map((n) => `<tr><td>${n}</td><td><br><br><br><br></td><td><br></td><td><br></td><td><br></td></tr>`).join("") + "</tbody></table>",
-      p("Tip: click in a Picture box and add a drawing or a photo with Insert, Picture."),
-    ] },
-  { key: "callsheet", kind: "doc", name: "Call sheet", note: "Who, where and when for a shoot day", title: "Call sheet",
-    blocks: () => [
-      '<h1 class="doc-title">Call sheet</h1>', p("Production name · Day 1 of 1", "doc-subtitle"),
-      '<table class="doc-table"><tbody><tr><th>Date</th><th>Crew call</th><th>Location</th><th>Weather</th></tr><tr><td><br></td><td><br></td><td><br></td><td><br></td></tr></tbody></table>',
-      "<h2>Schedule</h2>",
-      '<table class="doc-table"><tbody><tr><th>Time</th><th>Scene</th><th>What</th><th>Who</th></tr>' +
-      ["08:00", "09:00", "12:30", "13:30"].map((t, i) => `<tr><td>${t}</td><td><br></td><td>${["Set up", "Scene 1", "Lunch", "Scene 2"][i]}</td><td><br></td></tr>`).join("") + "</tbody></table>",
-      "<h2>Cast and crew</h2>",
-      '<table class="doc-table"><tbody><tr><th>Name</th><th>Role</th><th>Call time</th><th>Phone</th></tr>' +
-      [1, 2, 3].map(() => "<tr><td><br></td><td><br></td><td><br></td><td><br></td></tr>").join("") + "</tbody></table>",
-      "<h2>Notes</h2>", p("Parking, food, things to bring."),
-    ] },
+// Every new document starts empty. The kind you pick sets up the page and shows a guide on how to write it
+// (doc.settings.type remembers the kind, so the guide is there again next time).
+const DOC_TYPES = [
+  { key: "blank", kind: "doc", icon: "doc", name: "Blank document", note: "An empty page, nothing else", title: "Untitled document" },
+  { key: "script", kind: "script", icon: "script", name: "Movie script", note: "Formatted like a real screenplay", title: "Untitled script",
+    hint: "Start with a scene heading, like INT. KITCHEN - NIGHT",
+    guide: {
+      title: "How to write a movie script",
+      intro: "A script is made of blocks. You pick what kind of block you're writing and the app puts it in the right place on the page.",
+      steps: [
+        ["Scene heading", "Where and when. Start with INT. (inside) or EXT. (outside), then the place, then DAY or NIGHT. Like INT. KITCHEN - NIGHT."],
+        ["Action", "What we see and hear, written like it's happening now. Keep it short. Write a name in CAPITALS the first time we meet someone."],
+        ["Character", "The name of who's talking, above their lines. Press Tab on an empty action line to get one."],
+        ["Dialogue", "What they say. Press Enter after the name and just type."],
+        ["Parenthetical", "A tiny note on how they say it, like (whispering). Type ( inside dialogue."],
+        ["Transition", "How we go to the next scene, like CUT TO: or FADE OUT. Only use one when it matters."],
+      ],
+      tip: "Enter takes you to the usual next block, Tab changes the kind of block, and Ctrl+1 to Ctrl+8 picks one straight away. One page is about one minute of film.",
+    } },
+  { key: "outline", kind: "doc", icon: "outline", name: "Story outline", note: "Plan your story before you write it", title: "Story outline",
+    hint: "Start with your logline: the whole story in one sentence",
+    guide: {
+      title: "How to outline a story",
+      intro: "An outline is the plan for your story. Short notes are fine, it's only for you.",
+      steps: [
+        ["Logline", "The whole story in one sentence: when someone wants something, they have to do something hard, or else something bad happens."],
+        ["Characters", "Your main people. For each one: who they are, what they want, and what's in their way."],
+        ["Act 1: the setup", "Where we are, who we follow, and the thing that kicks the story off."],
+        ["Act 2: the trouble", "What gets in the way, and how it gets worse."],
+        ["Act 3: the end", "The big moment, and how things are different after."],
+      ],
+      tip: "Make each part a heading with the text style menu in the toolbar. Headings show up on the left, so you can jump around.",
+    } },
+  { key: "shots", kind: "doc", icon: "table", name: "Shot list", note: "Plan every shot for the shoot day", title: "Shot list",
+    hint: "Add the table from the guide, then write one shot per row",
+    guide: {
+      title: "How to make a shot list",
+      intro: "A shot list is every shot you need to film, so nothing gets forgotten on the day.",
+      steps: [
+        ["Shot", "Give every shot a number: 1, 2, 3..."],
+        ["Scene", "Which scene of your script it's for."],
+        ["What we see", "In a few words, like \"Maya looks at the notebook\"."],
+        ["Size", "How close the camera is: wide, medium, close-up or insert (a detail, like hands)."],
+        ["Camera", "How you film it: tripod, handheld, drone or moving."],
+        ["Done", "Tick it off on the day once it's filmed."],
+      ],
+      tip: "Group the shots by place, not by story order. Then you only set up at each place once.",
+      tables: [["Add the shot table", ["Shot", "Scene", "What we see", "Size", "Camera", "Done"], 6]],
+    } },
+  { key: "youtube", kind: "doc", icon: "script", name: "Video script", note: "For YouTube: hook, parts and ending", title: "Video script",
+    hint: "Start with your hook: the first thing you'll say",
+    guide: {
+      title: "How to write a video script",
+      intro: "Write it the way you talk. People decide in the first seconds if they keep watching.",
+      steps: [
+        ["Hook", "The first 15 seconds. Say the most interesting thing first, or show what they'll get."],
+        ["Intro", "Who you are and what this video gives them. Keep it under 30 seconds."],
+        ["The parts", "One heading per part. Write what you say, and put what's on screen in a table next to it if that helps."],
+        ["Ending", "Sum it up, ask them to subscribe, and point to your next video."],
+      ],
+      tip: "Read it out loud. If it sounds like reading, rewrite it the way you'd say it. Insert, Checklist is handy for a \"before uploading\" list.",
+      tables: [["Add a say / show table", ["Part", "What I say", "On screen"], 4]],
+    } },
+  { key: "treatment", kind: "doc", icon: "doc", name: "Treatment", note: "The whole film told like a story", title: "Treatment",
+    hint: "Start with your logline: what the film is, in one or two sentences",
+    guide: {
+      title: "How to write a treatment",
+      intro: "A treatment tells your whole film like a short story, before there's a script. It's what you show people to get them excited.",
+      steps: [
+        ["Logline", "One or two sentences that sell the film."],
+        ["Story", "Tell the whole story from start to end, in the present tense, like you're telling a friend. Include the ending."],
+        ["Characters", "The main people: age, who they are, what they want, and what's in their way."],
+        ["Look and feel", "Colors, light, camera, music. Films that feel like yours."],
+        ["Why this film", "Why you want to make it, and why now."],
+      ],
+      tip: "No dialogue here, just the story. One to three pages is plenty for a short film.",
+    } },
+  { key: "storyboard", kind: "doc", icon: "image", name: "Storyboard", note: "A picture and notes for every shot", title: "Storyboard",
+    hint: "Add the table from the guide, then one shot per row",
+    guide: {
+      title: "How to make a storyboard",
+      intro: "A storyboard shows every shot as a picture, so everyone sees the film the same way before you film it.",
+      steps: [
+        ["Shot", "Number every shot."],
+        ["Picture", "Click in the box and use Insert, Picture. A quick drawing or a phone photo is enough, stick figures are fine."],
+        ["What happens", "What we see in this shot."],
+        ["Sound", "Dialogue, music or sound effects."],
+        ["Camera", "Does it move? Pan, zoom, follow, or stay still."],
+      ],
+      tip: "Do one storyboard per scene, so it doesn't get too long.",
+      tables: [["Add the storyboard table", ["Shot", "Picture", "What happens", "Sound", "Camera"], 5]],
+    } },
+  { key: "callsheet", kind: "doc", icon: "calendar", name: "Call sheet", note: "Who, where and when for a shoot day", title: "Call sheet",
+    hint: "Start with the date and where you're filming",
+    guide: {
+      title: "How to make a call sheet",
+      intro: "A call sheet tells everyone where to be and when on a shoot day. Send it the day before.",
+      steps: [
+        ["The basics", "Date, the time everyone has to be there, the address, and the weather."],
+        ["Schedule", "What gets filmed when, with breaks and lunch."],
+        ["Cast and crew", "Everyone who's coming, what they do, when they need to be there, and their phone number."],
+        ["Notes", "Parking, food, what to bring, and who to call if something goes wrong."],
+      ],
+      tip: "Put your own phone number at the top so people can call you if they're lost.",
+      tables: [["Add the schedule table", ["Time", "Scene", "What", "Who"], 5], ["Add the cast and crew table", ["Name", "Role", "Call time", "Phone"], 4]],
+    } },
 ];
+const docTypeOf = (d) => DOC_TYPES.find((t) => t.key === (d && d.settings && d.settings.type)) || DOC_TYPES.find((t) => t.key === (d && d.kind === "script" ? "script" : "blank"));
 
-function templateBlocks(t) {
-  let pos = "";
-  return t.blocks().map((html) => {
-    pos = posBetween(pos, null);
-    return { id: newBlockId(), pos, html };
-  });
+function typeBlocks(t) {
+  return [{ id: newBlockId(), pos: posBetween("", null), html: p("", t.kind === "script" ? "sp-scene" : "") }];
 }
 
 // ---------------------------------------------------------------- the Docs home (the lists)
@@ -426,21 +459,14 @@ function drawDocsHome() {
   $("docsMain").hidden = collab && !user;
   drawInvites();
   if (collab && !user) return;
-  // The templates
+  // The "New document" button (it asks what kind)
   if (!$("docsTemplates").children.length) {
-    for (const t of DOC_TEMPLATES) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "doc-template";
-      b.innerHTML = `<span class="doc-thumb ${t.kind === "script" ? "is-script" : ""}"><span class="doc-thumb-page"></span></span><b class="doc-name-line"></b><small class="doc-note-line"></small>`;
-      b.querySelector(".doc-name-line").textContent = t.name;
-      b.querySelector(".doc-note-line").textContent = t.note;
-      const page = b.querySelector(".doc-thumb-page");
-      if (t.key === "blank") page.innerHTML = '<span class="doc-plus">' + docIcon("plus") + "</span>";
-      else drawThumb(page, templateBlocks(t).map((x) => x.html), t.kind);
-      b.addEventListener("click", () => newDoc(t));
-      $("docsTemplates").append(b);
-    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "doc-template";
+    b.innerHTML = `<span class="doc-thumb"><span class="doc-thumb-page"><span class="doc-plus">${docIcon("plus")}</span></span></span><b class="doc-name-line">New document</b><small class="doc-note-line">Choose what to write</small>`;
+    b.addEventListener("click", () => openDocTypes());
+    $("docsTemplates").append(b);
   }
   // The documents
   const search = $("docsSearch").value.trim().toLowerCase();
@@ -570,9 +596,30 @@ async function answerInvite(inv, join, row) {
   }
 }
 
+// "What do you want to write?"
+function openDocTypes() {
+  const grid = $("docTypes");
+  if (!grid.children.length) {
+    for (const t of DOC_TYPES) {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-type" });
+      b.innerHTML = `<span class="doc-type-icon">${docIcon(t.icon)}</span><span class="doc-type-text"><b></b><small></small></span>`;
+      b.querySelector("b").textContent = t.name;
+      b.querySelector("small").textContent = t.note;
+      b.addEventListener("click", () => { $("docTypeModal").hidden = true; newDoc(t); });
+      grid.append(b);
+    }
+  }
+  $("docTypeWhere").textContent = docsWhere === "collab" && sfxUser() ? "It's a Collab document: you can invite people to write it with you." : "It's saved on this computer, only you can see it.";
+  $("docTypeModal").hidden = false;
+  grid.firstElementChild.focus();
+}
+$("docTypeCancel").addEventListener("click", () => { $("docTypeModal").hidden = true; });
+$("docTypeModal").addEventListener("mousedown", (e) => { if (e.target === $("docTypeModal")) $("docTypeModal").hidden = true; });
+
 async function newDoc(t) {
   const where = docsWhere === "collab" && sfxUser() ? "collab" : "local";
-  const res = await api("/api/docs-create", { where, title: t.title, kind: t.kind, blocks: templateBlocks(t) }).catch(() => null);
+  const settings = t.key === "blank" ? {} : { type: t.key };
+  const res = await api("/api/docs-create", { where, title: t.title, kind: t.kind, blocks: typeBlocks(t), settings }).catch(() => null);
   if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the document. Try again.");
   await openDoc(where, res.id, { fresh: true });
 }
@@ -621,6 +668,7 @@ async function openDoc(where, id, opts = {}) {
   drawMenubar();
   docSaveState();
   $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
+  drawGuide();
   docFit();
   docCount();
   drawOutline();
@@ -634,6 +682,65 @@ async function openDoc(where, id, opts = {}) {
     if (first) docPutCaret(first, 0);
   }
   if (where === "collab") docSyncSoon(50);
+}
+
+// ---------------------------------------------------------------- the writing guide (next to the page)
+
+function drawGuide() {
+  const t = docTypeOf(doc), g = t.guide;
+  docsText.dataset.hint = t.hint || "";
+  docsText.style.setProperty("--hint", JSON.stringify(t.hint || ""));
+  docEmptyCheck();
+  $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1";
+  if (!g) return;
+  $("docGuideTitle").textContent = g.title;
+  $("docGuideIntro").textContent = g.intro;
+  $("docGuideSteps").replaceChildren(...g.steps.map(([name, text], i) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<i>${i + 1}</i><span><b></b><small></small></span>`;
+    li.querySelector("b").textContent = name;
+    li.querySelector("small").textContent = text;
+    return li;
+  }));
+  $("docGuideTip").textContent = g.tip || "";
+  $("docGuideTip").hidden = !g.tip;
+  $("docGuideTables").replaceChildren(...(g.tables || []).map(([label, cols, rows]) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "outline-button" });
+    b.innerHTML = docIcon("table") + "<span></span>";
+    b.querySelector("span").textContent = label;
+    b.addEventListener("click", () => docGuideTable(cols, rows));
+    return b;
+  }));
+}
+
+function docShowGuide(on) {
+  if (!doc) return;
+  savePref("docGuideOff:" + docTypeOf(doc).key, on ? "0" : "1");
+  drawGuide();
+  docFit();
+}
+$("docGuideClose").addEventListener("click", () => docShowGuide(false));
+
+// An empty table with just the column names (the rest is up to you).
+function docGuideTable(cols, rows) {
+  if (!doc || docBlockHeld()) return;
+  if (!docsText.contains(document.getSelection().anchorNode)) docPutCaret(docsText.lastElementChild, "end");
+  const head = "<tr>" + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr>";
+  const row = "<tr>" + "<td><br></td>".repeat(cols.length) + "</tr>";
+  const block = docCaretBlock();
+  const empty = block && block.tagName === "P" && !block.textContent.trim() && !block.querySelector("img");
+  docInsertBlockAfter(`<table class="doc-table"><tbody>${head}${row.repeat(rows)}</tbody></table>`);
+  if (empty) { block.remove(); docUndoCommit(); } // the table takes the empty line's place
+  const table = docCaretBlock() && docCaretBlock().previousElementSibling;
+  if (table && table.tagName === "TABLE") docPutCaret(table.querySelector("td"), 0);
+  docEmptyCheck();
+}
+
+// A faint "how to start" line on an empty page (it's not text, it's never saved).
+function docEmptyCheck() {
+  const first = docsText.firstElementChild;
+  const empty = !!doc && docsText.children.length === 1 && first.tagName === "P" && !first.textContent && !first.querySelector("img");
+  docsText.classList.toggle("is-empty", empty && !!docsText.dataset.hint);
 }
 
 // Closes the document as it is: what wasn't saved is gone (ask first with docLeave()).
@@ -2243,6 +2350,7 @@ function docCountSoon() {
 
 function docCount() {
   if (!doc) return;
+  docEmptyCheck();
   const text = docsText.innerText;
   const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
   let more = "";
@@ -2516,6 +2624,7 @@ document.addEventListener("keydown", (e) => {
   else if (!$("docAskModal").hidden) docAskClose(false);
   else if (!$("docSetupModal").hidden) $("docSetupModal").hidden = true;
   else if (!$("docInfoModal").hidden) $("docInfoModal").hidden = true;
+  else if (!$("docTypeModal").hidden) $("docTypeModal").hidden = true;
   else if (!$("docsCardMenu").hidden) $("docsCardMenu").hidden = true;
   else if (doc && !$("docPop").hidden) docHidePops();
   else if (doc && document.body.classList.contains("doc-focus")) docFocus(false);
@@ -2788,6 +2897,7 @@ function docCleanSettings(s) {
   if (Object.hasOwn(DOC_MARGINS, s.margins)) out.margins = s.margins;
   if (Object.hasOwn(DOC_PAGES, s.page)) out.page = s.page;
   if (Object.hasOwn(DOC_PAPERS, s.paper)) out.paper = s.paper;
+  if (DOC_TYPES.some((t) => t.key === s.type && t.key !== "blank")) out.type = s.type;
   return out;
 }
 function docSettings() { return doc ? { ...docDefaults(doc.kind), ...doc.settings } : docDefaults("doc"); }
@@ -2972,6 +3082,7 @@ function docMenuItems(name) {
   if (name === "view") return [
     { label: script ? "Scenes on the side" : "Outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
     script ? { label: "Scene numbers", icon: "numbersScene", on: docsText.classList.contains("numbers"), fn: () => docCommand("numbers-scene") } : null,
+    docTypeOf(doc).guide ? { label: "Writing guide", icon: "quote", on: !$("docGuide").hidden, fn: () => docShowGuide($("docGuide").hidden) } : null,
     { label: "Focus mode", icon: "focus", fn: () => docFocus(true) },
     "-",
     { label: "Zoom", icon: "zoom", more: "zoom" },
@@ -3022,12 +3133,12 @@ function docMenuItems(name) {
 }
 
 async function docNewFromMenu() {
-  const t = DOC_TEMPLATES.find((x) => x.key === (doc.kind === "script" ? "script" : "blank"));
   const where = doc.where;
   if (!(await docLeave())) return;
-  closeDoc(true);
+  closeDoc();
   docsWhere = where;
-  newDoc(t);
+  drawDocsHome();
+  openDocTypes();
 }
 
 async function docDeleteOpen() {
@@ -3200,8 +3311,8 @@ function drawPageSetup() {
 }
 $("docSetupDone").addEventListener("click", () => { $("docSetupModal").hidden = true; docsText.focus({ preventScroll: true }); });
 $("docSetupReset").addEventListener("click", () => {
-  if (!doc || !Object.keys(doc.settings).length) return;
-  doc.settings = {};
+  if (!doc || !Object.keys(doc.settings).some((k) => k !== "type")) return;
+  doc.settings = doc.settings.type ? { type: doc.settings.type } : {};
   docSettingsDirty = true;
   docMarkDirty();
   docApplySettings();
