@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "1.36.0", items: [
+    "New Docs tab: write documents and movie scripts right in the app, with a page that looks like Google Docs.",
+    "Local docs stay private on your computer. Collab docs let you invite people with an account, and only the people who joined can see them.",
+    "Templates for a movie script, video script, treatment, storyboard and call sheet, plus fonts, page setup (Letter or A4, margins, paper colour) and zoom.",
+    "Docs only save when you press Save or Ctrl+S. If you leave with changes, the app asks if you want to save.",
+  ] },
   { version: "1.35.0", items: [
     "A fresh Apple-inspired look: a cleaner font, big bold headlines and Apple's own soft greys in dark and light mode.",
     "The Library list is one neat rounded card with thin lines between sounds, like the iPhone Settings app.",
