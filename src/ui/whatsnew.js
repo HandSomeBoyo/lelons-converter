@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.2.0", items: [
+    "Collab docs are live now: you see the other person typing right away, and there's no Save button to press any more.",
+    "Pages in a document: add pages with the + on the left side, and pages under a page with the ··· button.",
+    "Comments in Collab docs: select some words and press the yellow bubble (or Ctrl+Alt+M). Everyone can reply, and you can mark a comment as done.",
+    "The new moon button at the top switches the page to black (dark page) or back to white. It's just for you, others keep their own look.",
+    "Who's online in a document only shows at the top now, not twice.",
+  ] },
   { version: "2.1.0", items: [
     "New document now asks what you want to write: a movie script, video script, shot list, storyboard and more.",
     "Every new document starts completely empty. A short guide next to the page explains how to write that kind of document.",

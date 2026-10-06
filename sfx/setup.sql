@@ -1121,6 +1121,7 @@ create or replace function lelons.doc_preview(doc uuid) returns json
 language sql stable security definer set search_path = '' as $$
   select coalesce(json_agg(left(b.html, 2000) order by b.pos collate "C", b.id), '[]'::json)
   from (select x.html, x.pos, x.id from lelons.doc_blocks x where x.doc_id = doc and not x.deleted
+          and x.id not like '%~%' -- (only the first page; the others and their names have a ~ in the id)
         order by x.pos collate "C", x.id limit 14) b
 $$;
 
@@ -1341,6 +1342,88 @@ begin
   end if;
 end $$;
 
+-- ---- Doc comments (2.2.0): notes on a piece of text in a shared document, with replies.
+-- Everyone in the document sees them; they don't change the text.
+create table if not exists lelons.doc_comments (
+  id bigserial primary key,
+  doc_id uuid not null references lelons.docs (id) on delete cascade,
+  parent_id bigint references lelons.doc_comments (id) on delete cascade,  -- set on a reply
+  block text check (length(block) <= 40),          -- the paragraph it's on
+  quote text check (length(quote) <= 300),         -- the words it's on
+  body text not null check (length(body) between 1 and 2000),
+  author_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now(),
+  edited_at timestamptz,
+  resolved boolean not null default false,
+  resolved_by uuid references lelons.accounts (id) on delete set null
+);
+create index if not exists doc_comments_doc on lelons.doc_comments (doc_id, id);
+alter table lelons.doc_comments enable row level security;
+revoke all on lelons.doc_comments from anon, authenticated;
+revoke all on sequence lelons.doc_comments_id_seq from anon, authenticated;
+
+-- All comments of a document (and a count, so the app only redraws when something changed).
+create or replace function public.lelons_doc_comments(token text, doc_id uuid)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs := lelons.doc_for(me.id, doc_id);
+begin
+  return coalesce((select json_agg(json_build_object('id', c.id, 'parent', c.parent_id, 'block', c.block, 'quote', c.quote,
+      'body', c.body, 'username', coalesce(a.username, 'Someone'), 'avatar', a.avatar, 'at', c.created_at,
+      'edited', c.edited_at is not null, 'resolved', c.resolved, 'resolvedBy', r.username,
+      'mine', c.author_id = me.id, 'canDelete', c.author_id = me.id or doc.owner_id = me.id) order by c.id)
+    from (select * from lelons.doc_comments x where x.doc_id = doc.id order by x.id desc limit 1000) c
+    left join lelons.accounts a on a.id = c.author_id
+    left join lelons.accounts r on r.id = c.resolved_by), '[]'::json);
+end $$;
+
+-- Add a comment or a reply, change your own, resolve or reopen one, or delete it
+-- (your own, or any if the document is yours).
+create or replace function public.lelons_doc_comment(token text, doc_id uuid, what text, comment_id bigint default null,
+                                                     block text default null, quote text default null, body text default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  doc lelons.docs := lelons.doc_for(me.id, doc_id);
+  c lelons.doc_comments;
+  clean text := left(btrim(coalesce(body, '')), 2000);
+begin
+  if comment_id is not null then
+    select x.* into c from lelons.doc_comments x where x.id = comment_id and x.doc_id = doc.id;
+    if c.id is null then
+      raise exception 'no such comment' using hint = 'comment_gone';
+    end if;
+  end if;
+  if what in ('add', 'reply', 'edit') and clean = '' then
+    raise exception 'empty' using hint = 'bad_input';
+  end if;
+  if what = 'add' then
+    if (select count(*) from lelons.doc_comments x where x.doc_id = doc.id) >= 1000 then
+      raise exception 'too many' using hint = 'comment_many';
+    end if;
+    insert into lelons.doc_comments (doc_id, block, quote, body, author_id)
+    values (doc.id, left(lelons_doc_comment.block, 40), left(lelons_doc_comment.quote, 300), clean, me.id) returning * into c;
+  elsif what = 'reply' and c.id is not null then
+    if (select count(*) from lelons.doc_comments x where x.doc_id = doc.id) >= 1000 then
+      raise exception 'too many' using hint = 'comment_many';
+    end if;
+    insert into lelons.doc_comments (doc_id, parent_id, body, author_id)
+    values (doc.id, coalesce(c.parent_id, c.id), clean, me.id) returning * into c;
+    update lelons.doc_comments x set resolved = false, resolved_by = null where x.id = c.parent_id;  -- a reply opens it again
+  elsif what = 'edit' and c.author_id = me.id then
+    update lelons.doc_comments x set body = clean, edited_at = now() where x.id = c.id;
+  elsif what in ('resolve', 'reopen') and c.id is not null and c.parent_id is null then
+    update lelons.doc_comments x set resolved = what = 'resolve', resolved_by = case when what = 'resolve' then me.id end
+    where x.id = c.id;
+  elsif what = 'delete' and (c.author_id = me.id or doc.owner_id = me.id) then
+    delete from lelons.doc_comments x where x.id = c.id;
+  else
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  return public.lelons_doc_comments(token, doc.id);
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -1363,7 +1446,8 @@ begin
     'lelons_doc_create(text, text, text, jsonb, jsonb)', 'lelons_doc_open(text, uuid)',
     'lelons_doc_sync(text, uuid, bigint, jsonb, text, text, boolean, jsonb)', 'lelons_doc_close(text, uuid)',
     'lelons_doc_invite(text, uuid, text[])', 'lelons_doc_answer(text, uuid, boolean)',
-    'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)'] loop
+    'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)', 'lelons_doc_comments(text, uuid)',
+    'lelons_doc_comment(text, uuid, text, bigint, text, text, text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

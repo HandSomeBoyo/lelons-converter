@@ -705,6 +705,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = {}
             elif action == "remove":
                 result = {"people": docs.collab_remove(doc_id, data.get("username"))}
+            elif action == "comments":
+                result = {"comments": docs.collab_comments(doc_id)}
+            elif action == "comment":
+                result = {"comments": docs.collab_comment(doc_id, data.get("what"), data.get("comment"),
+                                                          data.get("block"), data.get("quote"), data.get("body"))}
             elif action == "export":
                 path = docs.export(save_folder(data), data.get("title"), data.get("ext"), data.get("text"))
                 result = {"path": path, "fileName": os.path.basename(path)}

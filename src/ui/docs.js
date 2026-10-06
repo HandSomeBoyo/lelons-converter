@@ -25,7 +25,14 @@ const docInFlight = new Map();   // id -> html being sent right now
 let docTitleDirty = false;
 let docSettingsDirty = false;
 let docDirty = false;        // changed since the last Save (nothing is saved until you press Save)
-let docSaveWanted = false;   // (collab) the next sync sends your changes
+let docSaveWanted = false;
+// Pages: a document can have more pages (and pages under pages). Their blocks have ids "<page>~<id>";
+// a page's name is a block "t~<page>". Only the page you're on is on screen; the rest wait in docStore.
+let docTab = "";               // the page on screen ("" = the document's first page)
+const docStore = new Map();    // id -> {pos, html} for everything not on screen
+const docTabsOpen = new Set(); // pages whose pages-under are folded away (it's "closed" really)
+const docTabOf = (id) => id.startsWith("t~") ? null : id.includes("~") ? id.slice(0, id.indexOf("~")) : "";
+const docNewId = () => (docTab ? docTab + "~" : "") + newBlockId();   // (collab) the next sync sends your changes
 let docSyncTimer = 0;
 let docSyncBusy = false;
 let docSyncAgain = false;
@@ -98,6 +105,11 @@ const DOC_ICONS = {
   quote: '<path d="M5 17.5c2.5-1 4-3.4 4-6.5V7H5v4h4M14 17.5c2.5-1 4-3.4 4-6.5V7h-4v4h4"/>',
   heading: '<path d="M6 4.5v15M15 4.5v15M6 12h9M18.5 10l2-1.5v11"/>',
   sort: '<path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/>',
+  comment: '<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7.5L7 21v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5z"/><path d="M8 10h8M8 13.5h5"/>',
+  check: '<path d="M5.5 12.5l4 4 9-9"/>',
+  moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
@@ -647,7 +659,12 @@ async function openDoc(where, id, opts = {}) {
   docTitleDirty = false; docSettingsDirty = false; docDirty = false; docSaveWanted = false; docHere = []; docFailed = 0;
   document.execCommand("defaultParagraphSeparator", false, "p");
   docApplying = true;
-  docsText.replaceChildren(...(d.blocks || []).map(blockFromHtml));
+  docTab = ""; docStore.clear(); docTabsOpen.clear();
+  const here = [];
+  for (const b of d.blocks || []) {
+    if (docTabOf(b.id) === "") here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
+  }
+  docsText.replaceChildren(...here.map(blockFromHtml));
   docsText.classList.toggle("script", doc.kind === "script");
   docsText.classList.toggle("numbers", doc.kind === "script" && loadPref("docSceneNumbers") === "1");
   docsText.spellcheck = loadPref("docSpelling") !== "0";
@@ -669,6 +686,8 @@ async function openDoc(where, id, opts = {}) {
   docSaveState();
   $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
   drawGuide();
+  drawTabs();
+  docNotesOpenDoc();
   docFit();
   docCount();
   drawOutline();
@@ -684,6 +703,547 @@ async function openDoc(where, id, opts = {}) {
   if (where === "collab") docSyncSoon(50);
 }
 
+// ---------------------------------------------------------------- comments (collab docs)
+// A comment sits on a few words (quote) in one block. They're saved right away (they don't change the text),
+// everyone in the document sees them, and they show as a yellow mark on the words.
+
+let docNotes = [];          // from Supabase: {id, parent, block, quote, body, username, at, resolved, mine, canDelete}
+let docNotesSig = "";
+let docNotesTimer = 0;
+let docNotesRun = 0;
+let docNotesDraft = null;   // the new comment being written: {block, quote}
+let docNotesShowResolved = false;
+let docNotesActive = null;  // the comment that's selected
+const docNotesRanges = new Map(); // comment id -> Range on the page
+
+function docNotesOpenDoc() {
+  const collab = doc.where === "collab";
+  $("docNotesButton").hidden = !collab;
+  docNotes = []; docNotesSig = ""; docNotesDraft = null; docNotesActive = null; docNotesShowResolved = false;
+  $("docNotes").hidden = true;
+  docNotesMark();
+  drawNotesButton();
+  if (collab) docNotesLoad();
+}
+
+function docNotesCloseDoc() {
+  clearTimeout(docNotesTimer);
+  docNotesRun++;
+  docNotes = []; docNotesRanges.clear();
+  $("docNotes").hidden = true;
+  $("docAddNote").hidden = true;
+  if (window.CSS && CSS.highlights) { CSS.highlights.delete("doc-note"); CSS.highlights.delete("doc-note-now"); }
+}
+
+async function docNotesLoad() {
+  clearTimeout(docNotesTimer);
+  const d = doc;
+  if (!d || d.where !== "collab") return;
+  const mine = ++docNotesRun;
+  const res = await api("/api/docs-comments", { id: d.id, where: "collab" }).catch(() => null);
+  if (doc !== d || mine !== docNotesRun) return;
+  if (res && res.ok) docNotesSet(res.comments);
+  docNotesTimer = setTimeout(docNotesLoad, document.hidden ? 15000 : $("docNotes").hidden ? 5000 : 2500);
+}
+
+function docNotesSet(list) {
+  const sig = JSON.stringify(list || []);
+  if (sig === docNotesSig) return;
+  docNotesSig = sig;
+  docNotes = list || [];
+  if (docNotesActive && !docNotes.some((c) => c.id === docNotesActive)) docNotesActive = null;
+  drawNotesButton();
+  docNotesMark();
+  if (!$("docNotes").hidden) drawNotes();
+}
+
+async function docNotesSend(what, data = {}) {
+  const d = doc;
+  if (!d) return false;
+  const res = await api("/api/docs-comment", { id: d.id, where: "collab", what, ...data }).catch(() => null);
+  if (doc !== d) return false;
+  if (!res || !res.ok) { docToast((res && res.error) || "That didn't work. Check your internet and try again."); return false; }
+  docNotesRun++; // an older load on its way would bring back the old list
+  docNotesSet(res.comments);
+  docNotesTimer = setTimeout(docNotesLoad, 2500);
+  return true;
+}
+
+const docNotesOpen = () => docNotes.filter((c) => !c.parent && !c.resolved);
+function drawNotesButton() {
+  const n = docNotesOpen().length;
+  const b = $("docNotesButton");
+  b.innerHTML = docIcon("comment") + (n ? `<b>${n}</b>` : "");
+  b.title = n ? `${n} open ${n === 1 ? "comment" : "comments"}` : "Comments";
+  b.classList.toggle("on", !$("docNotes").hidden);
+}
+
+// The yellow marks on the page.
+function docNotesMark() {
+  docNotesRanges.clear();
+  if (!window.CSS || !CSS.highlights) return;
+  if (!doc || doc.where !== "collab") { CSS.highlights.delete("doc-note"); CSS.highlights.delete("doc-note-now"); return; }
+  for (const c of docNotesOpen()) {
+    if (!c.block || !c.quote) continue;
+    const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(c.block)}"]`);
+    const r = el && docQuoteRange(el, c.quote);
+    if (r) docNotesRanges.set(c.id, r);
+  }
+  CSS.highlights.set("doc-note", new Highlight(...docNotesRanges.values()));
+  let now = docNotesActive && docNotesRanges.get(docNotesActive);
+  if (docNotesDraft && docNotesDraft.block && docNotesDraft.quote && !$("docNotes").hidden) { // the words you're writing about
+    const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(docNotesDraft.block)}"]`);
+    now = (el && docQuoteRange(el, docNotesDraft.quote)) || now;
+  }
+  if (now) CSS.highlights.set("doc-note-now", new Highlight(now));
+  else CSS.highlights.delete("doc-note-now");
+}
+
+// Where the words are inside a block (spaces don't have to match exactly), as a Range.
+function docQuoteRange(el, quote) {
+  const nodes = [], starts = [];
+  let text = "";
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) { starts.push(text.length); nodes.push(walker.currentNode); text += walker.currentNode.data; }
+  const norm = (t) => t.replace(/\s+/g, " ");
+  const at = norm(text).toLowerCase().indexOf(norm(quote).toLowerCase());
+  if (at < 0 || !nodes.length) return null;
+  // norm() only shortens runs of spaces; map the found place back onto the real text.
+  const map = [];
+  for (let i = 0, j = 0; i < text.length; i++) { if (!(/\s/.test(text[i]) && i > 0 && /\s/.test(text[i - 1]))) map[j++] = i; }
+  const from = map[at], to = map[at + norm(quote).length - 1] + 1;
+  if (from === undefined || isNaN(to)) return null;
+  const place = (pos) => {
+    let k = nodes.length - 1;
+    while (k > 0 && starts[k] > pos) k--;
+    return [nodes[k], Math.min(pos - starts[k], nodes[k].data.length)];
+  };
+  const r = new Range();
+  r.setStart(...place(from));
+  r.setEnd(...place(to));
+  return r;
+}
+
+function docShowNotes(on) {
+  if (!doc || doc.where !== "collab") return;
+  $("docNotes").hidden = !on;
+  if (on) { $("docGuide").hidden = true; drawNotes(); docNotesLoad(); }
+  else { docNotesDraft = null; docNotesActive = null; docNotesMark(); drawGuide(); }
+  drawNotesButton();
+  docFit();
+}
+$("docNotesClose").addEventListener("click", () => docShowNotes(false));
+
+// "Comment": on the words you selected (or the line you're on).
+let docNotesSel = null;
+function docNotesNew() {
+  if (!doc || doc.where !== "collab") return;
+  const sel = getSelection();
+  let block = null, quote = "";
+  const r = docNotesSel || (sel.rangeCount && docsText.contains(sel.anchorNode) ? sel.getRangeAt(0) : null);
+  docNotesSel = null;
+  if (r && docsText.contains(r.startContainer)) {
+    block = docBlockOf(r.startContainer);
+    quote = r.toString().replace(/\s+/g, " ").trim();
+    if (block && docBlockOf(r.endContainer) !== block) quote = (block.textContent.replace(/\s+/g, " ").trim()); // across lines: the first line
+    if (!quote && block) quote = block.textContent.replace(/\s+/g, " ").trim();
+  }
+  if (quote.length > 300) quote = quote.slice(0, 300);
+  docNotesDraft = { block: block ? block.dataset.id : null, quote };
+  docNotesActive = null;
+  $("docAddNote").hidden = true;
+  docShowNotes(true);
+  docNotesMark();
+  const box = $("docNotesList").querySelector(".doc-note-new textarea");
+  if (box) box.focus();
+}
+$("docNotesButton").addEventListener("mousedown", (e) => e.preventDefault()); // keeps the selection in the text
+$("docNotesButton").addEventListener("click", () => {
+  if (!$("docNotes").hidden) return docShowNotes(false);
+  const sel = getSelection();
+  if (sel.rangeCount && !sel.isCollapsed && docsText.contains(sel.anchorNode)) docNotesNew();
+  else docShowNotes(true);
+});
+
+// The little "Comment" button next to selected text (on the body: "fixed" inside the tab would be off).
+document.body.append($("docAddNote"));
+function docAddNoteSpot() {
+  const b = $("docAddNote");
+  const sel = getSelection();
+  if (!doc || doc.where !== "collab" || !sel.rangeCount || sel.isCollapsed || !docsText.contains(sel.anchorNode)) { b.hidden = true; return; }
+  const rect = sel.getRangeAt(0).getBoundingClientRect(), page = $("docPage").getBoundingClientRect();
+  if (!rect.height) { b.hidden = true; return; }
+  b.hidden = false;
+  b.style.top = Math.round(rect.top - 4) + "px";
+  b.style.left = Math.round(Math.min(page.right - b.offsetWidth / 2, innerWidth - b.offsetWidth - 8)) + "px";
+}
+document.addEventListener("selectionchange", () => { if (doc) docAddNoteSpot(); });
+window.addEventListener("scroll", () => { if (doc && !$("docAddNote").hidden) docAddNoteSpot(); }, { passive: true });
+$("docAddNote").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  const sel = getSelection();
+  docNotesSel = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+});
+$("docAddNote").addEventListener("click", () => docNotesNew());
+document.addEventListener("keydown", (e) => {
+  if (doc && e.ctrlKey && e.altKey && !e.shiftKey && e.key.toLowerCase() === "m") { e.preventDefault(); docNotesNew(); }
+});
+
+// Clicking marked words opens their comment.
+docsText.addEventListener("click", () => {
+  if (!doc || doc.where !== "collab" || !docNotesRanges.size) return;
+  const sel = getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return;
+  for (const [id, r] of docNotesRanges) {
+    if (r.isPointInRange(sel.anchorNode, sel.anchorOffset)) { docNotesPick(id, true); return; }
+  }
+});
+
+function docNotesPick(id, scroll) {
+  docNotesActive = id;
+  if ($("docNotes").hidden) docShowNotes(true); else drawNotes();
+  docNotesMark();
+  const card = $("docNotesList").querySelector(`[data-note="${id}"]`);
+  if (card && scroll) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function noteWhen(at) { return timeAgo(Date.parse(at) / 1000); }
+
+function drawNotes() {
+  const list = $("docNotesList");
+  const keep = document.activeElement && list.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA"
+    ? { key: document.activeElement.dataset.key, value: document.activeElement.value, at: document.activeElement.selectionStart } : null;
+  const items = [];
+  if (docNotesDraft) {
+    const box = document.createElement("div");
+    box.className = "doc-note doc-note-new";
+    box.innerHTML = `<div class="doc-note-quote" hidden></div><textarea rows="3" maxlength="2000" data-key="new" placeholder="Write a comment..."></textarea>
+      <div class="doc-note-actions"><button type="button" class="link">Cancel</button><span class="spacer"></span><button type="button" class="small-button">Comment</button></div>`;
+    const q = box.querySelector(".doc-note-quote");
+    if (docNotesDraft.quote) { q.hidden = false; q.textContent = docNotesDraft.quote; }
+    const ta = box.querySelector("textarea");
+    const send = async () => {
+      const body = ta.value.trim();
+      if (!body) return ta.focus();
+      box.querySelector(".small-button").disabled = true;
+      const draft = docNotesDraft;
+      if (await docNotesSend("add", { block: draft.block, quote: draft.quote, body })) {
+        docNotesDraft = null;
+        const mine = [...docNotes].reverse().find((c) => c.mine && !c.parent);
+        if (mine) docNotesActive = mine.id;
+        drawNotes(); docNotesMark();
+      } else box.querySelector(".small-button").disabled = false;
+    };
+    box.querySelector(".small-button").addEventListener("click", send);
+    box.querySelector(".link").addEventListener("click", () => { docNotesDraft = null; drawNotes(); docNotesMark(); });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } if (e.key === "Escape") { e.stopPropagation(); docNotesDraft = null; drawNotes(); } });
+    items.push(box);
+  }
+  const roots = docNotes.filter((c) => !c.parent);
+  const open = roots.filter((c) => !c.resolved), done = roots.filter((c) => c.resolved);
+  // Open ones in the order they are on the page, then the ones whose words aren't there any more.
+  const order = new Map([...docsText.children].map((el, i) => [el.dataset.id, i]));
+  const where = (c) => (order.has(c.block) ? order.get(c.block) : 1e9);
+  open.sort((a, b) => where(a) - where(b) || a.id - b.id);
+  for (const c of open) items.push(noteCard(c));
+  if (!open.length && !docNotesDraft && done.length) {
+    const p = document.createElement("p");
+    p.className = "doc-notes-empty";
+    p.innerHTML = "<b>All done!</b> Every comment is resolved.";
+    items.push(p);
+  } else if (!open.length && !docNotesDraft) {
+    const p = document.createElement("p");
+    p.className = "doc-notes-empty";
+    p.innerHTML = `<b>No comments yet.</b> Select some words in the document and press ${docIcon("comment")} to leave a note. Everyone in this document can see comments, and they don't change the text.`;
+    items.push(p);
+  }
+  if (done.length) {
+    const t = Object.assign(document.createElement("button"), { type: "button", className: "doc-notes-done" });
+    t.innerHTML = `${docIcon("check")}<span>${docNotesShowResolved ? "Hide" : "Show"} resolved (${done.length})</span>`;
+    t.addEventListener("click", () => { docNotesShowResolved = !docNotesShowResolved; drawNotes(); });
+    items.push(t);
+    if (docNotesShowResolved) for (const c of done.reverse()) items.push(noteCard(c));
+  }
+  list.replaceChildren(...items);
+  if (keep) {
+    const ta = list.querySelector(`textarea[data-key="${keep.key}"]`);
+    if (ta) { ta.value = keep.value; ta.focus(); ta.setSelectionRange(keep.at, keep.at); }
+  }
+}
+
+function noteCard(c) {
+  const card = document.createElement("div");
+  card.className = "doc-note" + (c.resolved ? " resolved" : "") + (c.id === docNotesActive ? " active" : "");
+  card.dataset.note = c.id;
+  const replies = docNotes.filter((x) => x.parent === c.id);
+  const page = c.block ? docTabOf(c.block) : null;
+  const elsewhere = page !== null && page !== docTab && docStore.has(c.block); // on another page of this document
+  const gone = c.block && c.quote && !docNotesRanges.has(c.id) && !c.resolved && !elsewhere;
+  card.innerHTML = `<div class="doc-note-quote" hidden></div><div class="doc-note-msgs"></div>
+    <div class="doc-note-reply" hidden><textarea rows="2" maxlength="2000" data-key="reply-${c.id}" placeholder="Reply..."></textarea>
+      <div class="doc-note-actions"><span class="spacer"></span><button type="button" class="small-button">Reply</button></div></div>`;
+  const q = card.querySelector(".doc-note-quote");
+  if (c.quote) { q.hidden = false; q.textContent = c.quote; q.classList.toggle("gone", !!gone); if (gone) q.title = "These words aren't in the document any more"; }
+  if (elsewhere) {
+    const t = docTabsList().find((x) => x.id === page);
+    q.classList.add("elsewhere");
+    q.title = "Go to the page";
+    q.dataset.page = "On " + (page === "" ? $("docTitle").value.trim() || "the first page" : t ? t.title : "another page");
+    q.addEventListener("click", () => { docShowTab(page); docNotesPick(c.id, true); });
+  }
+  card.querySelector(".doc-note-msgs").append(...[c, ...replies].map((m, i) => noteMsg(m, i === 0 ? c : null)));
+  if (!c.resolved) {
+    const rep = card.querySelector(".doc-note-reply");
+    rep.hidden = false;
+    const ta = rep.querySelector("textarea");
+    const send = async () => {
+      const body = ta.value.trim();
+      if (!body) return;
+      rep.querySelector("button").disabled = true;
+      if (await docNotesSend("reply", { comment: c.id, body })) { ta.value = ""; drawNotes(); }
+      else rep.querySelector("button").disabled = false;
+    };
+    rep.querySelector("button").addEventListener("click", send);
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+    ta.addEventListener("focus", () => { if (docNotesActive !== c.id) { docNotesActive = c.id; card.classList.add("active"); docNotesMark(); } });
+  } else if (c.resolvedBy) {
+    const by = document.createElement("p");
+    by.className = "doc-note-by";
+    by.textContent = `Resolved by ${c.resolvedBy}`;
+    card.append(by);
+  }
+  card.addEventListener("click", (e) => {
+    if (e.target.closest("button, textarea")) return;
+    docNotesActive = c.id;
+    $("docNotesList").querySelectorAll(".doc-note.active").forEach((x) => x.classList.remove("active"));
+    card.classList.add("active");
+    docNotesMark();
+    const r = docNotesRanges.get(c.id);
+    if (r) {
+      const rect = r.getBoundingClientRect();
+      if (rect.top < 150 || rect.bottom > innerHeight - 60) window.scrollBy({ top: rect.top - innerHeight / 2, behavior: "smooth" });
+    }
+  });
+  return card;
+}
+
+function noteMsg(m, root) {
+  const el = document.createElement("div");
+  el.className = "doc-note-msg";
+  el.append(docAvatar({ username: m.username, avatarUrl: m.avatarUrl }, "small"));
+  const body = document.createElement("div");
+  body.className = "doc-note-body";
+  body.innerHTML = `<div class="doc-note-head"><b></b><small></small><span class="spacer"></span></div><p></p>`;
+  body.querySelector("b").textContent = m.username;
+  body.querySelector("small").textContent = noteWhen(m.at) + (m.edited ? " · edited" : "");
+  body.querySelector("p").textContent = m.body;
+  const head = body.querySelector(".doc-note-head");
+  const tool = (icon, title, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-note-tool " + cls, title });
+    b.innerHTML = docIcon(icon);
+    b.addEventListener("click", fn);
+    head.append(b);
+  };
+  if (root && !root.resolved) tool("check", "Resolve: it's done (hides it, anyone can open it again)", () => docNotesSend("resolve", { comment: root.id }), "resolve");
+  if (root && root.resolved) tool("undo", "Open it again", () => docNotesSend("reopen", { comment: root.id }));
+  if (m.canDelete) tool("trash", root ? "Delete this comment and its replies" : "Delete this reply", async () => {
+    const yes = await docAsk(root ? "Delete this comment?" : "Delete this reply?", root && docNotes.some((x) => x.parent === m.id) ? "Its replies are deleted too. This can't be undone." : "This can't be undone.", "Delete");
+    if (yes) docNotesSend("delete", { comment: m.id });
+  });
+  el.append(body);
+  return el;
+}
+
+// ---------------------------------------------------------------- pages (and pages under pages)
+
+function docTabMeta(html) {
+  const m = /^<!--tab (.*)-->$/s.exec(html || "");
+  try { return m ? JSON.parse(m[1]) : null; } catch (e) { return null; }
+}
+const docTabHtml = (t) => "<!--tab " + JSON.stringify({ title: t.title, parent: t.parent || "" }).replace(/[-<>]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "-->";
+
+// [{id, title, parent, pos}] in order. parent "" = at the top, "0" = under the first page.
+function docTabsList() {
+  const list = [];
+  for (const [id, b] of docStore) {
+    if (!id.startsWith("t~")) continue;
+    const meta = docTabMeta(b.html);
+    if (meta) list.push({ id: id.slice(2), title: String(meta.title || "Untitled page").slice(0, 100), parent: String(meta.parent || ""), pos: b.pos });
+  }
+  const ids = new Set(list.map((t) => t.id));
+  for (const t of list) if (t.parent && t.parent !== "0" && !ids.has(t.parent)) t.parent = ""; // its page is gone
+  return list.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
+}
+
+function drawTabs() {
+  if (!doc) return;
+  if ($("docTabsList").querySelector(".doc-tab-input")) return; // (not while you're naming a page; it draws again after)
+  const list = docTabsList();
+  const box = $("docTabsList");
+  const rows = [];
+  const kids = (parent) => list.filter((t) => t.parent === parent);
+  const row = (t, depth) => {
+    const under = kids(t.id === "" ? "0" : t.id);
+    const r = document.createElement("div");
+    r.className = "doc-tab-row" + (t.id === docTab ? " on" : "");
+    r.style.setProperty("--depth", depth);
+    r.dataset.tab = t.id;
+    r.innerHTML = `<button type="button" class="doc-tab-fold" ${under.length ? "" : "hidden"}><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 9.5h8l-4 5z"/></svg></button>
+      <button type="button" class="doc-tab-name">${docIcon("doc")}<span></span></button>
+      <button type="button" class="doc-tab-more" title="More">${docIcon("more")}</button>`;
+    r.querySelector(".doc-tab-name span").textContent = t.title;
+    r.querySelector(".doc-tab-name").title = t.title;
+    const closed = docTabsOpen.has(t.id || "0");
+    r.classList.toggle("closed", closed);
+    r.querySelector(".doc-tab-fold").addEventListener("click", () => { docTabsOpen.has(t.id || "0") ? docTabsOpen.delete(t.id || "0") : docTabsOpen.add(t.id || "0"); drawTabs(); });
+    r.querySelector(".doc-tab-name").addEventListener("click", () => docShowTab(t.id));
+    r.querySelector(".doc-tab-name").addEventListener("dblclick", () => docRenameTab(t.id));
+    r.querySelector(".doc-tab-more").addEventListener("click", (e) => { e.stopPropagation(); docTabMenu(t, r.querySelector(".doc-tab-more")); });
+    rows.push(r);
+    if (!closed) for (const k of under) row(k, depth + 1);
+  };
+  row({ id: "", title: $("docTitle").value.trim() || "Untitled document" }, 0);
+  for (const t of kids("")) row(t, 0);
+  box.replaceChildren(...rows);
+  $("docTabsHint").hidden = list.length > 0;
+}
+$("docTitle").addEventListener("input", () => { const r = $("docTabsList").querySelector('[data-tab=""] .doc-tab-name span'); if (r) r.textContent = $("docTitle").value.trim() || "Untitled document"; });
+
+// Shows another page (the one on screen goes back into the store, changes and all).
+function docShowTab(id) {
+  if (!doc || id === docTab) return;
+  docUndoCommit();
+  docApplying = true;
+  for (const el of docsText.children) docStore.set(el.dataset.id, { pos: el.dataset.pos, html: blockHtml(el) });
+  docsText.replaceChildren();
+  docTab = id;
+  const mine = [];
+  for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
+  mine.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
+  for (const b of mine) docStore.delete(b.id);
+  docsText.replaceChildren(...mine.map(blockFromHtml));
+  docNormalize();
+  docObserver.takeRecords();
+  docApplying = false;
+  docUndoReset();
+  docHidePops();
+  drawTabs();
+  drawOutline();
+  docCount();
+  drawHereMarks();
+  if (doc.where === "collab") { docNotesMark(); if (!$("docNotes").hidden) drawNotes(); }
+  window.scrollTo(0, 0);
+  docsText.focus({ preventScroll: true });
+  if (docsText.firstElementChild) docPutCaret(docsText.firstElementChild, 0);
+}
+
+function docAddTab(parent) {
+  if (!doc) return;
+  const list = docTabsList();
+  const id = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
+  const last = list.length ? list[list.length - 1].pos : "";
+  const pos = posBetween(last, null);
+  docStore.set("t~" + id, { pos, html: docTabHtml({ title: "Untitled page", parent }) });
+  docPending.add("t~" + id);
+  if (parent) docTabsOpen.delete(parent);
+  docMarkDirty();
+  docShowTab(id);
+  docRenameTab(id);
+}
+$("docTabAdd").addEventListener("click", () => docAddTab(""));
+
+function docRenameTab(id) {
+  if (id === "") { $("docTitle").focus(); $("docTitle").select(); return; }
+  const r = $("docTabsList").querySelector(`[data-tab="${CSS.escape(id)}"]`);
+  const b = docStore.get("t~" + id);
+  if (!r || !b) return;
+  const meta = docTabMeta(b.html) || {};
+  const name = r.querySelector(".doc-tab-name span");
+  const input = Object.assign(document.createElement("input"), { className: "doc-tab-input", value: meta.title || "", maxLength: 100 });
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (keep) => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    input.remove();
+    const now = docStore.get("t~" + id);
+    if (keep && title && now && title !== meta.title) {
+      docStore.set("t~" + id, { pos: now.pos, html: docTabHtml({ ...docTabMeta(now.html), title }) });
+      docPending.add("t~" + id);
+      docMarkDirty();
+    }
+    drawTabs();
+    docsText.focus({ preventScroll: true });
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
+async function docDeleteTab(id) {
+  const list = docTabsList();
+  const gone = new Set([id]);
+  for (let more = true; more;) { more = false; for (const t of list) if (!gone.has(t.id) && gone.has(t.parent)) { gone.add(t.id); more = true; } }
+  const t = list.find((x) => x.id === id);
+  const yes = await docAsk(`Delete "${t ? t.title : "this page"}"?`,
+    gone.size > 1 ? `The ${gone.size - 1 === 1 ? "page" : gone.size - 1 + " pages"} under it ${gone.size - 1 === 1 ? "is" : "are"} deleted too.` + (doc.where === "collab" ? " For everyone in this document." : "")
+      : doc.where === "collab" ? "It's deleted for everyone in this document." : "Everything on it is deleted.", "Delete");
+  if (!yes || !doc) return;
+  if (gone.has(docTab)) docShowTab("");
+  for (const bid of [...docStore.keys()]) {
+    const page = bid.startsWith("t~") ? bid.slice(2) : docTabOf(bid);
+    if (gone.has(page)) { docStore.delete(bid); docPending.delete(bid); docDeleted.add(bid); }
+  }
+  docMarkDirty();
+  drawTabs();
+}
+
+const docTabMenuEl = Object.assign(document.createElement("div"), { className: "lib-menu docs-card-menu doc-tab-menu", hidden: true });
+document.body.append(docTabMenuEl);
+document.addEventListener("mousedown", (e) => { if (!docTabMenuEl.hidden && !docTabMenuEl.contains(e.target) && !e.target.closest(".doc-tab-more")) docTabMenuEl.hidden = true; });
+function docTabMenu(t, button) {
+  const menu = docTabMenuEl;
+  if (!menu.hidden && menu.dataset.id === "tab:" + t.id) { menu.hidden = true; return; }
+  const item = (icon, label, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "lib-menu-item " + cls });
+    b.innerHTML = docIcon(icon) + "<span></span>";
+    b.querySelector("span").textContent = label;
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; fn(); });
+    return b;
+  };
+  const items = [item("plus", "Add a page under this", () => docAddTab(t.id === "" ? "0" : t.id)), item("rename", "Rename", () => docRenameTab(t.id))];
+  if (t.id !== "") items.push(item("trash", "Delete", () => docDeleteTab(t.id), "danger"));
+  menu.dataset.id = "tab:" + t.id;
+  menu.replaceChildren(...items);
+  menu.hidden = false;
+  const r = button.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top = Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8) + "px";
+}
+
+// ---------------------------------------------------------------- dark page (just for you, the document keeps its paper)
+
+const docDark = () => loadPref("docDarkPage") === "1";
+function docSetDark(on) {
+  savePref("docDarkPage", on ? "1" : "0");
+  $("docPage").dataset.dark = on ? "1" : "";
+  drawDarkButton();
+}
+function drawDarkButton() {
+  const on = docDark(), b = $("docDarkButton");
+  b.innerHTML = docIcon(on ? "sun" : "moon");
+  b.title = on ? "Light page (white)" : "Dark page (black)";
+  b.classList.toggle("on", on);
+}
+$("docDarkButton").addEventListener("mousedown", (e) => e.preventDefault());
+$("docDarkButton").addEventListener("click", () => docSetDark(!docDark()));
+drawDarkButton();
+
 // ---------------------------------------------------------------- the writing guide (next to the page)
 
 function drawGuide() {
@@ -691,7 +1251,7 @@ function drawGuide() {
   docsText.dataset.hint = t.hint || "";
   docsText.style.setProperty("--hint", JSON.stringify(t.hint || ""));
   docEmptyCheck();
-  $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1";
+  $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1" || !$("docNotes").hidden;
   if (!g) return;
   $("docGuideTitle").textContent = g.title;
   $("docGuideIntro").textContent = g.intro;
@@ -715,6 +1275,7 @@ function drawGuide() {
 
 function docShowGuide(on) {
   if (!doc) return;
+  if (on && !$("docNotes").hidden) { $("docNotes").hidden = true; docNotesDraft = null; drawNotesButton(); }
   savePref("docGuideOff:" + docTypeOf(doc).key, on ? "0" : "1");
   drawGuide();
   docFit();
@@ -752,6 +1313,7 @@ async function closeDoc(quiet) {
   document.body.classList.remove("doc-focus");
   if (was.where === "collab") api("/api/docs-close", { id: was.id }).catch(() => null);
   doc = null;
+  docNotesCloseDoc();
   docHidePops();
   $("docFind").hidden = true;
   docClearFind();
@@ -773,6 +1335,7 @@ async function docLeave() {
   if (docSaving) await docSaving;
   while (docSyncBusy && doc === d) await docSyncRunning;
   if (doc !== d) return true;
+  if (d.where === "collab" && docDirty) return docSave(); // live: whatever is left goes out, nothing to ask
   if (!docDirty) {
     if (d.fresh) await docForgetFresh(d);
     return true;
@@ -837,7 +1400,7 @@ function docNormalize() {
     }
     const el = node;
     if (!el.dataset.id || seen.has(el.dataset.id)) {
-      el.dataset.id = newBlockId();
+      el.dataset.id = docNewId();
       delete el.dataset.pos;
     }
     seen.add(el.dataset.id);
@@ -871,7 +1434,7 @@ function docNormalize() {
     const para = document.createElement("p");
     if (doc && doc.kind === "script") para.className = "sp-action";
     para.append(document.createElement("br"));
-    para.dataset.id = newBlockId();
+    para.dataset.id = docNewId();
     para.dataset.pos = posBetween("", null);
     docsText.append(para);
     docMarkChanged(para.dataset.id);
@@ -921,12 +1484,13 @@ function docChanged() {
   docUndoSoon();
   docCountSoon();
   docMarkDirty();
-  if (doc.where === "collab") docSyncSoon(400); // (only tells the others you're writing there; the words go on Save)
+  if (doc.where === "collab") docSyncSoon(300); // Collab docs are live: what you write goes to the others right away
 }
 
 function docMarkDirty() {
   if (!doc) return;
   if (!docDirty) { docDirty = true; docSaveState(); }
+  if (doc.where === "collab") docSyncSoon(300); // (the title and page setup are live too)
 }
 
 // ---------------------------------------------------------------- saving (only when you press Save)
@@ -961,6 +1525,7 @@ async function docSave() {
 async function docSaveLocalOnce() {
   const d = doc;
   const blocks = [...docsText.children].map((el) => ({ id: el.dataset.id, pos: el.dataset.pos, html: blockHtml(el) }));
+  for (const [id, b] of docStore) blocks.push({ id, pos: b.pos, html: b.html }); // the other pages
   const title = $("docTitle").value;
   docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
   docSaveState("Saving...");
@@ -985,22 +1550,27 @@ function docSaveState(text, bad) {
   if (!doc) return;
   const b = $("docSave");
   b.classList.toggle("dirty", docDirty);
+  b.hidden = doc.where === "collab"; // Collab docs save as you write (everyone sees it live)
   b.title = docDirty ? "Save your changes (Ctrl+S)" : "Everything is saved";
   b.querySelector("span").textContent = docDirty ? "Save" : "Saved";
-  $("docSaved").textContent = text || (docDirty ? (doc.fresh ? "Not saved yet" : "Unsaved changes")
-    : doc.where === "local" ? "Saved on this computer" : "Saved for everyone");
+  $("docSaved").textContent = text || (doc.where === "collab" ? (docDirty ? "Saving..." : "Live: everyone sees changes right away")
+    : docDirty ? (doc.fresh ? "Not saved yet" : "Unsaved changes") : "Saved on this computer");
   $("docSaved").classList.toggle("bad", !!bad);
-  $("docSaved").classList.toggle("dirty", docDirty && !bad);
+  $("docSaved").classList.toggle("dirty", docDirty && !bad && doc.where !== "collab");
 }
 function docSetSaved(text, bad) { docSaveState(text, bad); }
 $("docSave").addEventListener("click", () => docSave());
 
 // ---------------------------------------------------------------- live together (collab)
 
+let docSyncAt = 0;
 function docSyncSoon(ms) {
   if (!doc || doc.where !== "collab") return;
+  // Keep a sooner one (typing non-stop mustn't keep pushing the sending back).
+  if (docSyncTimer && docSyncAt > Date.now() && docSyncAt <= Date.now() + ms) return;
   clearTimeout(docSyncTimer);
-  docSyncTimer = setTimeout(docSync, ms);
+  docSyncAt = Date.now() + ms;
+  docSyncTimer = setTimeout(() => { docSyncTimer = 0; docSync(); }, ms);
 }
 
 function docCaretBlock() {
@@ -1027,14 +1597,16 @@ function docGone(text) {
 async function docSyncOnce() {
   docSyncBusy = true;
   const d = doc;
-  const send = docSaveWanted; // your changes only go out when you press Save
+  const asked = docSaveWanted; // Save (Ctrl+S) or leaving; otherwise changes go out on their own
   docSaveWanted = false;
+  const send = asked || docPending.size > 0 || docDeleted.size > 0 || docTitleDirty || docSettingsDirty;
   const changes = [];
   if (send) for (const id of docPending) {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`);
-    if (!el) continue;
-    const html = blockHtml(el);
-    changes.push({ id, pos: el.dataset.pos, html });
+    const kept = el ? null : docStore.get(id); // (on another page)
+    if (!el && !kept) continue;
+    const html = el ? blockHtml(el) : kept.html;
+    changes.push({ id, pos: el ? el.dataset.pos : kept.pos, html });
     docInFlight.set(id, html);
   }
   if (send) for (const id of docDeleted) changes.push({ id, pos: "0", html: "", deleted: true });
@@ -1043,7 +1615,7 @@ async function docSyncOnce() {
   const settings = send && docSettingsDirty ? d.settings : null;
   if (send) {
     docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
-    docSaveState("Saving...");
+    if (asked) docSaveState("Saving...");
   }
   const caret = docCaretBlock();
   const typing = Date.now() - docLastTyped < 3000 && docTypedBlock && caret && caret.dataset.id === docTypedBlock;
@@ -1068,6 +1640,7 @@ async function docSyncOnce() {
     return false;
   }
   docFailed = 0;
+  if (send && changes.length) d.fresh = false; // something was written: it's a real document now
   docApplyRemote(res.blocks || []);
   d.rev = Math.max(d.rev, res.rev || 0);
   if (send && title !== null) d.title = title;
@@ -1092,7 +1665,7 @@ async function docSyncOnce() {
     docSyncSoon(150);
   } else {
     // About every second while someone else is in it, a bit slower when you're alone.
-    docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.length ? 900 : 2000);
+    docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.some((h) => h.typing) ? 500 : docHere.length ? 800 : 2000);
   }
   return true;
 }
@@ -1103,9 +1676,14 @@ function docApplyRemote(blocks) {
   if (!blocks.length) return;
   const caret = docSaveCaret();
   docApplying = true;
-  let touched = false;
+  let touched = false, pages = false;
   for (const b of blocks) {
     if (docPending.has(b.id) || docDeleted.has(b.id)) continue;
+    if (docTabOf(b.id) !== docTab) { // a page's name, or what's on another page
+      if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
+      if (docTabOf(b.id) === null) pages = true;
+      continue;
+    }
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(b.id)}"]`);
     if (b.deleted) {
       if (el) { el.remove(); touched = true; }
@@ -1128,6 +1706,10 @@ function docApplyRemote(blocks) {
   }
   docObserver.takeRecords();
   docApplying = false;
+  if (pages) {
+    if (docTab && !docStore.has("t~" + docTab)) docShowTab(""); // the page you were on was deleted
+    drawTabs();
+  }
 }
 
 // Puts a block where its position says.
@@ -1207,14 +1789,6 @@ function drawHere() {
   });
   setChildren(box, faces);
   box.hidden = !faces.length;
-  // The same faces at the end of the toolbar (it stays on screen while you scroll).
-  let mini = $("docToolFaces");
-  if (!mini) {
-    mini = Object.assign(document.createElement("span"), { id: "docToolFaces", className: "doc-tool-faces" });
-    $("docToolbar").append(mini);
-  }
-  setChildren(mini, docHere.map((h) => { const f = docAvatar(h, "tiny"); f.title = h.username + (h.typing ? " is writing" : " is here"); return f; }));
-  mini.hidden = !docHere.length;
   drawHereMarks();
 }
 
@@ -1228,7 +1802,6 @@ function drawHereMarks() {
     if (el.getAttribute("style") === "") el.removeAttribute("style");
   }
   const mine = docCaretBlock();
-  const iTyped = Date.now() - docLastTyped < 1500;
   for (const h of docHere) {
     if (!h.block) continue;
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(h.block)}"]`);
@@ -1236,8 +1809,9 @@ function drawHereMarks() {
     el.classList.add("doc-other");
     el.dataset.who = el.dataset.who ? el.dataset.who + ", " + h.username : h.username;
     el.style.setProperty("--who", docColor(h.username));
-    // Someone's writing here right now: it's theirs for a moment (unless you're writing in it too).
-    if (h.typing && !(mine === el && iTyped)) {
+    // Someone's writing here right now: it's theirs for a moment. Never the line your cursor is on
+    // (that would throw your cursor somewhere else; their words still come in live).
+    if (h.typing && mine !== el) {
       el.classList.add("doc-held");
       el.setAttribute("contenteditable", "false");
     }
@@ -1704,11 +2278,12 @@ function docHidePops() {
   $("docPop").hidden = true;
   $("docSuggest").hidden = true;
   $("docsCardMenu").hidden = true;
+  docTabMenuEl.hidden = true;
   for (const b of $("docMenubar").children) b.classList.remove("open");
 }
 document.addEventListener("mousedown", (e) => {
   if (!doc) return;
-  if (!$("docPop").contains(e.target) && !$("docMenubar").contains(e.target)) docHidePops();
+  if (!$("docPop").contains(e.target) && !$("docMenubar").contains(e.target) && !docTabMenuEl.contains(e.target)) docHidePops();
   if (!$("docSuggest").contains(e.target)) $("docSuggest").hidden = true;
 });
 
@@ -2351,6 +2926,7 @@ function docCountSoon() {
 function docCount() {
   if (!doc) return;
   docEmptyCheck();
+  docNotesMark();
   const text = docsText.innerText;
   const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
   let more = "";
@@ -2525,8 +3101,10 @@ $("docShare").addEventListener("click", () => {
 async function docCopyTo(where) {
   if (where === "collab" && !sfxUser()) return docToast("Log in first to share documents.");
   // The copy is made of what's on the page now (saved or not), then the original asks about its changes.
+  if (docTab) docShowTab("");
   let pos = "";
   const blocks = [...docsText.children].map((el) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: blockHtml(el) }; });
+  for (const [id, b] of docStore) blocks.push({ id, pos: b.pos, html: b.html }); // the other pages, as they are
   const title = where === doc.where ? `Copy of ${$("docTitle").value}` : $("docTitle").value;
   const kind = doc.kind, settings = doc.settings;
   if (!(await docLeave())) return;
@@ -2933,6 +3511,7 @@ function docApplySettings() {
   const size = DOC_PAGES[s.page] || DOC_PAGES.letter;
   const margin = doc.kind === "script" ? 96 : DOC_MARGINS[s.margins].px;
   page.dataset.paper = s.paper;
+  page.dataset.dark = docDark() ? "1" : "";
   page.style.setProperty("--page-w", size.w + "px");
   page.style.setProperty("--page-h", size.h + "px");
   page.style.setProperty("--pad-x", margin + "px");
@@ -3080,20 +3659,23 @@ function docMenuItems(name) {
     { label: "Find and replace", icon: "find", key: "Ctrl+H", fn: () => docOpenFind(true) },
   ];
   if (name === "view") return [
-    { label: script ? "Scenes on the side" : "Outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
+    { label: script ? "Pages and scenes on the side" : "Pages and outline on the side", icon: "outline", on: !$("docOutline").hidden, fn: () => docCommand("outline") },
     script ? { label: "Scene numbers", icon: "numbersScene", on: docsText.classList.contains("numbers"), fn: () => docCommand("numbers-scene") } : null,
     docTypeOf(doc).guide ? { label: "Writing guide", icon: "quote", on: !$("docGuide").hidden, fn: () => docShowGuide($("docGuide").hidden) } : null,
     { label: "Focus mode", icon: "focus", fn: () => docFocus(true) },
     "-",
     { label: "Zoom", icon: "zoom", more: "zoom" },
     { label: "Paper color", icon: "paper", more: "paper" },
+    { label: "Dark page", icon: "moon", on: docDark(), fn: () => docSetDark(!docDark()) },
   ];
   if (name === "insert") return script ? [
+    doc.where === "collab" ? { label: "Comment", icon: "comment", key: "Ctrl+Alt+M", fn: () => docNotesNew() } : null,
     { label: "Page break", icon: "pagebreak", key: "Ctrl+Enter", fn: () => docCommand("pagebreak") },
     { label: "Today's date", icon: "calendar", fn: docInsertDate },
     { label: "Special character", icon: "omega", more: "special" },
     { label: "Emoji", icon: "emoji", more: "emoji" },
   ] : [
+    doc.where === "collab" ? { label: "Comment", icon: "comment", key: "Ctrl+Alt+M", fn: () => docNotesNew() } : null,
     { label: "Picture", icon: "image", fn: () => docCommand("image") },
     { label: "Table", icon: "table", more: "table" },
     { label: "Link", icon: "link", key: "Ctrl+K", fn: () => docCommand("link") },
