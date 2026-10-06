@@ -1099,6 +1099,25 @@ function drawTabs() {
     r.querySelector(".doc-tab-name").addEventListener("click", () => docShowTab(t.id));
     r.querySelector(".doc-tab-name").addEventListener("dblclick", () => docRenameTab(t.id));
     r.querySelector(".doc-tab-more").addEventListener("click", (e) => { e.stopPropagation(); docTabMenu(t, r.querySelector(".doc-tab-more")); });
+    if (t.id !== "") {
+      r.draggable = true;
+      r.addEventListener("dragstart", (e) => { docTabDrag = t.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-doc-page", t.id); r.classList.add("dragging"); });
+      r.addEventListener("dragend", () => { docTabDrag = null; drawTabs(); });
+    }
+    r.addEventListener("dragover", (e) => {
+      const where = docTabDropWhere(t, r, e);
+      for (const x of box.children) x.classList.remove("drop-in", "drop-before", "drop-after");
+      if (!where) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      r.classList.add("drop-" + where);
+    });
+    r.addEventListener("dragleave", (e) => { if (!r.contains(e.relatedTarget)) r.classList.remove("drop-in", "drop-before", "drop-after"); });
+    r.addEventListener("drop", (e) => {
+      const where = docTabDropWhere(t, r, e);
+      e.preventDefault();
+      if (where) docMoveTab(docTabDrag, t.id, where);
+    });
     rows.push(r);
     if (!closed) for (const k of under) row(k, depth + 1);
   };
@@ -1108,6 +1127,43 @@ function drawTabs() {
   $("docTabsHint").hidden = list.length > 0;
 }
 $("docTitle").addEventListener("input", () => { const r = $("docTabsList").querySelector('[data-tab=""] .doc-tab-name span'); if (r) r.textContent = $("docTitle").value.trim() || "Untitled document"; });
+
+// Dragging a page onto another page puts it under that page; near the top or bottom edge puts it before or after.
+let docTabDrag = null;
+function docTabDropWhere(t, row, e) {
+  const from = docTabDrag;
+  if (from === null || from === t.id) return null;
+  // (not into its own pages)
+  const list = docTabsList();
+  for (let at = t.id; at && at !== "0";) { if (at === from) return null; const p = list.find((x) => x.id === at); at = p ? p.parent : ""; }
+  if (t.id === "") return "in";
+  const r = row.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+  return y < 0.28 ? "before" : y > 0.72 ? "after" : "in";
+}
+
+function docMoveTab(id, target, where) {
+  const list = docTabsList();
+  const me = list.find((x) => x.id === id), t = list.find((x) => x.id === target);
+  const b = docStore.get("t~" + id);
+  if (!me || !b) return;
+  let parent, pos;
+  if (where === "in") {
+    parent = target === "" ? "0" : target;
+    pos = posBetween(list[list.length - 1].pos, null); // last under it
+    docTabsOpen.delete(parent);
+  } else {
+    if (!t) return;
+    parent = t.parent;
+    const others = list.filter((x) => x.id !== id);
+    const i = others.findIndex((x) => x.id === target);
+    pos = where === "before" ? posBetween(i > 0 ? others[i - 1].pos : "", t.pos) : posBetween(t.pos, i + 1 < others.length ? others[i + 1].pos : null);
+  }
+  if (parent === me.parent && pos === b.pos) return;
+  docStore.set("t~" + id, { pos, html: docTabHtml({ ...docTabMeta(b.html), parent }) });
+  docPending.add("t~" + id);
+  docMarkDirty();
+  drawTabs();
+}
 
 // Shows another page (the one on screen goes back into the store, changes and all).
 function docShowTab(id) {
@@ -1233,6 +1289,39 @@ function docSetDark(on) {
   savePref("docDarkPage", on ? "1" : "0");
   $("docPage").dataset.dark = on ? "1" : "";
   drawDarkButton();
+  docDarkInk();
+}
+
+// Black or very dark text colours (often pasted from Google Docs) turn light on the dark page.
+// Done with a style sheet, so the document itself doesn't change.
+const docInkStyle = document.head.appendChild(document.createElement("style"));
+const docInkCanvas = document.createElement("canvas").getContext("2d");
+let docInkSig = "";
+function docInkDark(value) {
+  docInkCanvas.fillStyle = "#010203";
+  docInkCanvas.fillStyle = value;
+  const f = docInkCanvas.fillStyle; // "#rrggbb", or "rgba(r, g, b, a)" when see-through
+  if (f === "#010203" && !/^#?010203$/i.test(value)) return false; // (not a colour)
+  const [r, g, b] = f[0] === "#" ? [1, 3, 5].map((i) => parseInt(f.slice(i, i + 2), 16)) : f.match(/[\d.]+/g).map(Number);
+  const hi = Math.max(r, g, b), lo = Math.min(r, g, b);
+  return hi < 70 || (0.2126 * r + 0.7152 * g + 0.0722 * b < 110 && hi - lo < 40); // black and dark greys (real colours stay)
+}
+function docDarkInk() {
+  const colors = new Set(), fonts = new Set();
+  if (doc && docDark()) {
+    for (const el of docsText.querySelectorAll('[style*="color"]')) if (el.style.color) colors.add(el.style.color);
+    for (const el of docsText.querySelectorAll("font[color]")) fonts.add(el.getAttribute("color"));
+  }
+  const dark = [...colors].filter(docInkDark), darkFonts = [...fonts].filter(docInkDark);
+  const sig = dark.join("|") + "#" + darkFonts.join("|");
+  if (sig === docInkSig) return;
+  docInkSig = sig;
+  const q = (v) => JSON.stringify(v);
+  const sel = [
+    ...dark.flatMap((c) => [`[style^=${q("color: " + c)}]`, `[style*=${q(" color: " + c)}]`]),
+    ...darkFonts.map((c) => `font[color=${q(c)}]`),
+  ].map((x) => `.doc-page[data-dark="1"] .doc-text ${x}`);
+  docInkStyle.textContent = sel.length ? sel.join(",\n") + " { color: var(--ink) !important; }" : "";
 }
 function drawDarkButton() {
   const on = docDark(), b = $("docDarkButton");
@@ -2349,12 +2438,14 @@ docsText.addEventListener("click", (e) => {
     docUndoCommit();
   }
 });
-// Links never open inside the app; Ctrl+click opens them in the browser.
+// Links never open inside the app; a click opens them in the browser (not when you're selecting text).
 docsText.addEventListener("click", (e) => {
   const a = e.target.closest && e.target.closest("a");
   if (!a) return;
   e.preventDefault();
-  if ((e.ctrlKey || e.metaKey) && a.getAttribute("href")) api("/api/docs-open-link", { url: a.getAttribute("href") }).catch(() => null);
+  const sel = document.getSelection();
+  if (e.button !== 0 || e.shiftKey || (sel && !sel.isCollapsed && sel.toString().trim())) return;
+  if (a.getAttribute("href")) api("/api/docs-open-link", { url: a.getAttribute("href") }).catch(() => null);
 }, true);
 docsText.addEventListener("auxclick", (e) => { if (e.target.closest && e.target.closest("a")) e.preventDefault(); }, true);
 
@@ -2926,6 +3017,7 @@ function docCountSoon() {
 function docCount() {
   if (!doc) return;
   docEmptyCheck();
+  docDarkInk();
   docNotesMark();
   const text = docsText.innerText;
   const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
@@ -2947,7 +3039,7 @@ function docCount() {
     more = words ? ` · ${minutes} min to read` : "";
   }
   $("docCount").textContent = `${words.toLocaleString()} ${words === 1 ? "word" : "words"}${more}`;
-  if (doc.kind !== "script") $("docHint").textContent = doc.where === "collab" ? "Ctrl+click a link to open it" : "";
+  if (doc.kind !== "script") $("docHint").textContent = docsText.querySelector("a[href]") ? "Click a link to open it" : "";
 }
 
 // The page fits the window: smaller windows get a smaller page (like zooming out).
@@ -3286,7 +3378,7 @@ function docPrint() {
   const margin = doc.kind === "script" ? "1in" : DOC_MARGINS[s.margins].px / 96 + "in";
   const style = Object.assign(document.createElement("style"), { id: "docPrintPage", textContent: `@media print { @page { size: ${(DOC_PAGES[s.page] || DOC_PAGES.letter).css}; margin: ${margin}; } }` });
   document.head.append(style);
-  const done = () => { document.body.classList.remove("doc-printing"); document.title = "Ultimate Recording"; style.remove(); window.removeEventListener("afterprint", done); };
+  const done = () => { document.body.classList.remove("doc-printing"); document.title = "VaultHub"; style.remove(); window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);
   const caret = docSaveCaret();
   docsText.blur(); // (no blinking caret on the paper)

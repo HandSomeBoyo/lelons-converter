@@ -54,8 +54,8 @@ jobs:
         run: |
           python3 build/release_notes.py "$TAG" > "$RUNNER_TEMP/notes.md"
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "dist/Ultimate Recording Setup.exe" --clobber
+            gh release upload "$TAG" "dist/VaultHub Setup.exe" --clobber
           else
-            gh release create "$TAG" "dist/Ultimate Recording Setup.exe" --target "$GITHUB_SHA" \
+            gh release create "$TAG" "dist/VaultHub Setup.exe" --target "$GITHUB_SHA" \
               --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --latest
           fi

@@ -11,4 +11,4 @@ text = open(os.path.join(here, "..", "src", "ui", "whatsnew.js"), encoding="utf-
 block = re.search(r'\{ version: "' + re.escape(version) + r'", items: \[(.*?)\] \}', text, re.S)
 items = re.findall(r'^\s*("(?:[^"\\]|\\.)*"),\s*$', block[1], re.M) if block else []
 print("\n".join("- " + json.loads(item) for item in items) or f"Version {version}")
-print("\nDownload **Ultimate Recording Setup.exe** below and run it. The app also updates itself.")
+print("\nDownload **VaultHub Setup.exe** below and run it. The app also updates itself.")

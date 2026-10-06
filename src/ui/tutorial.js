@@ -5,9 +5,9 @@
 const TOUR = [
   {
     key: "welcome", seconds: 5,
-    title: "Welcome to Ultimate Recording",
+    title: "Welcome to VaultHub",
     text: "A quick tour of everything you can do. It only takes a minute.",
-    say: "Hey, welcome to Ultimate Recording! Let me show you around. It only takes a minute.",
+    say: "Hey, welcome to VaultHub! Let me show you around. It only takes a minute.",
     html: `<div class="t-center">
       <div class="t-logo"><svg viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg><i></i><i></i></div>
       <div class="t-words"><span>Paste.</span><span>Convert.</span><span>Done.</span></div>
@@ -85,12 +85,36 @@ const TOUR = [
     </div>`,
   },
   {
+    key: "docs", seconds: 9,
+    title: "Write together in Docs",
+    text: "Write scripts and ideas in Docs. In Collab docs you see your friends type live. Drag pages onto each other to put one under another.",
+    say: "Got a story to write? Open Docs. In a Collab doc, you see your friends typing live, and you can leave comments. Add pages on the left, and drag one page onto another to tuck it underneath.",
+    html: `<div class="t-docs">
+      <div class="t-side"><small>Pages</small>
+        <div class="t-pg on" style="--y:0">Our film</div>
+        <div class="t-pg t-pg-target" style="--y:1">Characters</div>
+        <div class="t-pg t-pg-down" style="--y:2">Music ideas</div>
+        <div class="t-pg t-pg-move" style="--y:3">Kim</div>
+      </div>
+      <div class="t-paper">
+        <div class="t-doc-title"><span>THE TRUTH</span></div>
+        <div class="t-doc-line" style="--w:88%;--d:1.8s"></div>
+        <div class="t-doc-line" style="--w:72%;--d:2.05s"></div>
+        <div class="t-them"><span>Kim is writing this, live</span><b><em>Kim</em></b></div>
+        <div class="t-doc-line" style="--w:64%;--d:4.3s"></div>
+        <div class="t-bubble"><span class="t-face b">K</span>Love this part!</div>
+      </div>
+      <div class="t-faces"><span class="t-face a">L</span><span class="t-face b">K</span></div>
+      <div class="t-cursor"></div>
+    </div>`,
+  },
+  {
     key: "yours", seconds: 7.5,
     title: "Make it yours",
     text: "In Settings: themes, colors, size and volume. The speaker at the top changes the volume too.",
     say: "And make it yours! In Settings, you can pick a theme and a color, change the size, and set the volume.",
     html: `<div class="t-yours">
-      <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>Ultimate</b></div>
+      <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>VaultHub</b></div>
         <div class="t-win-line w1"></div><div class="t-win-line w2"></div><div class="t-win-button"></div></div>
       <div class="t-controls">
         <div class="t-swatches">${["#ffcf3f", "#ff8a3d", "#ef5350", "#ec5fa8", "#9b7bf7", "#4d9ef7", "#22b8a5", "#5cc15c"].map((c, i) => `<i style="--c:${c};--i:${i}"></i>`).join("")}</div>
@@ -117,6 +141,7 @@ let tourStarted = 0; // when this scene (or the part after a pause) started
 let tourLeft = 0; // ms left in this scene
 let tourPaused = false;
 let tourVoice = loadPref("tourVoice") === true;
+const TOUR_ROUND = "2.3"; // raise this to show the tour to everyone again after an update
 let tourShownNow = false; // opened by itself this time (then "What's new" waits for the next update)
 let tourSpeechDone = true;
 
@@ -126,7 +151,7 @@ function openTour(auto = false) {
   tourShownNow = tourShownNow || auto;
   $("tourStage").replaceChildren(); // start clean
   $("tourModal").hidden = false;
-  if (!loadPref("tourSeen")) savePref("tourSeen", true);
+  if (loadPref("tourSeen") !== TOUR_ROUND) savePref("tourSeen", TOUR_ROUND);
   showScene(0);
 }
 
@@ -297,5 +322,5 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === " ") { e.preventDefault(); if (!$("tourPause").hidden) togglePause(); }
 });
 
-// The first time: open by itself, once the app has loaded.
-if (!loadPref("tourSeen")) openTour(true);
+// The first time (and once after an update with a new tour): open by itself, once the app has loaded.
+if (loadPref("tourSeen") !== TOUR_ROUND) openTour(true);

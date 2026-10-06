@@ -1,4 +1,4 @@
-"""Ultimate Recording (was Lelons Converter) - paste a YouTube link, pick MP3 or MP4, convert.
+"""VaultHub (was Lelons Converter, then Ultimate Recording) - paste a YouTube link, pick MP3 or MP4, convert.
 
 The window is a Microsoft Edge app window (Edge is on every Windows PC)
 showing the page in ui/. This script runs a small local web server that the
@@ -411,7 +411,7 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def refuse(self):
-        body = b"Open Ultimate Recording from the Start menu or the desktop."
+        body = b"Open VaultHub from the Start menu or the desktop."
         self.send_response(403)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

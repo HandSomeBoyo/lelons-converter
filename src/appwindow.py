@@ -2,7 +2,7 @@
 
 WebView2 is the Edge engine that comes with Windows 10 and 11, made for
 putting web pages inside apps. Because the window belongs to the app itself,
-Task Manager and the taskbar show "Ultimate Recording" instead of Microsoft Edge.
+Task Manager and the taskbar show "VaultHub" instead of Microsoft Edge.
 
 Talks to Windows and WebView2 through ctypes. If anything doesn't work
 (no WebView2 on the PC, say), show() returns False and the app uses an Edge
@@ -14,7 +14,7 @@ import os
 import threading
 from ctypes import wintypes
 
-TITLE = "Ultimate Recording"
+TITLE = "VaultHub"
 BACKGROUND = (0x14, 0x14, 0x14)  # the page's --bg, so opening it doesn't flash white
 SIZE = (960, 760)
 

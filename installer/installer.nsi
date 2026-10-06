@@ -1,12 +1,14 @@
-; Ultimate Recording installer (built with NSIS). The app was called Lelons Converter before 1.30.0.
+; VaultHub installer (built with NSIS). The app was called Lelons Converter before 1.30.0,
+; and Ultimate Recording from 1.30.0 to 2.2.0.
 ; Installs just for the current user, so it never asks for admin rights.
 
 Unicode true
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
-!define APP_NAME "Ultimate Recording"
+!define APP_NAME "VaultHub"
 !define OLD_NAME "Lelons Converter"  ; its name before 1.30.0
+!define OLD_NAME2 "Ultimate Recording"  ; its name from 1.30.0 to 2.2.0
 !ifndef APP_VERSION
   !define APP_VERSION "0.0.0"  ; build.sh passes the real one from src/version.py
 !endif
@@ -15,7 +17,7 @@ Unicode true
 !define APP_PUBLISHER "Lelon"
 ; STAGE is passed in by build.sh: the folder holding app\ and runtime\.
 
-; The app starts with "Ultimate Recording.exe": Python's own pythonw.exe with
+; The app starts with "VaultHub.exe": Python's own pythonw.exe with
 ; the app's name and icon (see build.sh), so Windows shows it as the app.
 ; -E and -s keep any Python the user installed themselves from interfering.
 !define RUN_EXE "$INSTDIR\runtime\${APP_NAME}.exe"
@@ -103,29 +105,34 @@ FunctionEnd
   SetDetailsPrint none
 !macroend
 
+!macro MoveFromOld NAME ID
+  StrCpy $2 "$LOCALAPPDATA\Programs\${NAME}"
+  StrCmp $2 $INSTDIR old_done_${ID}
+  IfFileExists "$2\*.*" 0 old_done_${ID}
+  !insertmacro Status "Moving over from ${NAME}..."
+  !insertmacro CloseAppIn "$2"
+  StrCpy $1 0
+  old_again_${ID}:
+  RMDir /r "$2"
+  IfFileExists "$2\*.*" 0 old_gone_${ID}
+  IntOp $1 $1 + 1
+  IntCmp $1 6 old_gone_${ID}
+  !insertmacro CloseAppIn "$2"
+  Sleep 1500
+  Goto old_again_${ID}
+  old_gone_${ID}:
+  Delete "$DESKTOP\${NAME}.lnk"
+  RMDir /r "$SMPROGRAMS\${NAME}"
+  old_done_${ID}:
+!macroend
+
 Section "Install"
   !insertmacro Status "Getting things ready..."
   !insertmacro CloseRunningApp
-  ; Moving from the old name: close and remove the old copy and its shortcuts. Settings, the login
+  ; Moving from an old name: close and remove the old copy and its shortcuts. Settings, the login
   ; and history stay (they're kept in %LOCALAPPDATA%\LelonsConverter, which isn't renamed).
-  StrCpy $2 "$LOCALAPPDATA\Programs\${OLD_NAME}"
-  StrCmp $2 $INSTDIR old_done
-  IfFileExists "$2\*.*" 0 old_done
-  !insertmacro Status "Moving over from ${OLD_NAME}..."
-  !insertmacro CloseAppIn "$2"
-  StrCpy $1 0
-  old_again:
-  RMDir /r "$2"
-  IfFileExists "$2\*.*" 0 old_gone
-  IntOp $1 $1 + 1
-  IntCmp $1 6 old_gone
-  !insertmacro CloseAppIn "$2"
-  Sleep 1500
-  Goto old_again
-  old_gone:
-  Delete "$DESKTOP\${OLD_NAME}.lnk"
-  RMDir /r "$SMPROGRAMS\${OLD_NAME}"
-  old_done:
+  !insertmacro MoveFromOld "${OLD_NAME}" a
+  !insertmacro MoveFromOld "${OLD_NAME2}" b
   ; Clear out an older version first so no stale files are left behind.
   ; If something still holds a file (an app that's slow to close), close it again and wait a bit.
   StrCpy $1 0
@@ -138,7 +145,7 @@ Section "Install"
   still_there:
   IntOp $1 $1 + 1
   IntCmp $1 6 cleared
-  !insertmacro Status "Waiting for Lelons Converter to close..."
+  !insertmacro Status "Waiting for ${APP_NAME} to close..."
   !insertmacro CloseRunningApp
   Sleep 1500
   Goto clear_old
