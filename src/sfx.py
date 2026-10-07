@@ -231,10 +231,37 @@ class Waveforms:
                 if os.path.exists(temp):
                     os.remove(temp)
         self.remember(path, peaks)
+        share_peaks([(path, peaks)])
         return peaks
 
 
+def share_peaks(items):
+    """Save waveforms in the Library (in the background), so other apps don't have to download the sounds."""
+    token = settings.load().get("library_token")
+    if not token or not items:
+        return
+
+    def run():
+        for path, peaks in items:
+            try:
+                _rpc("lelons_set_peaks", token=token, file=path, peaks=peaks)
+            except Exception:
+                return
+    threading.Thread(target=run, daemon=True).start()
+
+
 waveforms = Waveforms()
+
+
+_token_lock = threading.Lock()
+
+
+def drop_token(token):
+    """Log out because this token stopped working, unless you logged in again meanwhile (a new token)."""
+    with _token_lock:
+        if settings.load().get("library_token") == token:
+            settings.save(library_token="")
+            presence.poke()
 
 
 def _clean_name(text, limit=80):
@@ -248,6 +275,7 @@ class Library:
         self.ids = 0
         self.drag_lock = threading.Lock()
         self.drag_locks = {}  # one per sound being fetched for dragging
+        self.peaks_shared = set()  # waveforms this app already sent to the Library
         self.saved = set()  # files downloaded from the library (allowed for "show in folder")
         self.channel_logged = {}  # channel url -> ((url, subs), when): what the stats last got
 
@@ -269,11 +297,11 @@ class Library:
         base = {"configured": configured(), "categories": CATEGORIES, "genres": GENRES, "roles": ROLES}
         if not configured() or not settings.load().get("library_token"):
             return {**base, "user": None}
+        token = self._token()
         try:
-            return {**base, "user": self._user(_rpc("lelons_me", token=self._token()))}
+            return {**base, "user": self._user(_rpc("lelons_me", token=token))}
         except LoggedOut:
-            settings.save(library_token="")
-            presence.poke()
+            drop_token(token)
             return {**base, "user": None}
 
     def _logged_in(self, result):
@@ -367,7 +395,7 @@ class Library:
                            for g in result.get("groups") or []],
                 "group": group,
                 "everyoneLast": result.get("everyone_last") or 0,
-                "names": result.get("names") or [],
+                "names": result.get("names"),  # (only on the first load of a chat)
                 "online": presence.remember(result.get("online"))}
 
     def chat_send(self, message, to_user=None, sound_id=None, clip=None):
@@ -395,6 +423,8 @@ class Library:
                 "yourself": "You can't send a private message to yourself.",
                 "gone": "Someone deleted that sound.",
             }.get((result or {}).get("error"), "That didn't send. Try again."))
+        for path in result.get("files") or []:  # clips of old messages that dropped off the end
+            self._remove_file(path)
 
     def _chat_clip(self, path, name, seconds):
         """Upload a clip's sound for the chat. Returns what lelons_chat_send needs."""
@@ -424,7 +454,7 @@ class Library:
         """Make a group chat, rename it, add or remove people, or leave it (see lelons_chat_group)."""
         if what not in ("create", "rename", "add", "remove", "leave", "picture"):
             raise Error("That didn't work. Try again.")
-        names = [str(u) for u in usernames or [] if str(u).strip()][:50]
+        names = [str(u) for u in usernames or [] if str(u).strip()][:49]  # (50 with you)
         result = _rpc("lelons_chat_group", token=self._token(), what=what, group_id=str(group_id) if group_id else None,
                       group_name=str(name) if name is not None else None, usernames=names or None, picture=picture) or {}
         if not result.get("ok"):
@@ -432,8 +462,8 @@ class Library:
                          "daily": "You've made a lot of groups today. Try again tomorrow.",
                          "denied": "Only the person who made the group can remove people.",
                          }.get(result.get("error")) or FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
-        if result.get("old_picture"):
-            self._remove_file(result["old_picture"])
+        for path in [result.get("old_picture"), *(result.get("files") or [])]:
+            self._remove_file(path)
         group = result.get("group")
         if group:
             result["group"] = {**group, "pictureUrl": public_url(group["picture"]) if group.get("picture") else "",
@@ -497,8 +527,7 @@ class Library:
         token = settings.load().get("library_token") or None
         result = _rpc("lelons_home", token=token) or {}
         if token and not result.get("logged_in"):
-            settings.save(library_token="")
-            presence.poke()
+            drop_token(token)
 
         def pictured(picture):
             return public_url(picture) if picture else ""
@@ -528,8 +557,9 @@ class Library:
             last = self.channel_logged.get(url)
             if last and last[0] == key and time.time() - last[1] < 3600:
                 return
-            self.channel_logged[url] = (key, time.time())
         _rpc("lelons_channel_log", token=token, channel=url, subs=int(subs), videos=None)
+        with self.lock:  # (only once it worked: a failed one is tried again next time)
+            self.channel_logged[url] = (key, time.time())
 
     def channel_history(self, days):
         return _rpc("lelons_channel_history", token=self._token(), days=int(days)) or []
@@ -550,7 +580,8 @@ class Library:
             error = (result or {}).get("error")
             raise Error(FRIENDLY["wrong_password" if error == "wrong" else error] if error in FRIENDLY or error == "wrong"
                         else "That didn't work. Try again.")
-        self._remove_file(result.get("avatar"))
+        for path in [result.get("avatar"), *(result.get("files") or [])]:
+            self._remove_file(path)
         settings.save(library_token="")
         presence.poke()
         return self.account()
@@ -618,7 +649,12 @@ class Library:
             known = waveforms._load()
             sounds = [{**row, "url": public_url(row["path"]), "categoryName": CATEGORIES.get(row["category"], "SFX"),
                        "uploaderAvatar": public_url(row["uploader_avatar"]) if row.get("uploader_avatar") else "",
-                       "peaks": known.get(row["path"])} for row in rows]
+                       "peaks": row.get("peaks") or known.get(row["path"])} for row in rows]
+            # Waveforms only this PC has (older sounds): share them once.
+            unshared = [(row["path"], known[row["path"]]) for row in rows
+                        if not row.get("peaks") and known.get(row["path"]) and row["path"] not in self.peaks_shared][:40]
+            self.peaks_shared.update(path for path, _ in unshared)
+        share_peaks(unshared)
         song_check.want(sounds, self._token)
         return song_check.fill_in(sounds)
 
@@ -833,7 +869,7 @@ class Library:
             try:
                 _rpc("lelons_add", token=token, sound_name=item["name"], sound_category=category,
                      file=path, sound_seconds=round(seconds, 2), sound_bytes=size, sound_hash=self.sound_hash(item, trim),
-                     sound_genre=genre or None)
+                     sound_genre=genre or None, sound_peaks=peaks)
             except Exception:
                 self._remove_file(path)  # uploaded, but it didn't make it into the list: nothing uses it
                 raise
@@ -928,6 +964,10 @@ class SongCheck:
     def _run(self, token):
         while (sound := self._next()) is not None:
             try:
+                if not _rpc("lelons_claim_check", token=token(), sound_id=sound["id"]):
+                    with self.lock:  # someone else's app is checking it (or did already)
+                        self.waiting.pop(sound["id"], None)
+                    continue
                 if (sound.get("seconds") or 0) < self.SHORT:
                     answer = {"match": None, "short": True}
                 else:

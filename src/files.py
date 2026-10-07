@@ -15,6 +15,7 @@ import threading
 import history
 import media
 import names
+import waveform
 
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter", "files")
 FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif")
@@ -104,6 +105,7 @@ class Files:
             if item:
                 self.items.remove(item)
         if item:
+            waveform.forget_local(item["id"])  # its preview copies for the trim editor
             # Only the app's own copies are deleted, never a file picked from the PC.
             for path in (item["path"] if item["copied"] else "", item["thumbPath"]):
                 if path:

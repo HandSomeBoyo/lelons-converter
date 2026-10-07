@@ -347,6 +347,7 @@ function typeBlocks(t) {
 function docsTabChanged(tab) {
   if (tab !== "docs") return; // the document stays open as it is (nothing is saved without Save)
   if (!doc) loadDocsList();
+  else if (doc.where === "collab") docNotesLoad(); // comments were only checked now and then while away
 }
 
 function docsAccountChanged() {
@@ -743,7 +744,7 @@ async function docNotesLoad() {
   const res = await api("/api/docs-comments", { id: d.id, where: "collab" }).catch(() => null);
   if (doc !== d || mine !== docNotesRun) return;
   if (res && res.ok) docNotesSet(res.comments);
-  docNotesTimer = setTimeout(docNotesLoad, document.hidden ? 15000 : $("docNotes").hidden ? 5000 : 2500);
+  docNotesTimer = setTimeout(docNotesLoad, document.hidden || $("docsTab").hidden ? 30000 : $("docNotes").hidden ? 5000 : 2500);
 }
 
 function docNotesSet(list) {
@@ -1072,6 +1073,15 @@ function docTabsList() {
   }
   const ids = new Set(list.map((t) => t.id));
   for (const t of list) if (t.parent && t.parent !== "0" && !ids.has(t.parent)) t.parent = ""; // its page is gone
+  // Two people moving pages at once can make a page end up under itself: put those back at the top.
+  const byId = new Map(list.map((t) => [t.id, t]));
+  for (const t of list) {
+    let p = t.parent, steps = 0;
+    while (p && p !== "0" && byId.has(p) && steps++ <= list.length) {
+      if (p === t.id) { t.parent = ""; break; }
+      p = byId.get(p).parent;
+    }
+  }
   return list.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
 }
 
@@ -1424,7 +1434,12 @@ async function docLeave() {
   if (docSaving) await docSaving;
   while (docSyncBusy && doc === d) await docSyncRunning;
   if (doc !== d) return true;
-  if (d.where === "collab" && docDirty) return docSave(); // live: whatever is left goes out, nothing to ask
+  if (d.where === "collab" && docDirty) {
+    // live: whatever is left goes out, nothing to ask (unless it can't go out right now)
+    if (await docSave()) return true;
+    if (doc !== d) return true;
+    return !!(await docAsk("Leave without saving?", "Your last changes couldn't be sent to the others. If you leave now, they're lost.", "Leave", { other: "" }));
+  }
   if (!docDirty) {
     if (d.fresh) await docForgetFresh(d);
     return true;
@@ -1690,11 +1705,13 @@ async function docSyncOnce() {
   docSaveWanted = false;
   const send = asked || docPending.size > 0 || docDeleted.size > 0 || docTitleDirty || docSettingsDirty;
   const changes = [];
+  const tooBig = []; // a paragraph over the size limit (a huge picture): the server would turn down everything
   if (send) for (const id of docPending) {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(id)}"]`);
     const kept = el ? null : docStore.get(id); // (on another page)
     if (!el && !kept) continue;
     const html = el ? blockHtml(el) : kept.html;
+    if (html.length > 590000) { tooBig.push(id); continue; }
     changes.push({ id, pos: el ? el.dataset.pos : kept.pos, html });
     docInFlight.set(id, html);
   }
@@ -1704,6 +1721,8 @@ async function docSyncOnce() {
   const settings = send && docSettingsDirty ? d.settings : null;
   if (send) {
     docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
+    for (const id of tooBig) docPending.add(id);
+    if (tooBig.length) docDirty = true;
     if (asked) docSaveState("Saving...");
   }
   const caret = docCaretBlock();
@@ -1748,7 +1767,8 @@ async function docSyncOnce() {
   }
   docHere = res.here || [];
   drawHere();
-  if (send || $("docSaved").classList.contains("bad")) docSaveState();
+  if (tooBig.length) docSaveState("A picture is too big to share. Make it smaller or take it out.", true);
+  else if (send || $("docSaved").classList.contains("bad")) docSaveState();
   if (docSyncAgain) {
     docSyncAgain = false;
     docSyncSoon(150);
@@ -1756,7 +1776,7 @@ async function docSyncOnce() {
     // About every second while someone else is in it, a bit slower when you're alone.
     docSyncSoon(document.hidden ? 8000 : $("docsTab").hidden ? 5000 : docHere.some((h) => h.typing) ? 500 : docHere.length ? 800 : 2000);
   }
-  return true;
+  return !tooBig.length;
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && doc) docSyncSoon(50); });
 
@@ -1881,7 +1901,14 @@ function drawHere() {
   drawHereMarks();
 }
 
+let docMarksSig = "", docMarked = [];
 function drawHereMarks() {
+  // Nothing changed (most of the time; this runs every second): leave the page alone.
+  const caretNow = docCaretBlock();
+  const sig = JSON.stringify([docHere.map((h) => [h.username, h.block, !!h.typing]), caretNow ? caretNow.dataset.id : ""]);
+  if (sig === docMarksSig && docMarked.every((el) => el.isConnected && el.classList.contains("doc-other"))) return;
+  docMarksSig = sig;
+  docMarked = [];
   docApplying = true;
   for (const el of docsText.querySelectorAll(":scope > .doc-other")) {
     el.classList.remove("doc-other", "doc-held");
@@ -1896,6 +1923,7 @@ function drawHereMarks() {
     const el = docsText.querySelector(`:scope > [data-id="${CSS.escape(h.block)}"]`);
     if (!el) continue;
     el.classList.add("doc-other");
+    docMarked.push(el);
     el.dataset.who = el.dataset.who ? el.dataset.who + ", " + h.username : h.username;
     el.style.setProperty("--who", docColor(h.username));
     // Someone's writing here right now: it's theirs for a moment. Never the line your cursor is on
@@ -3321,6 +3349,7 @@ $("docInviteSend").addEventListener("click", async () => {
 
 let docAskDone = null;
 function docAsk(title, text, yes, opts = {}) {
+  if (docAskDone) { const before = docAskDone; docAskDone = null; before(false); } // a question still open: that one is a no
   $("docAskTitle").textContent = title;
   $("docAskText").textContent = text;
   $("docAskYes").textContent = yes;

@@ -472,6 +472,9 @@ class Window:
     def _message(self, hwnd, message, wparam, lparam):
         if message == WM_SIZE:
             self._fit()
+            if self.controller:
+                # Minimized: tell the page (document.hidden), so it polls less and stops animating.
+                _method(self.controller, 4, ctypes.c_int)(0 if wparam == 1 else 1)  # put_IsVisible
         elif message == WM_MOVE and self.controller:
             _method(self.controller, 23)()  # NotifyParentWindowPositionChanged
         elif message == WM_ACTIVATE and self.controller and wparam & 0xFFFF:

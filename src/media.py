@@ -71,7 +71,9 @@ def run(args, seconds, on_progress=None):
     reader.join()
     if process.returncode != 0:
         last = next((e for e in reversed(errors) if e.strip()), "")
-        raise OSError(f"Converting didn't work. ({last.strip()[:200]})")
+        error = OSError(f"Converting didn't work. ({last.strip()[:200]})")
+        error.ffmpeg_log = "\n".join(errors[-40:])
+        raise error
 
 
 # ---------------------------------------------------------------- graphics card
@@ -118,6 +120,12 @@ def gpu_encoder():
         return _gpu
 
 
+def _encoder_broke(log, encoder):
+    log = log.lower()
+    return any(word in log for word in (encoder, "nvenc", "qsv", "amf", "error while opening encoder",
+                                        "hwaccel", "device", "driver"))
+
+
 def _gpu_failed():
     global _gpu
     with _gpu_lock:
@@ -149,10 +157,13 @@ def run_video(args_before_codec, args_after_codec, target, seconds, on_progress,
     encoder = gpu_encoder()
     try:
         return run([*args_before_codec, *video_codec(encoder, kbps), *args_after_codec, target], seconds, on_progress)
-    except OSError:
+    except OSError as e:
         if not encoder:
             raise
-    _gpu_failed()  # the graphics card didn't manage it: use the processor from now on
+        # Only stop using the graphics card for good if it was the card that failed (not, say, a
+        # broken video file); this one video is tried again on the processor either way.
+        if _encoder_broke(getattr(e, "ffmpeg_log", ""), encoder):
+            _gpu_failed()
     run([*args_before_codec, *video_codec("", kbps), *args_after_codec, target], seconds, on_progress)
 
 

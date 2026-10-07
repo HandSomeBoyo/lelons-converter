@@ -886,6 +886,9 @@ function renderJob(el, job) {
       <div class="actions"></div>`;
     el.dataset.id = job.id;
   }
+  const sig = JSON.stringify(job);
+  if (el.dataset.sig === sig) return el; // unchanged: long lists stay cheap
+  el.dataset.sig = sig;
   el.className = "job " + job.status;
   setDrag(el, job.status === "done" ? { kind: "job", id: job.id } : null);
   el.title = job.status === "done" ? DRAG_HINT : "";
@@ -1000,9 +1003,18 @@ function render(s) {
 }
 
 let failedChecks = 0;
+let lastState = "";
+let lastRenderAt = 0;
 async function refresh() {
   try {
-    render(await api("/api/state"));
+    const text = await (await fetch("/api/state")).text();
+    // Nothing changed (most of the time): skip redrawing the whole list. Still redrawn now and then.
+    const key = format + "\n" + text;
+    if (key !== lastState || Date.now() - lastRenderAt > 5000) {
+      render(JSON.parse(text));
+      lastState = key;
+      lastRenderAt = Date.now();
+    }
     failedChecks = 0;
   } catch (e) {
     // The app isn't answering: it was closed (or is updating).

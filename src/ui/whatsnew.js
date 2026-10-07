@@ -2,6 +2,16 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.5.1", items: [
+    "Smoother everywhere: scrolling, the chat and long download lists take a lot less work now, and the app rests when it's minimized.",
+    "Waveforms in the Library show up much faster, because everyone shares them.",
+    "Your save folder isn't forgotten any more when its drive (like a USB stick) is unplugged.",
+    "Updates are safer: a download that gets cut off is never installed, and the app closes properly first.",
+    "Half-made files from stopped downloads get cleaned up in every folder, not just the main one.",
+    "Closing the trim editor stops a clip that's still downloading.",
+    "Lots of chat and group fixes, like leaving a group that's gone, and old chat pictures getting cleaned up.",
+    "Docs: a picture that's too big to share now says so, and you're asked before leaving with changes that didn't send.",
+  ] },
   { version: "2.5.0", items: [
     "Genres in the Library! Pick Music, SFX or Ambience and a list of genres shows up on the left, like Action, Chill or Whooshes.",
     "Put a sound in a genre with the pencil button, or pick the genre when you upload.",

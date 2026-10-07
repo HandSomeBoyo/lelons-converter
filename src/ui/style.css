@@ -3307,19 +3307,22 @@ body.chat-page .player-bar { visibility: hidden; }
 }
 
 /* Something soft behind the glass to catch (a gentle light and a faint grid, like Apple's glass on its grid) */
-body { background-attachment: fixed;
+/* (drawn once on a fixed layer: a fixed body background is repainted on every scroll) */
+body { background: transparent; }
+:root[data-theme="light"] { background-color: #eceef2; }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image:
     radial-gradient(130% 95% at 50% 0%, transparent 25%, var(--bg) 88%),
     linear-gradient(var(--gl-line) 1px, transparent 1px), linear-gradient(90deg, var(--gl-line) 1px, transparent 1px),
     radial-gradient(1100px 700px at 15% -10%, rgba(255, 255, 255, .07), transparent 65%),
     radial-gradient(900px 700px at 100% 110%, rgba(130, 150, 200, .07), transparent 70%);
   background-size: auto, 160px 160px, 160px 160px, auto, auto; background-position: 0 0, -1px -1px, -1px -1px, 0 0, 0 0; }
-:root[data-theme="light"] body { background-color: #eceef2;
+:root[data-theme="light"] body::before {
   background-image:
     radial-gradient(130% 95% at 50% 0%, transparent 25%, #eceef2 88%),
     linear-gradient(var(--gl-line) 1px, transparent 1px), linear-gradient(90deg, var(--gl-line) 1px, transparent 1px),
     radial-gradient(1100px 700px at 10% -10%, #fff, transparent 65%), linear-gradient(160deg, transparent 40%, rgba(90, 100, 125, .16)); }
-:root[data-theme="black"] body { background-image:
+:root[data-theme="black"] body::before { background-image:
     radial-gradient(130% 95% at 50% 0%, transparent 25%, #000 88%),
     linear-gradient(var(--gl-line) 1px, transparent 1px), linear-gradient(90deg, var(--gl-line) 1px, transparent 1px),
     radial-gradient(1100px 700px at 15% -10%, rgba(255, 255, 255, .05), transparent 65%); }
@@ -3385,3 +3388,26 @@ body { background-attachment: fixed;
 .chat-panel, body.has-player .chat-panel { background: var(--gl-fill), color-mix(in srgb, var(--bg) 78%, transparent);
   -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur); box-shadow: var(--gl-rim), var(--gl-shadow); }
 .chat-side { background: rgba(255, 255, 255, .025); border-right-color: var(--gl-line); }
+
+/* ================================================================ 2.5.1: smoother (same look, less work for the graphics card) */
+/* Cards that sit on the page only have the faint grid behind them, so blurring it every frame while
+   scrolling bought almost nothing. Floating things (tab bar, player, menus) keep their real glass. */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* the chat page covers everything, so a blur behind it is never seen */
+body.chat-page::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: color-mix(in srgb, var(--bg) 92%, transparent); }
+.chat-panel, body.has-player .chat-panel { -webkit-backdrop-filter: none; backdrop-filter: none;
+  background: var(--gl-fill), color-mix(in srgb, var(--bg) 94%, transparent); }
+/* a popup over the blurred page: the page behind is already blurred once */
+.modal > .dialog { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.lib-genres[hidden] { display: none; }
+/* the online dot breathes with opacity on its own layer instead of repainting a shadow */
+.online-dot { position: relative; animation: none; }
+.online-dot::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; background: rgba(127, 214, 106, .16);
+  opacity: 0; animation: dot-breathe 2.8s ease-in-out infinite; pointer-events: none; }
+@keyframes dot-breathe { 50% { opacity: 1; } }
+@media (prefers-reduced-transparency: reduce) {
+  .tabs, .dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar, .chat-msg .msg-tools, .lib-genres,
+  .chat-panel, .modal > .dialog { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) { .online-dot::after { animation: none; } }

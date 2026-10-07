@@ -13,6 +13,7 @@ const isGroupKey = (key) => !!key && key.startsWith("g:");
 let chatMessages = [];
 let chatLastId = 0; // the newest message we have, in this conversation
 let chatLoaded = false; // the first load of this conversation is done
+let chatListsLoaded = false; // the private chats and groups came in once (new ones after that ding)
 let chatTimer = null;
 let chatBusy = false;
 let chatUserId = null; // who the messages were loaded for
@@ -326,7 +327,7 @@ async function loadChat() {
   if (user.id !== chatUserId) {
     chatUserId = user.id;
     chatWith = "";
-    chatPrivate = [];
+    chatPrivate = []; chatGroups = []; chatListsLoaded = false;
     chatMessages = []; chatLastId = 0; chatLoaded = false; chatDrawn = "";
     $("chatList").replaceChildren();
     if (chatIsOpen()) { drawChatUser(); drawConvos(); }
@@ -335,15 +336,16 @@ async function loadChat() {
   chatBusy = true;
   const asked = chatWith;
   const askedFor = chatUserId;
-  let stale = false;
+  let stale = false, more = false;
   try {
     const res = await api("/api/sfx-chat", { after: chatLastId, with: chatWith || null }).catch(() => null);
     // Switched to another chat (or account) while waiting: this answer is for the old one.
     stale = asked !== chatWith || askedFor !== chatUserId;
     if (res && !stale && !sfxLoggedOut(res)) addChat(res);
+    more = !!(res && res.ok && chatLastId && (res.messages || []).length >= 100); // (more waiting: get them right away)
   } finally {
     chatBusy = false;
-    pollChat(stale ? 0 : chatIsOpen() && !document.hidden ? 2500 : document.hidden ? 60000 : 20000);
+    pollChat(stale || more ? 0 : chatIsOpen() && !document.hidden ? 2500 : document.hidden ? 60000 : 20000);
   }
 }
 
@@ -420,7 +422,8 @@ function sendTyping(stop = false) {
 
 function addChat(res) {
   if (!res.ok) {
-    if (isGroupKey(chatWith) && /group is gone/.test(res.error || "")) {
+    // (a group you're no longer in, or a person who renamed or deleted their account)
+    if (chatWith && (/group is gone/.test(res.error || "") || /no account with that name/.test(res.error || ""))) {
       switchChat("");
       if (chatIsOpen()) $("chatNote").textContent = res.error;
       return;
@@ -433,20 +436,21 @@ function addChat(res) {
   // Private chats: a newer message from someone else means a ding.
   const before = new Map(chatPrivate.map((p) => [p.username, p.last_id]));
   chatPrivate = res.private || [];
-  if (chatLoaded || chatUserId) {
+  if (chatListsLoaded) {
     for (const p of chatPrivate) {
-      if (!p.last_mine && before.size && p.last_id > (before.get(p.username) || 0)
+      if (!p.last_mine && p.last_id > (before.get(p.username) || 0)
           && (p.username !== chatWith || !chatIsOpen() || document.hidden)) ding = true;
     }
   }
   const groupsBefore = new Map(chatGroups.map((g) => [g.id, g.last_id]));
   chatGroups = res.groups || [];
-  if (groupsBefore.size) {
+  if (chatListsLoaded) {
     for (const g of chatGroups) {
       if (!g.last_mine && g.last_id > (groupsBefore.get(g.id) || 0)
           && ("g:" + g.id !== chatWith || !chatIsOpen() || document.hidden)) ding = true;
     }
   }
+  chatListsLoaded = true;
   if (isGroupKey(chatWith) && res.group) chatGroup = res.group;
   chatEveryoneLast = res.everyoneLast || 0;
   if (res.names) chatNames = res.names;
@@ -772,7 +776,7 @@ $("chatForm").addEventListener("submit", async (e) => {
     $("chatNote").textContent = res.error;
     return;
   }
-  $("chatInput").value = "";
+  if (asked === chatWith) $("chatInput").value = ""; // (not text typed in another chat while a clip was sending)
   sendTyping(true);
   $("chatNote").textContent = "";
   if (chatAttached === attached) { chatAttached = null; drawAttach(); }
@@ -937,6 +941,7 @@ function drawGroupModal() {
     if (groupMode !== "dm") b.append(Object.assign(document.createElement("i"), { className: "group-check" }));
     b.addEventListener("click", () => {
       if (groupMode === "dm") { closeGroupModal(); openChat(n); return; }
+      if (!groupPicked.has(n) && groupPicked.size >= 49) return void ($("groupNote").textContent = "A group can have up to 50 people.");
       groupPicked.has(n) ? groupPicked.delete(n) : groupPicked.add(n);
       drawGroupModal();
     });

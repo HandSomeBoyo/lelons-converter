@@ -121,6 +121,17 @@ def get_local(file_id, source, video=False):
     return _once((("file", file_id), video), lambda: _build_local(file_id, source, video))
 
 
+def forget_local(file_id):
+    """A file was taken off the Files tab: delete its preview copies."""
+    for video in (False, True):
+        with _guard:
+            _cache.pop((("file", file_id), video), None)
+        try:
+            os.remove(os.path.join(FOLDER, f"file-{file_id}" + ("-video.mp4" if video else ".m4a")))
+        except OSError:
+            pass
+
+
 def _build_local(file_id, source, video):
     os.makedirs(FOLDER, exist_ok=True)
     found = media.probe(source)

@@ -290,6 +290,7 @@ def download(info, folder, fmt, quality, on_progress, trim=None, normalize=False
     # is never replaced (it becomes "name (2)" instead).
     mark = names.new_mark()
     os.makedirs(folder, exist_ok=True)
+    names.used(folder)
     try:
         with yt_dlp.YoutubeDL(build_options(folder, fmt, quality, on_progress, trim, mark)) as ydl:
             finish = _finish_step(ydl, fmt, quality, trim, normalize, on_progress)
