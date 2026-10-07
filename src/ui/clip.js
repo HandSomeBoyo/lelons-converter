@@ -28,6 +28,7 @@ function clipOpened(source) {
 
 function clipClosed() {
   clearTimeout(clipTimer);
+  if (clipOn && clipKey) api("/api/clip-close", { key: clipKey }).catch(() => {}); // stops a download nobody wants now
   clipOn = false;
 }
 

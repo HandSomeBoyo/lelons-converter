@@ -59,11 +59,27 @@ def check():
         "version": latest.lstrip("vV"),
         "notes": (release.get("body") or "").strip()[:500],
         "url": setup["browser_download_url"],
+        "size": setup.get("size") or 0,
     }
 
 
-def download_and_run(url, version, on_progress):
-    """Download the new installer and open it. The app should close right after."""
+def remove_old_setups():
+    """Delete installers that earlier updates downloaded."""
+    folder = tempfile.gettempdir()
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    for name in names:
+        if name.startswith("VaultHub Setup ") and (name.endswith(".exe") or name.endswith(".exe.part")):
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
+
+
+def download(url, version, on_progress, size=0):
+    """Download the new installer. Returns its path; run it with run_installer once the app has closed."""
     path = os.path.join(tempfile.gettempdir(), f"VaultHub Setup {version}.exe")
     with _get(url, timeout=30) as response, open(path + ".part", "wb") as out:
         total = int(response.headers.get("Content-Length") or 0)
@@ -73,8 +89,15 @@ def download_and_run(url, version, on_progress):
             done += len(chunk)
             if total:
                 on_progress(done * 100 / total)
+    # A dropped connection just ends the download early without an error: never run half an installer.
+    if (total and done != total) or (size and done != size):
+        raise OSError("The update download was cut off.")
     on_progress(100)
     os.replace(path + ".part", path)
+    return path
+
+
+def run_installer(path):
     # /update makes the installer skip its welcome page.
     subprocess.Popen([path, "/update"], close_fds=True)
 

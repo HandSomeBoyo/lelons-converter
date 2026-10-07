@@ -99,7 +99,9 @@ function moveTabLine() {
   }
 }
 
-new MutationObserver(moveTabLine).observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class"] });
+// (its own class changes don't count: those are just the slide starting and ending)
+new MutationObserver((changes) => { if (changes.some((c) => c.target !== tabLine)) moveTabLine(); })
+  .observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class"] });
 new MutationObserver(moveTabLine).observe(document.getElementById("accountTab"), { attributes: true, attributeFilter: ["hidden"] });
 // Resizing the window: the glass follows at once (no slide, no stretch).
 window.addEventListener("resize", () => {

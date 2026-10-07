@@ -54,15 +54,35 @@ def _read():
         return ""
 
 
-def load():
-    settings = {}
+def _raw():
+    """The settings exactly as saved, without any filled-in defaults."""
     try:
         settings = json.loads(_read() or "{}")
-        if not isinstance(settings, dict):
-            settings = {}
+        return settings if isinstance(settings, dict) else {}
     except ValueError:
-        pass
-    if not os.path.isdir(settings.get("folder") or ""):
+        return {}
+
+
+_dir_cache = {}
+
+
+def _is_dir(path):
+    """os.path.isdir, remembered for a bit: settings load on almost every request and a folder on an
+    unplugged network drive can take seconds to answer."""
+    if not path:
+        return False
+    now = time.monotonic()
+    known = _dir_cache.get(path)
+    if known and now - known[1] < 30:
+        return known[0]
+    result = os.path.isdir(path)
+    _dir_cache[path] = (result, now)
+    return result
+
+
+def load():
+    settings = _raw()
+    if not _is_dir(settings.get("folder") or ""):
         settings["folder"] = DEFAULT_FOLDER
     settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
     settings["normalize"] = settings.get("normalize") is True  # "Even out volume", off unless turned on
@@ -73,7 +93,7 @@ def load():
         settings["zoom"] = 1.0
     if settings.get("save_mode") not in SAVE_MODES:
         settings["save_mode"] = "ask"  # ask where to save each time, unless "always save here" was picked
-    if not os.path.isdir(settings.get("last_asked") or ""):
+    if not _is_dir(settings.get("last_asked") or ""):
         settings["last_asked"] = settings["folder"]
     if settings.get("theme") not in THEMES:
         settings["theme"] = "dark"
@@ -87,8 +107,11 @@ def load():
 
 def save(**changes):
     with _lock:
-        settings = load()
+        # Only what's really saved plus the changes: a save folder on a drive that's unplugged right
+        # now must not be swapped for Downloads for good.
+        settings = _raw()
         settings.update(changes)
+        _dir_cache.clear()
         os.makedirs(DATA_DIR, exist_ok=True)
         # Written to a new file first, so a crash halfway can't leave a broken settings file.
         temp = SETTINGS_FILE + ".new"

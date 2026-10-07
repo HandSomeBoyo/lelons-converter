@@ -44,12 +44,16 @@ def add(name, data):
         raise ValueError("That file is too big.")
     try:
         with Image.open(io.BytesIO(data)) as im:
+            width, height = im.size
+            if im.getexif().get(0x0112) in (5, 6, 7, 8):  # turned sideways: width and height swap
+                width, height = height, width
+            if im.format == "JPEG":
+                im.draft("RGB", (640, 640))  # a big photo is read small (much faster, a lot less memory)
             im.load()
-            width, height = ImageOps.exif_transpose(im).size
             kind = im.format or ""
             frames = getattr(im, "n_frames", 1)
             thumb = _thumbnail(im)
-    except (OSError, ValueError, Image.DecompressionBombError):
+    except (OSError, ValueError, MemoryError, Image.DecompressionBombError):
         raise ValueError("That isn't a picture this app can open. Try PNG, JPG, WEBP, GIF, BMP, TIFF or ICO.")
     os.makedirs(FOLDER, exist_ok=True)
     image_id = uuid.uuid4().hex[:12]
@@ -73,8 +77,9 @@ def add(name, data):
 
 
 def _thumbnail(im):
-    small = ImageOps.exif_transpose(im.copy())
+    small = im.copy()
     small.thumbnail((320, 320))
+    small = ImageOps.exif_transpose(small)
     if small.mode not in ("RGB", "RGBA"):
         small = small.convert("RGBA")
     out = io.BytesIO()

@@ -90,6 +90,15 @@ alter table lelons.sounds add column if not exists copyright jsonb;
 alter table lelons.sounds add column if not exists genre text check (genre is null or length(genre) between 1 and 40);
 update lelons.sounds set genre = coalesce(genre, 'Memes'), category = 'sfx' where category = 'memes';
 update lelons.sounds set category = 'sfx' where category = 'other';
+-- (2.5.1) The waveform, worked out once and shared (so not every app downloads every sound to draw it),
+-- and who's checking a sound for a known song right now (so not everyone checks the same one).
+alter table lelons.sounds add column if not exists peaks jsonb;
+alter table lelons.sounds add column if not exists checking_at timestamptz;
+create index if not exists sounds_created on lelons.sounds (created_at);
+create index if not exists sounds_uploader on lelons.sounds (uploader_id);
+create index if not exists sounds_name on lelons.sounds (lower(btrim(name)));
+create index if not exists sessions_account on lelons.sessions (account_id);
+create index if not exists presence_seen on lelons.presence (seen_at);
 
 -- Bug reports and wishes people send to the owner.
 create table if not exists lelons.feedback (
@@ -318,7 +327,7 @@ drop function if exists public.lelons_list(text);  -- (it gained columns: favori
 create or replace function public.lelons_list(token text)
 returns table (id uuid, name text, category text, path text, seconds real, bytes int,
                uploader text, uploader_avatar text, created_at timestamptz, mine boolean, favorite boolean,
-               copyright jsonb, genre text)
+               copyright jsonb, genre text, peaks jsonb)
 language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
@@ -326,7 +335,7 @@ begin
   return query select s.id, s.name, s.category, s.path, s.seconds, s.bytes,
                       coalesce(a.username, s.uploader), a.avatar, s.created_at, s.uploader_id is not distinct from me.id,
                       exists (select 1 from lelons.favorites f where f.account_id = me.id and f.sound_id = s.id),
-                      s.copyright, s.genre
+                      s.copyright, s.genre, s.peaks
                from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
                order by s.created_at desc limit 5000;
 end $$;
@@ -470,6 +479,7 @@ declare
   text_in text := btrim(coalesce(message, ''));
   target uuid;
   gid uuid := lelons.group_of(to_user, me.id);
+  old_files text[];
 begin
   if length(text_in) < 1 and sound is null and file is null then
     return json_build_object('ok', false, 'error', 'short');
@@ -507,9 +517,13 @@ begin
   values (me.id, text_in, target, gid, sound, file,
           left(btrim(coalesce((select s.name from lelons.sounds s where s.id = sound), file_name, '')), 120), file_seconds);
   delete from lelons.tickets t where t.path = file;
-  -- Only the newest 5000 messages are kept.
-  delete from lelons.chat c where c.id < (select min(x.id) from (select id from lelons.chat order by id desc limit 5000) x);
-  return json_build_object('ok', true);
+  -- Only the newest 20000 messages are kept (the clips of older ones go too: the app deletes 'files').
+  with gone as (delete from lelons.chat c
+                where c.id < (select min(x.id) from (select id from lelons.chat order by id desc limit 20000) x)
+                returning c.file)
+  select coalesce(array_agg(x.file) filter (where x.file is not null), '{}') into old_files from gone x;
+  perform lelons.delete_ticket(f) from unnest(old_files) f;
+  return json_build_object('ok', true, 'files', old_files);
 end $$;
 
 -- (2.4.0) Your group chats, newest message first, and one group with the people in it.
@@ -567,7 +581,7 @@ begin
               and (case when gid is not null then c.group_id = gid
                         when peer is null then c.to_id is null and c.group_id is null
                         else (c.account_id = me.id and c.to_id = peer) or (c.account_id = peer and c.to_id = me.id) end)
-            order by c.id desc limit 100) m
+            order by case when coalesce(after, 0) > 0 then c.id else -c.id end limit 100) m
       join lelons.accounts a on a.id = m.account_id
       left join lelons.sounds s on s.id = m.sound_id), '[]'::json),
     'recent', coalesce((
@@ -594,7 +608,8 @@ begin
     'everyone_last', (select max(c.id) from lelons.chat c where c.to_id is null and c.group_id is null),
     'groups', lelons.groups_json(me.id),
     'group', case when gid is null then null else lelons.group_json(gid) end,
-    'names', coalesce((select json_agg(a.username order by lower(a.username)) from lelons.accounts a), '[]'::json));
+    'names', case when coalesce(after, 0) = 0 then
+               coalesce((select json_agg(a.username order by lower(a.username)) from lelons.accounts a), '[]'::json) end);
 end $$;
 
 -- React to a message (on = false takes it back).
@@ -664,11 +679,47 @@ returns void language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
 begin
-  if jsonb_typeof(result) is distinct from 'object' or length(result::text) > 2000 then
+  if jsonb_typeof(result) is distinct from 'object' or length(result::text) > 2000
+     or not (result ? 'match') or exists (select 1 from jsonb_object_keys(result) k where k not in ('match', 'short', 'unreadable'))
+     or jsonb_typeof(result -> 'match') not in ('null', 'object') then
     raise exception 'bad result' using hint = 'bad_input';
   end if;
   update lelons.sounds s set copyright = result
   where s.id = lelons_set_copyright.sound_id and (s.copyright is null or me.role in ('owner', 'admin'));
+end $$;
+
+-- (2.5.1) "I'll check this sound for a known song": true when nobody else is checking it (or has checked it).
+create or replace function public.lelons_claim_check(token text, sound_id uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  n int;
+begin
+  update lelons.sounds s set checking_at = now()
+  where s.id = lelons_claim_check.sound_id and s.copyright is null
+    and (s.checking_at is null or s.checking_at < now() - interval '10 minutes');
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+
+-- A waveform: 20 to 400 numbers from 0 to 1.
+create or replace function lelons.peaks_ok(peaks jsonb) returns boolean
+language sql immutable set search_path = '' as $$
+  select coalesce(jsonb_typeof(peaks) = 'array' and jsonb_array_length(peaks) between 20 and 400
+         and not exists (select 1 from jsonb_array_elements(peaks) e
+                         where case when jsonb_typeof(e) <> 'number' then true
+                                    else e::text::numeric < 0 or e::text::numeric > 1 end), false)
+$$;
+
+-- (2.5.1) Share a sound's waveform with everyone (only when it has none yet).
+create or replace function public.lelons_set_peaks(token text, file text, peaks jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if lelons.peaks_ok(peaks) then
+    update lelons.sounds s set peaks = lelons_set_peaks.peaks where s.path = file and s.peaks is null;
+  end if;
 end $$;
 
 create or replace function public.lelons_favorite(token text, sound_id uuid, starred boolean)
@@ -740,9 +791,10 @@ end $$;
 
 drop function if exists public.lelons_add(text, text, text, text, real, int);  -- (it gained sound_hash)
 drop function if exists public.lelons_add(text, text, text, text, real, int, text);  -- (and sound_genre)
+drop function if exists public.lelons_add(text, text, text, text, real, int, text, text);  -- (and sound_peaks)
 create or replace function public.lelons_add(token text, sound_name text, sound_category text,
                                              file text, sound_seconds real, sound_bytes int, sound_hash text default null,
-                                             sound_genre text default null)
+                                             sound_genre text default null, sound_peaks jsonb default null)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
@@ -772,8 +824,9 @@ begin
   if clash is not null then
     raise exception 'already in the library' using hint = clash;
   end if;
-  insert into lelons.sounds (name, category, genre, path, seconds, bytes, uploader, uploader_id, source_hash)
-  values (btrim(sound_name), cat, g, file, sound_seconds, sound_bytes, me.username, me.id, sound_hash)
+  insert into lelons.sounds (name, category, genre, path, seconds, bytes, uploader, uploader_id, source_hash, peaks)
+  values (btrim(sound_name), cat, g, file, sound_seconds, sound_bytes, me.username, me.id, sound_hash,
+          case when lelons.peaks_ok(sound_peaks) then sound_peaks end)
   returning sounds.id into new_id;
   delete from lelons.tickets where path = file;
   return new_id;
@@ -899,6 +952,7 @@ create or replace function public.lelons_delete_me(token text, password text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
+  files text[];
 begin
   if me.role = 'owner' then
     return json_build_object('ok', false, 'error', 'owner');
@@ -906,11 +960,12 @@ begin
   if extensions.crypt(coalesce(password, ''), me.pass_hash) <> me.pass_hash then
     return json_build_object('ok', false, 'error', 'wrong');
   end if;
+  files := lelons.account_leaving(me.id);
   delete from lelons.accounts a where a.id = me.id;
   if me.avatar is not null then
     perform lelons.delete_ticket(me.avatar);
   end if;
-  return json_build_object('ok', true, 'avatar', me.avatar);
+  return json_build_object('ok', true, 'avatar', me.avatar, 'files', files);
 end $$;
 
 -- Removes an account (its sounds stay). Returns its picture's file, if any, for the app to delete.
@@ -922,6 +977,9 @@ declare
 begin
   if me.role <> 'owner' then
     raise exception 'not allowed' using hint = 'denied';
+  end if;
+  if exists (select 1 from lelons.accounts a where a.id = account_id and a.role <> 'owner') then
+    perform lelons.account_leaving(account_id);
   end if;
   delete from lelons.accounts a where a.id = account_id and a.role <> 'owner' returning a.avatar into picture;
   if picture is not null then
@@ -1044,6 +1102,8 @@ create table if not exists lelons.chat_seen (
   primary key (account_id, peer_key)
 );
 alter table lelons.chat_seen enable row level security;
+create index if not exists chat_seen_peer on lelons.chat_seen (peer_key, seen_at);
+create index if not exists chat_typing_to on lelons.chat_typing (to_key, at);
 
 create or replace function lelons.peer_of(with_user text) returns uuid
 language plpgsql stable security definer set search_path = '' as $$
@@ -1072,6 +1132,7 @@ begin
   else
     insert into lelons.chat_typing as t (account_id, to_key, at) values (me.id, key, now())
     on conflict (account_id, to_key) do update set at = now();
+    delete from lelons.chat_typing t where t.at < now() - interval '1 hour';  -- (old ones nobody stopped)
   end if;
 end $$;
 
@@ -1095,12 +1156,16 @@ begin
                           and (case when gid is not null then t.to_key = gid
                                     when peer is null then t.to_key = zero else t.account_id = peer and t.to_key = me.id end)),
                        '[]'::json),
-    'seen', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'last_id', x.last_id)
-                                      order by x.seen_at desc)
-                      from lelons.chat_seen x join lelons.accounts a on a.id = x.account_id
-                      where x.account_id <> me.id and x.seen_at > now() - interval '30 days'
-                        and (case when gid is not null then x.peer_key = gid
-                                  when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)),
+    'seen', coalesce((select json_agg(json_build_object('username', y.username, 'avatar', y.avatar, 'last_id', y.last_id)
+                                      order by y.seen_at desc)
+                      from (select a.username, a.avatar, x.last_id, x.seen_at
+                            from lelons.chat_seen x join lelons.accounts a on a.id = x.account_id
+                            where x.account_id <> me.id and x.seen_at > now() - interval '30 days'
+                              and (case when gid is not null then x.peer_key = gid
+                                          and exists (select 1 from lelons.chat_group_members m
+                                                      where m.group_id = gid and m.account_id = x.account_id)
+                                        when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)
+                            order by x.seen_at desc limit 20) y),
                      '[]'::json));
 end $$;
 
@@ -1519,6 +1584,45 @@ end $$;
 
 -- ---- Group chats (2.4.0)
 
+-- Deletes a group (nobody is left in it). Returns its files (picture and clips) for the app to delete.
+create or replace function lelons.drop_group(gid uuid) returns text[]
+language plpgsql security definer set search_path = '' as $$
+declare
+  files text[];
+begin
+  select coalesce(array_agg(f), '{}') into files from (
+    select x.picture f from lelons.chat_groups x where x.id = gid and x.picture is not null
+    union all select c.file from lelons.chat c where c.group_id = gid and c.file is not null) y;
+  perform lelons.delete_ticket(f) from unnest(files) f;
+  delete from lelons.chat_seen x where x.peer_key = gid;
+  delete from lelons.chat_typing x where x.to_key = gid;
+  delete from lelons.chat_groups x where x.id = gid;
+  return files;
+end $$;
+
+-- An account is about to be deleted: it leaves its groups (empty ones are deleted, owned ones get a
+-- new owner). Returns the files that go with it (its clips, emptied groups' files) for the app to delete.
+create or replace function lelons.account_leaving(acc uuid) returns text[]
+language plpgsql security definer set search_path = '' as $$
+declare
+  files text[];
+  g record;
+begin
+  select coalesce(array_agg(c.file), '{}') into files from lelons.chat c where c.account_id = acc and c.file is not null;
+  perform lelons.delete_ticket(f) from unnest(files) f;
+  for g in select m.group_id from lelons.chat_group_members m where m.account_id = acc loop
+    delete from lelons.chat_group_members m where m.group_id = g.group_id and m.account_id = acc;
+    if not exists (select 1 from lelons.chat_group_members m where m.group_id = g.group_id) then
+      files := files || lelons.drop_group(g.group_id);
+    else
+      update lelons.chat_groups x set owner_id = (select m.account_id from lelons.chat_group_members m
+                                                  where m.group_id = x.id order by m.added_at limit 1)
+      where x.id = g.group_id and (x.owner_id = acc or x.owner_id is null);
+    end if;
+  end loop;
+  return files;
+end $$;
+
 -- what: create (name, usernames), rename (name), picture (a file uploaded with an 'avatar' ticket, or
 -- null to take it off), add (usernames), remove (one username; the owner only), leave.
 -- Everyone in a group can rename it, change its picture and add people. Returns the group, or for
@@ -1546,7 +1650,7 @@ begin
     insert into lelons.chat_groups (name, owner_id) values (clean, me.id) returning * into g;
     insert into lelons.chat_group_members (group_id, account_id) values (g.id, me.id);
   else
-    select x.* into g from lelons.chat_groups x where x.id = lelons_chat_group.group_id;
+    select x.* into g from lelons.chat_groups x where x.id = lelons_chat_group.group_id for update;
     if g.id is null or not exists (select 1 from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me.id) then
       return json_build_object('ok', false, 'error', 'nogroup');
     end if;
@@ -1581,19 +1685,17 @@ begin
       return json_build_object('ok', false, 'error', 'denied');
     end if;
     delete from lelons.chat_group_members m where m.group_id = g.id and m.account_id = them;
+    delete from lelons.chat_seen x where x.account_id = them and x.peer_key = g.id;
+    delete from lelons.chat_typing x where x.account_id = them and x.to_key = g.id;
   elsif what = 'leave' then
     delete from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me.id;
+    delete from lelons.chat_seen x where x.account_id = me.id and x.peer_key = g.id;
+    delete from lelons.chat_typing x where x.account_id = me.id and x.to_key = g.id;
     select count(*) into n from lelons.chat_group_members m where m.group_id = g.id;
     if n = 0 then
-      if g.picture is not null then
-        perform lelons.delete_ticket(g.picture);
-      end if;
-      -- (clips sent in it go too)
-      perform lelons.delete_ticket(c.file) from lelons.chat c where c.group_id = g.id and c.file is not null;
-      delete from lelons.chat_groups x where x.id = g.id;
-      return json_build_object('ok', true, 'gone', true, 'old_picture', g.picture);
+      return json_build_object('ok', true, 'gone', true, 'files', lelons.drop_group(g.id));
     end if;
-    if g.owner_id = me.id then  -- the person who's been in it longest takes over
+    if g.owner_id is null or g.owner_id = me.id then  -- the person who's been in it longest takes over
       update lelons.chat_groups x set owner_id = (select m.account_id from lelons.chat_group_members m
                                                   where m.group_id = g.id order by m.added_at limit 1) where x.id = g.id;
     end if;
@@ -1612,7 +1714,7 @@ declare
 begin
   foreach f in array array['lelons_signup(text, text)', 'lelons_login(text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
-    'lelons_add(text, text, text, text, real, int, text, text)', 'lelons_sound_check(text, text, text)', 'lelons_set_copyright(text, uuid, jsonb)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
+    'lelons_add(text, text, text, text, real, int, text, text, jsonb)', 'lelons_claim_check(text, uuid)', 'lelons_set_peaks(text, text, jsonb)', 'lelons_sound_check(text, text, text)', 'lelons_set_copyright(text, uuid, jsonb)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',
     'lelons_rename(text, text)', 'lelons_delete_me(text, text)', 'lelons_favorite(text, uuid, boolean)',
     'lelons_feedback_send(text, text, text, text)', 'lelons_feedback_list(text)',

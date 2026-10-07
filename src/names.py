@@ -6,6 +6,7 @@ a download that was stopped halfway) are deleted the next time the app starts.
 """
 
 import glob
+import json
 import os
 import re
 import threading
@@ -28,12 +29,54 @@ def safe_stem(text, fallback="file", limit=80):
     return keep or fallback
 
 
+# Folders that had files being made in them, so leftovers there get cleaned up at the next start
+# too (not only in the Settings folder). Set by the app to a file in its data folder.
+FOLDERS_FILE = None
+_folders = set()
+
+
+def used(folder):
+    """Remember that files are being made in folder."""
+    folder = os.path.normcase(os.path.abspath(folder))
+    with _lock:
+        if folder in _folders or not FOLDERS_FILE:
+            _folders.add(folder)
+            return
+        _folders.add(folder)
+        try:
+            with open(FOLDERS_FILE + ".new", "w", encoding="utf-8") as f:
+                json.dump(sorted(_folders), f)
+            os.replace(FOLDERS_FILE + ".new", FOLDERS_FILE)
+        except OSError:
+            pass
+
+
+def remove_all_leftovers(before, *more):
+    """At startup: clean every folder that had files being made in it last time, then forget them."""
+    folders = set(more)
+    try:
+        with open(FOLDERS_FILE, encoding="utf-8") as f:
+            folders.update(x for x in json.load(f) if isinstance(x, str))
+    except (OSError, ValueError, TypeError):
+        pass
+    for folder in folders:
+        if folder and os.path.isdir(folder):
+            remove_leftovers(folder, before=before)
+    with _lock:
+        if not _folders:
+            try:
+                os.remove(FOLDERS_FILE)
+            except OSError:
+                pass
+
+
 def new_mark():
     return MARK + uuid.uuid4().hex[:8]
 
 
 def temp_path(folder, stem, ext):
     """Where to make a file before it gets its real name."""
+    used(folder)
     return os.path.join(folder, stem + new_mark() + ext)
 
 
@@ -56,12 +99,14 @@ def finish(path):
     return target
 
 
-def remove_leftovers(folder, mark=None):
-    """Delete half-made files in folder (only those with the marker; with mark, only that one's)."""
+def remove_leftovers(folder, mark=None, before=None):
+    """Delete half-made files in folder (only those with the marker; with mark, only that one's;
+    with before, only those last changed before that time, so a download just started is left alone)."""
     pattern = "*" + (mark or MARK) + "*"
     for path in glob.glob(os.path.join(glob.escape(folder), pattern)):
         if _MARK_RE.search(os.path.basename(path)):
             try:
-                os.remove(path)
+                if before is None or os.path.getmtime(path) < before:
+                    os.remove(path)
             except OSError:
                 pass

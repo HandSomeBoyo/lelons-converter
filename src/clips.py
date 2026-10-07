@@ -67,6 +67,13 @@ class Clips:
                 threading.Thread(target=self._worker, args=(key,), daemon=True).start()
             return self._public(clip)
 
+    def close(self, key):
+        """The trim editor closed: stop a clip that's still being made (and its download)."""
+        with self.lock:
+            clip = self.clips.get(str(key))
+            if clip and clip["status"] == "working":
+                clip.update(wanted=None, status="idle", message="", progress=0)
+
     def state(self, key):
         with self.lock:
             clip = self.clips.get(str(key))
@@ -107,7 +114,7 @@ class Clips:
             with self.lock:
                 clip = self.clips[key]
                 wanted = clip["wanted"]
-                if clip["made"] == wanted and clip["status"] == "ready":
+                if wanted is None or (clip["made"] == wanted and clip["status"] == "ready"):
                     clip["running"] = False
                     return
             try:
@@ -153,6 +160,9 @@ class Clips:
             return found
 
         def on_progress(d):
+            with self.lock:
+                if self.clips[key]["wanted"] is None:
+                    raise ChangedMeanwhile()  # the trim editor was closed: stop downloading
             if d["status"] == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
                 percent = d["downloaded_bytes"] * 100 / total if total else 0
@@ -186,7 +196,8 @@ class Clips:
                 media.make_gif(source, temp, int(quality) if quality.isdigit() else 480, trim, length, progress)
             elif fmt == "mp4":
                 target_mb = wanted["targetMb"] or (int(quality[3:]) if quality.startswith("fit") else None)
-                media.convert_video(source, temp, None, target_mb, trim, wanted["normalize"], length, progress)
+                media.convert_video(source, temp, int(quality) if quality.isdigit() else None, target_mb, trim,
+                                    wanted["normalize"], length, progress)
             else:
                 media.convert_audio(source, temp, fmt, quality if quality.isdigit() else "192", trim,
                                     wanted["normalize"], length, progress)

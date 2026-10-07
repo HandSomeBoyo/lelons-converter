@@ -221,9 +221,11 @@ $("libLogout").addEventListener("click", logOut);
 // ---- the list
 
 // The same sound keeps the same object, so its row (and the player bar, if it's playing) is kept.
+const sfxFavSending = new Map(); // id -> on, stars still being saved (a list loaded meanwhile mustn't undo them)
 function mergeSounds(list) {
   const old = new Map(sfxSounds.map((x) => [x.id, x]));
   sfxSounds = list.map((x) => {
+    if (sfxFavSending.has(x.id)) x.favorite = sfxFavSending.get(x.id);
     const was = old.get(x.id);
     if (!was) return x;
     for (const key of Object.keys(was)) if (!(key in x)) delete was[key];
@@ -232,9 +234,11 @@ function mergeSounds(list) {
 }
 
 let sfxSongTimer = 0;
+let sfxReloadPending = false;
 async function loadSfx() {
-  if (sfxLoading) return;
+  if (sfxLoading) { sfxReloadPending = true; return; } // after this one: something changed meanwhile
   sfxLoading = true;
+  sfxReloadPending = false;
   sfxLastLoad = Date.now();
   if (!sfxSounds.length) {
     sfxError = "";
@@ -243,12 +247,13 @@ async function loadSfx() {
   }
   const res = await api("/api/sfx-list", {}).catch(() => ({ ok: false, error: "Couldn't load the sounds." }));
   sfxLoading = false;
+  if (sfxReloadPending) { sfxReloadPending = false; setTimeout(loadSfx, 0); }
   clearTimeout(sfxSongTimer);
   if (res.ok) {
     mergeSounds(res.sounds);
     sfxError = "";
     // Sounds still being checked for songs: look again in a bit (only while the Library is open).
-    if (res.songsChecking) sfxSongTimer = setTimeout(() => { if (!$("sfxTab").hidden && !document.hidden) loadSfx(); }, 5000);
+    if (res.songsChecking) sfxSongTimer = setTimeout(() => { if (!$("sfxTab").hidden && !document.hidden) loadSfx(); }, 10000);
   } else if (sfxLoggedOut(res)) {
     return;
   } else {
@@ -662,10 +667,14 @@ function sfxRow(sound) {
 async function toggleSfxFavorite(sound) {
   const on = !sound.favorite;
   sound.favorite = on; // show it right away
+  sfxFavSending.set(sound.id, on);
   drawSfx();
   const res = await api("/api/sfx-favorite", { id: sound.id, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
+  if (sfxFavSending.get(sound.id) === on) sfxFavSending.delete(sound.id);
   if (sfxLoggedOut(res)) return;
   if (!res.ok) {
+    const now = sfxSounds.find((x) => x.id === sound.id);
+    if (now) now.favorite = !on;
     sound.favorite = !on;
     sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
     drawSfx();
@@ -789,7 +798,7 @@ function drawSoundWave(wave, sound) {
   const count = 72;
   for (let i = 0; i < count; i++) {
     const bar = document.createElement("i");
-    bar.style.height = peaks ? Math.max(8, peaks[i] * 100) + "%" : "8%";
+    bar.style.height = peaks ? Math.max(8, (peaks[Math.floor(i * peaks.length / count)] || 0) * 100) + "%" : "8%";
     bars.append(bar);
   }
   wave.classList.toggle("loading", !peaks);

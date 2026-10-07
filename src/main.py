@@ -104,6 +104,7 @@ class State:
         self.last_ping = time.time()
         self.closed_at = None
         self.quit = False
+        self.installer = None  # a downloaded update to open once the app has closed
 
     def set(self, **changes):
         with self.lock:
@@ -213,13 +214,16 @@ def install_app_update():
         return
     state.set(app_update_progress=0)
     try:
-        updater.download_and_run(found["url"], found["version"], lambda p: state.set(app_update_progress=p))
+        path = updater.download(found["url"], found["version"], lambda p: state.set(app_update_progress=p),
+                                found.get("size") or 0)
     except Exception as e:
         state.set(app_update_progress=None, installing=False,
                   notice={"kind": "error", "text": f"Couldn't download the update. ({e})"})
         return
     time.sleep(2.5)  # let the window show "Opening the installer..." and close itself
-    state.set(quit=True)  # close so the installer can replace the app's files
+    # The installer opens once the app has saved everything and closed (main() below), so it
+    # doesn't have to force the app shut halfway through.
+    state.set(installer=path, quit=True)
 
 
 docs_saved = set()  # files saved from the Docs tab (allowed for "show in folder")
@@ -1007,6 +1011,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "clip": clip_maker.want(data)})
             except ValueError as e:
                 self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/clip-close":
+            clip_maker.close(data.get("key"))
+            self.send_json({"ok": True})
         elif self.path == "/api/clip-state":
             self.send_json({"ok": True, "clip": clip_maker.state(data.get("key"))})
         elif self.path == "/api/drag-ready":  # the mouse is over a library sound: have it ready to drag
@@ -1295,6 +1302,8 @@ def main():
     clean_up()
     check_window_crash()
 
+    started = time.time()  # half-made files older than this are leftovers from last time
+    names.FOLDERS_FILE = os.path.join(settings.DATA_DIR, "making-in.json")
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     os.makedirs(settings.DATA_DIR, exist_ok=True)
@@ -1312,7 +1321,8 @@ def main():
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
     # Chores that can wait until the window is up (so it opens sooner).
     def after_start():
-        names.remove_leftovers(state.folder)
+        names.remove_all_leftovers(started, state.folder)
+        updater.remove_old_setups()
         sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
         if state.auto_update:
@@ -1344,6 +1354,8 @@ def main():
     sfx.presence.bye()  # not "online" any more
     windows.stop_helpers()  # ffmpeg can keep running after the app if it isn't told to stop
     clean_up()
+    if state.installer:
+        updater.run_installer(state.installer)
 
 
 if __name__ == "__main__":
