@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="editor/editor.css">
 <!--SAVED-->
 <script src="theme.js"></script>
 </head>
@@ -22,6 +23,7 @@
     <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
     <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
     <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+    <button data-tab="editor" title="Editor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 15.5c1.7 0 2.6-.9 2.6-2.2 0-1-.8-1.8-1.8-1.8-1.3 0-2.1 1-2.1 2.4V16"/><path d="m11.2 11.6 5.3-5.3"/></svg><span>Editor</span></button>
     <p class="nav-label">Crew</p>
     <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
     <button type="button" class="chat-button" id="chatButton" title="Chat"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span><b class="chat-badge" id="chatBadge" hidden></b></button>
@@ -597,6 +599,9 @@
     <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you download in the Video tab shows up here.</p>
     <div class="jobs history-list" id="historyList"></div>
   </section>
+
+  <!-- the Editor: a picture editor like Photoshop (editor/*.js) -->
+  <section class="tab-page" id="editorTab" hidden><div class="ps" id="ps"></div></section>
 
   <section class="tab-page" id="imagesTab" hidden>
     <h1 class="headline">Drop a picture.<br><em>Pick what you need.</em></h1>
@@ -1202,5 +1207,9 @@
 <script src="docs.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
+<script src="editor/core.js"></script>
+<script src="editor/tools.js"></script>
+<script src="editor/ui.js"></script>
+<script src="editor/dialogs.js"></script>
 </body>
 </html>

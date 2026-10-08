@@ -18,14 +18,16 @@ function saveImageOptions() {
 // ---- tabs
 
 // The name at the top of the page (the sidebar's names)
-const TAB_TITLES = { home: "Home", stats: "Channel stats", video: "Video", files: "Files", images: "Images", sfx: "Library",
+const TAB_TITLES = { home: "Home", stats: "Channel stats", video: "Video", files: "Files", images: "Images", editor: "Editor", sfx: "Library",
                      docs: "Docs", copyright: "Copyright", history: "History", account: "Your account" };
 
 function showTab(tab) {
   if (typeof chatIsOpen === "function" && chatIsOpen()) closeChat();
   document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   $("crumbTitle").textContent = TAB_TITLES[tab] || "";
-  for (const name of ["home", "stats", "video", "files", "images", "sfx", "docs", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "stats", "video", "files", "images", "editor", "sfx", "docs", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  document.body.classList.toggle("editor-mode", tab === "editor");
+  if (tab === "editor" && window.PS) requestAnimationFrame(() => PS.drawNow());
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
@@ -38,7 +40,7 @@ function showTab(tab) {
 }
 document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "sfx", "docs", "copyright", "history", "stats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "editor", "sfx", "docs", "copyright", "history", "stats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // ---- adding pictures (drop anywhere in the window, or choose files)

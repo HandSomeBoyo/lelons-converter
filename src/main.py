@@ -34,6 +34,7 @@ import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
+import editor_ai  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -242,6 +243,7 @@ def install_app_update():
 
 
 docs_saved = set()  # files saved from the Docs tab (allowed for "show in folder")
+editor_saved = set()  # pictures saved from the Editor tab (allowed for "show in folder")
 
 
 def show_in_folder(path):
@@ -826,6 +828,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, "image": images.add(os.path.basename(name), self.rfile.read(length))})
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
+        if self.path == "/api/editor-mask":  # the body is a picture: answers with its subject as a black and white PNG
+            if length > 200 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                return self.send_body(editor_ai.subject_mask(self.rfile.read(length)), "image/png")
+            except editor_ai.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+        if self.path == "/api/editor-save":  # the body is the exported picture, for the folder in X-Folder
+            folder = urllib.parse.unquote(self.headers.get("X-Folder") or "")
+            name = os.path.basename(urllib.parse.unquote(self.headers.get("X-File-Name") or ""))
+            again = urllib.parse.unquote(self.headers.get("X-Path") or "")  # Save again: only over a file the Editor saved
+            stem, ext = os.path.splitext(name)
+            if again and again not in editor_saved:
+                return self.send_json({"ok": False, "error": "Couldn't save there."})
+            if (not again and not os.path.isdir(folder)) or ext.lower() not in (".png", ".jpg", ".webp", ".psd"):
+                return self.send_json({"ok": False, "error": "Couldn't save there."})
+            body = self.rfile.read(length)
+            try:
+                path = again or names.free_path(folder, names.safe_stem(stem, "Untitled"), ext.lower())
+                with open(path, "wb") as f:
+                    f.write(body)
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save there. Try another folder."})
+            editor_saved.add(path)
+            return self.send_json({"ok": True, "path": path, "name": os.path.basename(path)})
         try:
             data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
@@ -1037,6 +1064,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True})
             except sfx.Error as e:
                 self.send_json({"ok": False, "error": str(e)})
+        elif self.path == "/api/editor-ai":  # is the AI model here? (or how far its download is)
+            self.send_json({"ok": True, **editor_ai.status()})
+        elif self.path == "/api/editor-ai-get":
+            editor_ai.start_download()
+            self.send_json({"ok": True, **editor_ai.status()})
+        elif self.path == "/api/editor-show":  # Show in folder, for a picture the Editor saved
+            path = str(data.get("path") or "")
+            if path in editor_saved:
+                show_in_folder(path)
+            self.send_json({"ok": True})
         elif self.path == "/api/show-file":
             job = queue.find(data.get("id"))
             if job:

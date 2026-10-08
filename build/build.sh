@@ -22,11 +22,16 @@ rm -rf "$WORK/python"
 unzip -q "$NUPKG" "tools/*" -d "$WORK/python"
 mv "$WORK/python/tools" "$STAGE/runtime"
 
-echo "==> Installing yt-dlp, ffmpeg, deno and Pillow into it"
+echo "==> Installing yt-dlp, ffmpeg, deno, Pillow and the Editor's AI (onnxruntime) into it"
 "$PY" -m pip install -q --disable-pip-version-check --upgrade \
   --target "$STAGE/runtime/Lib/site-packages" \
   --platform win_amd64 --python-version "${PYTHON_VERSION%.*}" --implementation cp --only-binary=:all: \
-  "yt-dlp[default]" imageio-ffmpeg deno pillow
+  "yt-dlp[default]" imageio-ffmpeg deno pillow onnxruntime numpy
+
+echo "==> Adding msvcp140.dll (onnxruntime needs it; not every PC has the Visual C++ runtime)"
+"$PY" -m pip download -q --disable-pip-version-check --no-deps -d "$WORK/msvc" \
+  --platform win_amd64 --python-version "${PYTHON_VERSION%.*}" --implementation cp --only-binary=:all: msvc-runtime
+unzip -q -o -j "$WORK"/msvc/msvc_runtime-*.whl "*/data/msvcp140.dll" "*/data/msvcp140_1.dll" -d "$STAGE/runtime"
 
 echo "==> Moving ffmpeg to runtime\\ffmpeg\\ffmpeg.exe"
 # yt-dlp looks for a program named exactly "ffmpeg" when downloading part of a video.
