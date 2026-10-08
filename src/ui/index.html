@@ -324,6 +324,11 @@
   <section class="tab-page" id="sfxTab" hidden>
     <div class="lib-head">
       <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
+      <div class="lib-head-tools" id="sfxHeadTools" hidden>
+        <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
+        <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
+      </div>
     </div>
 
     <div class="lib-out" id="libLoggedOut" hidden>
@@ -338,38 +343,35 @@
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
+      <div class="lib-tools">
+        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
+        <label class="input history-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="lib-people">
+          <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
+            <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
+        </div>
+        <label class="quality lib-sort" title="Sort by">
+          <span>Sort</span>
+          <select id="sfxSort">
+            <option value="favorites">Favorites first</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="name">Name (A to Z)</option>
+            <option value="longest">Longest</option>
+            <option value="shortest">Shortest</option>
+            <option value="uploader">Uploader (A to Z)</option>
+          </select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </label>
+      </div>
       <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
-        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
-        <div class="lib-tools">
-          <label class="input history-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-            <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
-          </label>
-          <div class="lib-people">
-            <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
-              <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
-          </div>
-          <label class="quality lib-sort" title="Sort by">
-            <span>Sort</span>
-            <select id="sfxSort">
-              <option value="favorites">Favorites first</option>
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="name">Name (A to Z)</option>
-              <option value="longest">Longest</option>
-              <option value="shortest">Shortest</option>
-              <option value="uploader">Uploader (A to Z)</option>
-            </select>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </label>
-          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
-          <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
-        </div>
         <p class="lib-showing" id="sfxShowing"></p>
         <div class="upload-list" id="sfxUploads"></div>
         <p class="history-empty" id="sfxEmpty"></p>
