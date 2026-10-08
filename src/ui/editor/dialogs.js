@@ -161,30 +161,199 @@
           }
         });
       } },
+    curves: { name: "Curves", fields: [], curves: true, run: (s, v, c, adj) => {
+      const pts = (adj && adj.pts) || {};
+      const L = curveLut(pts.rgb), R = curveLut(pts.r), G = curveLut(pts.g), B = curveLut(pts.b);
+      return pixels(s, (d) => { for (let i = 0; i < d.length; i += 4) { d[i] = L[R[d[i]]]; d[i + 1] = L[G[d[i + 1]]]; d[i + 2] = L[B[d[i + 2]]]; } });
+    } },
+    exposure: { name: "Exposure", fields: [["Exposure:", 0, -5, 5, "", 0.01], ["Offset:", 0, -0.5, 0.5, "", 0.001], ["Gamma Correction:", 1, 0.01, 9.99, "", 0.01]],
+      run: (s, [e, o, g]) => {
+        const lut = new Uint8ClampedArray(256), k = Math.pow(2, e);
+        for (let i = 0; i < 256; i++) lut[i] = 255 * Math.pow(Math.max(0, (i / 255) * k + o), 1 / g);
+        return pixels(s, (d) => { for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; } });
+      } },
+    colorbal: { name: "Color Balance", fields: [["Cyan / Red:", 0, -100, 100], ["Magenta / Green:", 0, -100, 100], ["Yellow / Blue:", 0, -100, 100]], checks: [["Preserve Luminosity", true]],
+      run: (s, [cr, mg, yb], [keep]) => pixels(s, (d) => {
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2], lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          const w = 1 - Math.abs(2 * lum - 1) * 0.7; // midtones most
+          let nr = r + cr * 0.8 * w, ng = g + mg * 0.8 * w, nb = b + yb * 0.8 * w;
+          if (keep) { const nl = (0.299 * nr + 0.587 * ng + 0.114 * nb) / 255, f = nl > 0 ? lum / nl : 1; nr *= f; ng *= f; nb *= f; }
+          d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+        }
+      }) },
+    photo: { name: "Photo Filter", fields: [["Density:", 25, 1, 100, "%"]], checks: [["Preserve Luminosity", true]],
+      selects: [["Filter:", [["#ec8a00", "Warming Filter (85)"], ["#fa9600", "Warming Filter (LBA)"], ["#006dff", "Cooling Filter (80)"], ["#00b5ff", "Cooling Filter (LBB)"], ["#ea1a1a", "Red"], ["#f38417", "Orange"], ["#f9e31c", "Yellow"], ["#19c919", "Green"], ["#1dcbea", "Cyan"], ["#1d35ea", "Blue"], ["#9b1dea", "Violet"], ["#e318e3", "Magenta"], ["#ac7a33", "Sepia"]], "#ec8a00"]],
+      run: (s, [dens], [keep], adj) => {
+        const col = PS.parseHex((adj && adj.s && adj.s[0]) || "#ec8a00"), k = dens / 100;
+        return pixels(s, (d) => {
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i + 1], b = d[i + 2], lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            let nr = r * (1 - k) + ((r * col.r) / 255) * k * 1.6, ng = g * (1 - k) + ((g * col.g) / 255) * k * 1.6, nb = b * (1 - k) + ((b * col.b) / 255) * k * 1.6;
+            if (keep) { const nl = 0.299 * nr + 0.587 * ng + 0.114 * nb, f = nl > 0 ? lum / nl : 1; nr *= f; ng *= f; nb *= f; }
+            d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+          }
+        });
+      } },
+    posterize: { name: "Posterize", fields: [["Levels:", 4, 2, 255]],
+      run: (s, [n]) => { const k = 255 / (n - 1); return pixels(s, (d) => { for (let i = 0; i < d.length; i += 4) for (let j = 0; j < 3; j++) d[i + j] = Math.round(Math.round(d[i + j] / k) * k); }); } },
+    threshold: { name: "Threshold", fields: [["Threshold Level:", 128, 1, 255]],
+      run: (s, [t]) => pixels(s, (d) => { for (let i = 0; i < d.length; i += 4) { const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] >= t ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; } }) },
+    gradmap: { name: "Gradient Map", fields: [], checks: [["Reverse", false]],
+      run: (s, v, [rev], adj) => {
+        let [a, b] = ((adj && adj.colors) || ["#000000", "#ffffff"]).map(PS.parseHex);
+        if (rev) [a, b] = [b, a];
+        return pixels(s, (d) => {
+          for (let i = 0; i < d.length; i += 4) {
+            const t = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+            d[i] = a.r + (b.r - a.r) * t; d[i + 1] = a.g + (b.g - a.g) * t; d[i + 2] = a.b + (b.b - a.b) * t;
+          }
+        });
+      } },
+    invert: { name: "Invert", fields: [], run: (s) => fx(s, "invert(1)") },
+  };
+  PS.FILTERS = FILTERS;
+  PS.ADJ_TYPES = ["bc", "levels", "curves", "exposure", "vib", "hs", "colorbal", "bw", "photo", "invert", "posterize", "threshold", "gradmap"];
+  PS.adjDefaults = (type) => {
+    const f = FILTERS[type];
+    return { type, v: f.fields.map((x) => x[1]), c: (f.checks || []).map((x) => x[1]), s: (f.selects || []).map((x) => x[2]),
+      pts: f.curves ? { rgb: [[0, 0], [255, 255]], r: [[0, 0], [255, 255]], g: [[0, 0], [255, 255]], b: [[0, 0], [255, 255]] } : undefined,
+      colors: type === "gradmap" ? [PS.hex(PS.fg), PS.hex(PS.bg)] : undefined };
+  };
+  PS.runAdj = (adj, src) => { const f = FILTERS[adj.type]; return f ? f.run(src, adj.v || [], adj.c || [], adj) : PS.clone(src); };
+
+  // Curves: a smooth curve through the points (monotone, so it never overshoots), as a table of 256 values
+  const curveLut = (pts) => {
+    const lut = new Uint8ClampedArray(256);
+    if (!pts || pts.length < 2) { for (let i = 0; i < 256; i++) lut[i] = i; return lut; }
+    const p = [...pts].sort((a, b) => a[0] - b[0]), n = p.length;
+    const dx = [], m = [], t = [];
+    for (let i = 0; i < n - 1; i++) { dx[i] = Math.max(1e-6, p[i + 1][0] - p[i][0]); m[i] = (p[i + 1][1] - p[i][1]) / dx[i]; }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
+    for (let x = 0; x < 256; x++) {
+      if (x <= p[0][0]) { lut[x] = p[0][1]; continue; }
+      if (x >= p[n - 1][0]) { lut[x] = p[n - 1][1]; continue; }
+      let i = 0;
+      while (x > p[i + 1][0]) i++;
+      const h = dx[i], u = (x - p[i][0]) / h;
+      const h00 = 2 * u ** 3 - 3 * u ** 2 + 1, h10 = u ** 3 - 2 * u ** 2 + u, h01 = -2 * u ** 3 + 3 * u ** 2, h11 = u ** 3 - u ** 2;
+      lut[x] = h00 * p[i][1] + h10 * h * t[i] + h01 * p[i + 1][1] + h11 * h * t[i + 1];
+    }
+    return lut;
+  };
+  // The Curves box: click to add a point, drag to move it, drag it out of the box to remove it
+  const curveWidget = (pts, onChange) => {
+    let ch = "rgb";
+    const w = el(`<div style="display:flex;flex-direction:column;gap:8px">
+      <div class="fr" style="grid-template-columns:70px 1fr"><span>Channel:</span><select><option value="rgb">RGB</option><option value="r">Red</option><option value="g">Green</option><option value="b">Blue</option></select></div>
+      <canvas width="512" height="512" style="width:100%;max-width:256px;aspect-ratio:1;background:#1c1c1c;box-shadow:0 0 0 1px #111;touch-action:none"></canvas>
+      <div class="note" data-io>Input: – Output: –</div></div>`);
+    const cv = w.querySelector("canvas"), io = w.querySelector("[data-io]");
+    const col = { rgb: "#e6e6e6", r: "#ff5a5a", g: "#58d858", b: "#5a8cff" };
+    const draw = () => {
+      const c = cv.getContext("2d"), S = 512 / 255;
+      c.clearRect(0, 0, 512, 512);
+      c.strokeStyle = "#3a3a3a"; c.lineWidth = 1;
+      for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(i * 128, 0); c.lineTo(i * 128, 512); c.moveTo(0, i * 128); c.lineTo(512, i * 128); c.stroke(); }
+      c.beginPath(); c.moveTo(0, 512); c.lineTo(512, 0); c.strokeStyle = "#444"; c.stroke();
+      for (const k of ["r", "g", "b", "rgb"]) {
+        if (k !== ch && (k === "rgb" || pts[k].length <= 2)) continue;
+        const lut = curveLut(pts[k]);
+        c.beginPath();
+        for (let x = 0; x < 256; x++) { const X = x * S, Y = 512 - lut[x] * S; x ? c.lineTo(X, Y) : c.moveTo(X, Y); }
+        c.strokeStyle = col[k]; c.globalAlpha = k === ch ? 1 : 0.35; c.lineWidth = 2.5; c.stroke(); c.globalAlpha = 1;
+      }
+      c.fillStyle = "#fff";
+      for (const [x, y] of pts[ch]) { c.fillRect(x * S - 6, 512 - y * S - 6, 12, 12); }
+    };
+    w.querySelector("select").addEventListener("change", (e) => { ch = e.target.value; draw(); });
+    let dragI = -1;
+    const at = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 255, (1 - (e.clientY - r.top) / r.height) * 255]; };
+    cv.addEventListener("pointerdown", (e) => {
+      cv.setPointerCapture(e.pointerId);
+      const [x, y] = at(e), list = pts[ch];
+      dragI = list.findIndex(([px, py]) => Math.hypot(px - x, py - y) < 12);
+      if (dragI < 0) { list.push([Math.round(PS.clamp(x, 0, 255)), Math.round(PS.clamp(y, 0, 255))]); list.sort((a, b) => a[0] - b[0]); dragI = list.findIndex((p) => p[0] === Math.round(PS.clamp(x, 0, 255))); }
+      draw(); onChange();
+    });
+    cv.addEventListener("pointermove", (e) => {
+      const [x, y] = at(e);
+      io.textContent = `Input: ${Math.round(PS.clamp(x, 0, 255))}  Output: ${Math.round(PS.clamp(y, 0, 255))}`;
+      if (dragI < 0) return;
+      const list = pts[ch];
+      const out = x < -20 || x > 275 || y < -20 || y > 275;
+      if (out && list.length > 2) { list.splice(dragI, 1); dragI = -1; draw(); onChange(); return; }
+      const lo = dragI > 0 ? list[dragI - 1][0] + 1 : 0, hi = dragI < list.length - 1 ? list[dragI + 1][0] - 1 : 255;
+      list[dragI] = [Math.round(PS.clamp(x, lo, hi)), Math.round(PS.clamp(y, 0, 255))];
+      draw(); onChange();
+    });
+    cv.addEventListener("pointerup", () => { if (dragI >= 0) onChange(true); dragI = -1; });
+    draw();
+    return w;
+  };
+  // The controls for an adjustment (in its dialog, or in Properties for an adjustment layer).
+  // onChange(adj, done): done = the change is finished (end of a drag, a click), worth a History step.
+  PS.adjBody = (adj0, onChange) => {
+    const f = FILTERS[adj0.type];
+    const adj = JSON.parse(JSON.stringify(adj0));
+    const body = el('<div style="display:flex;flex-direction:column;gap:12px"></div>');
+    const send = (done) => onChange(JSON.parse(JSON.stringify(adj)), done);
+    (f.selects || []).forEach(([label, options], i) => {
+      const r = selectRow(label, options, adj.s[i]);
+      r.on(() => { adj.s[i] = r.get(); send(true); });
+      body.append(r);
+    });
+    f.fields.forEach(([label, , min, max, unit, step], i) => {
+      const r = field(label, adj.v[i], min, max, unit || "", step || 1);
+      r.on(() => { adj.v[i] = r.get(); send(false); });
+      r.querySelectorAll("input").forEach((x) => x.addEventListener("change", () => send(true)));
+      body.append(r);
+    });
+    (f.checks || []).forEach(([label], i) => {
+      const r = checkRow(label, adj.c[i]);
+      r.on(() => { adj.c[i] = r.get(); send(true); });
+      body.append(r);
+    });
+    if (f.curves) body.append(curveWidget(adj.pts, (done) => send(!!done)));
+    if (adj.type === "gradmap") {
+      const r = el('<div class="fr"><span>Colors:</span><span class="in"></span></div>');
+      adj.colors.forEach((c, i) => {
+        const inp = el(`<input type="color" value="${c}" style="width:40px;height:24px;border:0;background:none;padding:0">`);
+        inp.addEventListener("input", () => { adj.colors[i] = inp.value; send(false); });
+        inp.addEventListener("change", () => send(true));
+        r.querySelector(".in").append(inp);
+      });
+      body.append(r);
+    }
+    if (!f.fields.length && !f.curves && !(f.checks || []).length && adj.type !== "gradmap") body.append(el('<div class="note">No settings: it just inverts the colors.</div>'));
+    return body;
   };
   PS.adjust = (id) => {
     const l = needLayer();
     const f = FILTERS[id];
     if (!l || !f) return;
+    if (!PS.isPixels(l)) return PS.toast(`Could not complete the ${f.name} command because the target layer is ${PS.isGroup(l) ? "a group" : "an adjustment layer"}.`);
     if (PS.isText(l)) PS.rasterize(l);
     const orig = l.canvas;
-    const rows = f.fields.map(([label, v, min, max, unit, step]) => field(label, v, min, max, unit || "", step || 1));
-    const checks = (f.checks || []).map(([label, on]) => checkRow(label, on));
+    let cur = PS.adjDefaults(id);
     const preview = el('<label><input type="checkbox" checked>Preview</label>');
-    const body = el('<div style="display:flex;flex-direction:column;gap:12px;min-width:380px"></div>');
-    rows.forEach((r) => body.append(r));
-    checks.forEach((r) => body.append(r));
     let timer = null;
     const update = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         l.canvas = orig;
-        if (preview.querySelector("input").checked) PS.putWithinSel(l, f.run(orig, rows.map((r) => r.get()), checks.map((c) => c.get())));
+        if (preview.querySelector("input").checked) PS.putWithinSel(l, PS.runAdj(cur, orig));
         PS.changed();
       }, 30);
     };
-    rows.forEach((r) => r.on(update));
-    checks.forEach((r) => r.on(update));
+    const body = PS.adjBody(cur, (adj) => { cur = adj; update(); });
+    body.style.minWidth = "380px";
     preview.querySelector("input").addEventListener("change", update);
     update();
     PS.dialog({
@@ -192,15 +361,136 @@
       onOk: () => {
         clearTimeout(timer);
         l.canvas = orig;
-        PS.putWithinSel(l, f.run(orig, rows.map((r) => r.get()), checks.map((c) => c.get())));
+        PS.putWithinSel(l, PS.runAdj(cur, orig));
         PS.commit(f.name);
       },
       onCancel: () => { clearTimeout(timer); PS.goto(doc().hi); }, // back to how it was (a type layer stays type)
     });
   };
+  // A new adjustment layer (it changes everything under it, and can be changed again any time)
+  PS.newAdjLayer = (type) => {
+    const d = doc();
+    if (!d) return;
+    const f = FILTERS[type];
+    const m = PS.canvas(d.w, d.h), mc = m.getContext("2d");
+    if (d.sel) mc.drawImage(d.sel.c, 0, 0); else { mc.fillStyle = "#fff"; mc.fillRect(0, 0, d.w, d.h); }
+    const a = PS.active();
+    const l = PS.layer({ kind: "adjust", name: PS.layerName(f.name), canvas: PS.canvas(d.w, d.h), mask: m, adj: PS.adjDefaults(type), parent: a ? a.parent || null : null });
+    if (a && PS.isGroup(a) && a.open !== false) l.parent = a.id;
+    d.layers.splice(a ? d.layers.indexOf(a) + 1 : d.layers.length, 0, l);
+    PS.normalize(d);
+    d.active = l.id; d.picked = [l.id]; d.maskEdit = false; d.sel = null;
+    PS.commit(`New ${f.name} Layer`);
+    PS.showPanel && PS.showPanel("props");
+  };
+
+  // ---------------------------------------------------------------- groups
+  const rebuild = (d, pid, list) => { // d.layers again, with this parent's layers in the given order
+    const out = [];
+    const walk = (p) => ((p || null) === (pid || null) ? list : PS.kids(d, p)).forEach((x) => { if (PS.isGroup(x)) walk(x.id); out.push(x); });
+    walk(null);
+    d.layers = out;
+  };
+  PS.rebuild = rebuild;
+  const pickedLayers = () => {
+    const d = doc();
+    const ids = d.picked && d.picked.length ? d.picked : [d.active];
+    const list = d.layers.filter((l) => ids.includes(l.id));
+    // leave out layers whose group is picked too
+    return list.filter((l) => { for (let p = PS.parentOf(l); p; p = PS.parentOf(p)) if (ids.includes(p.id)) return false; return true; });
+  };
+  PS.pickedLayers = pickedLayers;
+  PS.newGroup = (fromPicked) => {
+    const d = doc();
+    if (!d) return;
+    const list = fromPicked ? pickedLayers().filter((l) => !(l.locked && l.name === "Background")) : [];
+    const a = PS.active();
+    const g = PS.layer({ kind: "group", name: PS.layerName("Group"), canvas: PS.canvas(d.w, d.h), blend: "pass", open: true, parent: list.length ? list[list.length - 1].parent || null : a ? a.parent || null : null });
+    const at = list.length ? Math.max(...list.map((l) => d.layers.indexOf(l))) + 1 : a ? d.layers.indexOf(a) + 1 : d.layers.length;
+    d.layers.splice(at, 0, g);
+    list.forEach((l) => (l.parent = g.id));
+    PS.normalize(d);
+    d.active = g.id; d.picked = [g.id]; d.maskEdit = false;
+    PS.commit(fromPicked ? "Group Layers" : "New Group");
+  };
+  PS.ungroup = () => {
+    const d = doc(), g = PS.active();
+    if (!PS.isGroup(g)) return;
+    const kids = PS.kids(d, g.id);
+    kids.forEach((l) => (l.parent = g.parent || null));
+    const i = d.layers.indexOf(g);
+    d.layers.splice(i, 1);
+    PS.normalize(d);
+    d.active = (kids[kids.length - 1] || d.layers[Math.max(0, i - 1)]).id;
+    d.picked = kids.map((l) => l.id);
+    PS.commit("Ungroup Layers");
+  };
+  PS.duplicateAny = () => {
+    const d = doc();
+    const list = pickedLayers();
+    if (!list.length) return;
+    const made = [];
+    for (const l of list) {
+      if (!PS.isGroup(l)) { made.push(PS.duplicate(l, true)); continue; }
+      const ids = new Map();
+      const copy = (x) => { const c = { ...PS.copyLayer(x), id: PS.id(), _st: null }; ids.set(x.id, c.id); return c; };
+      const g2 = copy(l);
+      g2.name = l.name + " copy";
+      const inside = PS.inside(d, l).map((x) => copy(x));
+      inside.forEach((x) => (x.parent = ids.get(x.parent) || x.parent));
+      d.layers.splice(d.layers.indexOf(l) + 1, 0, ...inside, g2);
+      made.push(g2);
+    }
+    PS.normalize(d);
+    d.picked = made.map((l) => l.id);
+    d.active = made[made.length - 1].id;
+    PS.commit(made.length > 1 ? "Duplicate Layers" : "Duplicate Layer");
+  };
+  // Moves a layer (and a group's contents with it) next to another one, or into a group
+  PS.place = (l, target, where) => {
+    const d = doc();
+    if (l === target) return;
+    if (PS.isGroup(l) && (target === l || PS.inside(d, l).includes(target))) return;
+    if (where === "into") {
+      l.parent = target.id;
+      const sib = PS.kids(d, target.id).filter((x) => x !== l);
+      sib.push(l);
+      rebuild(d, target.id, sib);
+    } else {
+      l.parent = target.parent || null;
+      const sib = PS.kids(d, l.parent).filter((x) => x !== l);
+      let at = sib.indexOf(target) + (where === "above" ? 1 : 0);
+      if (!l.parent && sib[0] && sib[0].locked && sib[0].name === "Background") at = Math.max(1, at); // nothing goes under the Background
+      sib.splice(at, 0, l);
+      rebuild(d, l.parent, sib);
+    }
+    PS.commit("Layer Order");
+  };
+
+  // ---------------------------------------------------------------- Warp Text
+  PS.warpDialog = () => {
+    const l = PS.active();
+    if (!PS.isText(l)) return PS.toast("Pick a type layer to warp its text.");
+    const w0 = l.text.warp || { style: "none", bend: 50, h: 0, v: 0 };
+    const cur = { ...w0, bend: w0.style === "none" ? 50 : w0.bend };
+    const style = selectRow("Style:", PS.WARPS, cur.style);
+    const bend = field("Bend:", cur.bend, -100, 100, "%"), hd = field("Horizontal Distortion:", cur.h, -100, 100, "%"), vd = field("Vertical Distortion:", cur.v, -100, 100, "%");
+    const body = el('<div style="display:flex;flex-direction:column;gap:12px;min-width:400px"></div>');
+    body.append(style, bend, hd, vd);
+    const update = () => {
+      const st = style.get();
+      [bend, hd, vd].forEach((r) => r.querySelectorAll("input").forEach((i) => (i.disabled = st === "none")));
+      l.text = { ...l.text, warp: st === "none" ? null : { style: st, bend: bend.get(), h: hd.get(), v: vd.get() } };
+      PS.changed();
+    };
+    [style, bend, hd, vd].forEach((r) => r.on(update));
+    update();
+    PS.dialog({ title: "Warp Text", body, onOk: () => PS.commit("Warp Text"), onCancel: () => PS.goto(doc().hi) });
+  };
   PS.quickFilter = (id) => {
     const l = needLayer();
     if (!l) return;
+    if (!PS.isPixels(l)) return PS.toast("Pick a pixel layer for that.");
     if (PS.isText(l)) PS.rasterize(l);
     const s = l.canvas;
     const out = id === "invert" ? fx(s, "invert(1)") : id === "desat" ? fx(s, "grayscale(1)") : FILTERS.unsharp.run(s, [60, 1, 0]);
@@ -318,6 +608,8 @@
   PS.layerVia = (cut) => {
     const d = doc(), l = PS.active();
     if (!l) return;
+    if (!d.sel && !cut) return PS.duplicateAny();
+    if (!PS.isPixels(l)) return PS.toast("Pick a pixel layer to copy from.");
     if (!d.sel) { if (!cut) PS.duplicate(l); return; }
     if (PS.isText(l)) PS.rasterize(l);
     const s = PS.styled({ ...l, fx: null, fill: 100, _st: null });
@@ -335,93 +627,104 @@
     PS.commit(cut ? "Layer Via Cut" : "Layer Via Copy");
   };
   PS.deleteLayer = () => {
-    const d = doc(), l = PS.active();
-    if (!l) return;
-    if (d.layers.length === 1) return PS.toast("A document needs at least one layer.");
-    const i = PS.layerIndex(l);
-    d.layers.splice(i, 1);
-    d.active = (d.layers[Math.max(0, i - 1)] || d.layers[0]).id;
+    const d = doc();
+    const list = pickedLayers();
+    if (!list.length) return;
+    const gone = new Set();
+    list.forEach((l) => { gone.add(l); if (PS.isGroup(l)) PS.inside(d, l).forEach((x) => gone.add(x)); });
+    if (gone.size >= d.layers.length) return PS.toast("A document needs at least one layer.");
+    const i = Math.min(...list.map((l) => d.layers.indexOf(l)));
+    d.layers = d.layers.filter((l) => !gone.has(l));
+    const next = d.layers[Math.max(0, Math.min(i, d.layers.length) - 1)] || d.layers[0];
+    d.active = next.id; d.picked = [next.id];
     d.maskEdit = false;
-    PS.commit("Delete Layer");
+    PS.commit(gone.size > 1 && list.length > 1 ? "Delete Layers" : "Delete Layer");
   };
   PS.arrange = (how) => {
     const d = doc(), l = PS.active();
     if (!l || (l.locked && l.name === "Background")) return;
-    const i = PS.layerIndex(l), floor = d.layers[0].locked && d.layers[0].name === "Background" ? 1 : 0;
-    const j = how === "front" ? d.layers.length - 1 : how === "back" ? floor : how === "up" ? Math.min(d.layers.length - 1, i + 1) : Math.max(floor, i - 1);
+    const sib = PS.kids(d, l.parent || null);
+    const i = sib.indexOf(l), floor = !l.parent && sib[0] && sib[0].locked && sib[0].name === "Background" ? 1 : 0;
+    const j = how === "front" ? sib.length - 1 : how === "back" ? floor : how === "up" ? Math.min(sib.length - 1, i + 1) : Math.max(floor, i - 1);
     if (i === j) return;
-    d.layers.splice(i, 1);
-    d.layers.splice(j, 0, l);
+    sib.splice(i, 1);
+    sib.splice(j, 0, l);
+    rebuild(d, l.parent || null, sib);
     PS.commit({ front: "Bring to Front", back: "Send to Back", up: "Bring Forward", down: "Send Backward" }[how]);
   };
-  const contentBox = (l) => {
-    const s = PS.styled({ ...l, fx: null, _st: null });
-    const c = s.c, w = c.width, h = c.height, data = c.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, w, h).data;
-    let x0 = w, y0 = h, x1 = -1, y1 = -1;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    return x1 < 0 ? null : { x: s.x + x0, y: s.y + y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  const contentBox = (list) => {
+    let box = null;
+    for (const l of list) {
+      if (!PS.isPixels(l)) continue;
+      const s = PS.styled({ ...l, fx: null, _st: null });
+      const b = PS.bounds(s.c);
+      if (!b) continue;
+      const r = { x: s.x + b.x, y: s.y + b.y, x2: s.x + b.x + b.w, y2: s.y + b.y + b.h };
+      box = box ? { x: Math.min(box.x, r.x), y: Math.min(box.y, r.y), x2: Math.max(box.x2, r.x2), y2: Math.max(box.y2, r.y2) } : r;
+    }
+    return box && { x: box.x, y: box.y, w: box.x2 - box.x, h: box.y2 - box.y };
   };
   PS.align = (edge) => {
-    const d = doc(), l = PS.active();
-    if (!l) return;
-    if (l.locked) return PS.toast("Could not align because the layer is locked.");
-    const b = contentBox(l);
+    const d = doc();
+    const list = PS.targets().filter((l) => !l.locked);
+    if (!list.length) return PS.toast("Could not align because the layer is locked.");
+    const b = contentBox(list);
     if (!b) return;
     const t = d.sel ? d.sel.box : { x: 0, y: 0, w: d.w, h: d.h };
     const dx = edge === "l" ? t.x - b.x : edge === "r" ? t.x + t.w - (b.x + b.w) : edge === "c" ? Math.round(t.x + t.w / 2 - (b.x + b.w / 2)) : 0;
     const dy = edge === "t" ? t.y - b.y : edge === "b" ? t.y + t.h - (b.y + b.h) : edge === "m" ? Math.round(t.y + t.h / 2 - (b.y + b.h / 2)) : 0;
     if (!dx && !dy) return;
-    PS.moveLayer(l, dx, dy);
+    list.forEach((l) => PS.moveLayer(l, dx, dy));
     PS.commit("Align");
   };
-  const flat = (layers, w, h) => {
-    const c = PS.canvas(w, h), ctx = c.getContext("2d");
-    for (const l of layers) {
-      if (!l.visible) continue;
-      const s = PS.styled(l);
-      ctx.globalAlpha = l.opacity / 100;
-      ctx.globalCompositeOperation = PS.gco(l.blend);
-      ctx.drawImage(s.c, s.x, s.y);
-    }
-    return c;
+  // Some layers become one pixel layer, where the lowest of them was
+  const mergeInto = (list, name) => {
+    const d = doc();
+    const all = new Set();
+    list.forEach((l) => { all.add(l); if (PS.isGroup(l)) PS.inside(d, l).forEach((x) => all.add(x)); });
+    const c = PS.renderSome(d, [...all]);
+    const low = list.reduce((a, b) => (d.layers.indexOf(a) < d.layers.indexOf(b) ? a : b));
+    const merged = PS.layer({ name: PS.isGroup(low) || PS.isAdj(low) ? list[list.length - 1].name : low.name, canvas: c, parent: low.parent || null });
+    const at = d.layers.indexOf(low);
+    d.layers.splice(at, 0, merged);
+    d.layers = d.layers.filter((l) => !all.has(l));
+    PS.normalize(d);
+    d.active = merged.id; d.picked = [merged.id]; d.maskEdit = false;
+    PS.commit(name);
   };
   PS.mergeDown = () => {
-    const d = doc(), l = PS.active(), i = PS.layerIndex(l);
-    if (!l || i < 1) return;
-    const below = d.layers[i - 1];
-    const c = PS.canvas(d.w, d.h), ctx = c.getContext("2d");
-    const sb = PS.styled(below);
-    if (below.visible) ctx.drawImage(sb.c, sb.x, sb.y);
-    if (l.visible) { const s = PS.styled(l); ctx.globalAlpha = l.opacity / 100; ctx.globalCompositeOperation = PS.gco(l.blend); ctx.drawImage(s.c, s.x, s.y); }
-    const merged = { ...below, kind: "pixel", text: null, _tk: null, canvas: c, x: 0, y: 0, mask: null, fx: null, fill: 100, _st: null };
-    d.layers.splice(i - 1, 2, merged);
-    d.active = merged.id;
-    d.maskEdit = false;
-    PS.commit("Merge Down");
+    const d = doc(), l = PS.active();
+    if (!l) return;
+    const picked = pickedLayers();
+    if (picked.length > 1) return mergeInto(picked, "Merge Layers");
+    if (PS.isGroup(l)) return mergeInto([l], "Merge Group");
+    const sib = PS.kids(d, l.parent || null), below = sib[sib.indexOf(l) - 1];
+    if (!below) return;
+    if (!PS.isPixels(below)) return PS.toast(`Could not merge down because the layer below is ${PS.isGroup(below) ? "a group" : "an adjustment layer"}.`);
+    const keep = { ...below };
+    mergeInto([below, l], "Merge Down");
+    const m = PS.active();
+    m.name = keep.name; m.locked = keep.locked && keep.name === "Background";
   };
   PS.mergeVisible = () => {
-    const d = doc(), vis = d.layers.filter((l) => l.visible);
+    const d = doc();
+    const vis = PS.kids(d, null).filter((l) => l.visible);
     if (vis.length < 2) return;
-    const c = flat(d.layers, d.w, d.h);
-    const first = vis[0];
-    const merged = { ...first, kind: "pixel", text: null, _tk: null, canvas: c, x: 0, y: 0, mask: null, fx: null, fill: 100, opacity: 100, blend: "normal", _st: null };
-    d.layers = d.layers.filter((l) => !l.visible || l === first).map((l) => (l === first ? merged : l));
-    d.active = merged.id;
-    PS.commit("Merge Visible");
+    mergeInto(vis, "Merge Visible");
   };
   PS.stampVisible = () => {
     const d = doc();
-    PS.addLayer(PS.layer({ name: PS.layerName("Layer") + " (merged)", canvas: flat(d.layers, d.w, d.h) }), "Stamp Visible");
+    PS.addLayer(PS.layer({ name: PS.layerName("Layer") + " (merged)", canvas: PS.composite(d, { fresh: true }), parent: (PS.active() || {}).parent || null }), "Stamp Visible");
   };
   PS.flatten = () => {
     const d = doc();
     const c = PS.canvas(d.w, d.h), ctx = c.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, d.w, d.h);
-    ctx.drawImage(flat(d.layers, d.w, d.h), 0, 0);
+    ctx.drawImage(PS.composite(d, { fresh: true }), 0, 0);
     const l = PS.layer({ name: "Background", canvas: c, locked: true });
     d.layers = [l];
-    d.active = l.id;
+    d.active = l.id; d.picked = [l.id];
     d.maskEdit = false;
     PS.commit("Flatten Image");
   };
@@ -434,6 +737,7 @@
   PS.styleDialog = (tab) => {
     const l = needLayer();
     if (!l) return;
+    if (!PS.isPixels(l)) return PS.toast("Layer styles work on pixel and type layers.");
     const before = l.fx;
     const f = JSON.parse(JSON.stringify(l.fx || defaultFx()));
     f.stroke = f.stroke || defaultFx().stroke;
@@ -483,6 +787,7 @@
     const d = doc(), l = PS.active();
     if (!l || l.mask) return;
     if (PS.isText(l)) return PS.toast("Rasterize the type layer first to give it a mask (Layer > Rasterize > Type).");
+    if (PS.isAdj(l)) return PS.toast("An adjustment layer already has a mask.");
     if (l.locked && l.name === "Background") { l.locked = false; l.name = "Layer 0"; }
     PS.editPixels(l);
     const m = PS.newMask(l, kind === "all" || kind === "hidesel");
@@ -556,6 +861,7 @@
     const d = doc(), l = PS.active();
     if (!l) return;
     if (!d.sel) return PS.deleteLayer();
+    if (!PS.isPixels(l)) return PS.toast("Pick a pixel layer to clear.");
     if (PS.isText(l)) PS.rasterize(l);
     if (l.locked) return PS.fillWith(PS.bg, "Clear");
     const ctx = PS.editPixels(l);
@@ -566,6 +872,7 @@
   PS.fillWith = (color, name, opacity = 100, keepAlpha = false) => {
     const d = doc(), l = PS.active();
     if (!l) return;
+    if (!PS.isPixels(l)) return PS.toast("Pick a pixel layer to fill.");
     if (PS.isText(l)) PS.rasterize(l);
     const ctx = PS.editPixels(l);
     const f = PS.canvas(d.w, d.h), fc = f.getContext("2d");
@@ -777,7 +1084,7 @@
   PS.removeBackground = () => {
     const l = PS.active();
     if (!l) return;
-    if (PS.isText(l)) return PS.toast("Remove Background works on pictures, not type layers.");
+    if (!PS.isPixels(l) || PS.isText(l)) return PS.toast("Remove Background works on pictures. Pick a pixel layer.");
     withAi("Removing the background...", async () => {
       const d = doc();
       const m = await askModel(l.canvas);
@@ -802,6 +1109,7 @@
     if (!d) return;
     let src;
     if (merged) src = { c: PS.composite(d, { fresh: true }), x: 0, y: 0 };
+    else if (!PS.isPixels(l)) src = { c: PS.renderSome(d, PS.isGroup(l) ? PS.inside(d, l) : [l]), x: 0, y: 0 };
     else { if (!l) return; const s = PS.styled({ ...l, fx: null, fill: 100, _st: null }); src = { c: s.c, x: s.x, y: s.y }; }
     let c = PS.clone(src.c), x = src.x, y = src.y;
     if (d.sel) {
@@ -941,9 +1249,35 @@
       const psd = lib.readPsd(await file.arrayBuffer(), { skipThumbnail: true });
       const d = PS.newDoc(file.name, psd.width, psd.height, "transparent");
       d.layers = [];
-      const add = (list, hidden) => {
+      const readMask = (x, l) => {
+        const mw = x.mask.canvas.width, mh = x.mask.canvas.height;
+        const full = PS.canvas(l.canvas.width, l.canvas.height), fc = full.getContext("2d");
+        if ((x.mask.defaultColor || 0) > 127) { fc.fillStyle = "#000"; fc.fillRect(0, 0, full.width, full.height); fc.clearRect((x.mask.left || 0) - l.x, (x.mask.top || 0) - l.y, mw, mh); }
+        fc.drawImage(grayToAlpha(x.mask.canvas, mw, mh), (x.mask.left || 0) - l.x, (x.mask.top || 0) - l.y);
+        l.mask = full;
+        l.maskOn = !x.mask.disabled;
+      };
+      const add = (list, parent) => {
         for (const x of list || []) {
-          if (x.children) { add(x.children, hidden || x.hidden); continue; }
+          if (x.children) {
+            const g = PS.layer({ kind: "group", name: x.name || "Group", canvas: PS.canvas(psd.width, psd.height), parent, open: x.opened !== false,
+              visible: !x.hidden, opacity: Math.round((x.opacity === undefined ? 1 : x.opacity) * 100), blend: x.blendMode === "pass through" || !x.blendMode ? "pass" : fromPsdBlend(x.blendMode) });
+            if (x.mask && x.mask.canvas) readMask(x, g);
+            d.layers.push(g);
+            add(x.children, g.id);
+            continue;
+          }
+          if (x.adjustment) {
+            const adj = fromPsdAdj(x.adjustment);
+            if (adj) {
+              const a = PS.layer({ kind: "adjust", name: x.name || "Adjustment", canvas: PS.canvas(psd.width, psd.height), adj, parent,
+                visible: !x.hidden, opacity: Math.round((x.opacity === undefined ? 1 : x.opacity) * 100), blend: fromPsdBlend(x.blendMode) });
+              if (x.mask && x.mask.canvas) readMask(x, a);
+              else { const m = PS.canvas(psd.width, psd.height), mc = m.getContext("2d"); mc.fillStyle = "#fff"; mc.fillRect(0, 0, m.width, m.height); a.mask = m; }
+              d.layers.push(a);
+              continue;
+            }
+          }
           let l;
           if (x.text && x.text.text !== undefined) {
             try {
@@ -955,24 +1289,20 @@
                 text: { str: String(x.text.text).replace(/\r/g, "\n"), font: fromPostscript(st.font && st.font.name), size: Math.round((st.fontSize || 24) * scale * 10) / 10,
                   bold: !!st.fauxBold, italic: !!st.fauxItalic, align: just === "center" || just === "right" ? just : "left",
                   color: PS.hex(col), x: tr[4], y: tr[5], angle: (Math.atan2(tr[1], tr[0]) * 180) / Math.PI, leading: 1.2 } });
+              const wp = x.text.warp;
+              if (wp && wp.style && wp.style !== "none" && PS.WARPS.some((w) => w[0] === wp.style)) l.text.warp = { style: wp.style, bend: wp.value || 0, h: wp.perspective || 0, v: wp.perspectiveOther || 0 };
             } catch (e) { l = null; }
           }
           if (!l) {
             if (!x.canvas) continue;
             l = PS.layer({ name: x.name || "Layer", canvas: x.canvas, x: x.left || 0, y: x.top || 0 });
           }
-          l.visible = !(hidden || x.hidden);
+          l.parent = parent;
+          l.visible = !x.hidden;
           l.opacity = Math.round((x.opacity === undefined ? 1 : x.opacity) * 100);
           l.fill = Math.round((x.fillOpacity === undefined ? 1 : x.fillOpacity) * 100);
           l.blend = fromPsdBlend(x.blendMode);
-          if (x.mask && x.mask.canvas && !PS.isText(l)) {
-            const mw = x.mask.canvas.width, mh = x.mask.canvas.height;
-            const full = PS.canvas(l.canvas.width, l.canvas.height), fc = full.getContext("2d");
-            if ((x.mask.defaultColor || 0) > 127) { fc.fillStyle = "#000"; fc.fillRect(0, 0, full.width, full.height); fc.clearRect((x.mask.left || 0) - l.x, (x.mask.top || 0) - l.y, mw, mh); }
-            fc.drawImage(grayToAlpha(x.mask.canvas, mw, mh), (x.mask.left || 0) - l.x, (x.mask.top || 0) - l.y);
-            l.mask = full;
-            l.maskOn = !x.mask.disabled;
-          }
+          if (x.mask && x.mask.canvas && !PS.isText(l)) readMask(x, l);
           const e = x.effects;
           if (e && !e.disabled) {
             const s = e.stroke && e.stroke[0], sh = e.dropShadow && e.dropShadow[0];
@@ -984,11 +1314,12 @@
           d.layers.push(l);
         }
       };
-      add(psd.children);
+      add(psd.children, null);
+      PS.normalize(d);
       if (!d.layers.length && psd.canvas) d.layers.push(PS.layer({ name: "Background", canvas: psd.canvas, locked: true }));
       if (!d.layers.length) throw new Error("empty");
       const b = d.layers[0];
-      if (/^background$/i.test(b.name) && !PS.isText(b)) b.locked = true;
+      if (/^background$/i.test(b.name) && b.kind === "pixel" && !b.parent) b.locked = true;
       d.active = d.layers[d.layers.length - 1].id;
       PS.doc = null;
       PS.switchDoc(d);
@@ -1015,38 +1346,85 @@
     return res;
   };
   const savedToast = (res) => PS.toast(`Saved ${res.name}`, { label: "Show in folder", run: () => post("/api/editor-show", { path: res.path }) });
-  const makePsd = (d) => {
-    const children = d.layers.map((l) => {
-      PS.syncText(l);
-      const x = { name: l.name, canvas: l.canvas, left: l.x, top: l.y, opacity: l.opacity / 100, fillOpacity: l.fill / 100, blendMode: toPsdBlend(l.blend), hidden: !l.visible };
-      if (l.mask) {
-        const g = PS.canvas(l.mask.width, l.mask.height), gc = g.getContext("2d");
-        gc.fillStyle = "#000"; gc.fillRect(0, 0, g.width, g.height);
-        const t = PS.canvas(g.width, g.height), tc = t.getContext("2d");
-        tc.fillStyle = "#fff"; tc.fillRect(0, 0, g.width, g.height);
-        tc.globalCompositeOperation = "destination-in"; tc.drawImage(l.mask, 0, 0);
-        gc.drawImage(t, 0, 0);
-        x.mask = { canvas: g, left: l.x, top: l.y, defaultColor: 255, disabled: !l.maskOn };
-      }
-      if (PS.isText(l)) {
-        const t = l.text, a = ((t.angle || 0) * Math.PI) / 180;
-        x.text = {
-          text: t.str.replace(/\n/g, "\r"),
-          transform: [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), t.x, t.y],
-          style: { font: { name: POSTSCRIPT[t.font] || t.font.replace(/\s/g, "") }, fontSize: t.size, fauxBold: t.bold, fauxItalic: t.italic, fillColor: PS.parseHex(t.color), autoLeading: true },
-          paragraphStyle: { justification: t.align },
-        };
-      }
-      if (l.fx) {
-        const e = {};
-        if (l.fx.stroke && l.fx.stroke.on) e.stroke = [{ enabled: true, present: true, showInDialog: true, size: { units: "Pixels", value: l.fx.stroke.size }, position: "outside", fillType: "color", blendMode: "normal", opacity: l.fx.stroke.opacity / 100, color: PS.parseHex(l.fx.stroke.color) }];
-        if (l.fx.shadow && l.fx.shadow.on) e.dropShadow = [{ enabled: true, present: true, showInDialog: true, size: { units: "Pixels", value: l.fx.shadow.size }, distance: { units: "Pixels", value: l.fx.shadow.distance }, angle: l.fx.shadow.angle, color: PS.parseHex(l.fx.shadow.color), opacity: l.fx.shadow.opacity / 100, blendMode: "multiply", useGlobalLight: false }];
-        if (e.stroke || e.dropShadow) x.effects = e;
-      }
-      return x;
-    });
-    return { width: d.w, height: d.h, children, canvas: PS.composite(d, { fresh: true }) };
+  const toPsdAdj = (adj) => {
+    const v = adj.v || [], c = adj.c || [];
+    const pts = (list) => (list || [[0, 0], [255, 255]]).map(([x, y]) => ({ input: x, output: y }));
+    switch (adj.type) {
+      case "bc": return { type: "brightness/contrast", brightness: v[0], contrast: v[1], useLegacy: false };
+      case "levels": return { type: "levels", rgb: { shadowInput: v[0], midtoneInput: v[1], highlightInput: v[2], shadowOutput: v[3], highlightOutput: v[4] } };
+      case "curves": return { type: "curves", rgb: pts(adj.pts.rgb), red: pts(adj.pts.r), green: pts(adj.pts.g), blue: pts(adj.pts.b) };
+      case "exposure": return { type: "exposure", exposure: v[0], offset: v[1], gamma: v[2] };
+      case "vib": return { type: "vibrance", vibrance: v[0], saturation: v[1] };
+      case "hs": return { type: "hue/saturation", master: { a: 0, b: 0, c: 0, d: 0, hue: v[0], saturation: v[1], lightness: v[2] } };
+      case "colorbal": return { type: "color balance", shadows: { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 }, midtones: { cyanRed: v[0], magentaGreen: v[1], yellowBlue: v[2] }, highlights: { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 }, preserveLuminosity: !!c[0] };
+      case "bw": return { type: "black & white", reds: v[0], yellows: 60, greens: v[1], cyans: 60, blues: v[2], magentas: 80, useTint: false };
+      case "photo": return { type: "photo filter", color: PS.parseHex(adj.s[0]), density: v[0], preserveLuminosity: !!c[0] };
+      case "invert": return { type: "invert" };
+      case "posterize": return { type: "posterize", levels: v[0] };
+      case "threshold": return { type: "threshold", level: v[0] };
+      case "gradmap": return { type: "gradient map", gradientType: "solid", reverse: !!c[0], colorStops: adj.colors.map((h, i) => ({ color: PS.parseHex(h), location: i * 4096, midpoint: 50 })), opacityStops: [{ opacity: 1, location: 0, midpoint: 50 }, { opacity: 1, location: 4096, midpoint: 50 }] };
+    }
+    return null;
   };
+  const fromPsdAdj = (a) => {
+    const pts = (list) => (list && list.length >= 2 ? list.map((p) => [p.input, p.output]) : [[0, 0], [255, 255]]);
+    const t = { "brightness/contrast": "bc", levels: "levels", curves: "curves", exposure: "exposure", vibrance: "vib", "hue/saturation": "hs", "color balance": "colorbal",
+      "black & white": "bw", "photo filter": "photo", invert: "invert", posterize: "posterize", threshold: "threshold", "gradient map": "gradmap" }[a.type];
+    if (!t) return null;
+    const adj = PS.adjDefaults(t), n = (x, d) => (typeof x === "number" ? x : d);
+    if (t === "bc") adj.v = [n(a.brightness, 0), n(a.contrast, 0)];
+    if (t === "levels" && a.rgb) adj.v = [a.rgb.shadowInput, a.rgb.midtoneInput, a.rgb.highlightInput, a.rgb.shadowOutput, a.rgb.highlightOutput].map((x, i) => n(x, adj.v[i]));
+    if (t === "curves") adj.pts = { rgb: pts(a.rgb), r: pts(a.red), g: pts(a.green), b: pts(a.blue) };
+    if (t === "exposure") adj.v = [n(a.exposure, 0), n(a.offset, 0), n(a.gamma, 1)];
+    if (t === "vib") adj.v = [n(a.vibrance, 0), n(a.saturation, 0)];
+    if (t === "hs" && a.master) adj.v = [n(a.master.hue, 0), n(a.master.saturation, 0), n(a.master.lightness, 0)];
+    if (t === "colorbal" && a.midtones) { adj.v = [n(a.midtones.cyanRed, 0), n(a.midtones.magentaGreen, 0), n(a.midtones.yellowBlue, 0)]; adj.c = [a.preserveLuminosity !== false]; }
+    if (t === "bw") adj.v = [n(a.reds, 40), n(a.greens, 40), n(a.blues, 20)];
+    if (t === "photo") { adj.v = [n(a.density, 25)]; adj.c = [a.preserveLuminosity !== false]; if (a.color && "r" in a.color) adj.s = [PS.hex(a.color)]; }
+    if (t === "posterize") adj.v = [n(a.levels, 4)];
+    if (t === "threshold") adj.v = [n(a.level, 128)];
+    if (t === "gradmap") { adj.c = [!!a.reverse]; const st = (a.colorStops || []).filter((x) => x.color && "r" in x.color); if (st.length >= 2) adj.colors = [PS.hex(st[0].color), PS.hex(st[st.length - 1].color)]; }
+    return adj;
+  };
+  const maskToPsd = (l) => {
+    const g = PS.canvas(l.mask.width, l.mask.height), gc = g.getContext("2d");
+    gc.fillStyle = "#000"; gc.fillRect(0, 0, g.width, g.height);
+    const t = PS.canvas(g.width, g.height), tc = t.getContext("2d");
+    tc.fillStyle = "#fff"; tc.fillRect(0, 0, g.width, g.height);
+    tc.globalCompositeOperation = "destination-in"; tc.drawImage(l.mask, 0, 0);
+    gc.drawImage(t, 0, 0);
+    return { canvas: g, left: l.x, top: l.y, defaultColor: 255, disabled: !l.maskOn };
+  };
+  const toPsdLayer = (d, l) => {
+    const base = { name: l.name, opacity: l.opacity / 100, hidden: !l.visible };
+    if (PS.isGroup(l)) {
+      const g = { ...base, opened: l.open !== false, blendMode: l.blend === "pass" ? "pass through" : toPsdBlend(l.blend), children: PS.kids(d, l.id).map((x) => toPsdLayer(d, x)) };
+      if (l.mask) g.mask = maskToPsd(l);
+      return g;
+    }
+    if (PS.isAdj(l)) return { ...base, blendMode: toPsdBlend(l.blend), adjustment: toPsdAdj(l.adj), mask: l.mask ? maskToPsd(l) : undefined };
+    PS.syncText(l);
+    const x = { ...base, canvas: l.canvas, left: l.x, top: l.y, fillOpacity: l.fill / 100, blendMode: toPsdBlend(l.blend) };
+    if (l.mask) x.mask = maskToPsd(l);
+    if (PS.isText(l)) {
+      const t = l.text, a = ((t.angle || 0) * Math.PI) / 180;
+      x.text = {
+        text: t.str.replace(/\n/g, "\r"),
+        transform: [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), t.x, t.y],
+        style: { font: { name: POSTSCRIPT[t.font] || t.font.replace(/\s/g, "") }, fontSize: t.size, fauxBold: t.bold, fauxItalic: t.italic, fillColor: PS.parseHex(t.color), autoLeading: true },
+        paragraphStyle: { justification: t.align },
+      };
+      if (t.warp && t.warp.style) x.text.warp = { style: t.warp.style, value: t.warp.bend, perspective: t.warp.h, perspectiveOther: t.warp.v, rotate: "horizontal" };
+    }
+    if (l.fx) {
+      const e = {};
+      if (l.fx.stroke && l.fx.stroke.on) e.stroke = [{ enabled: true, present: true, showInDialog: true, size: { units: "Pixels", value: l.fx.stroke.size }, position: "outside", fillType: "color", blendMode: "normal", opacity: l.fx.stroke.opacity / 100, color: PS.parseHex(l.fx.stroke.color) }];
+      if (l.fx.shadow && l.fx.shadow.on) e.dropShadow = [{ enabled: true, present: true, showInDialog: true, size: { units: "Pixels", value: l.fx.shadow.size }, distance: { units: "Pixels", value: l.fx.shadow.distance }, angle: l.fx.shadow.angle, color: PS.parseHex(l.fx.shadow.color), opacity: l.fx.shadow.opacity / 100, blendMode: "multiply", useGlobalLight: false }];
+      if (e.stroke || e.dropShadow) x.effects = e;
+    }
+    return x;
+  };
+  const makePsd = (d) => ({ width: d.w, height: d.h, children: PS.kids(d, null).map((l) => toPsdLayer(d, l)), canvas: PS.composite(d, { fresh: true }) });
   PS.savePsd = async (asNew, thenClose) => {
     const d = doc();
     if (!d) return;

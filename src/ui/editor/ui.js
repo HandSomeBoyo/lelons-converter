@@ -24,6 +24,11 @@
     gradient: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1"/><path d="M8 5.5v13" stroke-opacity=".9"/><path d="M12 5.5v13" stroke-opacity=".6"/><path d="M16 5.5v13" stroke-opacity=".3"/>'),
     bucket: svg('<path d="M10 3.5 3.5 10l7 7 6.5-6.5z"/><path d="M3.5 10h13.5"/><path d="M19 12.5s2 2.6 2 4a2 2 0 0 1-4 0c0-1.4 2-4 2-4z" fill="currentColor"/>'),
     type: svg('<path d="M5 6V4.5h14V6M12 4.5v15M9 19.5h6" stroke-width="1.8"/>'),
+    spotheal: svg('<rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M10.5 10.5l3 3M13.5 10.5l-3 3" stroke-width="1.2"/><path d="M18.5 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="currentColor" stroke="none"/>'),
+    heal: svg('<rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-45 12 12)"/><circle cx="10.6" cy="10.6" r=".7" fill="currentColor"/><circle cx="13.4" cy="13.4" r=".7" fill="currentColor"/><circle cx="13.4" cy="10.6" r=".7" fill="currentColor"/><circle cx="10.6" cy="13.4" r=".7" fill="currentColor"/>'),
+    clone: svg('<path d="M9 3.5h6l-1 6h-4z" fill="currentColor" fill-opacity=".3"/><path d="M9 3.5h6l-1 6h-4zM6 12.5h12l1 4H5z"/><path d="M5 19.5h14"/>'),
+    warp: svg('<path d="M4 7.5c3-3 5 3 8 0s5 3 8 0M8 7.5v10M16 7.5v10M5.5 19c2-1.5 4 1 6.5 0s4.5 1 6.5 0"/>'),
+    group: svg('<path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>'),
     rect: svg('<rect x="4" y="6" width="16" height="12" rx="1" fill="currentColor" fill-opacity=".25"/>'),
     ellipseShape: svg('<ellipse cx="12" cy="12" rx="8.5" ry="6.5" fill="currentColor" fill-opacity=".25"/>'),
     hand: svg('<path d="M8 12.5V5.8a1.3 1.3 0 0 1 2.6 0V11V4.3a1.3 1.3 0 0 1 2.6 0V11V5.3a1.3 1.3 0 0 1 2.6 0V11.5V8a1.3 1.3 0 0 1 2.6 0v6.5c0 3.6-2.6 6-6 6-2.4 0-3.8-1-5.2-2.8L4.5 13.6c-.7-.9.4-2.2 1.4-1.6z"/>'),
@@ -124,6 +129,9 @@
   const hasSel = () => !!(doc() && doc().sel);
   const hasLayer = () => !!PS.active();
   const A = PS.actions = {};
+  const ADJ_NAMES = { bc: "Brightness/Contrast", levels: "Levels", curves: "Curves", exposure: "Exposure", vib: "Vibrance", hs: "Hue/Saturation", colorbal: "Color Balance",
+    bw: "Black & White", photo: "Photo Filter", invert: "Invert", posterize: "Posterize", threshold: "Threshold", gradmap: "Gradient Map" };
+  const ADJ_MENU = () => (PS.ADJ_TYPES || []).map((t) => [ADJ_NAMES[t] + "...", "", () => PS.newAdjLayer(t), has]);
   const MENUS = () => [
     ["File", [
       ["New...", "Ctrl+N", () => PS.newDialog()],
@@ -168,11 +176,20 @@
       ["Adjustments", [
         ["Brightness/Contrast...", "", () => PS.adjust("bc"), hasLayer],
         ["Levels...", "Ctrl+L", () => PS.adjust("levels"), hasLayer],
-        ["Hue/Saturation...", "Ctrl+U", () => PS.adjust("hs"), hasLayer],
+        ["Curves...", "Ctrl+M", () => PS.adjust("curves"), hasLayer],
+        ["Exposure...", "", () => PS.adjust("exposure"), hasLayer],
+        ["-"],
         ["Vibrance...", "", () => PS.adjust("vib"), hasLayer],
+        ["Hue/Saturation...", "Ctrl+U", () => PS.adjust("hs"), hasLayer],
+        ["Color Balance...", "Ctrl+B", () => PS.adjust("colorbal"), hasLayer],
         ["Black & White...", "Alt+Shift+Ctrl+B", () => PS.adjust("bw"), hasLayer],
+        ["Photo Filter...", "", () => PS.adjust("photo"), hasLayer],
         ["-"],
         ["Invert", "Ctrl+I", () => PS.quickFilter("invert"), hasLayer],
+        ["Posterize...", "", () => PS.adjust("posterize"), hasLayer],
+        ["Threshold...", "", () => PS.adjust("threshold"), hasLayer],
+        ["Gradient Map...", "", () => PS.adjust("gradmap"), hasLayer],
+        ["-"],
         ["Desaturate", "Shift+Ctrl+U", () => PS.quickFilter("desat"), hasLayer],
       ]],
       ["-"],
@@ -192,10 +209,13 @@
     ["Layer", [
       ["New", [
         ["Layer...", "Shift+Ctrl+N", () => PS.newLayer(), has],
+        ["Group...", "", () => PS.newGroup(false), has],
+        ["-"],
         ["Layer via Copy", "Ctrl+J", () => PS.layerVia(false), hasLayer],
         ["Layer via Cut", "Shift+Ctrl+J", () => PS.layerVia(true), hasSel],
       ]],
-      ["Duplicate Layer...", "", () => PS.duplicate(PS.active()), hasLayer],
+      ["New Adjustment Layer", ADJ_MENU()],
+      ["Duplicate Layer...", "", () => PS.duplicateAny(), hasLayer],
       ["Delete Layer", "", () => PS.deleteLayer(), hasLayer],
       ["Rename Layer...", "", () => PS.renameActive(), hasLayer],
       ["-"],
@@ -232,12 +252,16 @@
         ["Top Edges", "", () => PS.align("t"), hasLayer], ["Vertical Centers", "", () => PS.align("m"), hasLayer], ["Bottom Edges", "", () => PS.align("b"), hasLayer],
       ]],
       ["-"],
-      ["Merge Down", "Ctrl+E", () => PS.mergeDown(), () => hasLayer() && PS.layerIndex(PS.active()) > 0],
+      ["Group Layers", "Ctrl+G", () => PS.newGroup(true), hasLayer],
+      ["Ungroup Layers", "Shift+Ctrl+G", () => PS.ungroup(), () => PS.isGroup(PS.active())],
+      ["-"],
+      [() => (doc() && (doc().picked || []).length > 1 ? "Merge Layers" : PS.isGroup(PS.active()) ? "Merge Group" : "Merge Down"), "Ctrl+E", () => PS.mergeDown(), hasLayer],
       ["Merge Visible", "Shift+Ctrl+E", () => PS.mergeVisible(), has],
       ["Stamp Visible", "Alt+Shift+Ctrl+E", () => PS.stampVisible(), has],
       ["Flatten Image", "", () => PS.flatten(), has],
     ]],
     ["Type", [
+      ["Warp Text...", "", () => PS.warpDialog(), () => PS.isText(PS.active())],
       ["Rasterize Type Layer", "", () => { PS.rasterize(PS.active(), true); PS.commit("Rasterize Type"); }, () => PS.isText(PS.active())],
       ["-"],
       ["Bigger", "Shift+Ctrl+.", () => PS.nudgeType(2), () => PS.isText(PS.active())],
@@ -350,7 +374,7 @@
   document.addEventListener("mousedown", (e) => { if (!e.target.closest(".ps-menu, .ps-flyout, .ps-pop")) { closeMenus(); closeFlyouts(); } });
 
   // ---------------------------------------------------------------- tools panel
-  const GROUPS = [["move"], ["marquee", "ellipse"], ["lasso", "polylasso"], ["objsel", "wand"], ["crop"], ["eyedropper"], "|", ["brush"], ["eraser"], ["gradient", "bucket"], "|", ["type"], ["rect", "ellipseShape"], "|", ["hand"], ["zoom"]];
+  const GROUPS = [["move"], ["marquee", "ellipse"], ["lasso", "polylasso"], ["objsel", "wand"], ["crop"], ["eyedropper"], "|", ["spotheal", "heal"], ["brush"], ["clone"], ["eraser"], ["gradient", "bucket"], "|", ["type"], ["rect", "ellipseShape"], "|", ["hand"], ["zoom"]];
   const groupShown = {};
   const toolsEl = $("psTools");
   const closeFlyouts = () => document.querySelectorAll(".ps-flyout, .ps-pop").forEach((f) => f.remove());
@@ -564,11 +588,18 @@
         color.onclick = () => PS.colorPicker("text");
         add(font, style, size, ctl.sep(),
           ctl.seg({ a: t.align }, "a", [["left", I.tleft, "Left align text"], ["center", I.tcenter, "Center text"], ["right", I.tright, "Right align text"]], null),
-          color);
+          color, ctl.ib(I.warp, "Create warped text", () => PS.warpDialog()));
         optEl.querySelectorAll(".grp .ps-ib").forEach((b, i) => { b.onclick = () => { setType("align", ["left", "center", "right"][i]); drawOptions(); }; });
         if (PS.typing) add(el('<span style="flex:1"></span>'), ctl.ib(I.cancel, "Cancel any current edits (Esc)", () => PS.endTyping(false)), ctl.ib(I.check, "Commit any current edits (Ctrl+Enter)", () => PS.endTyping(true)));
         break;
       }
+      case "clone": case "heal":
+        add(ctl.brush(opt[PS.tool]), ctl.sep(), ...(PS.tool === "clone" ? [ctl.num("Opacity:", opt.clone, "opacity", 1, 100, "%", 46), ctl.num("Flow:", opt.clone, "flow", 1, 100, "%", 46)] : [el('<span style="color:#bbb">Source: Sampled</span>')]),
+          ctl.check("Aligned", opt[PS.tool], "aligned"), ctl.check("Sample All Layers", opt[PS.tool], "all"), ctl.sep(), el('<span style="color:#999">Alt+click to pick where to copy from</span>'));
+        break;
+      case "spotheal":
+        add(ctl.brush(opt.spotheal), ctl.sep(), el('<span style="color:#bbb">Type: Content-Aware</span>'), ctl.check("Sample All Layers", opt.spotheal, "all"), ctl.sep(), el('<span style="color:#999">Paint over a spot to remove it</span>'));
+        break;
       case "rect":
         add(el('<span style="color:#bbb">Fill: foreground color</span>'), ctl.sep(), ctl.num("Corner radius:", opt.shape, "radius", 0, 1000, " px", 50));
         break;
@@ -657,21 +688,28 @@
   const ADJ = [
     ["bc", "Brightness/Contrast", '<path d="M12 4v16M12 4a8 8 0 0 1 0 16" fill="currentColor"/><circle cx="12" cy="12" r="8"/>'],
     ["levels", "Levels", '<path d="M3 20h18M5 20l3-7 3 4 3-10 3 8 2-3v8"/>'],
-    ["hs", "Hue/Saturation", '<path d="M4 18c3-8 5-12 8-12s5 4 8 12"/><path d="M4 18h16"/>'],
+    ["curves", "Curves", '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M4 20C10 19 9 6 20 4"/>'],
+    ["exposure", "Exposure", '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M4 20 20 4"/><path d="M7 8h4M9 6v4M13 16h4"/>'],
     ["vib", "Vibrance", '<path d="M12 3l9 16H3z"/><path d="M12 10v5"/>'],
+    ["hs", "Hue/Saturation", '<path d="M4 18c3-8 5-12 8-12s5 4 8 12"/><path d="M4 18h16"/>'],
+    ["colorbal", "Color Balance", '<path d="M12 4v16M5 8h14M7 8l-3 6h6zM17 8l-3 6h6z"/>'],
     ["bw", "Black & White", '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 20 20 4v16z" fill="currentColor"/>'],
+    ["photo", "Photo Filter", '<rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M8 7l1.5-2.5h5L16 7"/>'],
     ["invert", "Invert", '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16h8V4z" fill="currentColor"/>'],
-    ["blur", "Gaussian Blur", '<circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="3.5"/>'],
-    ["unsharp", "Unsharp Mask", '<path d="M12 3l3 6 6 1-4.5 4.2 1 6.3L12 17.5 6.5 20.5l1-6.3L3 10l6-1z"/>'],
+    ["posterize", "Posterize", '<path d="M4 20V14h4v-4h4V6h4V4h4v16z"/>'],
+    ["threshold", "Threshold", '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 14c3-1 5 2 8 0s5-4 8-3v9H4z" fill="currentColor"/>'],
+    ["gradmap", "Gradient Map", '<rect x="3.5" y="6.5" width="17" height="11" rx="1"/><path d="M8 6.5v11" stroke-opacity=".8"/><path d="M12 6.5v11" stroke-opacity=".55"/><path d="M16 6.5v11" stroke-opacity=".3"/>'],
   ];
+  PS.showPanel = (n) => showPanel(n);
+  let skipMid = false;
   const drawMid = () => {
     midBody.innerHTML = "";
     const d = doc();
     if (midTab === "adjust") {
-      const w = el('<div class="ps-props"><h4>Add an adjustment</h4><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" class="adj"></div><div class="note" style="color:#7d7d7d">Applies to the selected layer (inside the selection, if there is one).</div></div>');
+      const w = el('<div class="ps-props"><h4>Add an adjustment</h4><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px" class="adj"></div><div class="note" style="color:#7d7d7d">Adds an adjustment layer: it changes everything under it, and you can change or remove it any time.</div></div>');
       for (const [id, name, path] of ADJ) {
         const b = el(`<button class="ps-ib" style="width:100%;height:34px" title="${name}">${svg(path)}</button>`);
-        b.onclick = () => (id === "invert" ? PS.quickFilter("invert") : PS.adjust(id));
+        b.onclick = () => PS.newAdjLayer(id);
         if (!d) b.disabled = true;
         w.querySelector(".adj").append(b);
       }
@@ -707,6 +745,27 @@
       q.querySelector(".quick").append(rb, ss);
       return q;
     };
+    if (PS.isAdj(l)) {
+      const f = PS.FILTERS[l.adj.type];
+      w.append(el(`<h4>${svg(ADJ_ICON(l.adj.type))}${esc(f.name)}</h4>`));
+      w.append(PS.adjBody(l.adj, (adj, done) => {
+        l.adj = adj;
+        skipMid = true; // the controls are already right; don't rebuild them mid-drag
+        if (done) PS.commit(`Modify ${f.name} Layer`); else PS.changed();
+      }));
+      w.append(el('<div class="note" style="color:#7d7d7d">Paint black on its mask to hide the adjustment in places.</div>'));
+      midBody.append(w);
+      return;
+    }
+    if (PS.isGroup(l)) {
+      const n = PS.inside(d, l).filter((x) => !PS.isGroup(x)).length;
+      w.append(el(`<h4>${I.group}Group</h4>`), el(`<div class="note" style="color:#9a9a9a">${n} layer${n === 1 ? "" : "s"} inside. Move or transform it to change them all at once.</div>`));
+      const g = el('<div class="quick" style="display:grid;gap:6px"></div>');
+      g.append(ctl.btn("Ungroup", () => PS.ungroup()), ctl.btn("Merge Group", () => PS.mergeDown()), ctl.btn("Free Transform", () => PS.startTransform()));
+      w.append(g);
+      midBody.append(w);
+      return;
+    }
     if (d.maskEdit && l && l.mask) {
       w.append(el(`<h4>${I.mask}Masks</h4>`), el('<div class="note" style="color:#9a9a9a">Paint black to hide, white to show. Click the layer thumbnail to paint on the layer again.</div>'));
       const g = el('<div class="quick" style="display:grid;gap:6px"></div>');
@@ -754,7 +813,6 @@
     <div class="r"><select disabled style="flex:none;width:86px;opacity:.75"><option>Kind</option></select><span style="flex:1"></span></div>
     <div class="r"><select id="psBlend"></select><span class="num">Opacity: <input type="number" id="psOpacity" min="0" max="100">%</span></div>
     <div class="r"><span class="num">Lock:</span><span class="locks"><button class="ps-ib" id="psLockPos" title="Lock position">${svg('<path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/>')}</button><button class="ps-ib" id="psLockAll" title="Lock all">${I.lockSm}</button></span><span style="flex:1"></span><span class="num">Fill: <input type="number" id="psFill" min="0" max="100">%</span></div>`;
-  $("psBlend").innerHTML = BLEND_OPTS.map(([v, t]) => (v === "-" ? "<option disabled>──────────</option>" : `<option value="${v}">${t}</option>`)).join("");
   $("psBlend").onchange = (e) => { const l = PS.active(); if (l) { l.blend = e.target.value; PS.commit("Blending Change"); } };
   const numIn = (id, key, name) => {
     const i = $(id);
@@ -768,7 +826,8 @@
     [I.link, "Link layers", null],
     ['<span class="fx">fx</span>', "Add a layer style", (e) => PS.contextMenu([["Stroke...", "", () => PS.styleDialog("stroke"), hasLayer], ["Drop Shadow...", "", () => PS.styleDialog("shadow"), hasLayer]], e.clientX, e.clientY - 70)],
     [I.mask, "Add layer mask", () => PS.addMask(doc() && doc().sel ? "sel" : "all")],
-    [I.adjust, "Create new fill or adjustment layer", (e) => PS.contextMenu(ADJ.map(([id, name]) => [name + (id === "invert" ? "" : "..."), "", () => (id === "invert" ? PS.quickFilter("invert") : PS.adjust(id)), hasLayer]), e.clientX, e.clientY - 220)],
+    [I.adjust, "Create new fill or adjustment layer", (e) => PS.contextMenu(ADJ_MENU(), e.clientX, e.clientY - 330)],
+    [I.group, "Create a new group", () => PS.newGroup(false)],
     [I.newLayer, "Create a new layer", () => PS.newLayer(true)],
     [I.trash, "Delete layer", () => PS.deleteLayer()],
   ];
@@ -829,45 +888,71 @@
   };
 
   let dragLayer = null;
+  const ADJ_ICON = (t) => (ADJ.find((x) => x[0] === t) || ADJ[0])[2];
+  const pick = (d, l, e) => { // clicking a layer: Ctrl adds/removes it, Shift picks a range, otherwise just this one
+    const rows = [...layersEl.querySelectorAll(".ps-layer")].map((r) => +r.dataset.id);
+    let picked = d.picked && d.picked.length ? [...d.picked] : [d.active];
+    if (e.ctrlKey || e.metaKey) picked = picked.includes(l.id) ? picked.filter((x) => x !== l.id) : [...picked, l.id];
+    else if (e.shiftKey && d.active) {
+      const i = rows.indexOf(d.active), j = rows.indexOf(l.id);
+      picked = rows.slice(Math.min(i, j), Math.max(i, j) + 1);
+    } else picked = [l.id];
+    if (!picked.length) picked = [l.id];
+    d.picked = picked;
+    d.active = picked.includes(l.id) ? l.id : picked[picked.length - 1];
+  };
   const drawLayers = () => {
     const d = doc(), l0 = PS.active();
     layersEl.innerHTML = "";
-    $("psBlend").disabled = $("psOpacity").disabled = $("psFill").disabled = !l0;
+    $("psBlend").disabled = $("psOpacity").disabled = !l0;
+    $("psFill").disabled = !l0 || !PS.isPixels(l0);
     if (!d) return;
+    if (!d.picked || !d.picked.length || !d.picked.includes(d.active)) d.picked = d.active ? [d.active] : [];
+    const blendOpts = (l0 && PS.isGroup(l0) ? [["pass", "Pass Through"]] : []).concat(BLEND_OPTS);
+    $("psBlend").innerHTML = blendOpts.map(([v, t]) => (v === "-" ? "<option disabled>──────────</option>" : `<option value="${v}">${t}</option>`)).join("");
     if (l0) { $("psBlend").value = l0.blend; $("psOpacity").value = l0.opacity; $("psFill").value = l0.fill; }
     $("psLockPos").classList.toggle("on", !!(l0 && l0.locked));
+    const hidden = (l) => { for (let p = PS.parentOf(l); p; p = PS.parentOf(p)) if (p.open === false) return true; return false; };
     for (let i = d.layers.length - 1; i >= 0; i--) {
       const l = d.layers[i];
-      const row = el(`<div class="ps-layer ${l.id === d.active ? "on" : ""} ${l.locked && l.name === "Background" ? "bgl" : ""}" data-id="${l.id}">
+      if (hidden(l)) continue;
+      const dep = PS.depth(l), on = d.picked.includes(l.id);
+      const kind = PS.isGroup(l) ? "group" : PS.isAdj(l) ? "adj" : PS.isText(l) ? "type" : "";
+      const row = el(`<div class="ps-layer ${on ? "on" : ""} ${l.locked && l.name === "Background" ? "bgl" : ""} ${kind === "group" ? "grp" : ""}" data-id="${l.id}">
         <button class="eye ${l.visible ? "" : "off"}" title="Indicates layer visibility">${I.eye}</button>
-        <span class="th ${PS.isText(l) ? "type" : ""} ${l.id === d.active && !d.maskEdit ? "sel" : ""}" title="Layer thumbnail">${PS.isText(l) ? "T" : ""}</span>
+        <span class="ind" style="width:${dep * 16}px"></span>
+        ${kind === "group" ? `<button class="twist ${l.open !== false ? "open" : ""}" title="Show or hide the layers in this group"></button>` : ""}
+        <span class="th ${kind} ${l.id === d.active && !d.maskEdit ? "sel" : ""}" title="${kind === "adj" ? "Adjustment settings" : "Layer thumbnail"}">${kind === "type" ? "T" : kind === "group" ? I.group : kind === "adj" ? svg(ADJ_ICON(l.adj.type)) : ""}</span>
         ${l.mask ? `<span class="link">${l.maskOn ? "⛓" : "✕"}</span><span class="th mask ${l.id === d.active && d.maskEdit ? "sel" : ""}" title="Layer mask thumbnail"></span>` : ""}
         <span class="nm">${esc(l.name)}</span>
         ${l.fx && ((l.fx.stroke && l.fx.stroke.on) || (l.fx.shadow && l.fx.shadow.on)) ? '<span class="fxb" title="Layer effects">fx</span>' : ""}
         ${l.locked ? `<span class="lk">${I.lockSm}</span>` : ""}
       </div>`);
-      if (!PS.isText(l)) row.querySelector(".th").append(layerThumb(l));
+      if (!kind) row.querySelector(".th").append(layerThumb(l));
       if (l.mask) { const mt = row.querySelector(".th.mask"); mt.style.background = "#000"; mt.append(maskThumb(l)); }
+      row.querySelector(".twist")?.addEventListener("click", (e) => { e.stopPropagation(); l.open = l.open === false; drawLayers(); });
       row.querySelector(".eye").addEventListener("click", (e) => {
         e.stopPropagation();
         if (e.altKey) { // Alt+click: show only this layer
-          const solo = d.layers.every((x) => x === l || !x.visible);
-          d.layers.forEach((x) => (x.visible = solo ? true : x === l));
+          const solo = d.layers.every((x) => x === l || !x.visible || PS.isGroup(x));
+          d.layers.forEach((x) => { if (!PS.isGroup(x)) x.visible = solo ? true : x === l; });
+          for (let p = PS.parentOf(l); p; p = PS.parentOf(p)) p.visible = true;
         } else l.visible = !l.visible;
         PS.commit(l.visible ? "Show Layer" : "Hide Layer");
       });
       row.querySelector(".th").addEventListener("click", (e) => {
-        if (e.ctrlKey) { e.stopPropagation(); PS.setSel(PS.selFromLayer(l), "Load Selection"); }
+        if (e.ctrlKey && PS.isPixels(l)) { e.stopPropagation(); PS.setSel(PS.selFromLayer(l), "Load Selection"); }
+        else if (kind === "adj") { e.stopPropagation(); d.active = l.id; d.picked = [l.id]; d.maskEdit = false; showPanel("props"); PS.changed(); }
       });
       row.querySelector(".th.mask")?.addEventListener("click", (e) => {
         e.stopPropagation();
         if (e.shiftKey) return PS.maskAction("toggle");
-        d.active = l.id; d.maskEdit = true; PS.changed();
+        d.active = l.id; d.picked = [l.id]; d.maskEdit = true; PS.changed();
       });
       row.addEventListener("click", (e) => {
         if (e.target.closest("input")) return;
         if (PS.typing) PS.endTyping(true);
-        d.active = l.id;
+        pick(d, l, e);
         d.maskEdit = false;
         PS.changed();
       });
@@ -878,53 +963,60 @@
         else if (l.locked && l.name === "Background") unlockBg(l);
       });
       row.addEventListener("dblclick", (e) => {
-        if (e.target.closest(".nm, .th, .eye")) return;
-        if (l.locked && l.name === "Background") unlockBg(l); else { d.active = l.id; PS.styleDialog("stroke"); }
+        if (e.target.closest(".nm, .th, .eye, .twist")) return;
+        if (l.locked && l.name === "Background") unlockBg(l); else if (PS.isPixels(l)) { d.active = l.id; PS.styleDialog("stroke"); }
       });
       row.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        d.active = l.id; PS.changed();
+        if (!d.picked.includes(l.id)) { d.active = l.id; d.picked = [l.id]; }
+        PS.changed();
         PS.contextMenu([
-          ["Layer Style...", "", () => PS.styleDialog("stroke"), () => true], ["Clear Layer Style", "", () => PS.clearStyle(), () => !!l.fx],
-          ["-"], ["Duplicate Layer...", "", () => PS.duplicate(l), () => true], ["Delete Layer", "", () => PS.deleteLayer(), () => true],
+          ["Layer Style...", "", () => PS.styleDialog("stroke"), () => PS.isPixels(l)], ["Clear Layer Style", "", () => PS.clearStyle(), () => !!l.fx],
+          ["-"], ["Duplicate Layer...", "", () => PS.duplicateAny(), () => true], ["Delete Layer", "", () => PS.deleteLayer(), () => true],
+          ["Group from Layers...", "Ctrl+G", () => PS.newGroup(true), () => true], ["Ungroup Layers", "Shift+Ctrl+G", () => PS.ungroup(), () => PS.isGroup(l)],
           ["-"], ["Rasterize Type", "", () => { PS.rasterize(l, true); PS.commit("Rasterize Type"); }, () => PS.isText(l)],
-          ["Remove Background", "", () => PS.removeBackground(), () => !PS.isText(l), null, true],
-          ["-"], ["Merge Down", "Ctrl+E", () => PS.mergeDown(), () => PS.layerIndex(l) > 0], ["Merge Visible", "Shift+Ctrl+E", () => PS.mergeVisible(), () => true], ["Flatten Image", "", () => PS.flatten(), () => true],
+          ["Warp Text...", "", () => PS.warpDialog(), () => PS.isText(l)],
+          ["Remove Background", "", () => PS.removeBackground(), () => l.kind === "pixel", null, true],
+          ["-"], [d.picked.length > 1 ? "Merge Layers" : PS.isGroup(l) ? "Merge Group" : "Merge Down", "Ctrl+E", () => PS.mergeDown(), () => true],
+          ["Merge Visible", "Shift+Ctrl+E", () => PS.mergeVisible(), () => true], ["Flatten Image", "", () => PS.flatten(), () => true],
         ], e.clientX, e.clientY);
       });
-      // drag to reorder
+      // drag to reorder, or onto a group to put it inside
       row.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || e.target.closest(".eye, input")) return;
+        if (e.button !== 0 || e.target.closest(".eye, input, .twist")) return;
         dragLayer = { l, y: e.clientY, moved: false };
       });
       layersEl.append(row);
     }
   };
   const rowUnder = (y) => [...layersEl.querySelectorAll(".ps-layer")].find((r) => { const b = r.getBoundingClientRect(); return y >= b.top && y < b.bottom; });
+  const dropSpot = (r, y) => {
+    const b = r.getBoundingClientRect(), t = doc().layers.find((x) => x.id === +r.dataset.id);
+    if (PS.isGroup(t) && y > b.top + b.height * 0.3 && y < b.bottom - b.height * 0.3) return "into";
+    return y < b.top + b.height / 2 ? "above" : "below";
+  };
   window.addEventListener("pointermove", (e) => {
     if (!dragLayer) return;
     if (!dragLayer.moved && Math.abs(e.clientY - dragLayer.y) < 5) return;
     dragLayer.moved = true;
-    layersEl.querySelectorAll(".drop-above, .drop-below").forEach((r) => r.classList.remove("drop-above", "drop-below"));
+    layersEl.querySelectorAll(".drop-above, .drop-below, .drop-into").forEach((r) => r.classList.remove("drop-above", "drop-below", "drop-into"));
     const r = rowUnder(e.clientY);
-    if (r) { const b = r.getBoundingClientRect(); r.classList.add(e.clientY < b.top + b.height / 2 ? "drop-above" : "drop-below"); }
+    if (r) r.classList.add("drop-" + dropSpot(r, e.clientY));
   });
   window.addEventListener("pointerup", (e) => {
     if (!dragLayer) return;
     const g = dragLayer;
     dragLayer = null;
-    layersEl.querySelectorAll(".drop-above, .drop-below").forEach((r) => r.classList.remove("drop-above", "drop-below"));
+    layersEl.querySelectorAll(".drop-above, .drop-below, .drop-into").forEach((r) => r.classList.remove("drop-above", "drop-below", "drop-into"));
     if (!g.moved) return;
     const r = rowUnder(e.clientY), d = doc();
     if (!r) return;
     const target = d.layers.find((x) => x.id === +r.dataset.id);
-    if (!target || target === g.l) return;
-    const b = r.getBoundingClientRect(), above = e.clientY < b.top + b.height / 2;
-    d.layers.splice(d.layers.indexOf(g.l), 1);
-    let at = d.layers.indexOf(target) + (above ? 1 : 0);
-    if (d.layers[0] && d.layers[0].locked && d.layers[0].name === "Background" && at === 0) at = 1; // nothing goes under the Background
-    d.layers.splice(at, 0, g.l);
-    PS.commit("Layer Order");
+    if (!target || target === g.l || (g.l.locked && g.l.name === "Background")) return;
+    let where = dropSpot(r, e.clientY);
+    // below an open group's row is the top of that group
+    if (where === "below" && PS.isGroup(target) && target.open !== false) where = "into";
+    PS.place(g.l, target, where);
   });
   const rename = (l, nm) => {
     nm.innerHTML = "";
@@ -972,6 +1064,7 @@
       eraser: "[ and ] change the size", gradient: "Drag to draw the gradient · Shift for straight lines", bucket: "Click to fill similar colors",
       type: "Click to add text, or click text to edit it · Ctrl+Enter to commit", rect: "Drag to draw · Shift for a square", ellipseShape: "Drag to draw · Shift for a circle",
       hand: "Drag to move around", zoom: "Click to zoom in · Alt+click to zoom out",
+      clone: "Alt+click to set the source, then paint", heal: "Alt+click to set the source, then paint over what to fix", spotheal: "Paint over a spot or blemish",
     }[PS.tool] || "";
   };
   PS.onPointer = (p) => {
@@ -1069,7 +1162,7 @@
     requestAnimationFrame(() => {
       panelsPending = false;
       drawTabs(); drawStatus(); drawHome(); drawLayers();
-      if (!PS.typing || midTab !== "props") drawMid();
+      if (skipMid) skipMid = false; else if (!PS.typing || midTab !== "props") drawMid();
       if (PS.tool === "type" && !PS.typing) drawOptions();
     });
   };

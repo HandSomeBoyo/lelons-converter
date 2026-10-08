@@ -286,3 +286,21 @@ body.editor-mode main { padding: var(--gap); min-height: 0; height: 100vh; }
 @keyframes ps-spin { to { rotate: 360deg; } }
 .ps-toast { position: absolute; z-index: 850; left: 50%; bottom: 34px; translate: -50% 0; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; border-radius: 6px; background: #3f3f3f; color: #eee; box-shadow: 0 0 0 1px #151515, 0 10px 30px rgba(0, 0, 0, .45); }
 .ps-toast .ps-btn { height: 24px; }
+
+/* groups and adjustment layers in the Layers panel */
+.ps-layer .ind { flex: none; }
+.ps-layer .twist { width: 16px; height: 42px; flex: none; display: grid; place-items: center; margin-left: 2px; }
+.ps-layer .twist::before { content: ""; border: 4px solid transparent; border-left: 5px solid #bbb; border-right: 0; transition: rotate .12s; }
+.ps-layer .twist.open::before { rotate: 90deg; }
+.ps-layer .th.group, .ps-layer .th.adj { background: none; box-shadow: none; color: #d8d8d8; width: 28px; margin-left: 6px; }
+.ps-layer .th.group svg, .ps-layer .th.adj svg { width: 20px; height: 20px; }
+.ps-layer .th.adj { background: #3a3a3a; box-shadow: 0 0 0 1px #151515; width: 28px; }
+.ps-layer .th.adj.sel { box-shadow: 0 0 0 1px #151515, 0 0 0 2.5px #e8e8e8; }
+.ps-layer.drop-into { box-shadow: inset 0 0 0 2px var(--blue2); background: #2f3a4a; }
+
+/* adjustment settings in the narrow Properties panel: the name above, then slider and number side by side */
+.ps-props .fr { grid-template-columns: 1fr; gap: 4px; }
+.ps-props .fr .in { display: grid; grid-template-columns: 1fr 58px auto; align-items: center; gap: 8px; }
+.ps-props .fr .in input[type="number"] { width: 58px; }
+.ps-props .fr .in input[type="range"] { min-width: 0; }
+.ps-props .fr label { justify-self: start; }

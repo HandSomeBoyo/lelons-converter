@@ -56,7 +56,11 @@
   });
   PS.isText = (l) => l && l.kind === "text";
 
-  // A text layer's picture is made from its words; this keeps it up to date.
+  PS.isGroup = (l) => l && l.kind === "group";
+  PS.isAdj = (l) => l && l.kind === "adjust";
+  PS.isPixels = (l) => l && (l.kind === "pixel" || l.kind === "text"); // layers with a picture of their own
+
+  // A text layer's picture is made from its words (then warped, then turned); this keeps it up to date.
   PS.syncText = (l) => {
     if (!PS.isText(l)) return;
     const t = l.text, key = JSON.stringify(t);
@@ -73,26 +77,92 @@
     const left = t.align === "center" ? -w / 2 : t.align === "right" ? -w : 0; // box relative to the anchor
     const top = -asc;
     const pad = Math.ceil(t.size * 0.15) + 2;
-    const ang = (t.angle || 0) * Math.PI / 180;
-    const corners = [[left - pad, top - pad], [left + w + pad, top - pad], [left - pad, top + h + pad], [left + w + pad, top + h + pad]]
-      .map(([x, y]) => [x * Math.cos(ang) - y * Math.sin(ang), x * Math.sin(ang) + y * Math.cos(ang)]);
-    const minX = Math.floor(Math.min(...corners.map((p) => p[0]))), maxX = Math.ceil(Math.max(...corners.map((p) => p[0])));
-    const minY = Math.floor(Math.min(...corners.map((p) => p[1]))), maxY = Math.ceil(Math.max(...corners.map((p) => p[1])));
-    const c = PS.canvas(maxX - minX, maxY - minY), ctx = c.getContext("2d");
-    ctx.translate(-minX, -minY);
-    ctx.rotate(ang);
+    // 1. the words, straight; the anchor is at (ax, ay)
+    let c = PS.canvas(w + pad * 2, h + pad * 2);
+    let ax = pad - left, ay = pad - top;
+    const ctx = c.getContext("2d");
     ctx.font = font;
     ctx.fillStyle = t.color;
     ctx.textBaseline = "alphabetic";
     lines.forEach((s, i) => {
       const lw = widths[i];
-      const x = t.align === "center" ? -lw / 2 : t.align === "right" ? -lw : 0;
-      ctx.fillText(s, x, i * lh);
+      ctx.fillText(s, ax + (t.align === "center" ? -lw / 2 : t.align === "right" ? -lw : 0), ay + i * lh);
     });
+    // 2. Warp Text
+    if (t.warp && t.warp.style && t.warp.style !== "none") ({ c, ax, ay } = PS.warp(c, ax, ay, { x: ax + left, y: ay + top, w, h }, t.warp));
+    // 3. turned around the anchor
+    const ang = ((t.angle || 0) * Math.PI) / 180;
+    if (ang) {
+      const W = c.width, H = c.height;
+      const corners = [[0, 0], [W, 0], [0, H], [W, H]].map(([x, y]) => [x - ax, y - ay])
+        .map(([x, y]) => [x * Math.cos(ang) - y * Math.sin(ang), x * Math.sin(ang) + y * Math.cos(ang)]);
+      const minX = Math.floor(Math.min(...corners.map((p) => p[0]))), maxX = Math.ceil(Math.max(...corners.map((p) => p[0])));
+      const minY = Math.floor(Math.min(...corners.map((p) => p[1]))), maxY = Math.ceil(Math.max(...corners.map((p) => p[1])));
+      const r = PS.canvas(maxX - minX, maxY - minY), rc = r.getContext("2d");
+      rc.translate(-minX, -minY);
+      rc.rotate(ang);
+      rc.drawImage(c, -ax, -ay);
+      c = r; ax = -minX; ay = -minY;
+    }
     l.canvas = c;
-    l.x = Math.round(t.x) + minX;
-    l.y = Math.round(t.y) + minY;
-    l._box = { left, top, w, h }; // where the words are, around the anchor (before turning)
+    l.x = Math.round(t.x - ax);
+    l.y = Math.round(t.y - ay);
+    l._box = { left, top, w, h }; // where the words are, around the anchor (before warping and turning)
+  };
+
+  // Warp Text: each column of the words is moved and stretched up or down (then each row sideways, for
+  // vertical distortion). Styles and numbers like Photoshop's: bend and distortions are -100..100.
+  PS.WARPS = [["none", "None"], ["arc", "Arc"], ["arcLower", "Arc Lower"], ["arcUpper", "Arc Upper"], ["arch", "Arch"], ["bulge", "Bulge"],
+    ["shellLower", "Shell Lower"], ["shellUpper", "Shell Upper"], ["flag", "Flag"], ["wave", "Wave"], ["fish", "Fish"], ["rise", "Rise"],
+    ["fisheye", "Fisheye"], ["inflate", "Inflate"], ["squeeze", "Squeeze"], ["twist", "Twist"]];
+  PS.warp = (src, ax, ay, box, wp) => {
+    const k = (wp.bend || 0) / 100, hd = (wp.h || 0) / 100, vd = (wp.v || 0) / 100;
+    const H = box.h, Wd = box.w;
+    const curve = (u) => 1 - (2 * u - 1) ** 2; // 0 at the ends, 1 in the middle
+    const S = Math.sin, P = Math.PI;
+    const shapes = {
+      arc: (u) => [-0.55 * curve(u), -0.55 * curve(u)],
+      arcLower: (u) => [0, 0.55 * curve(u)],
+      arcUpper: (u) => [-0.55 * curve(u), 0],
+      arch: (u) => [-0.7 * Math.sqrt(curve(u)), -0.7 * Math.sqrt(curve(u)) * 0.6],
+      bulge: (u) => [-0.4 * curve(u), 0.4 * curve(u)],
+      shellLower: (u) => [0, 0.55 * (1 - curve(u))],
+      shellUpper: (u) => [-0.55 * (1 - curve(u)), 0],
+      flag: (u) => [-0.3 * S(2 * P * u), -0.3 * S(2 * P * u)],
+      wave: (u) => [-0.3 * S(2 * P * u), -0.3 * S(2 * P * u + P / 2)],
+      fish: (u) => [-0.4 * S(P * u) * (1 - u), 0.4 * S(P * u) * (1 - u)],
+      rise: (u) => [-(u - 0.5), -(u - 0.5)],
+      fisheye: (u) => [-0.45 * curve(u) ** 2, 0.45 * curve(u) ** 2],
+      inflate: (u) => [-0.35 * Math.sqrt(curve(u)), 0.35 * Math.sqrt(curve(u))],
+      squeeze: (u) => [0.3 * curve(u), -0.3 * curve(u)],
+      twist: (u) => [-0.35 * (2 * u - 1), 0.35 * (2 * u - 1)],
+    };
+    const f = shapes[wp.style] || (() => [0, 0]);
+    // the extra room the words can move into
+    let up = 0, down = 0;
+    for (let i = 0; i <= 40; i++) {
+      const u = i / 40, [a, b] = f(u);
+      const ta = k * a * H - hd * (u - 0.5) * H * 0.5, tb = k * b * H + hd * (u - 0.5) * H * 0.5;
+      up = Math.max(up, -ta, -tb); down = Math.max(down, ta, tb);
+    }
+    const padY = Math.ceil(Math.max(up, down)) + 2, padX = Math.ceil(Math.abs(vd) * Wd * 0.5) + 2;
+    const out = PS.canvas(src.width + padX * 2, src.height + padY * 2), o = out.getContext("2d");
+    for (let x = 0; x < src.width; x++) {
+      const u = PS.clamp((x - box.x) / Wd, 0, 1);
+      const [a, b] = f(u);
+      const top = k * a * H - hd * (u - 0.5) * H * 0.5, bot = k * b * H + hd * (u - 0.5) * H * 0.5;
+      const scale = Math.max(0.05, (H + bot - top) / H);
+      // the box's top goes to box.y + top, its bottom to box.y + H + bot
+      o.drawImage(src, x, 0, 1, src.height, x + padX, padY + box.y + top - box.y * scale, 1, src.height * scale);
+    }
+    if (!vd) return { c: out, ax: ax + padX, ay: ay + padY };
+    const out2 = PS.canvas(out.width, out.height), o2 = out2.getContext("2d");
+    const cx = box.x + padX + Wd / 2, by = box.y + padY;
+    for (let y = 0; y < out.height; y++) {
+      const v = PS.clamp((y - by) / H, 0, 1), sc = Math.max(0.05, 1 + vd * (v - 0.5));
+      o2.drawImage(out, 0, y, out.width, 1, cx - cx * sc, y, out.width * sc, 1);
+    }
+    return { c: out2, ax: ax + padX, ay: ay + padY };
   };
   PS.fontCss = (t) => `${t.italic ? "italic " : ""}${t.bold ? "700 " : "400 "}${t.size}px "${t.font}", sans-serif`;
 
@@ -133,7 +203,9 @@
   };
 
   // A layer's look with its mask, Fill and layer style (Stroke, Drop Shadow), kept until something changes.
+  const EMPTY = { c: null, x: 0, y: 0 };
   PS.styled = (l) => {
+    if (!PS.isPixels(l)) { if (!EMPTY.c) EMPTY.c = PS.canvas(1, 1); return EMPTY; }
     PS.syncText(l);
     const fx = l.fx || {};
     const stroke = fx.stroke && fx.stroke.on ? fx.stroke : null;
@@ -248,9 +320,11 @@
   };
 
   // ---- history (each step keeps the layers as they were; canvases are never changed after a step, only replaced)
+  const copyLayer = (l) => ({ ...l, text: l.text && { ...l.text }, fx: l.fx && JSON.parse(JSON.stringify(l.fx)), adj: l.adj && JSON.parse(JSON.stringify(l.adj)) });
+  PS.copyLayer = copyLayer;
   const snap = (d) => ({
     w: d.w, h: d.h, active: d.active, sel: d.sel,
-    layers: d.layers.map((l) => ({ ...l, text: l.text && { ...l.text }, fx: l.fx && JSON.parse(JSON.stringify(l.fx)) })),
+    layers: d.layers.map(copyLayer),
   });
   PS.commit = (name) => {
     const d = PS.doc;
@@ -272,7 +346,8 @@
     d.h = s.h;
     d.active = s.active;
     d.sel = s.sel;
-    d.layers = s.layers.map((l) => ({ ...l, text: l.text && { ...l.text }, fx: l.fx && JSON.parse(JSON.stringify(l.fx)) }));
+    d.layers = s.layers.map(copyLayer);
+    d.picked = (d.picked || []).filter((id) => d.layers.some((l) => l.id === id));
     if (d.w !== d.comp?.width || d.h !== d.comp?.height) d.comp = null;
     PS.changed();
   };
@@ -286,27 +361,93 @@
     PS.onChange && PS.onChange();
   };
 
-  // ---- the picture with all its layers
+  // ---- groups: a group's layers sit right under it in d.layers (bottom to top), each with parent = the group's id
+  PS.parentOf = (l) => (l && l.parent ? PS.doc.layers.find((g) => g.id === l.parent) || null : null);
+  PS.kids = (d, pid) => d.layers.filter((l) => (l.parent || null) === (pid || null));
+  PS.inside = (d, g) => { // everything in a group, at any depth
+    const out = [];
+    const walk = (id) => PS.kids(d, id).forEach((l) => { out.push(l); if (PS.isGroup(l)) walk(l.id); });
+    walk(g.id);
+    return out;
+  };
+  PS.depth = (l) => { let n = 0, p = PS.parentOf(l); while (p) { n++; p = PS.parentOf(p); } return n; };
+  PS.shown = (l) => { for (let x = l; x; x = PS.parentOf(x)) if (!x.visible) return false; return true; };
+  // Puts d.layers back in order after parents changed: each group right above its own layers.
+  PS.normalize = (d = PS.doc) => {
+    const ids = new Set(d.layers.map((l) => l.id));
+    d.layers.forEach((l) => { if (l.parent && !ids.has(l.parent)) l.parent = null; });
+    const out = [];
+    const walk = (pid) => PS.kids(d, pid).forEach((l) => { if (PS.isGroup(l)) walk(l.id); out.push(l); });
+    walk(null);
+    d.layers = out;
+  };
+
+  // ---- the picture with all its layers (groups and adjustment layers included)
+  const live = (l) => PS.live && (PS.live.layer === l || (PS.live.layers && PS.live.layers.has(l)));
+  PS.renderItems = (ctx, d, items, opts = {}) => {
+    for (const l of items) {
+      if (!l.visible || (PS.hideLayer && PS.hideLayer === l && !opts.fresh)) continue;
+      if (PS.isGroup(l)) {
+        const kids = PS.kids(d, l.id);
+        const plain = (l.blend === "pass" || l.blend === "normal") && l.opacity >= 100 && !(l.mask && l.maskOn);
+        if (l.blend === "pass" && plain) { PS.renderItems(ctx, d, kids, opts); continue; }
+        const t = PS.canvas(d.w, d.h), tc = t.getContext("2d");
+        PS.renderItems(tc, d, kids, opts);
+        if (l.mask && l.maskOn) { tc.globalCompositeOperation = "destination-in"; tc.drawImage(maskAt(l, d), 0, 0); }
+        ctx.globalAlpha = l.opacity / 100;
+        ctx.globalCompositeOperation = PS.gco(l.blend === "pass" ? "normal" : l.blend);
+        ctx.drawImage(t, 0, 0);
+      } else if (PS.isAdj(l)) {
+        if (!PS.runAdj) continue;
+        const below = ctx.canvas;
+        const changed = PS.runAdj(l.adj, below);
+        const cc = changed.getContext("2d");
+        if (l.mask && l.maskOn) { cc.globalCompositeOperation = "destination-in"; cc.drawImage(l.mask, l.x, l.y); }
+        ctx.globalAlpha = l.opacity / 100;
+        ctx.globalCompositeOperation = l.blend === "normal" ? "source-atop" : PS.gco(l.blend);
+        ctx.drawImage(changed, 0, 0);
+      } else {
+        ctx.globalAlpha = l.opacity / 100;
+        ctx.globalCompositeOperation = PS.gco(l.blend);
+        if (!opts.fresh && live(l)) PS.live.draw(ctx, l);
+        else { const s = PS.styled(l); ctx.drawImage(s.c, s.x, s.y); }
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+  };
+  // a group's (or adjustment layer's) mask as a picture-sized canvas; outside the mask's own area counts as shown
+  const maskAt = (l, d) => {
+    const m = PS.canvas(d.w, d.h), mc = m.getContext("2d");
+    mc.fillStyle = "#fff"; mc.fillRect(0, 0, d.w, d.h);
+    mc.clearRect(l.x, l.y, l.mask.width, l.mask.height);
+    mc.drawImage(l.mask, l.x, l.y);
+    return m;
+  };
   PS.composite = (d = PS.doc, opts = {}) => {
     if (!d.comp || d.comp.width !== d.w || d.comp.height !== d.h) { d.comp = PS.canvas(d.w, d.h); d.compDirty = true; }
     if (!d.compDirty && !opts.fresh) return d.comp;
     const out = opts.fresh ? PS.canvas(d.w, d.h) : d.comp;
     const ctx = out.getContext("2d");
     ctx.clearRect(0, 0, d.w, d.h);
-    for (const l of d.layers) {
-      if (!l.visible || (PS.hideLayer && PS.hideLayer === l && !opts.fresh)) continue;
-      ctx.globalAlpha = l.opacity / 100;
-      ctx.globalCompositeOperation = PS.gco(l.blend);
-      if (PS.live && PS.live.layer === l && !opts.fresh) PS.live.draw(ctx, l);
-      else {
-        const s = PS.styled(l);
-        ctx.drawImage(s.c, s.x, s.y);
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
+    PS.renderItems(ctx, d, PS.kids(d, null), opts);
     if (!opts.fresh) d.compDirty = false;
     return out;
+  };
+  // Some layers (with whatever is inside groups among them) drawn together, as one picture-sized canvas
+  PS.renderSome = (d, layers) => {
+    const c = PS.canvas(d.w, d.h);
+    const set = new Set(layers);
+    const pick = (pid) => PS.kids(d, pid).filter((l) => set.has(l) || (PS.isGroup(l) && PS.inside(d, l).some((x) => set.has(x))));
+    const ctx = c.getContext("2d");
+    const walk = (items) => {
+      for (const l of items) {
+        if (PS.isGroup(l) && !set.has(l)) { if (l.visible) walk(pick(l.id)); }
+        else PS.renderItems(ctx, d, [l], { fresh: true });
+      }
+    };
+    walk(pick(null));
+    return c;
   };
 
   // ---- selections: a picture-sized canvas whose see-through-ness is the selection

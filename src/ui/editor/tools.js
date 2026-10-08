@@ -11,6 +11,9 @@
     eyedropper: { all: true },
     brush: { size: 30, hard: 0, opacity: 100, flow: 100, mode: "normal" },
     eraser: { size: 50, hard: 100, opacity: 100, flow: 100 },
+    clone: { size: 60, hard: 0, opacity: 100, flow: 100, aligned: true, all: false },
+    heal: { size: 40, hard: 50, opacity: 100, flow: 100, aligned: true, all: false },
+    spotheal: { size: 30, hard: 50, opacity: 100, flow: 100, all: false },
     gradient: { type: "linear", opacity: 100, reverse: false, transparent: false, mode: "normal" },
     bucket: { tol: 32, contiguous: true, all: false, opacity: 100 },
     type: { font: "Arial", size: 72, bold: false, italic: false, align: "left" },
@@ -37,9 +40,24 @@
   const paintable = (what) => {
     const l = PS.active();
     if (!l) return null;
-    if (!l.visible) { toast(`Could not use the ${what} because the target layer is hidden.`); return null; }
+    if (!PS.shown(l)) { toast(`Could not use the ${what} because the target layer is hidden.`); return null; }
+    if (PS.isGroup(l)) { toast(`Could not use the ${what} because the target layer is a group. Pick a layer inside it.`); return null; }
+    if (PS.isAdj(l)) doc().maskEdit = true; // an adjustment layer is painted through its mask
     if (PS.isText(l)) PS.rasterize(l);
     return l;
+  };
+  // The layers a move or transform works on: the picked ones, with groups standing for everything in them
+  PS.targets = () => {
+    const d = doc();
+    const ids = d.picked && d.picked.length ? d.picked : [d.active];
+    const out = new Set();
+    for (const id of ids) {
+      const l = d.layers.find((x) => x.id === id);
+      if (!l) continue;
+      if (PS.isGroup(l)) PS.inside(d, l).filter((x) => !PS.isGroup(x)).forEach((x) => out.add(x));
+      else out.add(l);
+    }
+    return [...out];
   };
 
   // ---------------------------------------------------------------- Move (V)
@@ -48,26 +66,24 @@
     name: "Move Tool", key: "V",
     down(e, p) {
       const d = doc();
-      let l = PS.active();
       if ((opt.move.auto || e.ctrlKey) && !e.altKey) {
         const hit = PS.layerAt(p.x, p.y);
-        if (hit) { l = hit; d.active = hit.id; PS.onChange && PS.onChange(); }
+        if (hit) { d.active = hit.id; d.picked = [hit.id]; PS.onChange && PS.onChange(); }
       }
-      if (!l) return;
-      if (l.locked) return toast("Could not use the move tool because the layer is locked. Double-click the Background layer to unlock it.");
-      if (e.altKey) { // Alt+drag: move a copy
-        const copy = PS.duplicate(l, true);
-        l = copy;
-      }
-      mv = { l, x: p.x, y: p.y, dx: 0, dy: 0, float: null };
-      if (d.sel && !PS.isText(l)) mv.float = PS.lift(l);
+      let list = PS.targets();
+      if (!list.length) return;
+      if (list.every((l) => l.locked)) return toast("Could not use the move tool because the layer is locked. Double-click the Background layer to unlock it.");
+      list = list.filter((l) => !l.locked);
+      if (e.altKey) list = list.map((l) => PS.duplicate(l, true)); // Alt+drag: move a copy
+      mv = { list, x: p.x, y: p.y, dx: 0, dy: 0, float: null };
+      if (d.sel && list.length === 1 && list[0].kind === "pixel") mv.float = PS.lift(list[0]);
     },
     move(e, p) {
       if (!mv) return;
       let dx = Math.round(p.x - mv.x), dy = Math.round(p.y - mv.y);
       if (e.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
       if (mv.float) { mv.float.dx = dx; mv.float.dy = dy; PS.changed(); return; }
-      PS.moveLayer(mv.l, dx - mv.dx, dy - mv.dy);
+      for (const l of mv.list) PS.moveLayer(l, dx - mv.dx, dy - mv.dy);
       mv.dx = dx; mv.dy = dy;
       PS.changed();
     },
@@ -89,7 +105,7 @@
     const d = doc();
     for (let i = d.layers.length - 1; i >= 0; i--) {
       const l = d.layers[i];
-      if (!l.visible) continue;
+      if (!PS.isPixels(l) || !PS.shown(l)) continue;
       const s = PS.styled(l);
       const px = Math.floor(x - s.x), py = Math.floor(y - s.y);
       if (px < 0 || py < 0 || px >= s.c.width || py >= s.c.height) continue;
@@ -498,9 +514,9 @@
       PS.live = null;
       PS.commit(eraser ? "Eraser" : "Brush Tool");
     },
-    overlay(ctx, v) {
+    overlay(ctx, v, size) {
       if (!PS.cursorAt) return;
-      const s = PS.toScreen(PS.cursorAt.x, PS.cursorAt.y), r = Math.max(1, (opt[id].size / 2) * v.zoom);
+      const s = PS.toScreen(PS.cursorAt.x, PS.cursorAt.y), r = Math.max(1, ((size || opt[id].size) / 2) * v.zoom);
       ctx.lineWidth = 1;
       ctx.strokeStyle = "rgba(0,0,0,.7)";
       ctx.beginPath(); ctx.arc(s.x, s.y, r + 0.5, 0, Math.PI * 2); ctx.stroke();
@@ -546,6 +562,176 @@
   };
   paintTool("brush", "Brush Tool", "B", false);
   paintTool("eraser", "Eraser Tool", "E", true);
+
+  // ---------------------------------------------------------------- Clone Stamp (S), Healing Brush (J), Spot Healing Brush (J)
+  // These paint "coverage" like a brush; what goes where the coverage is depends on the tool.
+  let cloneFrom = null, cloneOff = null, cov = null;
+  const sampled = (l, all) => { // the picture to copy from, picture-sized
+    const d = doc();
+    if (all) return PS.composite(d, { fresh: true });
+    const c = PS.canvas(d.w, d.h), s2 = PS.styled({ ...l, fx: null, fill: 100, mask: null, _st: null });
+    c.getContext("2d").drawImage(s2.c, s2.x, s2.y);
+    return c;
+  };
+  const covResult = (c, last) => {
+    const coverage = PS.clipToSel(PS.clone(c.buf), 0, 0);
+    const piece = (last && c.final ? c.final : c.make)(coverage);
+    const base = PS.clone(c.l.canvas), bx = base.getContext("2d");
+    bx.globalAlpha = c.o.opacity / 100;
+    bx.drawImage(piece, -c.l.x, -c.l.y);
+    return base;
+  };
+  const covTool = (id, name, key, setup) => def(id, {
+    name, key, cursor: "none",
+    down(e, p) {
+      if (e.altKey && id !== "spotheal") { cloneFrom = { x: p.x, y: p.y }; cloneOff = null; PS.draw(); return; }
+      const l = paintable(name.replace(" Tool", "").toLowerCase());
+      if (!l) return;
+      if (PS.isAdj(l)) return toast(`Could not use the ${name.replace(" Tool", "").toLowerCase()} on an adjustment layer.`);
+      const ways = setup(l, p);
+      if (!ways) return;
+      PS.editPixels(l);
+      cov = { l, o: opt[id], buf: PS.canvas(doc().w, doc().h), last: null, color: { r: 0, g: 0, b: 0 }, ...ways };
+      stamp(cov, p);
+      PS.live = { layer: l, draw: (ctx, layer) => { const st = PS.styled({ ...layer, canvas: covResult(cov, false), _st: null }); ctx.drawImage(st.c, st.x, st.y); } };
+      PS.changed();
+    },
+    move(e, p) { PS.cursorAt = p; if (!cov) return PS.draw(); line(cov, p); PS.changed(); },
+    hover(p) { PS.cursorAt = p; PS.draw(); },
+    up() {
+      if (!cov) return;
+      const c = cov;
+      cov = null;
+      let made;
+      try { made = covResult(c, true); } catch (err) { made = null; }
+      PS.live = null;
+      if (!made) { PS.changed(); return toast("Couldn't heal that area. Try a smaller brush."); }
+      c.l.canvas = made;
+      PS.commit(name.replace(" Tool", ""));
+    },
+    overlay(ctx, v) {
+      T.brush.overlay.call({}, ctx, v, opt[id].size);
+      if (id === "spotheal" || !cloneFrom || !PS.cursorAt) return;
+      const src = opt[id].aligned && cloneOff ? { x: PS.cursorAt.x + cloneOff.x, y: PS.cursorAt.y + cloneOff.y } : cov ? null : cloneFrom;
+      if (!src) return;
+      const sp = PS.toScreen(src.x, src.y), r = Math.max(4, (opt[id].size / 2) * v.zoom);
+      ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sp.x - 6, sp.y); ctx.lineTo(sp.x + 6, sp.y); ctx.moveTo(sp.x, sp.y - 6); ctx.lineTo(sp.x, sp.y + 6); ctx.stroke();
+    },
+  });
+  const needSource = (what) => { toast(`Could not use the ${what} because the area to clone has not been defined (Alt-click to define a source point).`); return null; };
+  const shifted = (src, off, coverage) => {
+    const d = doc(), piece = PS.canvas(d.w, d.h), pc = piece.getContext("2d");
+    pc.drawImage(src, -off.x, -off.y);
+    pc.globalCompositeOperation = "destination-in";
+    pc.drawImage(coverage, 0, 0);
+    return piece;
+  };
+  covTool("clone", "Clone Stamp Tool", "S", (l, p) => {
+    if (!cloneFrom) return needSource("clone stamp");
+    if (!opt.clone.aligned || !cloneOff) cloneOff = { x: cloneFrom.x - p.x, y: cloneFrom.y - p.y };
+    const src = sampled(l, opt.clone.all), off = { ...cloneOff };
+    return { make: (coverage) => shifted(src, off, coverage) };
+  });
+  covTool("heal", "Healing Brush Tool", "J", (l, p) => {
+    if (!cloneFrom) return needSource("healing brush");
+    if (!opt.heal.aligned || !cloneOff) cloneOff = { x: cloneFrom.x - p.x, y: cloneFrom.y - p.y };
+    const src = sampled(l, opt.heal.all), off = { ...cloneOff };
+    return { make: (coverage) => shifted(src, off, coverage), final: (coverage) => PS.heal(src, coverage, off, opt.heal.size) };
+  });
+  covTool("spotheal", "Spot Healing Brush Tool", "J", (l) => {
+    const src = sampled(l, opt.spotheal.all);
+    return {
+      make: (coverage) => { const c = PS.clone(coverage), x = c.getContext("2d"); x.globalCompositeOperation = "source-in"; x.fillStyle = "rgba(0,0,0,.45)"; x.fillRect(0, 0, c.width, c.height); return c; },
+      final: (coverage) => PS.heal(src, coverage, PS.findPatch(src, coverage, opt.spotheal.size), opt.spotheal.size),
+    };
+  });
+
+  // Healing: the copied pixels keep their texture but take on the colors around the painted area.
+  // (The difference between target and source is known around the edge, and spread smoothly inside.)
+  const boxBlur = (a, w, h, r) => {
+    r = Math.max(1, Math.round(r));
+    const tmp = new Float32Array(a.length);
+    for (let pass = 0; pass < 3; pass++) {
+      for (let y = 0; y < h; y++) { // rows
+        let acc = 0; const o = y * w;
+        for (let x = -r; x <= r; x++) acc += a[o + PS.clamp(x, 0, w - 1)];
+        for (let x = 0; x < w; x++) { tmp[o + x] = acc / (2 * r + 1); acc += a[o + Math.min(w - 1, x + r + 1)] - a[o + Math.max(0, x - r)]; }
+      }
+      for (let x = 0; x < w; x++) { // columns
+        let acc = 0;
+        for (let y = -r; y <= r; y++) acc += tmp[PS.clamp(y, 0, h - 1) * w + x];
+        for (let y = 0; y < h; y++) { a[y * w + x] = acc / (2 * r + 1); acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x]; }
+      }
+    }
+    return a;
+  };
+  PS.heal = (src, coverage, off, size) => {
+    const d = doc();
+    const bb = bounds(coverage);
+    const piece = PS.canvas(d.w, d.h);
+    if (!bb) return piece;
+    const m = Math.ceil(size) + 6;
+    const rx = Math.max(0, bb.x - m), ry = Math.max(0, bb.y - m);
+    const rw = Math.min(d.w, bb.x + bb.w + m) - rx, rh = Math.min(d.h, bb.y + bb.h + m) - ry;
+    const T = src.getContext("2d", { willReadFrequently: true }).getImageData(rx, ry, rw, rh).data;
+    const sc = PS.canvas(rw, rh);
+    sc.getContext("2d").drawImage(src, -(rx + off.x), -(ry + off.y));
+    const S = sc.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, rw, rh).data;
+    const M = coverage.getContext("2d", { willReadFrequently: true }).getImageData(rx, ry, rw, rh).data;
+    const n = rw * rh, known = new Float32Array(n);
+    for (let i = 0; i < n; i++) known[i] = M[i * 4 + 3] > 4 ? 0 : 1;
+    const r1 = Math.max(3, size * 0.6), r2 = Math.max(8, size * 2);
+    const den1 = boxBlur(Float32Array.from(known), rw, rh, r1), den2 = boxBlur(Float32Array.from(known), rw, rh, r2);
+    const out = new ImageData(rw, rh);
+    for (let ch = 0; ch < 4; ch++) {
+      const num1 = new Float32Array(n);
+      for (let i = 0; i < n; i++) num1[i] = known[i] * (T[i * 4 + ch] - S[i * 4 + ch]);
+      const num2 = Float32Array.from(num1);
+      boxBlur(num1, rw, rh, r1); boxBlur(num2, rw, rh, r2);
+      for (let i = 0; i < n; i++) {
+        const fix = den1[i] > 0.04 ? num1[i] / den1[i] : num2[i] / Math.max(den2[i], 1e-4);
+        out.data[i * 4 + ch] = S[i * 4 + ch] + fix;
+      }
+    }
+    for (let i = 0; i < n; i++) out.data[i * 4 + 3] = Math.round((out.data[i * 4 + 3] * M[i * 4 + 3]) / 255);
+    piece.getContext("2d").putImageData(out, rx, ry);
+    return piece;
+  };
+  // Spot Healing: looks around the painted spot for the patch whose surroundings match best
+  PS.findPatch = (src, coverage, size) => {
+    const d = doc();
+    const bb = bounds(coverage);
+    if (!bb) return { x: size, y: 0 };
+    const all = src.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, d.w, d.h).data;
+    const M = coverage.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, d.w, d.h).data;
+    const m = Math.ceil(size / 2) + 4;
+    const ring = [];
+    const x0 = Math.max(0, bb.x - m), y0 = Math.max(0, bb.y - m), x1 = Math.min(d.w - 1, bb.x + bb.w + m), y1 = Math.min(d.h - 1, bb.y + bb.h + m);
+    const step = Math.max(1, Math.round((x1 - x0) * (y1 - y0) / 6000));
+    for (let y = y0; y <= y1; y += step) for (let x = x0; x <= x1; x += step) if (M[(y * d.w + x) * 4 + 3] <= 4) ring.push(x, y);
+    let best = null, bestScore = Infinity;
+    const reach = Math.max(bb.w, bb.h) + m;
+    for (const f of [1, 1.4, 1.9]) for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2, ox = Math.round(Math.cos(a) * reach * f), oy = Math.round(Math.sin(a) * reach * f);
+      if (bb.x + ox - m < 0 || bb.y + oy - m < 0 || bb.x + bb.w + ox + m >= d.w || bb.y + bb.h + oy + m >= d.h) continue;
+      let sc = 0;
+      for (let i = 0; i < ring.length; i += 2) {
+        const p = (ring[i + 1] * d.w + ring[i]) * 4, q = ((ring[i + 1] + oy) * d.w + ring[i] + ox) * 4;
+        sc += Math.abs(all[p] - all[q]) + Math.abs(all[p + 1] - all[q + 1]) + Math.abs(all[p + 2] - all[q + 2]);
+      }
+      // the patch itself shouldn't be busy: a little extra cost for detail inside it
+      let detail = 0;
+      for (let y = bb.y; y < bb.y + bb.h; y += Math.max(1, step * 2)) for (let x = bb.x + 1; x < bb.x + bb.w; x += Math.max(1, step * 2)) {
+        const q = ((y + oy) * d.w + x + ox) * 4;
+        detail += Math.abs(all[q] - all[q - 4]) + Math.abs(all[q + 1] - all[q - 3]) + Math.abs(all[q + 2] - all[q - 2]);
+      }
+      const score = sc / Math.max(1, ring.length / 2) + 0.3 * detail / Math.max(1, (bb.w * bb.h) / Math.max(1, step * step * 4)) + f * 2;
+      if (score < bestScore) { bestScore = score; best = { x: ox, y: oy }; }
+    }
+    return best || { x: reach, y: 0 };
+  };
 
   // ---------------------------------------------------------------- Gradient (G) and Paint Bucket (G)
   let grad = null;
@@ -705,13 +891,22 @@
 
   // ---------------------------------------------------------------- Free Transform (Ctrl+T)
   // The box: centre cx, cy; size w, h (scaled); turned by ang (radians). src is drawn into it.
-  PS.drawXf = (ctx, x, ox = 0, oy = 0) => {
+  // An item (src, at rect r in the picture) as moved by the box: the box was b, it is now centred at cx, cy, w x h, turned by ang.
+  PS.drawXf = (ctx, x, ox = 0, oy = 0, item) => {
+    const it = item || { src: x.src, r: x.b };
     ctx.save();
     ctx.translate(x.cx + ox, x.cy + oy);
     ctx.rotate(x.ang);
+    ctx.scale(x.w / x.b.w, x.h / x.b.h);
+    ctx.translate(-(x.b.x + x.b.w / 2), -(x.b.y + x.b.h / 2));
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(x.src, -x.w / 2, -x.h / 2, x.w, x.h);
+    ctx.drawImage(it.src, it.r.x, it.r.y, it.r.w, it.r.h);
     ctx.restore();
+  };
+  const xfPoint = (x, px, py) => {
+    const sx = x.w / x.b.w, sy = x.h / x.b.h;
+    const rx = (px - (x.b.x + x.b.w / 2)) * sx, ry = (py - (x.b.y + x.b.h / 2)) * sy;
+    return [x.cx + rx * Math.cos(x.ang) - ry * Math.sin(x.ang), x.cy + rx * Math.sin(x.ang) + ry * Math.cos(x.ang)];
   };
   const bounds = (c) => {
     const w = c.width, h = c.height, data = c.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, w, h).data;
@@ -719,38 +914,48 @@
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
     return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
   };
+  PS.bounds = bounds;
   const crop2 = (c, b) => { const o = PS.canvas(b.w, b.h); o.getContext("2d").drawImage(c, -b.x, -b.y); return o; };
 
   PS.startTransform = () => {
     const d = doc(), l = PS.active();
     if (!l || PS.xf) return;
-    if (l.locked) return toast("Could not complete the Free Transform command because the layer is locked.");
-    if (!l.visible) return toast("Could not complete the Free Transform command because the layer is hidden.");
     PS.endTyping && PS.endTyping(true);
-    let src, b, float = null;
-    if (d.sel && !PS.isText(l)) {
-      float = PS.lift(l);
-      b = bounds(float.c);
+    const list = PS.targets().filter((x) => PS.isPixels(x));
+    if (!list.length) return toast("Could not complete the Free Transform command because there is nothing to transform.");
+    if (list.some((x) => x.locked)) return toast("Could not complete the Free Transform command because the layer is locked.");
+    if (list.some((x) => !PS.shown(x))) return toast("Could not complete the Free Transform command because the layer is hidden.");
+    if (d.sel && list.length === 1 && list[0].kind === "pixel") { // only the selected pixels move
+      const one = list[0];
+      const float = PS.lift(one);
+      let b = bounds(float.c);
       if (!b) { PS.drop(float); PS.changed(); return toast("Could not transform because the selected area is empty."); }
-      src = crop2(float.c, b);
-      float.selSrc = crop2(d.sel.c, { x: b.x + l.x, y: b.y + l.y, w: b.w, h: b.h });
-      b = { x: b.x + l.x, y: b.y + l.y, w: b.w, h: b.h };
+      const src = crop2(float.c, b);
+      float.selSrc = crop2(d.sel.c, { x: b.x + one.x, y: b.y + one.y, w: b.w, h: b.h });
+      b = { x: b.x + one.x, y: b.y + one.y, w: b.w, h: b.h };
+      PS.xf = { l: one, src, b, cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, ang: 0, float, items: [] };
+      float.xf = PS.xf;
     } else {
-      PS.syncText(l);
-      const raw = PS.isText(l) ? l.canvas : l.canvas;
-      const bb = bounds(raw);
-      if (!bb) return toast("Could not transform because the layer is empty.");
-      src = crop2(raw, bb);
-      b = { x: l.x + bb.x, y: l.y + bb.y, w: bb.w, h: bb.h };
-      let shown = src;
-      if (l.mask && !PS.isText(l)) {
-        PS.xfMask = crop2(l.mask, bb);
-        if (l.maskOn) { shown = PS.clone(src); const sc = shown.getContext("2d"); sc.globalCompositeOperation = "destination-in"; sc.drawImage(PS.xfMask, 0, 0); }
+      const items = [];
+      for (const x of list) {
+        PS.syncText(x);
+        const bb = bounds(x.canvas);
+        if (!bb) continue;
+        const src = crop2(x.canvas, bb);
+        let shown = src, mask = null;
+        if (x.mask && !PS.isText(x)) {
+          mask = crop2(x.mask, bb);
+          if (x.maskOn) { shown = PS.clone(src); const sc = shown.getContext("2d"); sc.globalCompositeOperation = "destination-in"; sc.drawImage(mask, 0, 0); }
+        }
+        items.push({ l: x, src, shown, mask, r: { x: x.x + bb.x, y: x.y + bb.y, w: bb.w, h: bb.h } });
       }
-      PS.live = { layer: l, draw: (ctx) => PS.drawXf(ctx, { ...PS.xf, src: shown }) };
+      if (!items.length) return toast("Could not transform because the layer is empty.");
+      const x0 = Math.min(...items.map((i) => i.r.x)), y0 = Math.min(...items.map((i) => i.r.y));
+      const x1 = Math.max(...items.map((i) => i.r.x + i.r.w)), y1 = Math.max(...items.map((i) => i.r.y + i.r.h));
+      const b = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      PS.xf = { l, items, b, cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, ang: 0, textOnly: items.every((i) => PS.isText(i.l)) };
+      PS.live = { layers: new Set(items.map((i) => i.l)), draw: (ctx, layer) => { const it = items.find((i) => i.l === layer); PS.drawXf(ctx, PS.xf, 0, 0, { src: it.shown, r: it.r }); } };
     }
-    PS.xf = { l, src, b, cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, ang: 0, float };
-    if (float) float.xf = PS.xf;
     PS.changed();
     PS.onTransform && PS.onTransform();
   };
@@ -758,9 +963,7 @@
     const x = PS.xf;
     if (!x) return;
     PS.xf = null;
-    const d = doc(), l = x.l;
-    const mask = PS.xfMask;
-    PS.xfMask = null;
+    const d = doc();
     const changed = Math.abs(x.w - x.b.w) > 0.01 || Math.abs(x.h - x.b.h) > 0.01 || x.ang || Math.abs(x.cx - (x.b.x + x.b.w / 2)) > 0.01 || Math.abs(x.cy - (x.b.y + x.b.h / 2)) > 0.01;
     if (x.float) {
       if (apply && changed) { PS.drop(x.float); PS.commit("Free Transform"); }
@@ -770,25 +973,23 @@
     }
     PS.live = null;
     if (apply && changed) {
-      if (PS.isText(l)) {
-        const sx = x.w / x.b.w, sy = x.h / x.b.h, s = Math.sqrt(sx * sy);
-        const t = l.text, c0x = x.b.x + x.b.w / 2, c0y = x.b.y + x.b.h / 2;
-        const rx = (t.x - c0x) * sx, ry = (t.y - c0y) * sy;
-        l.text = { ...t, size: Math.max(1, Math.round(t.size * s * 10) / 10), angle: ((t.angle || 0) + (x.ang * 180) / Math.PI) % 360,
-          x: Math.round(x.cx + rx * Math.cos(x.ang) - ry * Math.sin(x.ang)), y: Math.round(x.cy + rx * Math.sin(x.ang) + ry * Math.cos(x.ang)) };
-        PS.syncText(l);
-      } else {
-        const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => {
-          const px = (a * x.w) / 2, py = (b * x.h) / 2;
-          return [x.cx + px * Math.cos(x.ang) - py * Math.sin(x.ang), x.cy + px * Math.sin(x.ang) + py * Math.cos(x.ang)];
-        });
+      const sx = x.w / x.b.w, sy = x.h / x.b.h;
+      for (const it of x.items) {
+        const l = it.l;
+        if (PS.isText(l)) {
+          const t = l.text, [nx, ny] = xfPoint(x, t.x, t.y);
+          l.text = { ...t, size: Math.max(1, Math.round(t.size * Math.sqrt(sx * sy) * 10) / 10), angle: ((t.angle || 0) + (x.ang * 180) / Math.PI) % 360, x: Math.round(nx), y: Math.round(ny) };
+          PS.syncText(l);
+          continue;
+        }
+        const corners = [[it.r.x, it.r.y], [it.r.x + it.r.w, it.r.y], [it.r.x, it.r.y + it.r.h], [it.r.x + it.r.w, it.r.y + it.r.h]].map(([a, b]) => xfPoint(x, a, b));
         const minX = Math.floor(Math.min(...corners.map((p) => p[0]))), minY = Math.floor(Math.min(...corners.map((p) => p[1])));
         const maxX = Math.ceil(Math.max(...corners.map((p) => p[0]))), maxY = Math.ceil(Math.max(...corners.map((p) => p[1])));
         const c = PS.canvas(maxX - minX, maxY - minY);
-        PS.drawXf(c.getContext("2d"), x, -minX, -minY);
-        if (mask) {
+        PS.drawXf(c.getContext("2d"), x, -minX, -minY, it);
+        if (it.mask) {
           const m = PS.canvas(c.width, c.height);
-          PS.drawXf(m.getContext("2d"), { ...x, src: mask }, -minX, -minY);
+          PS.drawXf(m.getContext("2d"), x, -minX, -minY, { src: it.mask, r: it.r });
           l.mask = m;
         }
         l.canvas = c; l.x = minX; l.y = minY;
@@ -841,7 +1042,7 @@
           const s = hx && hy ? Math.max(w / g.w0, h / g.h0) : hx ? w / g.w0 : h / g.h0;
           w = g.w0 * s; h = g.h0 * s;
         }
-        if (PS.isText(x.l)) { const s = hx ? w / g.w0 : h / g.h0; w = g.w0 * s; h = g.h0 * s; }
+        if (x.textOnly) { const s = hx ? w / g.w0 : h / g.h0; w = g.w0 * s; h = g.h0 * s; }
         x.w = w; x.h = h;
         const lx = (hx * w) / 2, ly = (hy * h) / 2; // the centre, from the fixed point opposite the handle
         x.cx = g.fx + lx * Math.cos(x.ang) - ly * Math.sin(x.ang);
