@@ -16,7 +16,7 @@ from ctypes import wintypes
 
 TITLE = "VaultHub"
 BACKGROUND = (0x14, 0x14, 0x14)  # the page's --bg, so opening it doesn't flash white
-SIZE = (960, 760)
+SIZE = (1200, 760)  # (2.6.0: wider, for the sidebar)
 
 HRESULT = ctypes.c_long
 _FUNCTYPE = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)  # (CFUNCTYPE only so this loads off Windows)

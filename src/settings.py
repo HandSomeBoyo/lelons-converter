@@ -26,9 +26,9 @@ QUALITIES = {
 DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossless", "mp4": "1080", "gif": "480"}
 
 
-THEMES = ("dark", "black", "light")
+THEMES = ("ocean", "graphite", "dark", "black", "light")  # (Ocean and Graphite are glass, 2.6.0)
 SAVE_MODES = ("ask", "folder")
-ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green")
+ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green", "white")
 
 
 def is_valid_quality(fmt, quality):

@@ -1,4 +1,4 @@
-// The chat (a whole page, Discord style: everyone, groups and private chats on the left) and "3 online" at the top right.
+// The chat (a whole page, Discord style: everyone, groups and private chats on the left) and "3 online" at the bottom of the sidebar.
 // The chat with everyone, group chats, private chats, Library sounds and clips in messages, reactions and @mentions.
 // Uses $, api(), setDrag(), DRAG_HINT, ICONS, clock() from app.js, loadPref()/savePref() from theme.js,
 // and sfxUser(), avatarEl(), sfxLoggedOut(), openLogin(), closeMenu(), SFX_ICONS from sfx.js.
@@ -39,6 +39,12 @@ function renderOnline(online) {
   $("chatOpen").hidden = !online && !chatIsOpen();
   if (!online) return;
   $("onlineText").textContent = `${online.online} online`;
+  // (the sidebar shows the faces of who's online)
+  const faces = (online.people || []).slice(0, 6);
+  if ($("sideFaces").dataset.sig !== JSON.stringify(faces)) {
+    $("sideFaces").dataset.sig = JSON.stringify(faces);
+    $("sideFaces").replaceChildren(...faces.map((p) => avatarEl(p.avatarUrl, p.username)));
+  }
   $("chatOpen").title = online.online === 1 ? "Just you right now. Open the live chat" : "Open the live chat";
   if (chatIsOpen()) drawOnline();
 }
@@ -136,6 +142,7 @@ function openChat(withUser) {
   $("chatOpen").classList.add("open");
   $("chatButton").classList.add("open");
   document.body.classList.add("chat-page");
+  $("crumbTitle").textContent = "Chat";
   if (withUser !== undefined && withUser !== chatWith) switchChat(withUser);
   drawChatUser();
   drawOnline();
@@ -151,6 +158,8 @@ function closeChat() {
   $("chatOpen").classList.remove("open");
   $("chatButton").classList.remove("open");
   document.body.classList.remove("chat-page");
+  const tab = document.querySelector("#tabs button.active");
+  $("crumbTitle").textContent = tab ? TAB_TITLES[tab.dataset.tab] || "" : "";
   $("chatOpen").hidden = !onlineInfo;
   $("chatSuggest").hidden = true;
   stopChatAudio();

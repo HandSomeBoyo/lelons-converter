@@ -68,7 +68,7 @@ function smoothHidden(el) {
 
 document.querySelectorAll(".modal, #chatPanel, #libMenu").forEach(smoothHidden);
 
-// ---- the line under the active tab
+// ---- the glass behind the open page in the sidebar (it slides up and down to the one you pick)
 
 const tabLine = document.createElement("span");
 tabLine.className = "tab-line";
@@ -77,21 +77,23 @@ let tabLineReady = false;
 tabLine.addEventListener("animationend", () => tabLine.classList.remove("moving"));
 
 function moveTabLine() {
-  const active = document.getElementById("tabs").querySelector("button.active");
+  const tabs = document.getElementById("tabs");
+  // (the chat is a page too: while it's open the glass sits on Chat)
+  const active = tabs.querySelector(".chat-button.open") || tabs.querySelector("button.active");
   if (!active || document.querySelector("#accountTab:not([hidden])")) {
     tabLine.style.opacity = "0";
     return;
   }
   tabLine.style.opacity = "1";
-  const x = `translateX(${active.offsetLeft}px)`;
-  // Moving to another tab, the glass stretches a little on the way, like a drop of liquid.
-  if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
+  const y = `translateY(${active.offsetTop}px)`;
+  // Moving to another page, the glass stretches a little on the way, like a drop of liquid.
+  if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== y && !reduceMotion.matches) {
     tabLine.classList.remove("moving");
     void tabLine.offsetWidth;
     tabLine.classList.add("moving");
   }
-  tabLine.style.width = active.offsetWidth + "px";
-  tabLine.style.transform = x;
+  tabLine.style.height = active.offsetHeight + "px";
+  tabLine.style.transform = y;
   if (!tabLineReady) {
     // The first time it just appears there; after that it slides.
     tabLineReady = true;

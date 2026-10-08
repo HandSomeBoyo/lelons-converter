@@ -3411,3 +3411,204 @@ body.chat-page::after { -webkit-backdrop-filter: none; backdrop-filter: none; ba
   .chat-panel, .modal > .dialog { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) { .online-dot::after { animation: none; } }
+
+/* ================================================================ 2.6.0: the pages in a sidebar on the left, a slim top bar,
+   and two glass themes (Ocean and Graphite): soft colored light far behind, frosted glass on top */
+:root { --side-w: 232px; --gap: 14px; }
+
+/* ---- the sidebar */
+.side {
+  position: fixed; z-index: 92; top: var(--gap); left: var(--gap); bottom: var(--gap); width: var(--side-w); box-sizing: border-box;
+  display: flex; flex-direction: column; padding: 18px 12px 12px; border-radius: 26px;
+  background: var(--gl-fill), var(--gl-tint); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  box-shadow: var(--gl-rim), var(--gl-shadow);
+}
+.side .brand { padding: 0 8px 16px; gap: 10px; }
+.side .mark { width: 32px; height: 32px; border-radius: 10px; }
+.side .mark svg { width: 19px; height: 19px; }
+.side .word { font-size: 19px; }
+
+/* the pages: a list instead of the floating bar */
+.side .tabs {
+  position: relative; top: auto; z-index: auto; display: flex; flex-direction: column; align-self: stretch; gap: 1px;
+  width: auto; max-width: none; margin: 0; padding: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+  border-radius: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+}
+.side .tabs::after { display: none; }
+.side .tabs button {
+  all: unset; box-sizing: border-box; cursor: pointer; position: relative; z-index: 1; flex: none;
+  display: flex; align-items: center; gap: 11px; width: 100%; height: 38px; padding: 0 12px; border-radius: 12px;
+  font: 500 14px var(--head); letter-spacing: -.005em; white-space: nowrap;
+  color: color-mix(in srgb, var(--text) 66%, transparent);
+  transition: color .3s var(--ease), background-color .3s var(--ease), transform .35s var(--spring);
+}
+.side .tabs button span { display: inline; overflow: hidden; text-overflow: ellipsis; }
+.side .tabs button svg { width: 18px; height: 18px; flex: none; opacity: .9; }
+.side .tabs button:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.side .tabs button:active { transform: scale(.97); }
+.side .tabs button.active, .side .tabs .chat-button.open { color: var(--text); background: transparent; }
+.side .tabs button.active svg, .side .tabs .chat-button.open svg { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), .45)); }
+/* while the chat is open, the page under it isn't the picked one */
+body.chat-page .side .tabs button.active:not(.chat-button) { color: color-mix(in srgb, var(--text) 66%, transparent); }
+body.chat-page .side .tabs button.active:not(.chat-button) svg { color: inherit; filter: none; opacity: .9; }
+.side .tabs .tab-line { left: 0; right: 0; top: 0; bottom: auto; width: auto; border-radius: 12px; }
+.side .tabs .tab-line.ready { transition: transform .5s var(--ease), height .5s var(--ease), opacity .2s; }
+@keyframes lens-stretch { 35% { scale: .97 1.12; } 70% { scale: 1.01 .97; } }
+.nav-label { margin: 14px 12px 5px; font: 600 10.5px var(--head); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); opacity: .75; }
+.side .chat-badge, .side .tab-badge { position: static; margin-left: auto; box-shadow: none; }
+.side .chat-badge { min-width: 19px; height: 19px; line-height: 19px; border-radius: 10px; background: var(--accent); color: var(--ink); }
+
+/* who's online and your account, at the bottom */
+.side-bottom { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.side-crew:not([hidden]) {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 9px; width: 100%; height: auto; box-sizing: border-box;
+  padding: 11px 12px; border-radius: 16px; font: 500 12.5px var(--head); color: var(--muted);
+}
+.side-crew:hover, .side-crew.open { color: var(--text); }
+.side-crew-top { display: flex; align-items: center; gap: 8px; }
+.side-crew .chat-unread { display: none; }
+.side-faces { display: flex; padding-left: 2px; }
+.side-faces:empty { display: none; }
+.side-faces .avatar { width: 26px; height: 26px; margin-left: -4px; font-size: 10px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg) 85%, transparent); }
+.side-faces .avatar:first-child { margin-left: 0; }
+.side .account { width: 100%; }
+.side .account-button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: auto; box-sizing: border-box;
+  padding: 7px 8px; border: 0; border-radius: 14px; background: none; box-shadow: none;
+}
+.side .account-button:hover, .side .account-button[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.side .account-button .avatar { width: 34px; height: 34px; flex: none; }
+.me-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.me-text b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-text small { font-size: 12px; color: var(--muted); }
+.side .account-button.has-news::after { left: 32px; right: auto; top: 6px; }
+.side .account-panel { left: 0; right: auto; top: auto; bottom: calc(100% + 8px); transform-origin: bottom left;
+  /* (glass inside the glass sidebar can't blur what's behind it, so this one is solid) */
+  background: var(--gl-fill), var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* the same for the menus inside the glass top bar */
+.top .help-pop { background: var(--gl-fill), var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---- the page, to the right of the sidebar */
+main, body.doc-open main {
+  max-width: none; min-height: 100vh; box-sizing: border-box;
+  margin: 0 0 0 calc(var(--side-w) + var(--gap)); padding: var(--gap) calc(var(--gap) + 14px) 26px calc(var(--gap) + 8px);
+}
+main > .tab-page, main > .notice, main > .footer { width: 100%; max-width: 1180px; margin-left: auto; margin-right: auto; }
+
+/* the top bar: what page this is, where files go, and the round buttons */
+.top {
+  position: sticky; top: var(--gap); z-index: 40; height: 56px; box-sizing: border-box; margin: 0 0 26px; padding: 0 10px 0 22px;
+  border-radius: 20px; background: var(--gl-fill), var(--gl-tint); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  box-shadow: var(--gl-rim), var(--gl-shadow);
+}
+.crumb { display: flex; align-items: baseline; gap: 9px; min-width: 0; white-space: nowrap; }
+.crumb b { font: 600 15.5px var(--head); letter-spacing: -.01em; }
+.crumb span { font-size: 12.5px; color: var(--muted); }
+.top-right { gap: 6px; }
+.top-right .where {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; margin-right: 4px; border-radius: 18px;
+  font-size: 13px; background: var(--gl-field); box-shadow: var(--gl-rim-soft);
+}
+.top-right .where .link { font-size: 13px; }
+
+/* page titles: one line, the second half in grey (like the mockup) */
+.headline { font-size: 34px; line-height: 1.12; letter-spacing: -.03em; margin-bottom: 22px; }
+.headline br { display: none; }
+.headline em { font-weight: 500; }
+.headline em::before { content: " "; }
+
+/* the chat opens next to the sidebar (the sidebar stays, so you can go straight to another page) */
+.chat-panel, body.has-player .chat-panel { top: var(--gap); right: var(--gap); bottom: var(--gap); left: calc(var(--side-w) + 2 * var(--gap)); border-radius: 26px; }
+/* the player floats along the bottom, next to the sidebar */
+.player-bar { left: calc(var(--side-w) + 2 * var(--gap)); right: var(--gap); bottom: var(--gap); height: 76px; border-radius: 24px; }
+
+/* Channel stats has its own place in the sidebar now, so no "back to Home" link */
+#statsBack { display: none; }
+
+/* Docs focus mode: only the page */
+body.doc-focus .side { display: none; }
+body.doc-focus main { margin-left: 0; }
+
+/* smaller windows: the sidebar keeps only its icons (the name shows when you point at one) */
+@media (max-width: 1020px) { :root { --side-w: 200px; } .top-right .where { display: none; } }
+@media (max-width: 880px) {
+  :root { --side-w: 68px; }
+  .side { padding: 14px 8px 10px; align-items: stretch; }
+  .side .brand { justify-content: center; padding: 0 0 12px; }
+  .side .word, .nav-label, .side .tabs button span, .me-text, .side-crew-top span, .side-faces { display: none; }
+  .nav-label { display: block; height: 1px; margin: 9px 10px; padding: 0; overflow: hidden; color: transparent; background: var(--gl-line); opacity: 1; }
+  .side .tabs button { justify-content: center; padding: 0; }
+  .side .chat-badge, .side .tab-badge { position: absolute; top: 2px; right: 4px; margin: 0; }
+  .side-crew:not([hidden]) { align-items: center; padding: 10px 0; }
+  .side .account-button { justify-content: center; padding: 6px 0; }
+  .top-right .where { display: none; }
+}
+
+/* the page is narrower next to the sidebar: the Library tools wrap a bit sooner */
+@media (max-width: 1180px) {
+  .lib-tools { flex-wrap: wrap; }
+  .lib-tools .history-search { flex: 1 1 100%; }
+}
+/* short windows: a tighter sidebar, so every page still fits */
+@media (max-height: 740px) {
+  .side { padding-top: 14px; }
+  .side .brand { padding-bottom: 10px; }
+  .side .tabs button { height: 34px; }
+  .nav-label { margin-top: 10px; margin-bottom: 3px; }
+  .side-faces { display: none; }
+  .side-crew:not([hidden]) { padding: 9px 12px; }
+}
+
+/* ---- the glass themes: Ocean (blue) and Graphite (grey) */
+:root[data-theme="ocean"], :root[data-theme="graphite"] { color-scheme: dark; }
+:root[data-theme="ocean"] {
+  --bg: #050a14; --panel: #0e1729; --panel2: #18253d; --line: rgba(150, 180, 230, .16); --line2: rgba(150, 180, 230, .28);
+  --text: #f2f6fc; --muted: #94a5c0; --bars: rgba(200, 220, 255, .24); --bars-hover: rgba(200, 220, 255, .45); --wave: #d5e2f7;
+  --shade: rgba(5, 10, 20, .72); --check-a: #13203a; --check-b: #0d172b;
+  --gl-tint: rgba(12, 24, 48, .30); --gl-card: rgba(140, 180, 255, .045); --gl-line: rgba(150, 190, 255, .09);
+  --gl-field: linear-gradient(180deg, rgba(160, 200, 255, .09), rgba(160, 200, 255, .04));
+  --glow-1: rgba(30, 110, 255, .46); --glow-2: rgba(40, 210, 230, .30); --glow-3: rgba(80, 60, 230, .36); --glow-4: rgba(20, 140, 210, .30);
+  --glow-5: rgba(80, 170, 255, .20); --glow-base: #050a14;
+}
+:root[data-theme="ocean"], :root[data-theme="graphite"] { --switch-on: var(--accent); }
+:root[data-theme="graphite"] {
+  --bg: #0b0b0d; --panel: #18181b; --panel2: #232327; --line: rgba(200, 200, 215, .13); --line2: rgba(200, 200, 215, .24);
+  --text: #f4f4f6; --muted: #9a9aa3; --bars: rgba(255, 255, 255, .22); --bars-hover: rgba(255, 255, 255, .42); --wave: #dcdce2;
+  --shade: rgba(11, 11, 13, .72); --check-a: #1d1d21; --check-b: #141417;
+  --gl-tint: rgba(28, 28, 32, .32); --gl-card: rgba(255, 255, 255, .04); --gl-line: rgba(255, 255, 255, .07);
+  --glow-1: rgba(160, 160, 180, .30); --glow-2: rgba(110, 110, 130, .30); --glow-3: rgba(175, 175, 190, .18); --glow-4: rgba(90, 90, 110, .26);
+  --glow-5: rgba(210, 210, 225, .12); --glow-base: #0a0a0c;
+}
+/* the light far behind the glass (drawn once on a fixed layer, so scrolling never repaints it) */
+:root[data-theme="ocean"] body::before, :root[data-theme="graphite"] body::before {
+  background-image:
+    radial-gradient(560px 460px at 6% 14%, var(--glow-1), transparent 70%),
+    radial-gradient(680px 560px at 96% 4%, var(--glow-3), transparent 70%),
+    radial-gradient(620px 520px at 72% 104%, var(--glow-2), transparent 70%),
+    radial-gradient(560px 440px at 22% 108%, var(--glow-4), transparent 70%),
+    radial-gradient(420px 360px at 46% 42%, var(--glow-5), transparent 70%);
+  background-size: auto; background-position: 0 0; background-color: var(--glow-base);
+}
+:root[data-theme="ocean"], :root[data-theme="graphite"] { background-color: var(--glow-base); }
+/* clearer glass: the cards let the light through, floating things blur it */
+:root[data-theme="ocean"] .home-card, :root[data-theme="ocean"] .channel-card, :root[data-theme="ocean"] .sound-list,
+:root[data-theme="graphite"] .home-card, :root[data-theme="graphite"] .channel-card, :root[data-theme="graphite"] .sound-list { border-radius: 22px; }
+:root[data-theme="ocean"] .convert, :root[data-theme="graphite"] .convert,
+:root[data-theme="ocean"] .small-button:not(.ghost-button):not(.outline-button), :root[data-theme="graphite"] .small-button:not(.ghost-button):not(.outline-button) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 -2px 5px rgba(0, 0, 0, .14), 0 8px 24px rgba(var(--accent-rgb), .32);
+}
+:root[data-theme="ocean"] .chat-panel, :root[data-theme="graphite"] .chat-panel, :root[data-theme="ocean"] body.has-player .chat-panel,
+:root[data-theme="graphite"] body.has-player .chat-panel { background: var(--gl-fill), color-mix(in srgb, var(--bg) 58%, transparent); }
+:root[data-theme="ocean"] body.chat-page::after, :root[data-theme="graphite"] body.chat-page::after { background: none; }
+/* behind the chat, the page is hidden (the glass then shows the light, not a page full of words) */
+body.chat-page main { visibility: hidden; }
+/* the player sits over the list: solid, so the rows behind never show through (it keeps the glass edge and shine) */
+.player-bar { background: var(--gl-fill), var(--panel); }
+
+/* Settings: the five themes */
+.theme-picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.theme-sample.ocean { background: radial-gradient(circle at 20% 25%, rgba(30, 110, 255, .9), transparent 60%), radial-gradient(circle at 85% 80%, rgba(40, 210, 230, .7), transparent 60%), #050a14; }
+.theme-sample.graphite { background: radial-gradient(circle at 20% 25%, rgba(170, 170, 190, .55), transparent 60%), radial-gradient(circle at 85% 80%, rgba(120, 120, 140, .5), transparent 60%), #0b0b0d; }
+.theme-sample.ocean i, .theme-sample.graphite i { color: #f2f6fc; }

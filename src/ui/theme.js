@@ -27,10 +27,11 @@ const ACCENT_COLORS = {
   blue: ["#62adff", "#2f86ea"],
   teal: ["#45dccb", "#14ad9d"],
   green: ["#8fdc6a", "#4cb337"],
+  white: ["#f2f2f5", "#3a3a3f"],
 };
 
 function applyTheme(theme, accent) {
-  if (!["dark", "black", "light"].includes(theme)) theme = "dark";
+  if (!["ocean", "graphite", "dark", "black", "light"].includes(theme)) theme = "ocean";
   if (!ACCENT_COLORS[accent]) accent = "yellow";
   const root = document.documentElement;
   root.dataset.theme = theme;

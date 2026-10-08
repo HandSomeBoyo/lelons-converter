@@ -60,7 +60,7 @@ function avatarEl(url, name, cls = "") {
 
 const sfxUser = () => sfxAccount && sfxAccount.user;
 
-// Who's logged in. Loaded when the app opens, so the account button at the top right shows your picture.
+// Who's logged in. Loaded when the app opens, so the account button in the sidebar shows your picture.
 async function loadAccount() {
   const res = await api("/api/sfx-account", {}).catch(() => null);
   if (!res || !res.ok) {
@@ -133,6 +133,9 @@ function drawSfxAccount() {
       $("sfxCategory").append(b);
     }
   }
+  // (the account button in the sidebar shows the name next to the picture)
+  $("sideMeName").textContent = user ? user.username : "Log in";
+  $("sideMeRole").textContent = user ? user.roleName : "to see the crew";
   if (!user) {
     $("libMeButton").classList.remove("has-news");
     $("libMeAvatar").replaceWith(Object.assign(document.createElement("span"), {
