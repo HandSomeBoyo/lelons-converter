@@ -75,8 +75,7 @@ def build_options(folder, fmt, quality, on_progress, trim=None, mark=""):
         options["format"] = "bv*[height<=720]/b[height<=720]/bv*/b"
         options["format_sort"] = ["res", "fps"]
     else:
-        # "Under 10 MB" and so on: download in HD, then make it fit.
-        height = "720" if quality.startswith("fit") else quality
+        height = quality
         h = f"[height<={height}]"
         if int(height) <= 1080:
             # Prefer H.264 + AAC so the MP4 plays everywhere on Windows.
@@ -94,14 +93,13 @@ def build_options(folder, fmt, quality, on_progress, trim=None, mark=""):
 
 def _finish_step(ydl, fmt, quality, trim, normalize, on_progress):
     """A yt-dlp step that does what's left after downloading: cutting, the GIF,
-    making it fit a size, evening out the volume. None if nothing is left.
+    evening out the volume. None if nothing is left.
 
     The whole video is downloaded first and then changed here on the PC.
     Letting ffmpeg cut while downloading from YouTube gave files that some
     players couldn't skip around in.
     """
-    shrink = fmt == "mp4" and quality.startswith("fit")
-    if fmt != "gif" and not trim and not shrink and not (normalize and fmt in media.AUDIO_FORMATS):
+    if fmt != "gif" and not trim and not (normalize and fmt in media.AUDIO_FORMATS):
         return None
     from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
     from yt_dlp.utils import prepend_extension
@@ -127,9 +125,6 @@ def _finish_step(ydl, fmt, quality, trim, normalize, on_progress):
                     # MP3 and M4A can be cut without converting them again.
                     on_progress({"status": "step", "step": "Cut"})
                     media.run([*media._part(trim), "-i", path, "-map", "0:a:0", "-c:a", "copy", temp], length)
-            elif shrink:
-                media.convert_video(path, temp, target_mb=int(quality[3:]), trim=trim, length=length,
-                                    on_progress=progress("Shrink"))
             else:
                 # Re-encode so the video starts exactly at the cut, with clean
                 # timestamps, in H.264 + AAC that every Windows player handles.

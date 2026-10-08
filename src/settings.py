@@ -19,17 +19,16 @@ QUALITIES = {
     "wav": [("lossless", "Lossless (big files)")],
     "flac": [("lossless", "Lossless (smaller than WAV)")],
     "mp4": [("2160", "2160p (4K)"), ("1440", "1440p (2K)"), ("1080", "1080p (Full HD)"),
-            ("720", "720p (HD)"), ("480", "480p"), ("360", "360p (smallest)"),
-            ("fit10", "Under 10 MB (Discord)"), ("fit25", "Under 25 MB"), ("fit50", "Under 50 MB")],
+            ("720", "720p (HD)"), ("480", "480p"), ("360", "360p (smallest)")],
     "gif": [("320", "320 px wide (smallest)"), ("480", "480 px wide"), ("640", "640 px wide"),
             ("800", "800 px wide (sharpest)")],
 }
 DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossless", "mp4": "1080", "gif": "480"}
 
 
-THEMES = ("dark", "black", "light")
+THEMES = ("ocean", "graphite", "dark", "black", "light")  # (Ocean and Graphite are glass, 2.6.0)
 SAVE_MODES = ("ask", "folder")
-ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green")
+ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green", "white")
 
 
 def is_valid_quality(fmt, quality):

@@ -156,6 +156,21 @@ class State:
             return True
 
 
+def new_design_once():
+    """2.6.0: the new sidebar design comes with glass themes. Whoever was on the old default (Dark, yellow)
+    starts on Ocean (blue) once; Black and Light stay, and Settings can change it back."""
+    saved = settings.load()
+    if saved.get("design"):
+        return
+    changes = {"design": 2}
+    if saved["theme"] == "dark":
+        changes["theme"] = "ocean"
+        if saved["accent"] == "yellow":
+            changes["accent"] = "blue"
+    settings.save(**changes)
+
+
+new_design_once()
 queue = jobs.Queue(on_done=history.add_job)
 page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()

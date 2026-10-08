@@ -10,12 +10,70 @@
 <script src="theme.js"></script>
 </head>
 <body>
+<!-- 2.6.0: the pages are in a sidebar on the left (in groups), with who's online and your account at the bottom -->
+<aside class="side" id="side">
+  <div class="brand">
+    <div class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg></div>
+    <div class="word">Vault<span>Hub</span></div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
+    <p class="nav-label">Convert</p>
+    <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
+    <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
+    <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+    <p class="nav-label">Crew</p>
+    <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
+    <button type="button" class="chat-button" id="chatButton" title="Chat"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span><b class="chat-badge" id="chatBadge" hidden></b></button>
+    <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
+    <button data-tab="stats" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-5M12 16V6.5M17 16v-8"/></svg><span>Channel stats</span></button>
+    <p class="nav-label">You</p>
+    <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
+    <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
+  </nav>
+  <div class="side-bottom">
+    <button type="button" class="online-pill side-crew" id="chatOpen" hidden title="Live chat">
+      <span class="side-crew-top"><i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b></span>
+      <span class="side-faces" id="sideFaces"></span>
+    </button>
+    <div class="account" id="libMe" hidden>
+      <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
+        <span class="avatar account-empty" id="libMeAvatar"></span>
+        <span class="me-text"><b id="sideMeName">Log in</b><small id="sideMeRole">to see the crew</small></span>
+      </button>
+      <div class="account-panel" id="libMenu" hidden>
+        <div class="account-card" id="libMeCard" hidden>
+          <span class="avatar big" id="libMeCardAvatar"></span>
+          <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
+        </div>
+        <div class="lib-menu" id="libMenuItems" hidden>
+          <button type="button" id="libAccountOpen">Manage account</button>
+          <button type="button" id="libPeopleOpen" hidden>People and roles</button>
+          <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
+          <button type="button" id="libFeedbackOpen">Send feedback</button>
+          <button type="button" id="libLogout">Log out</button>
+        </div>
+        <div class="lib-login" id="libLogin" hidden>
+          <div class="lib-login-tabs">
+            <button type="button" class="active" data-mode="login">Log in</button>
+            <button type="button" data-mode="signup">Create account</button>
+          </div>
+          <form id="libLoginForm">
+            <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+            <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
+            <p class="sfx-error" id="libLoginError"></p>
+            <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
+          </form>
+          <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
 <main>
   <header class="top">
-    <div class="brand">
-      <div class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg></div>
-      <div class="word">Vault<span>Hub</span></div>
-    </div>
+    <div class="crumb"><b id="crumbTitle">Home</b><span id="crumbSub">VaultHub</span></div>
     <div class="top-right">
       <div class="where"><span id="whereText">Saving to <strong id="folder">Downloads</strong></span> · <button class="link" id="change">Change</button></div>
       <div class="help-menu">
@@ -27,10 +85,6 @@
           <button type="button" id="whatsNewOpen">What's new</button>
         </div>
       </div>
-      <button type="button" class="icon-button head-button chat-button" id="chatButton" title="Chat">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg>
-        <b class="chat-badge" id="chatBadge" hidden></b>
-      </button>
       <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
       </button>
@@ -40,53 +94,8 @@
       <button type="button" class="icon-button head-button" id="settingsOpen" title="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.54-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.54V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.54 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.54 1z"/></svg>
       </button>
-      <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
-        <i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b>
-      </button>
-      <div class="account" id="libMe" hidden>
-        <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
-          <span class="avatar account-empty" id="libMeAvatar"></span>
-        </button>
-        <div class="account-panel" id="libMenu" hidden>
-          <div class="account-card" id="libMeCard" hidden>
-            <span class="avatar big" id="libMeCardAvatar"></span>
-            <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
-          </div>
-          <div class="lib-menu" id="libMenuItems" hidden>
-            <button type="button" id="libAccountOpen">Manage account</button>
-            <button type="button" id="libPeopleOpen" hidden>People and roles</button>
-            <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
-            <button type="button" id="libFeedbackOpen">Send feedback</button>
-            <button type="button" id="libLogout">Log out</button>
-          </div>
-          <div class="lib-login" id="libLogin" hidden>
-            <div class="lib-login-tabs">
-              <button type="button" class="active" data-mode="login">Log in</button>
-              <button type="button" data-mode="signup">Create account</button>
-            </div>
-            <form id="libLoginForm">
-              <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
-              <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
-              <p class="sfx-error" id="libLoginError"></p>
-              <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
-            </form>
-            <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
-          </div>
-        </div>
-      </div>
     </div>
   </header>
-
-  <nav class="tabs" id="tabs">
-    <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
-    <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
-    <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
-    <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
-    <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
-    <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
-    <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
-    <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
-  </nav>
 
   <section class="tab-page" id="homeTab">
     <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
@@ -295,20 +304,6 @@
         <span class="opt-label" id="fileQualityLabel">Quality</span>
         <div class="chips" id="fileQuality"></div>
       </div>
-      <div class="opt-row" id="fileFitRow">
-        <span class="opt-label">Smaller</span>
-        <div class="chips" id="fileFit">
-          <button data-value="" class="active">Off</button>
-          <button data-value="10">Under 10 MB (Discord)</button>
-          <button data-value="25">25 MB</button>
-          <button data-value="50">50 MB</button>
-          <button data-value="custom">Custom</button>
-        </div>
-        <div class="custom-size" id="fileFitCustomBox" hidden>
-          <input id="fileFitCustom" inputmode="decimal" placeholder="MB" autocomplete="off">
-          <span>MB</span>
-        </div>
-      </div>
       <div class="opt-row" id="fileVolumeRow">
         <span class="opt-label">Volume</span>
         <div class="chips">
@@ -329,6 +324,11 @@
   <section class="tab-page" id="sfxTab" hidden>
     <div class="lib-head">
       <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
+      <div class="lib-head-tools" id="sfxHeadTools" hidden>
+        <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
+        <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
+      </div>
     </div>
 
     <div class="lib-out" id="libLoggedOut" hidden>
@@ -337,44 +337,41 @@
         <button type="button" class="convert" id="libOutLogin">Log in</button>
         <button type="button" class="small-button" id="libOutSignup">Create account</button>
       </div>
-      <p class="lib-out-hint">You can also use the account button at the top right.</p>
+      <p class="lib-out-hint">You can also use the account button at the bottom of the sidebar.</p>
     </div>
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
+      <div class="lib-tools">
+        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
+        <label class="input history-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="lib-people">
+          <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
+            <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
+        </div>
+        <label class="quality lib-sort" title="Sort by">
+          <span>Sort</span>
+          <select id="sfxSort">
+            <option value="favorites">Favorites first</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="name">Name (A to Z)</option>
+            <option value="longest">Longest</option>
+            <option value="shortest">Shortest</option>
+            <option value="uploader">Uploader (A to Z)</option>
+          </select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </label>
+      </div>
       <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
-        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
-        <div class="lib-tools">
-          <label class="input history-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-            <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
-          </label>
-          <div class="lib-people">
-            <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
-              <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
-          </div>
-          <label class="quality lib-sort" title="Sort by">
-            <span>Sort</span>
-            <select id="sfxSort">
-              <option value="favorites">Favorites first</option>
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="name">Name (A to Z)</option>
-              <option value="longest">Longest</option>
-              <option value="shortest">Shortest</option>
-              <option value="uploader">Uploader (A to Z)</option>
-            </select>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </label>
-          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
-          <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
-        </div>
         <p class="lib-showing" id="sfxShowing"></p>
         <div class="upload-list" id="sfxUploads"></div>
         <p class="history-empty" id="sfxEmpty"></p>
@@ -1155,6 +1152,8 @@
     <section class="set-block">
       <h3>Theme</h3>
       <div class="theme-picks" id="themePicks">
+        <button type="button" data-theme="ocean"><span class="theme-sample ocean"><i></i><b></b></span>Ocean</button>
+        <button type="button" data-theme="graphite"><span class="theme-sample graphite"><i></i><b></b></span>Graphite</button>
         <button type="button" data-theme="dark"><span class="theme-sample dark"><i></i><b></b></span>Dark</button>
         <button type="button" data-theme="black"><span class="theme-sample black"><i></i><b></b></span>Black</button>
         <button type="button" data-theme="light"><span class="theme-sample light"><i></i><b></b></span>Light</button>

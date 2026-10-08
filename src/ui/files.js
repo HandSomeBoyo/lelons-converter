@@ -10,7 +10,7 @@ const FILE_QUALITIES = {
 };
 const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480" };
 
-let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false };
+let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, normalize: false };
 try {
   const saved = loadPref("fileOptions") || {};
   fileOptions = { ...fileOptions, ...saved, quality: { ...FILE_DEFAULTS, ...(saved.quality || {}) } };
@@ -87,17 +87,6 @@ $("fileFormat").querySelectorAll("button").forEach((b) => b.addEventListener("cl
   saveFileOptions();
   drawFiles();
 }));
-$("fileFit").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-  fileOptions.fit = b.dataset.value;
-  saveFileOptions();
-  drawFiles();
-}));
-$("fileFitCustom").addEventListener("input", () => {
-  $("fileFitCustom").value = $("fileFitCustom").value.replace(/[^\d.]/g, "").slice(0, 6);
-  fileOptions.fitCustom = $("fileFitCustom").value;
-  saveFileOptions();
-  drawFiles();
-});
 $("fileNormalize").addEventListener("click", () => {
   fileOptions.normalize = !fileOptions.normalize;
   saveFileOptions();
@@ -110,12 +99,6 @@ $("fileClear").addEventListener("click", () => {
   api("/api/files-clear", {}).then(refresh);
   drawFiles();
 });
-
-function targetMb() {
-  if (fileOptions.format !== "mp4") return null;
-  const value = fileOptions.fit === "custom" ? parseFloat(fileOptions.fitCustom) : parseFloat(fileOptions.fit);
-  return value > 0 ? value : null;
-}
 
 // ---- trimming one file
 
@@ -130,7 +113,7 @@ function trimFile(file) {
     end: saved ? saved.end : gif ? Math.min(10, file.seconds) : file.seconds,
     maxLength: gif ? 60 : 0,
     clip: () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
-                   quality: fileOptions.quality[fileOptions.format] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize }),
+                   quality: fileOptions.quality[fileOptions.format] ?? "", normalize: fileOptions.normalize }),
     done: (part) => {
       if (part) fileTrims.set(file.id, part); else fileTrims.delete(file.id);
       drawFiles();
@@ -157,10 +140,6 @@ $("fileConvert").addEventListener("click", async () => {
     return { id: f.id, ...(part ? { start: part.start.toFixed(2), end: part.end.toFixed(2) } : {}) };
   });
   const fmt = fileOptions.format;
-  if (fmt === "mp4" && fileOptions.fit === "custom" && !(targetMb() >= 0.5 && targetMb() <= 4000)) {
-    fileError = "Type a size between 0.5 and 4000 MB.";
-    return drawFiles();
-  }
   const folder = await whereToSave();
   if (!folder) return;
   // Shown as "Waiting..." until the app says this conversion (its next run) has started.
@@ -169,7 +148,7 @@ $("fileConvert").addEventListener("click", async () => {
   drawFiles();
   const res = await api("/api/files-convert", {
     items, folder,
-    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize },
+    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", normalize: fileOptions.normalize },
   }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) {
     for (const f of ready) delete f.waitingFor;
@@ -335,10 +314,6 @@ function drawFiles() {
     }
     box.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === (o.quality[fmt] ?? "")));
   }
-  $("fileFitRow").hidden = fmt !== "mp4";
-  $("fileFit").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === o.fit));
-  $("fileFitCustomBox").hidden = o.fit !== "custom";
-  if ($("fileFitCustom").value !== o.fitCustom) $("fileFitCustom").value = o.fitCustom;
   $("fileVolumeRow").hidden = fmt === "gif";
   $("fileNormalize").classList.toggle("active", !!o.normalize);
 
@@ -348,9 +323,7 @@ function drawFiles() {
     gif: "GIFs have no sound and can be up to 60 seconds.",
   };
   $("fileNote").classList.toggle("error", !!fileError);
-  $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
-    ? `Videos are made just small enough to stay under ${targetMb()} MB. Long videos get a smaller picture to fit.`
-    : notes[fmt] || "");
+  $("fileNote").textContent = fileError || notes[fmt] || "";
 
   const ready = readyFiles().length;
   const busy = serverFiles.some((f) => f.status === "active" || f.status === "queued");
