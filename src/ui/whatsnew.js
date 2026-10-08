@@ -2,7 +2,7 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.6.0", items: [
+  { version: "2.6.1", items: [
     "A whole new look! The pages are in a sidebar on the left now, with names, so everything is one click away.",
     "Chat and Channel stats have their own spots in the sidebar. Who's online and your account are at the bottom.",
     "Two new glass themes: Ocean (blue) and Graphite (grey). Pick one in Settings, next to Dark, Black and Light.",
