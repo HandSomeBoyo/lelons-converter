@@ -21,8 +21,7 @@ To remove it: Settings > Apps > Installed apps > VaultHub > Uninstall.
    one of the many other sites yt-dlp knows.
 2. Pick a format and a quality:
    - **MP3** or **M4A** for music, **WAV** or **FLAC** for perfect (lossless) sound
-   - **MP4** for video. "Under 10 MB (Discord)", "Under 25 MB" and "Under 50 MB"
-     make the video just small enough to send.
+   - **MP4** for video
    - **GIF** for a looping clip without sound (up to 60 seconds; the first 10
      seconds unless you pick a part)
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.

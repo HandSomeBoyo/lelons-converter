@@ -18,7 +18,6 @@ STEPS = {
     "ExtractAudio": "Converting",
     "Cut": "Cutting out your part",
     "Gif": "Making the GIF",
-    "Shrink": "Making it smaller",
     "Volume": "Evening out the volume",
     "Metadata": "Adding the title and cover art",
 }

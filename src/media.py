@@ -195,66 +195,20 @@ def convert_audio(source, target, fmt, kbps="192", trim=None, normalize=False, l
         length, on_progress)
 
 
-def _pick_height(video_kbps, height):
-    """A smaller picture looks better than a blurry big one when there's little room."""
-    for kbps, limit in ((2500, 1080), (1200, 720), (600, 480), (300, 360)):
-        if video_kbps >= kbps:
-            return min(height, limit)
-    return min(height, 240)
-
-
-def convert_video(source, target, max_height=None, target_mb=None, trim=None, normalize=False,
+def convert_video(source, target, max_height=None, trim=None, normalize=False,
                   length=0, on_progress=None, info=None):
-    """An MP4 (H.264 + AAC) that plays everywhere. target_mb makes it fit a size, like 10 MB for Discord."""
+    """An MP4 (H.264 + AAC) that plays everywhere."""
     info = info or probe(source)
     if not info["video"]:
         raise ValueError("This file has no video in it. Pick MP3 or another sound format instead.")
     length = length or (trim[1] - trim[0] if trim else info["duration"])
     height = info["height"] or 1080
-    audio_kbps = 160
-    if target_mb:
-        if not length:
-            raise ValueError("Couldn't tell how long this video is, so it can't be made to fit a size.")
-        # 1 MB = 1,000,000 bytes, which keeps it under the limit on every site. Leave a little room.
-        total_kbps = target_mb * 8000 / length * 0.92
-        audio_kbps = 0 if not info["audio"] else 128 if total_kbps > 1000 else 96 if total_kbps > 400 else 64
-        video_kbps = int(total_kbps - audio_kbps)
-        if video_kbps < 60:
-            raise ValueError(f"This is too long to fit in {target_mb:g} MB. Trim it shorter or pick a bigger size.")
-        height = _pick_height(video_kbps, height)
     if max_height:
         height = min(height, max_height)
-
-    def encode(video_kbps=None):
-        scale = [] if height >= info["height"] else ["-vf", f"scale=-2:{height}"]
-        sound = ["-c:a", "aac", "-b:a", f"{audio_kbps}k"] if audio_kbps or not target_mb else ["-an"]
-        volume = ["-af", LOUDNORM, "-ar", "48000"] if normalize and info["audio"] else []
-        run_video([*_part(trim), "-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-dn", "-sn", "-map_metadata", "0", *scale],
-                  [*volume, *sound, "-movflags", "+faststart"], target, length, on_progress, video_kbps)
-
-    if not target_mb:
-        return encode()
-    # Already small enough? Then don't blow it up to the size limit: convert normally and check.
-    if info["duration"] and os.path.getsize(source) * length / info["duration"] / 1e6 < target_mb * 0.8:
-        height = info["height"] or height
-        if max_height:
-            height = min(height, max_height)
-        audio_kbps = 160 if info["audio"] else 0
-        encode()
-        if os.path.getsize(target) / 1e6 <= target_mb:
-            return
-        height = _pick_height(int(target_mb * 8000 / length * 0.92), info["height"] or 1080)
-        audio_kbps = 0 if not info["audio"] else 128
-    video_kbps = int(target_mb * 8000 / length * 0.92 - audio_kbps)
-    for _ in range(3):
-        encode(video_kbps)
-        size_mb = os.path.getsize(target) / 1e6
-        if size_mb <= target_mb:
-            return
-        video_kbps = int(video_kbps * target_mb / size_mb * 0.9)  # came out too big: try again a bit smaller
-        if video_kbps < 60:
-            break
-    raise ValueError(f"Couldn't get this under {target_mb:g} MB. Trim it shorter or pick a bigger size.")
+    scale = [] if height >= info["height"] else ["-vf", f"scale=-2:{height}"]
+    volume = ["-af", LOUDNORM, "-ar", "48000"] if normalize and info["audio"] else []
+    run_video([*_part(trim), "-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-dn", "-sn", "-map_metadata", "0", *scale],
+              [*volume, "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"], target, length, on_progress)
 
 
 def make_gif(source, target, width=480, trim=None, length=0, on_progress=None, fps=15):
