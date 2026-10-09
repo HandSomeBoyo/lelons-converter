@@ -2,8 +2,8 @@
 // Uses $, api() from app.js and applyTheme(), ACCENT_COLORS from theme.js.
 
 const ACCENT_NAMES = { yellow: "Yellow", orange: "Orange", red: "Red", pink: "Pink", purple: "Purple", blue: "Blue",
-  teal: "Teal", green: "Green", white: "White" };
-let appSettings = { hardware: true, theme: "ocean", accent: "blue", zoom: 1, saveMode: "ask", folder: "", folderName: "" };
+  teal: "Teal", green: "Green" };
+let appSettings = { hardware: true, theme: "dark", accent: "yellow", zoom: 1, saveMode: "ask", folder: "", folderName: "" };
 const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8];
 
 function drawSettings() {
@@ -54,8 +54,20 @@ async function changeSettings(changes) {
   if (s) syncSettings(s);
 }
 
+// The pages on the left of the Settings window.
+function showSettingsPage(page) {
+  if (!document.querySelector(`#setNav button[data-set="${page}"]`)) page = "general";
+  document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
+  document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
+}
+document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("click", () => {
+  showSettingsPage(b.dataset.set);
+  savePref("settingsPage", b.dataset.set);
+}));
+
 function openSettings(part) {
   drawSettings();
+  showSettingsPage(part === "save" ? "general" : loadPref("settingsPage") || "general");
   $("settingsModal").hidden = false;
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);

@@ -2,7 +2,6 @@
 // Uses $, api(), clock(), openTrim(), ICONS from app.js, showTab() and sizeText() from images.js.
 
 const SFX_ICONS = {
-  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>',
@@ -61,7 +60,7 @@ function avatarEl(url, name, cls = "") {
 
 const sfxUser = () => sfxAccount && sfxAccount.user;
 
-// Who's logged in. Loaded when the app opens, so the account button in the sidebar shows your picture.
+// Who's logged in. Loaded when the app opens, so the account button at the top right shows your picture.
 async function loadAccount() {
   const res = await api("/api/sfx-account", {}).catch(() => null);
   if (!res || !res.ok) {
@@ -123,7 +122,6 @@ function drawSfxAccount() {
   $("libMeCard").hidden = $("libMenuItems").hidden = !user;
   $("libLoggedOut").hidden = !a.configured || !!user;
   $("sfxMain").hidden = !a.configured || !user;
-  $("sfxHeadTools").hidden = $("sfxMain").hidden; // (Find sounds and Upload, next to the title)
   $("libMeButton").title = user ? `${user.username} (${user.roleName})` : "Log in or create an account";
   if (!$("sfxCategory").children.length) {
     for (const [value, label] of Object.entries(a.categories)) {
@@ -135,9 +133,6 @@ function drawSfxAccount() {
       $("sfxCategory").append(b);
     }
   }
-  // (the account button in the sidebar shows the name next to the picture)
-  $("sideMeName").textContent = user ? user.username : "Log in";
-  $("sideMeRole").textContent = user ? user.roleName : "to see the crew";
   if (!user) {
     $("libMeButton").classList.remove("has-news");
     $("libMeAvatar").replaceWith(Object.assign(document.createElement("span"), {
@@ -443,14 +438,6 @@ $("sfxSort").addEventListener("change", () => {
   drawSfx();
 });
 
-// The sound whose "···" menu is open (kept open when its row is made again, like after the first click on Delete).
-let sfxMoreOpen = "";
-document.addEventListener("click", (e) => {
-  if (!sfxMoreOpen || e.target.closest(".sound-more-pop")) return;
-  sfxMoreOpen = "";
-  document.querySelectorAll(".sound-more-pop:not([hidden])").forEach((p) => { p.hidden = true; });
-});
-
 // Rows are kept and only made again when something on them changed, so typing in the search stays quick.
 const sfxRows = new Map(); // id -> {el, sig}
 const sfxDownloading = new Set(); // ids being downloaded (a second click does nothing)
@@ -569,7 +556,6 @@ function sfxRow(sound) {
       <div class="meta"></div>
     </div>
     <div class="sound-wave" title="Click to play from here"><div class="bars"></div><span class="time"></span></div>
-    <div class="sound-by"></div>
     <div class="actions"></div>`;
   const play = el.querySelector(".play");
   play.innerHTML = sfxPlaying === sound.id ? SFX_ICONS.pause : SFX_ICONS.play;
@@ -596,23 +582,24 @@ function sfxRow(sound) {
     cat.className = "cat cat-" + sound.category;
     cat.textContent = sound.genre ? `${sound.categoryName} · ${sound.genre}` : sound.categoryName;
     meta.append(cat);
+    if (sound.uploader) {
+      const by = document.createElement("span");
+      by.className = "by";
+      by.title = "Uploaded by " + sound.uploader;
+      by.append(avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
+      const name = document.createElement("b");
+      name.className = "by-name";
+      name.textContent = sound.uploader;
+      name.title = "See " + sound.uploader + "'s profile";
+      name.onclick = (e) => { e.stopPropagation(); openProfile(sound.uploader); };
+      by.append(name);
+      meta.append(sfxSep(), by);
+    }
     // The time goes last and is the part cut short when there isn't room (never the name).
     const when = document.createElement("span");
     when.className = "when";
     when.textContent = sfxAgo(sound.created_at);
     meta.append(sfxSep(), when);
-  }
-  // Who uploaded it: its own column, after the waveform (2.6.0)
-  if (sound.uploader) {
-    const by = el.querySelector(".sound-by");
-    by.title = "Uploaded by " + sound.uploader;
-    by.append(avatarEl(sound.uploaderAvatar, sound.uploader, "tiny"));
-    const name = document.createElement("b");
-    name.className = "by-name";
-    name.textContent = sound.uploader === (sfxUser() && sfxUser().username) ? "You" : sound.uploader;
-    name.title = "See " + sound.uploader + "'s profile";
-    name.onclick = (e) => { e.stopPropagation(); openProfile(sound.uploader); };
-    by.append(name);
   }
   const wave = el.querySelector(".sound-wave");
   drawSoundWave(wave, sound);
@@ -623,18 +610,13 @@ function sfxRow(sound) {
   };
 
   const actions = el.querySelector(".actions");
-  // Star and download stay on the row; the rest is in the "···" menu, with words next to the icons.
-  const more = document.createElement("div");
-  more.className = "lib-menu sound-more-pop";
-  more.hidden = sfxMoreOpen !== sound.id;
-  const add = (icon, title, onclick, label) => {
+  const add = (icon, title, onclick) => {
     const b = document.createElement("button");
-    b.className = label ? "sound-more-item" : "icon-button";
+    b.className = "icon-button";
     b.title = title;
     b.innerHTML = icon;
-    if (label) b.append(label);
-    b.onclick = (e) => { if (label) e.stopPropagation(); onclick(b); };
-    (label ? more : actions).append(b);
+    b.onclick = () => onclick(b);
+    actions.append(b);
     return b;
   };
   const star = add(sound.favorite ? SFX_ICONS.starOn : SFX_ICONS.star,
@@ -644,18 +626,17 @@ function sfxRow(sound) {
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
   add(SFX_ICONS.download, "Download as MP3", () => downloadSfx(sound));
   // The rest only shows when the mouse is over the row (less to look at).
-  const closeMore = (go) => () => { sfxMoreOpen = ""; more.hidden = true; go(); };
-  add(SFX_ICONS.chat, "Send to the live chat", closeMore(() => shareToChat({ sound: { id: sound.id, name: sound.name } })), "Send to chat");
-  add(SFX_ICONS.shield, "Check if it's a copyrighted song", closeMore(() => checkSoundCopyright(sound)), "Check for copyright");
+  add(SFX_ICONS.chat, "Send to the live chat", () => shareToChat({ sound: { id: sound.id, name: sound.name } })).classList.add("extra");
+  add(SFX_ICONS.shield, "Check if it's a copyrighted song", () => checkSoundCopyright(sound)).classList.add("extra");
   if (sfxUser() && (sfxUser().canUpload || sound.mine)) {
-    add(SFX_ICONS.edit, "Change the name, category or genre", closeMore(() => openEditSound(sound)), "Edit");
+    add(SFX_ICONS.edit, "Change the name, category or genre", () => openEditSound(sound)).classList.add("extra");
   }
   if (sfxUser() && sfxUser().canUpload) {
     // Deleting needs a second click, so it can't happen by accident.
     const bin = add(SFX_ICONS.trash, "Delete this sound for everyone", async () => {
       if (!sfxSure.has(sound.id)) {
         sfxSure.add(sound.id);
-        sfxNotes.set(sound.id, { text: "Click Delete again to delete it for everyone.", kind: "bad" });
+        sfxNotes.set(sound.id, { text: "Click the bin again to delete it for everyone.", kind: "bad" });
         drawSfx();
         setTimeout(() => {
           if (!sfxSure.delete(sound.id)) return;
@@ -676,22 +657,10 @@ function sfxRow(sound) {
         sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
       }
       drawSfx();
-    }, "Delete");
-    bin.classList.add("danger");
-    if (sfxSure.has(sound.id)) { bin.classList.add("sure"); bin.lastChild.textContent = "Click again to delete"; }
+    });
+    bin.classList.add("extra");
+    if (sfxSure.has(sound.id)) { bin.style.color = "var(--red)"; bin.classList.add("sure"); }
   }
-  const moreButton = document.createElement("button");
-  moreButton.className = "icon-button more-button";
-  moreButton.title = "More";
-  moreButton.innerHTML = SFX_ICONS.more;
-  moreButton.onclick = (e) => {
-    e.stopPropagation();
-    const open = more.hidden;
-    document.querySelectorAll(".sound-more-pop:not([hidden])").forEach((p) => { p.hidden = true; });
-    more.hidden = !open;
-    sfxMoreOpen = open ? sound.id : "";
-  };
-  actions.append(moreButton, more);
   return el;
 }
 

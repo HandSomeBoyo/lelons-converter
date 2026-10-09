@@ -50,7 +50,7 @@ class Clips:
             raise ValueError(f"GIFs can be up to {media.GIF_MAX_SECONDS} seconds.")
         wanted = {
             "source": request.get("source") or {}, "title": str(request.get("title") or "clip"), "format": fmt,
-            "quality": str(request.get("quality") or ""),
+            "quality": str(request.get("quality") or ""), "targetMb": request.get("targetMb"),
             "normalize": bool(request.get("normalize")), "trim": (round(start, 3), round(end, 3)),
         }
         with self.lock:
@@ -151,8 +151,8 @@ class Clips:
             raise ValueError("Something's missing for the clip.")
         fmt = "mp4" if wanted["format"] == "gif" else wanted["format"]
         quality = wanted["quality"]
-        if wanted["format"] == "gif":
-            quality = "720"  # made into a GIF when it's cut
+        if wanted["format"] == "gif" or quality.startswith("fit"):
+            quality = "720"  # made smaller (or into a GIF) when it's cut
         if not settings.is_valid_quality(fmt, quality):
             quality = settings.DEFAULT_QUALITY[fmt]
         found = self.sources.get((url, fmt, quality))
@@ -195,7 +195,8 @@ class Clips:
             if fmt == "gif":
                 media.make_gif(source, temp, int(quality) if quality.isdigit() else 480, trim, length, progress)
             elif fmt == "mp4":
-                media.convert_video(source, temp, int(quality) if quality.isdigit() else None, trim,
+                target_mb = wanted["targetMb"] or (int(quality[3:]) if quality.startswith("fit") else None)
+                media.convert_video(source, temp, int(quality) if quality.isdigit() else None, target_mb, trim,
                                     wanted["normalize"], length, progress)
             else:
                 media.convert_audio(source, temp, fmt, quality if quality.isdigit() else "192", trim,

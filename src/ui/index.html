@@ -10,70 +10,8 @@
 <script src="theme.js"></script>
 </head>
 <body>
-<!-- 2.6.0: the pages are in a sidebar on the left (in groups), with who's online and your account at the bottom -->
-<aside class="side" id="side">
-  <div class="brand">
-    <div class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg></div>
-    <div class="word">Vault<span>Hub</span></div>
-  </div>
-  <nav class="tabs" id="tabs">
-    <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
-    <p class="nav-label">Convert</p>
-    <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
-    <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
-    <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
-    <p class="nav-label">Crew</p>
-    <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
-    <button type="button" class="chat-button" id="chatButton" title="Chat"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span><b class="chat-badge" id="chatBadge" hidden></b></button>
-    <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
-    <button data-tab="stats" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-5M12 16V6.5M17 16v-8"/></svg><span>Channel stats</span></button>
-    <p class="nav-label">You</p>
-    <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
-    <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
-  </nav>
-  <div class="side-bottom">
-    <button type="button" class="online-pill side-crew" id="chatOpen" hidden title="Live chat">
-      <span class="side-crew-top"><i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b></span>
-      <span class="side-faces" id="sideFaces"></span>
-    </button>
-    <div class="account" id="libMe" hidden>
-      <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
-        <span class="avatar account-empty" id="libMeAvatar"></span>
-        <span class="me-text"><b id="sideMeName">Log in</b><small id="sideMeRole">to see the crew</small></span>
-      </button>
-      <div class="account-panel" id="libMenu" hidden>
-        <div class="account-card" id="libMeCard" hidden>
-          <span class="avatar big" id="libMeCardAvatar"></span>
-          <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
-        </div>
-        <div class="lib-menu" id="libMenuItems" hidden>
-          <button type="button" id="libAccountOpen">Manage account</button>
-          <button type="button" id="libPeopleOpen" hidden>People and roles</button>
-          <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
-          <button type="button" id="libFeedbackOpen">Send feedback</button>
-          <button type="button" id="libLogout">Log out</button>
-        </div>
-        <div class="lib-login" id="libLogin" hidden>
-          <div class="lib-login-tabs">
-            <button type="button" class="active" data-mode="login">Log in</button>
-            <button type="button" data-mode="signup">Create account</button>
-          </div>
-          <form id="libLoginForm">
-            <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
-            <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
-            <p class="sfx-error" id="libLoginError"></p>
-            <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
-          </form>
-          <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</aside>
-
 <main>
   <header class="top">
-    <div class="crumb"><b id="crumbTitle">Home</b><span id="crumbSub">VaultHub</span></div>
     <div class="top-right">
       <div class="where"><span id="whereText">Saving to <strong id="folder">Downloads</strong></span> · <button class="link" id="change">Change</button></div>
       <div class="help-menu">
@@ -91,11 +29,74 @@
       <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
       </button>
-      <button type="button" class="icon-button head-button" id="settingsOpen" title="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.54-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.54V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.54 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.54 1z"/></svg>
+      <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
+        <i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b>
       </button>
+      <div class="account" id="libMe" hidden>
+        <button type="button" class="account-button" id="libMeButton" aria-haspopup="menu" title="Your account">
+          <span class="avatar account-empty" id="libMeAvatar"></span>
+        </button>
+        <div class="account-panel" id="libMenu" hidden>
+          <div class="account-card" id="libMeCard" hidden>
+            <span class="avatar big" id="libMeCardAvatar"></span>
+            <div class="lib-me-text"><b id="libMeName"></b><span id="libMeRole"></span></div>
+          </div>
+          <div class="lib-menu" id="libMenuItems" hidden>
+            <button type="button" id="libAccountOpen">Manage account</button>
+            <button type="button" id="libPeopleOpen" hidden>People and roles</button>
+            <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
+            <button type="button" id="libFeedbackOpen">Send feedback</button>
+            <button type="button" id="libLogout">Log out</button>
+          </div>
+          <div class="lib-login" id="libLogin" hidden>
+            <div class="lib-login-tabs">
+              <button type="button" class="active" data-mode="login">Log in</button>
+              <button type="button" data-mode="signup">Create account</button>
+            </div>
+            <form id="libLoginForm">
+              <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+              <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
+              <p class="sfx-error" id="libLoginError"></p>
+              <button class="convert lib-login-submit" type="submit" id="libLoginButton">Log in</button>
+            </form>
+            <p class="lib-login-hint" id="libLoginHint">Log in to hear everyone's sounds.</p>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand side-brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M16 18h10l6 15 6-15h10L36.5 46h-9z"/></svg></div>
+      <div class="side-name"><div class="word">Vault<span>Hub</span></div><small id="sideVersion"></small></div>
+      <button type="button" class="side-fold" id="sideFold" title="Make the side bar smaller">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/><path d="M15.5 10l-2 2 2 2"/></svg>
+      </button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
+      <div class="tab-group">Convert</div>
+      <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
+      <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
+      <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+      <div class="tab-group">Create</div>
+      <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
+      <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
+      <div class="tab-group">Tools</div>
+      <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
+      <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
+    </nav>
+    <div class="side-foot">
+      <button type="button" class="side-link chat-button" id="chatButton" title="Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span>
+        <b class="chat-badge" id="chatBadge" hidden></b>
+      </button>
+      <button type="button" class="side-link" id="settingsOpen" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.54-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.54V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.54 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.54 1z"/></svg><span>Settings</span>
+      </button>
+    </div>
+  </aside>
 
   <section class="tab-page" id="homeTab">
     <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
@@ -304,6 +305,20 @@
         <span class="opt-label" id="fileQualityLabel">Quality</span>
         <div class="chips" id="fileQuality"></div>
       </div>
+      <div class="opt-row" id="fileFitRow">
+        <span class="opt-label">Smaller</span>
+        <div class="chips" id="fileFit">
+          <button data-value="" class="active">Off</button>
+          <button data-value="10">Under 10 MB (Discord)</button>
+          <button data-value="25">25 MB</button>
+          <button data-value="50">50 MB</button>
+          <button data-value="custom">Custom</button>
+        </div>
+        <div class="custom-size" id="fileFitCustomBox" hidden>
+          <input id="fileFitCustom" inputmode="decimal" placeholder="MB" autocomplete="off">
+          <span>MB</span>
+        </div>
+      </div>
       <div class="opt-row" id="fileVolumeRow">
         <span class="opt-label">Volume</span>
         <div class="chips">
@@ -324,11 +339,6 @@
   <section class="tab-page" id="sfxTab" hidden>
     <div class="lib-head">
       <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
-      <div class="lib-head-tools" id="sfxHeadTools" hidden>
-        <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
-        <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
-      </div>
     </div>
 
     <div class="lib-out" id="libLoggedOut" hidden>
@@ -337,41 +347,44 @@
         <button type="button" class="convert" id="libOutLogin">Log in</button>
         <button type="button" class="small-button" id="libOutSignup">Create account</button>
       </div>
-      <p class="lib-out-hint">You can also use the account button at the bottom of the sidebar.</p>
+      <p class="lib-out-hint">You can also use the account button at the top right.</p>
     </div>
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
-      <div class="lib-tools">
-        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
-        <label class="input history-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
-        </label>
-        <div class="lib-people">
-          <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
-            <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
-        </div>
-        <label class="quality lib-sort" title="Sort by">
-          <span>Sort</span>
-          <select id="sfxSort">
-            <option value="favorites">Favorites first</option>
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="name">Name (A to Z)</option>
-            <option value="longest">Longest</option>
-            <option value="shortest">Shortest</option>
-            <option value="uploader">Uploader (A to Z)</option>
-          </select>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </label>
-      </div>
       <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
+        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
+        <div class="lib-tools">
+          <label class="input history-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <input id="sfxSearch" placeholder="Search sounds" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="lib-people">
+            <button type="button" class="lib-people-button" id="sfxPeopleButton" title="Only sounds from one person" aria-haspopup="menu">
+              <span class="lib-faces" id="sfxPeopleFaces"></span><span id="sfxPeopleText">Everyone</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="lib-menu people-pop" id="sfxPeoplePop" hidden><div class="side-people" id="sfxPeople"></div></div>
+          </div>
+          <label class="quality lib-sort" title="Sort by">
+            <span>Sort</span>
+            <select id="sfxSort">
+              <option value="favorites">Favorites first</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="name">Name (A to Z)</option>
+              <option value="longest">Longest</option>
+              <option value="shortest">Shortest</option>
+              <option value="uploader">Uploader (A to Z)</option>
+            </select>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
+          <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
+        </div>
         <p class="lib-showing" id="sfxShowing"></p>
         <div class="upload-list" id="sfxUploads"></div>
         <p class="history-empty" id="sfxEmpty"></p>
@@ -1104,66 +1117,91 @@
 </div>
 
 <div class="modal" id="settingsModal" hidden>
-  <div class="dialog settings-dialog" role="dialog" aria-labelledby="settingsHeading">
-    <h2 id="settingsHeading">Settings</h2>
-    <section class="set-block" id="setSaveBlock">
-      <h3>Where to save</h3>
-      <label class="check"><input type="radio" name="saveMode" value="ask" id="setAsk"> Ask me every time</label>
-      <label class="check"><input type="radio" name="saveMode" value="folder" id="setAlways"> Always save to <b class="set-folder" id="setFolderName"></b></label>
-      <p class="set-help"><button type="button" class="link" id="setFolderChange">Pick the folder</button> for "Always save to".</p>
-    </section>
-    <section class="set-block">
-      <h3>Volume</h3>
-      <div class="volume-row">
-        <input type="range" class="volume-slider" min="0" max="100" step="1" aria-label="Volume">
-        <span class="volume-value"></span>
-      </div>
-      <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor. Also in the player at the bottom.</p>
-    </section>
-    <section class="set-block">
-      <h3>Hardware acceleration</h3>
-      <label class="check"><input type="checkbox" id="setHardware"> Use my graphics card</label>
-      <p class="set-help">Makes videos several times faster and keeps the window smooth. Turn it off if videos
-        come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
-    </section>
-    <section class="set-block">
-      <h3>Size</h3>
-      <div class="size-row">
-        <button type="button" class="size-step" id="sizeDown" title="Smaller (Ctrl and -)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>
-        </button>
-        <div class="size-track" id="sizeTrack"></div>
-        <button type="button" class="size-step" id="sizeUp" title="Bigger (Ctrl and +)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12M12 6v12"/></svg>
-        </button>
-        <span class="size-value" id="sizeValue">100%</span>
-      </div>
-      <p class="set-help">Tip: hold Ctrl and scroll, or press Ctrl and + or -. Ctrl and 0 goes back to normal.</p>
-    </section>
-    <section class="set-block">
-      <h3>Chat</h3>
-      <label class="check"><input type="checkbox" id="setChatSound"> Play a sound for new messages</label>
-    </section>
-    <section class="set-block">
-      <h3>Updates</h3>
-      <label class="check" title="Look for updates every time the app opens"><input type="checkbox" id="autoUpdate"> Update automatically</label>
-      <p class="set-help"><span id="version"></span> · <button type="button" class="link" id="checkNow">Check for updates</button></p>
-    </section>
-    <section class="set-block">
-      <h3>Theme</h3>
-      <div class="theme-picks" id="themePicks">
-        <button type="button" data-theme="ocean"><span class="theme-sample ocean"><i></i><b></b></span>Ocean</button>
-        <button type="button" data-theme="graphite"><span class="theme-sample graphite"><i></i><b></b></span>Graphite</button>
-        <button type="button" data-theme="dark"><span class="theme-sample dark"><i></i><b></b></span>Dark</button>
-        <button type="button" data-theme="black"><span class="theme-sample black"><i></i><b></b></span>Black</button>
-        <button type="button" data-theme="light"><span class="theme-sample light"><i></i><b></b></span>Light</button>
-      </div>
-    </section>
-    <section class="set-block">
-      <h3>Color</h3>
-      <div class="accent-picks" id="accentPicks"></div>
-    </section>
-    <div class="dialog-actions"><span class="spacer"></span><button type="button" class="small-button" id="settingsClose">Done</button></div>
+  <div class="dialog settings-dialog set2" role="dialog" aria-labelledby="settingsHeading">
+    <nav class="set-nav" id="setNav">
+      <h2 id="settingsHeading">Settings</h2>
+      <button type="button" data-set="general" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>General</span></button>
+      <button type="button" data-set="look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg><span>Appearance</span></button>
+      <button type="button" data-set="sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span></button>
+      <button type="button" data-set="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5L5.5 13.5H12L11 20.5L18.5 10.5H12z"/></svg><span>Performance</span></button>
+      <div class="set-about"><b>VaultHub</b><span id="version"></span></div>
+    </nav>
+    <div class="set-main">
+      <button type="button" class="set-close" id="settingsClose" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+
+      <section class="set-page" data-set="general">
+        <h3 class="set-title">General</h3>
+        <div class="set-label">Where to save</div>
+        <div class="set-group" id="setSaveBlock">
+          <label class="set-row set-choice"><input type="radio" name="saveMode" value="ask" id="setAsk">
+            <span class="set-text"><b>Ask me every time</b><small>You pick a folder for each download.</small></span></label>
+          <div class="set-row set-choice">
+            <label class="set-choice-label"><input type="radio" name="saveMode" value="folder" id="setAlways">
+              <span class="set-text"><b>Always save to <span class="set-folder" id="setFolderName"></span></b><small>Everything goes straight into this folder.</small></span></label>
+            <button type="button" class="ghost-button set-button" id="setFolderChange">Change</button>
+          </div>
+        </div>
+        <div class="set-label">Updates</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Update automatically</b><small>Looks for a new version every time the app opens.</small></span><input type="checkbox" id="autoUpdate"></label>
+          <div class="set-row"><span class="set-text"><b>Check for updates</b><small id="setVersionLine">See if there's something new right now.</small></span>
+            <button type="button" class="ghost-button set-button" id="checkNow">Check now</button></div>
+        </div>
+      </section>
+
+      <section class="set-page" data-set="look" hidden>
+        <h3 class="set-title">Appearance</h3>
+        <div class="set-label">Theme</div>
+          <div class="theme-picks" id="themePicks">
+            <button type="button" data-theme="dark"><span class="theme-sample dark"><i></i><b></b></span>Dark</button>
+            <button type="button" data-theme="black"><span class="theme-sample black"><i></i><b></b></span>Black</button>
+            <button type="button" data-theme="light"><span class="theme-sample light"><i></i><b></b></span>Light</button>
+          </div>
+        <div class="set-label">Color</div>
+        <div class="set-group set-pad"><div class="accent-picks" id="accentPicks"></div></div>
+        <div class="set-label">Size</div>
+        <div class="set-group set-pad">
+            <div class="size-row">
+              <button type="button" class="size-step" id="sizeDown" title="Smaller (Ctrl and -)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>
+              </button>
+              <div class="size-track" id="sizeTrack"></div>
+              <button type="button" class="size-step" id="sizeUp" title="Bigger (Ctrl and +)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12M12 6v12"/></svg>
+              </button>
+              <span class="size-value" id="sizeValue">100%</span>
+            </div>
+        </div>
+        <p class="set-help">Tip: hold Ctrl and scroll, or press Ctrl and + or -. Ctrl and 0 goes back to normal.</p>
+      </section>
+
+      <section class="set-page" data-set="sound" hidden>
+        <h3 class="set-title">Sound</h3>
+        <div class="set-label">Volume</div>
+        <div class="set-group set-pad">
+            <div class="volume-row">
+              <input type="range" class="volume-slider" min="0" max="100" step="1" aria-label="Volume">
+              <span class="volume-value"></span>
+            </div>
+        </div>
+        <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
+        <div class="set-label">Chat</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
+        </div>
+      </section>
+
+      <section class="set-page" data-set="speed" hidden>
+        <h3 class="set-title">Performance</h3>
+        <div class="set-label">Hardware acceleration</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Use my graphics card</b><small>Makes videos several times faster and keeps the window smooth.</small></span><input type="checkbox" id="setHardware"></label>
+        </div>
+        <p class="set-help">Turn it off if videos come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
+      </section>
+    </div>
   </div>
 </div>
 

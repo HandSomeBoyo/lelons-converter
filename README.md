@@ -17,15 +17,12 @@ To remove it: Settings > Apps > Installed apps > VaultHub > Uninstall.
 
 ## Using it
 
-The pages are in the sidebar on the left: Home, then Video, Files and Images
-(Convert), Library, Chat, Docs and Channel stats (Crew), and History and
-Copyright (You). Who's online and your account are at the bottom of it.
-
 1. Paste a link from YouTube, TikTok, SoundCloud, X/Twitter, Instagram or
    one of the many other sites yt-dlp knows.
 2. Pick a format and a quality:
    - **MP3** or **M4A** for music, **WAV** or **FLAC** for perfect (lossless) sound
-   - **MP4** for video
+   - **MP4** for video. "Under 10 MB (Discord)", "Under 25 MB" and "Under 50 MB"
+     make the video just small enough to send.
    - **GIF** for a looping clip without sound (up to 60 seconds; the first 10
      seconds unless you pick a part)
 3. Click **Convert**. Files go to your Downloads folder unless you click **Change**.
@@ -48,8 +45,8 @@ Then click **Done**. For MP4s and GIFs the video plays above
 the waveform, and dragging a line shows that moment of the video.
 
 The **Library** tab is a sound library you share with your friends. Everyone
-makes an account with just a username and password (the account button
-at the bottom of the sidebar), then plays, searches and downloads the sounds by category
+makes an account with just a username and password (the round account button
+at the top right), then plays, searches and downloads the sounds by category
 (SFX, Music, Memes, Ambience, Other). Each sound shows its waveform (click it
 to play from that spot) and who uploaded it. Click it and pick **Manage account**
 to open your Account page: change your profile picture, username or password,
@@ -72,7 +69,7 @@ pills at the top pick what you see: all sounds, your favorites or a category. Th
 people button next to Sort shows only one person's uploads. **Sort** lists them favorites first, newest, oldest,
 by name, by length or by uploader.
 
-**Live chat:** the "online" card at the bottom of the sidebar shows how many people have
+**Live chat:** the "online" button at the top right shows how many people have
 the app open right now. Click it to chat with everyone who has an account. Your
 own messages (and, for the Owner and Admins, anyone's) can be deleted.
 
@@ -117,8 +114,8 @@ sound's name or category with the pencil button.
 
 **Settings** (the gear at the top): **Hardware acceleration** (on by default) uses
 your graphics card to make videos faster and draw the window. Turn it off if
-videos come out broken or the app looks glitchy. Pick a theme (Ocean or Graphite,
-which are glass, or Dark, Black or Light) and an accent color too. **Size** makes the whole app bigger or smaller
+videos come out broken or the app looks glitchy. Pick a theme (Dark, Black or
+Light) and an accent color too. **Size** makes the whole app bigger or smaller
 (or hold Ctrl and scroll, or press Ctrl and + or -; Ctrl and 0 resets it).
 **Updates** (turn automatic updates on or off, or check now) are in Settings too.
 

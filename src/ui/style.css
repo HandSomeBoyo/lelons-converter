@@ -3412,267 +3412,201 @@ body.chat-page::after { -webkit-backdrop-filter: none; backdrop-filter: none; ba
 }
 @media (prefers-reduced-motion: reduce) { .online-dot::after { animation: none; } }
 
-/* ================================================================ 2.6.0: the pages in a sidebar on the left, a slim top bar,
-   and two glass themes (Ocean and Graphite): soft colored light far behind, frosted glass on top */
-:root { --side-w: 232px; --gap: 14px; }
+/* ================================================================ 3.0: simple and professional. The pages are listed down the left
+   in groups (like a pro app), the page titles are calm, and only things that float are glass: the side bar,
+   the player and popups. Later restyles should build on this section. */
+:root { --side-w: 232px; --side-gap: 12px; --content-left: calc(var(--side-w) + var(--side-gap) * 2); }
 
-/* ---- the sidebar */
-.side {
-  position: fixed; z-index: 92; top: var(--gap); left: var(--gap); bottom: var(--gap); width: var(--side-w); box-sizing: border-box;
-  display: flex; flex-direction: column; padding: 18px 12px 12px; border-radius: 26px;
+/* A calm background: no grid, just two soft lights for the glass to catch */
+body::before, :root[data-theme="black"] body::before {
+  background-image: radial-gradient(760px 560px at 0% 0%, rgba(var(--accent-rgb), .055), transparent 70%),
+                    radial-gradient(900px 700px at 100% 105%, rgba(120, 140, 210, .07), transparent 70%);
+  background-size: auto; background-position: 0 0;
+}
+:root[data-theme="light"] body::before {
+  background-image: radial-gradient(760px 560px at 0% 0%, rgba(var(--accent-rgb), .12), transparent 70%),
+                    radial-gradient(900px 700px at 100% 105%, rgba(120, 140, 210, .14), transparent 70%);
+}
+
+body { padding-left: var(--content-left); }
+main { max-width: 1040px; padding: 16px 40px 40px; box-sizing: border-box; }
+
+/* ---- the side bar */
+.sidebar {
+  position: fixed; z-index: var(--z-tabs); top: var(--side-gap); bottom: var(--side-gap); left: var(--side-gap); width: var(--side-w);
+  box-sizing: border-box; display: flex; flex-direction: column; padding: 18px 10px 10px; border-radius: 20px;
   background: var(--gl-fill), var(--gl-tint); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
   box-shadow: var(--gl-rim), var(--gl-shadow);
 }
-.side .brand { padding: 0 8px 16px; gap: 10px; }
-.side .mark { width: 32px; height: 32px; border-radius: 10px; }
-.side .mark svg { width: 19px; height: 19px; }
-.side .word { font-size: 19px; }
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 14px; }
+.side-brand .mark { width: 30px; height: 30px; border-radius: 9px; flex: none; }
+.side-brand .mark svg { width: 20px; height: 20px; }
+.side-brand .word { font: 700 17px var(--head); letter-spacing: -.02em; }
 
-/* the pages: a list instead of the floating bar */
-.side .tabs {
-  position: relative; top: auto; z-index: auto; display: flex; flex-direction: column; align-self: stretch; gap: 1px;
-  width: auto; max-width: none; margin: 0; padding: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
-  border-radius: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+.sidebar .tabs {
+  position: relative; top: auto; z-index: auto; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; align-self: stretch; gap: 1px; width: auto; max-width: none;
+  margin: 0; padding: 0; border-radius: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
 }
-.side .tabs::after { display: none; }
-.side .tabs button {
-  all: unset; box-sizing: border-box; cursor: pointer; position: relative; z-index: 1; flex: none;
-  display: flex; align-items: center; gap: 11px; width: 100%; height: 38px; padding: 0 12px; border-radius: 12px;
-  font: 500 14px var(--head); letter-spacing: -.005em; white-space: nowrap;
-  color: color-mix(in srgb, var(--text) 66%, transparent);
-  transition: color .3s var(--ease), background-color .3s var(--ease), transform .35s var(--spring);
+.sidebar .tabs::after { display: none; }
+.sidebar .tabs button, .side-link {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box;
+  padding: 9px 12px; margin: 0; border: 0; border-radius: 10px; background: none; box-shadow: none;
+  font: 500 14px/1.2 var(--head); letter-spacing: -.005em; text-align: left; white-space: nowrap; cursor: pointer;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
 }
-.side .tabs button span { display: inline; overflow: hidden; text-overflow: ellipsis; }
-.side .tabs button svg { width: 18px; height: 18px; flex: none; opacity: .9; }
-.side .tabs button:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
-.side .tabs button:active { transform: scale(.97); }
-.side .tabs button.active, .side .tabs .chat-button.open { color: var(--text); background: transparent; }
-.side .tabs button.active svg, .side .tabs .chat-button.open svg { color: var(--accent); opacity: 1; filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), .45)); }
-/* while the chat is open, the page under it isn't the picked one */
-body.chat-page .side .tabs button.active:not(.chat-button) { color: color-mix(in srgb, var(--text) 66%, transparent); }
-body.chat-page .side .tabs button.active:not(.chat-button) svg { color: inherit; filter: none; opacity: .9; }
-.side .tabs .tab-line { left: 0; right: 0; top: 0; bottom: auto; width: auto; border-radius: 12px; }
-.side .tabs .tab-line.ready { transition: transform .5s var(--ease), height .5s var(--ease), opacity .2s; }
-@keyframes lens-stretch { 35% { scale: .97 1.12; } 70% { scale: 1.01 .97; } }
-.nav-label { margin: 14px 12px 5px; font: 600 10.5px var(--head); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); opacity: .75; }
-.side .chat-badge, .side .tab-badge { position: static; margin-left: auto; box-shadow: none; }
-.side .chat-badge { min-width: 19px; height: 19px; line-height: 19px; border-radius: 10px; background: var(--accent); color: var(--ink); }
+.sidebar .tabs button svg, .side-link svg { width: 18px; height: 18px; flex: none; opacity: .9; color: currentColor; }
+.sidebar .tabs button:hover, .side-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.sidebar .tabs button.active { color: var(--text); font-weight: 600; background: none; }
+.sidebar .tabs button.active svg { color: var(--accent); }
+:root[data-theme="light"] .sidebar .tabs button.active svg { color: var(--text); }
+.sidebar .tabs .tab-badge { position: static; margin-left: auto; }
+/* the glass drop under the open page slides up and down the list */
+.sidebar .tabs .tab-line { top: 0; left: 0; bottom: auto; border-radius: 10px; }
+.sidebar .tabs .tab-line.ready { transition: transform .5s var(--ease), height .5s var(--ease), width .5s var(--ease), opacity .2s; }
+.sidebar .tabs .tab-line.moving { animation: lens-drop .5s var(--ease); }
+@keyframes lens-drop { 35% { scale: .97 1.12; } 70% { scale: 1.01 .97; } }
 
-/* who's online and your account, at the bottom */
-.side-bottom { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-.side-crew:not([hidden]) {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 9px; width: 100%; height: auto; box-sizing: border-box;
-  padding: 11px 12px; border-radius: 16px; font: 500 12.5px var(--head); color: var(--muted);
-}
-.side-crew:hover, .side-crew.open { color: var(--text); }
-.side-crew-top { display: flex; align-items: center; gap: 8px; }
-.side-crew .chat-unread { display: none; }
-.side-faces { display: flex; padding-left: 2px; }
-.side-faces:empty { display: none; }
-.side-faces .avatar { width: 26px; height: 26px; margin-left: -4px; font-size: 10px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg) 85%, transparent); }
-.side-faces .avatar:first-child { margin-left: 0; }
-.side .account { width: 100%; }
-.side .account-button {
-  display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: auto; box-sizing: border-box;
-  padding: 7px 8px; border: 0; border-radius: 14px; background: none; box-shadow: none;
-}
-.side .account-button:hover, .side .account-button[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.side .account-button .avatar { width: 34px; height: 34px; flex: none; }
-.me-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.me-text b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.me-text small { font-size: 12px; color: var(--muted); }
-.side .account-button.has-news::after { left: 32px; right: auto; top: 6px; }
-.side .account-panel { left: 0; right: auto; top: auto; bottom: calc(100% + 8px); transform-origin: bottom left;
-  /* (glass inside the glass sidebar can't blur what's behind it, so this one is solid) */
-  background: var(--gl-fill), var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.tab-group { padding: 18px 12px 7px; font: 600 11px/1 var(--head); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.side-foot { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--gl-line); }
+.side-link .chat-badge { position: static; margin-left: auto; }
+.side-link.open { color: var(--text); background: var(--gl-lens); box-shadow: var(--gl-rim-soft); }
 
-/* the same for the menus inside the glass top bar */
-.top .help-pop { background: var(--gl-fill), var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* ---- the top bar: just the buttons on the right */
+.top { justify-content: flex-end; margin-bottom: 14px; min-height: 40px; }
 
-/* ---- the page, to the right of the sidebar */
-main, body.doc-open main {
-  max-width: none; min-height: 100vh; box-sizing: border-box;
-  margin: 0 0 0 calc(var(--side-w) + var(--gap)); padding: var(--gap) calc(var(--gap) + 14px) 26px calc(var(--gap) + 8px);
-}
-main > .tab-page, main > .notice, main > .footer { width: 100%; max-width: 1180px; margin-left: auto; margin-right: auto; }
-
-/* the top bar: what page this is, where files go, and the round buttons */
-.top {
-  position: sticky; top: var(--gap); z-index: 40; height: 56px; box-sizing: border-box; margin: 0 0 26px; padding: 0 10px 0 22px;
-  border-radius: 20px; background: var(--gl-fill), var(--gl-tint); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
-  box-shadow: var(--gl-rim), var(--gl-shadow);
-}
-.crumb { display: flex; align-items: baseline; gap: 9px; min-width: 0; white-space: nowrap; }
-.crumb b { font: 600 15.5px var(--head); letter-spacing: -.01em; }
-.crumb span { font-size: 12.5px; color: var(--muted); }
-.top-right { gap: 6px; }
-.top-right .where {
-  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; margin-right: 4px; border-radius: 18px;
-  font-size: 13px; background: var(--gl-field); box-shadow: var(--gl-rim-soft);
-}
-.top-right .where .link { font-size: 13px; }
-
-/* page titles: one line, the second half in grey (like the mockup) */
-.headline { font-size: 34px; line-height: 1.12; letter-spacing: -.03em; margin-bottom: 22px; }
+/* ---- page titles: one calm line with a short grey line under it */
+.headline { font: 700 30px/1.15 var(--head); letter-spacing: -.025em; margin: 6px 0 26px; }
 .headline br { display: none; }
-.headline em { font-weight: 500; }
-.headline em::before { content: " "; }
+.headline em { display: block; margin-top: 6px; font: 400 15px/1.4 var(--head); letter-spacing: 0; color: var(--muted); }
 
-/* the chat opens next to the sidebar (the sidebar stays, so you can go straight to another page) */
-.chat-panel, body.has-player .chat-panel { top: var(--gap); right: var(--gap); bottom: var(--gap); left: calc(var(--side-w) + 2 * var(--gap)); border-radius: 26px; }
-/* the player floats along the bottom, next to the sidebar */
-.player-bar { left: calc(var(--side-w) + 2 * var(--gap)); right: var(--gap); bottom: var(--gap); height: 76px; border-radius: 24px; }
+/* ---- calmer controls: soft corners instead of pills, no glow */
+.convert, .small-button:not(.ghost-button):not(.outline-button) {
+  border-radius: 10px; background-image: none; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12);
+}
+.convert:hover:not(:disabled) { filter: brightness(1.05); box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.input { border-radius: 10px; }
+.toggle button, .chips button, .quality, .lib-tools .find-open, .lib-people-button, .ghost-button, .outline-button { border-radius: 9px; }
+.side-item.lib-cat, .lib-cats-pill { border-radius: 9px; }
+.head-button, .online-pill { box-shadow: none; background: none; }
+.head-button:hover, .online-pill:hover { background: color-mix(in srgb, var(--text) 6%, transparent); box-shadow: none; }
 
-/* Channel stats has its own place in the sidebar now, so no "back to Home" link */
-#statsBack { display: none; }
-
-/* Docs focus mode: only the page */
-body.doc-focus .side { display: none; }
-body.doc-focus main { margin-left: 0; }
-
-/* smaller windows: the sidebar keeps only its icons (the name shows when you point at one) */
-@media (max-width: 1020px) { :root { --side-w: 200px; } .top-right .where { display: none; } }
-@media (max-width: 880px) {
-  :root { --side-w: 68px; }
-  .side { padding: 14px 8px 10px; align-items: stretch; }
-  .side .brand { justify-content: center; padding: 0 0 12px; }
-  .side .word, .nav-label, .side .tabs button span, .me-text, .side-crew-top span, .side-faces { display: none; }
-  .nav-label { display: block; height: 1px; margin: 9px 10px; padding: 0; overflow: hidden; color: transparent; background: var(--gl-line); opacity: 1; }
-  .side .tabs button { justify-content: center; padding: 0; }
-  .side .chat-badge, .side .tab-badge { position: absolute; top: 2px; right: 4px; margin: 0; }
-  .side-crew:not([hidden]) { align-items: center; padding: 10px 0; }
-  .side .account-button { justify-content: center; padding: 6px 0; }
-  .top-right .where { display: none; }
+/* cards: a quiet panel with a hairline edge */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list {
+  background: color-mix(in srgb, var(--panel) 55%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); border-radius: 14px;
+}
+.channel-card:hover, .home-card:hover { background: color-mix(in srgb, var(--panel) 75%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); }
+:root[data-theme="light"] .home-card, :root[data-theme="light"] .channel-card, :root[data-theme="light"] .sound-list,
+:root[data-theme="light"] .stats-card, :root[data-theme="light"] .upload-card, :root[data-theme="light"] .copy-card {
+  background: rgba(255, 255, 255, .7); box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08), 0 1px 2px rgba(20, 25, 40, .04);
 }
 
-/* the page is narrower next to the sidebar: the Library tools wrap a bit sooner */
-@media (max-width: 1180px) {
-  .lib-tools { flex-wrap: wrap; }
-  .lib-tools .history-search { flex: 1 1 100%; }
-}
-/* short windows: a tighter sidebar, so every page still fits */
-@media (max-height: 740px) {
-  .side { padding-top: 14px; }
-  .side .brand { padding-bottom: 10px; }
-  .side .tabs button { height: 34px; }
-  .nav-label { margin-top: 10px; margin-bottom: 3px; }
-  .side-faces { display: none; }
-  .side-crew:not([hidden]) { padding: 9px 12px; }
-}
+/* ---- things fixed to the window leave room for the side bar */
+.player-bar { left: var(--content-left); }
+.lib-genres { top: 16px; }
+html { scroll-padding-top: 16px; }
 
-/* ---- the glass themes: Ocean (blue) and Graphite (grey) */
-:root[data-theme="ocean"], :root[data-theme="graphite"] { color-scheme: dark; }
-:root[data-theme="ocean"] {
-  --bg: #050a14; --panel: #0e1729; --panel2: #18253d; --line: rgba(150, 180, 230, .16); --line2: rgba(150, 180, 230, .28);
-  --text: #f2f6fc; --muted: #94a5c0; --bars: rgba(200, 220, 255, .24); --bars-hover: rgba(200, 220, 255, .45); --wave: #d5e2f7;
-  --shade: rgba(5, 10, 20, .72); --check-a: #13203a; --check-b: #0d172b;
-  --gl-tint: rgba(12, 24, 48, .30); --gl-card: rgba(140, 180, 255, .045); --gl-line: rgba(150, 190, 255, .09);
-  --gl-field: linear-gradient(180deg, rgba(160, 200, 255, .09), rgba(160, 200, 255, .04));
-  --glow-1: rgba(30, 110, 255, .46); --glow-2: rgba(40, 210, 230, .30); --glow-3: rgba(80, 60, 230, .36); --glow-4: rgba(20, 140, 210, .30);
-  --glow-5: rgba(80, 170, 255, .20); --glow-base: #050a14;
+/* ---- folded in (or a narrow window): the side bar shows icons only (the name shows when you point at it) */
+html.side-small { --side-w: 64px; }
+.sidebar { transition: width .45s var(--ease); }
+body { transition: padding-left .45s var(--ease); }
+.player-bar, .chat-panel { transition: left .45s var(--ease); }
+html.side-small .side-brand { flex-direction: column; gap: 12px; padding: 0 0 12px; }
+html.side-small .side-name, html.side-small .sidebar .tabs button span, html.side-small .side-link span { display: none; }
+html.side-small .sidebar .tabs button, html.side-small .side-link { justify-content: center; padding: 10px 0; }
+html.side-small .tab-group { height: 1px; padding: 0; margin: 10px 8px; overflow: hidden; color: transparent; background: var(--gl-line); }
+html.side-small .side-link .chat-badge, html.side-small .sidebar .tabs .tab-badge { position: absolute; top: 2px; right: 6px; margin: 0; }
+@media (max-width: 900px) { main { padding: 12px 22px 32px; } .side-fold { display: none; } }
+/* the Library's own genre list sits next to the side bar now: a bit narrower, and the search row wraps */
+#sfxMain.lib-layout.has-genres { grid-template-columns: 176px minmax(0, 1fr); gap: 22px; }
+.lib-tools { flex-wrap: wrap; }
+.lib-tools .history-search { flex: 1 1 220px; }
+/* the open page: a quiet drop of glass, not a bright one */
+.sidebar .tabs .tab-line { background: color-mix(in srgb, var(--text) 9%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 0 0 .5px rgba(255, 255, 255, .1); }
+.sidebar .tabs .tab-line::after { display: none; }
+:root[data-theme="light"] .sidebar .tabs .tab-line { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .1), inset 0 0 0 .5px rgba(20, 25, 40, .08); }
+.sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .025)), var(--gl-tint); }
+:root[data-theme="light"] .sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, .75), rgba(255, 255, 255, .5)), var(--gl-tint); }
+.lib-tools .history-search { flex: 1 1 150px; }
+/* the chat opens next to the side bar, so the pages stay one click away */
+.chat-panel, body.has-player .chat-panel { left: var(--content-left); }
+body.chat-page::after { left: calc(var(--content-left) - var(--side-gap)); }
+/* (the side bar's list is not a glass bar of its own in any theme) */
+.sidebar #tabs { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 0; }
+/* menus and popups: thicker glass, so what's behind never shows through as a smudge */
+.account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu { --gl-tint: rgba(28, 28, 32, .86); }
+:root[data-theme="light"] .account-panel, :root[data-theme="light"] .help-pop, :root[data-theme="light"] .people-pop,
+:root[data-theme="light"] .volume-pop, :root[data-theme="light"] .lib-menu { --gl-tint: rgba(255, 255, 255, .88); }
+
+/* ---- the name, the version, and the fold button at the top of the side bar */
+.side-brand { position: relative; padding-right: 4px; }
+.side-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.side-name small { font: 500 11.5px/1.2 var(--head); color: var(--muted); white-space: nowrap; }
+.side-fold { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px;
+  background: none; color: var(--muted); cursor: pointer; transition: color .2s, background-color .2s; }
+.side-fold:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.side-fold svg { width: 18px; height: 18px; transition: transform .45s var(--ease); }
+.side-fold.folded svg { transform: scaleX(-1); }
+
+/* ================================================================ 3.0: Settings, like a pro app: pages on the left, tidy rows on the right */
+.settings-dialog.set2 { width: min(780px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: none; padding: 0;
+  display: grid; grid-template-columns: 210px minmax(0, 1fr); overflow: hidden; }
+.set-nav { display: flex; flex-direction: column; gap: 2px; padding: 22px 12px 16px; border-right: 1px solid var(--gl-line);
+  background: color-mix(in srgb, var(--text) 3%, transparent); }
+.set-nav h2 { margin: 0 10px 14px; font: 700 20px var(--head); letter-spacing: -.02em; }
+.set-nav button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px;
+  background: none; color: color-mix(in srgb, var(--text) 75%, transparent); font: 500 14px var(--head); text-align: left; cursor: pointer; }
+.set-nav button svg { width: 18px; height: 18px; flex: none; }
+.set-nav button:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.set-nav button.active { color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
+.set-nav button.active svg { color: var(--accent); }
+:root[data-theme="light"] .set-nav button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .1); }
+:root[data-theme="light"] .set-nav button.active svg { color: var(--text); }
+.set-about { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 10px; font-size: 12px; color: var(--muted); }
+.set-about b { color: var(--text); font: 600 13px var(--head); }
+
+.set-main { position: relative; overflow-y: auto; padding: 24px 28px 28px; }
+.set-close { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 50%; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--muted); cursor: pointer; }
+.set-close:hover { color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); }
+.set-close svg { width: 15px; height: 15px; }
+.set-page:not([hidden]) { animation: set-in .35s var(--ease-out) both; }
+@keyframes set-in { from { opacity: 0; transform: translateY(6px); } }
+.set-title { margin: 2px 0 18px; font: 700 22px var(--head); letter-spacing: -.02em; }
+.set-label { margin: 18px 4px 8px; font: 600 12px var(--head); color: var(--muted); }
+.set-title + .set-label { margin-top: 0; }
+.set-group { border-radius: 12px; background: color-mix(in srgb, var(--text) 4.5%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); overflow: hidden; }
+:root[data-theme="light"] .set-group { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+.set-group.set-pad { padding: 14px 16px; }
+.set-row { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 58px; padding: 10px 16px; margin: 0; cursor: default; }
+.set-row + .set-row { box-shadow: inset 0 1px 0 var(--gl-line); }
+label.set-row, .set-choice-label { cursor: pointer; }
+.set-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.set-text b { font: 500 14px var(--head); color: var(--text); }
+.set-text small { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.set-folder { font-weight: 700; }
+.set2 .check.set-row { display: flex; }
+.set2 .check.set-row input { order: 2; margin: 0 0 0 auto; flex: none; }
+.set-choice-label { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.set-choice input[type=radio] { flex: none; width: 18px; height: 18px; margin: 0; }
+.set-button { flex: none; padding: 7px 14px; font-size: 13px; }
+.set-help { margin: 8px 4px 0; padding: 0; font-size: 12.5px; color: var(--muted); }
+.set2 .theme-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.set2 .theme-picks button { width: auto; }
+.set2 .volume-row, .set2 .size-row { padding: 0; background: none; margin: 0; }
+.set2 .accent-picks { margin: 0; }
+@media (max-width: 640px) {
+  .settings-dialog.set2 { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .set-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--gl-line); padding: 12px; }
+  .set-nav h2, .set-about { display: none; }
+  .set-nav button { width: auto; flex: none; }
 }
-:root[data-theme="ocean"], :root[data-theme="graphite"] { --switch-on: var(--accent); }
-:root[data-theme="graphite"] {
-  --bg: #0b0b0d; --panel: #18181b; --panel2: #232327; --line: rgba(200, 200, 215, .13); --line2: rgba(200, 200, 215, .24);
-  --text: #f4f4f6; --muted: #9a9aa3; --bars: rgba(255, 255, 255, .22); --bars-hover: rgba(255, 255, 255, .42); --wave: #dcdce2;
-  --shade: rgba(11, 11, 13, .72); --check-a: #1d1d21; --check-b: #141417;
-  --gl-tint: rgba(28, 28, 32, .32); --gl-card: rgba(255, 255, 255, .04); --gl-line: rgba(255, 255, 255, .07);
-  --glow-1: rgba(160, 160, 180, .30); --glow-2: rgba(110, 110, 130, .30); --glow-3: rgba(175, 175, 190, .18); --glow-4: rgba(90, 90, 110, .26);
-  --glow-5: rgba(210, 210, 225, .12); --glow-base: #0a0a0c;
-}
-/* the light far behind the glass (drawn once on a fixed layer, so scrolling never repaints it) */
-:root[data-theme="ocean"] body::before, :root[data-theme="graphite"] body::before {
-  background-image:
-    radial-gradient(560px 460px at 6% 14%, var(--glow-1), transparent 70%),
-    radial-gradient(680px 560px at 96% 4%, var(--glow-3), transparent 70%),
-    radial-gradient(620px 520px at 72% 104%, var(--glow-2), transparent 70%),
-    radial-gradient(560px 440px at 22% 108%, var(--glow-4), transparent 70%),
-    radial-gradient(420px 360px at 46% 42%, var(--glow-5), transparent 70%);
-  background-size: auto; background-position: 0 0; background-color: var(--glow-base);
-}
-:root[data-theme="ocean"], :root[data-theme="graphite"] { background-color: var(--glow-base); }
-/* clearer glass: the cards let the light through, floating things blur it */
-:root[data-theme="ocean"] .home-card, :root[data-theme="ocean"] .channel-card, :root[data-theme="ocean"] .sound-list,
-:root[data-theme="graphite"] .home-card, :root[data-theme="graphite"] .channel-card, :root[data-theme="graphite"] .sound-list { border-radius: 22px; }
-:root[data-theme="ocean"] .convert, :root[data-theme="graphite"] .convert,
-:root[data-theme="ocean"] .small-button:not(.ghost-button):not(.outline-button), :root[data-theme="graphite"] .small-button:not(.ghost-button):not(.outline-button) {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 60%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), inset 0 -2px 5px rgba(0, 0, 0, .14), 0 8px 24px rgba(var(--accent-rgb), .32);
-}
-:root[data-theme="ocean"] .chat-panel, :root[data-theme="graphite"] .chat-panel, :root[data-theme="ocean"] body.has-player .chat-panel,
-:root[data-theme="graphite"] body.has-player .chat-panel { background: var(--gl-fill), color-mix(in srgb, var(--bg) 58%, transparent); }
-:root[data-theme="ocean"] body.chat-page::after, :root[data-theme="graphite"] body.chat-page::after { background: none; }
-/* behind the chat, the page is hidden (the glass then shows the light, not a page full of words) */
-body.chat-page main { visibility: hidden; }
-/* the player sits over the list: solid, so the rows behind never show through (it keeps the glass edge and shine) */
-.player-bar { background: var(--gl-fill), var(--panel); }
-
-/* Settings: the five themes */
-.theme-picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.theme-sample.ocean { background: radial-gradient(circle at 20% 25%, rgba(30, 110, 255, .9), transparent 60%), radial-gradient(circle at 85% 80%, rgba(40, 210, 230, .7), transparent 60%), #050a14; }
-.theme-sample.graphite { background: radial-gradient(circle at 20% 25%, rgba(170, 170, 190, .55), transparent 60%), radial-gradient(circle at 85% 80%, rgba(120, 120, 140, .5), transparent 60%), #0b0b0d; }
-.theme-sample.ocean i, .theme-sample.graphite i { color: #f2f6fc; }
-
-/* ================================================================ 2.6.0: the Library like the mockup: Find sounds and Upload next to
-   the title, one row of controls (a segmented category picker, search, people, sort), genres on the left, and calmer rows:
-   play, name, waveform, length, who uploaded it, then star, download and a "···" menu with the rest */
-.lib-head { align-items: center; margin-bottom: 20px; }
-.lib-head .headline { margin-bottom: 0; }
-.lib-head-tools { display: flex; align-items: center; gap: 8px; flex: none; }
-.lib-head-tools[hidden] { display: none; }
-.lib-head-tools .find-open, .lib-head-tools .sfx-upload-button { height: 40px; padding: 0 18px; border-radius: 999px; gap: 8px; }
-
-/* the controls run across the whole width, above the genres and the list */
-#sfxMain .lib-tools { grid-column: 1 / -1; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
-#sfxMain .lib-tools .history-search { flex: 1 1 120px; min-width: 110px; height: 42px; }
-/* (the picker shows just the names, and the star for Favorites, so the whole row fits like the mockup) */
-#sfxMain .side-item.lib-cat svg { display: none; }
-#sfxMain .side-item.lib-cat.cat-favorites svg { display: block; }
-#sfxMain.lib-layout.has-genres { grid-template-columns: 200px minmax(0, 1fr); gap: 14px 16px; }
-.lib-genres { top: 84px; }
-
-/* the categories: one segmented control with a glass lens on the picked one */
-#sfxMain .lib-cats { flex: 0 1 auto; margin: 0; padding: 4px; gap: 2px; border-radius: 999px; background: var(--gl-field); box-shadow: var(--gl-rim-soft); }
-#sfxMain .lib-cats-pill { top: 4px; height: 34px; }
-#sfxMain .side-item.lib-cat { height: 34px; padding: 0 13px; gap: 6px; background: transparent; box-shadow: none; }
-#sfxMain .side-item.lib-cat:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
-#sfxMain .side-item.lib-cat.active, #sfxMain .side-item.lib-cat.active:hover { background: transparent; }
-
-/* the list: one glass card; menus may hang out of it */
-.sound-list { overflow: visible; padding: 6px; border-radius: 22px; }
-.sound { gap: 14px; padding: 9px 10px; border-radius: 16px; }
-.sound + .sound, :root[data-theme="light"] .sound + .sound { background-position: 58px 0; background-size: calc(100% - 68px) 1px; }
-.sound .play { width: 36px; height: 36px; flex: none; }
-.sound.playing { background: rgba(var(--accent-rgb), .09); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .28); }
-.sound.playing + .sound { background-image: none; }
-.sound.playing .play {
-  background: linear-gradient(180deg, rgba(255, 255, 255, .4), rgba(255, 255, 255, 0) 60%), var(--accent); color: var(--ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 4px 14px rgba(var(--accent-rgb), .4);
-}
-.sound .sound-wave { flex: 0 1 28%; }
-.sound-info { min-width: 120px; }
-.sound-by { flex: none; width: 112px; display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; color: var(--muted); }
-.sound-by .avatar { width: 20px; height: 20px; font-size: 8px; flex: none; }
-.sound-by b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sound-by b:hover { color: var(--text); }
-.sound .actions { position: relative; min-width: 0; gap: 5px; opacity: 1; }
-.sound .actions .icon-button { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 50%; color: var(--muted); background: var(--gl-field); box-shadow: var(--gl-rim-soft); }
-.sound .actions .icon-button:hover { color: var(--text); }
-.sound .actions .icon-button svg { width: 14px; height: 14px; }
-.sound .actions .star.on { color: var(--accent); }
-.sound:has(.star.on) .actions button:not(.star) { opacity: 1; }
-
-/* the "···" menu */
-.sound-more-pop {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 210px; padding: 6px; border-radius: 14px;
-  background: var(--gl-fill), var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none;
-  box-shadow: var(--gl-rim), var(--gl-shadow); animation: pop-in .3s var(--ease) both; transform-origin: top right;
-}
-.sound-more-pop[hidden] { display: none; }
-.lib-menu .sound-more-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; font-size: 13.5px; color: var(--text); }
-.sound-more-item svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
-.lib-menu .sound-more-item.danger, .sound-more-item.danger svg { color: var(--red); }
-
-/* narrow: the uploader goes first, then the waveform */
-@container (max-width: 680px) { .sound .sound-by { display: none; } }
-@media (max-width: 1180px) { #sfxMain .lib-tools .history-search { flex: 1 1 120px; } }
+.set-choice input[type=radio] { appearance: none; -webkit-appearance: none; display: grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--text) 30%, transparent); background: none; cursor: pointer; transition: border-color .2s, background-color .2s; }
+.set-choice input[type=radio]::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); transform: scale(0); transition: transform .25s var(--spring); }
+.set-choice input[type=radio]:checked { border-color: var(--accent); background: var(--accent); }
+.set-choice input[type=radio]:checked::after { transform: scale(1); }
+.set-button { height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 9px; }
+@media (max-width: 900px) { .side-fold { display: none; } }

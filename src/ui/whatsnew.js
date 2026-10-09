@@ -2,13 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.6.1", items: [
-    "A whole new look! The pages are in a sidebar on the left now, with names, so everything is one click away.",
-    "Chat and Channel stats have their own spots in the sidebar. Who's online and your account are at the bottom.",
-    "Two new glass themes: Ocean (blue) and Graphite (grey). Pick one in Settings, next to Dark, Black and Light.",
-    "A new White color, for the buttons and highlights.",
-    "A tidier Library: Find sounds and Upload are next to the title, and Send to chat, Check for copyright, Edit and Delete are in the ··· menu on each sound.",
-    "The \"Under 10 MB (Discord)\" and other size options are gone from Video and Files.",
+  { version: "2.7.0", items: [
+    "A new, simpler look! All the pages are now in a sidebar on the left, sorted into Convert, Create and Tools.",
+    "Fold the sidebar with the button next to the name to make it just icons, and open it again the same way.",
+    "The version you're on now shows right under VaultHub.",
+    "A tidier Settings window with pages on the left: General, Appearance, Sound and Performance.",
+    "The chat now opens next to the sidebar, so your pages stay one click away.",
   ] },
   { version: "2.5.1", items: [
     "Smoother everywhere: scrolling, the chat and long download lists take a lot less work now, and the app rests when it's minimized.",

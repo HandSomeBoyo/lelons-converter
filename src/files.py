@@ -147,9 +147,18 @@ class Files:
         settings = {
             "format": fmt,
             "quality": str(options.get("quality") or ""),
+            "targetMb": None,
             "normalize": bool(options.get("normalize")) and fmt != "gif",
             "folder": folder,
         }
+        if fmt == "mp4" and options.get("targetMb"):
+            try:
+                target = float(options["targetMb"])
+            except (TypeError, ValueError):
+                target = 0
+            if not 0.5 <= target <= 4000:
+                raise ValueError("Pick a size between 0.5 and 4000 MB.")
+            settings["targetMb"] = target
         with self.lock:
             for pick in picks:
                 item = next((i for i in self.items if i["id"] == str(pick.get("id"))), None)
@@ -205,10 +214,12 @@ class Files:
         stem = os.path.splitext(item["name"])[0] or "file"
         if trim:
             stem += " ({}-{})".format(*(f"{int(t) // 60}m{int(t) % 60:02d}s" for t in trim))
+        if fmt == "mp4" and job["targetMb"]:
+            stem += f" ({job['targetMb']:g} MB)"
         os.makedirs(job["folder"], exist_ok=True)
         temp = names.temp_path(job["folder"], stem, "." + fmt)
 
-        verb = "Making the GIF" if fmt == "gif" else "Converting"
+        verb = {"gif": "Making the GIF", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
 
         def progress(percent):
             if item.get("cancel"):
@@ -231,7 +242,8 @@ class Files:
             media.make_gif(item["path"], temp, width, trim, length, progress)
         elif fmt == "mp4":
             max_height = int(quality) if quality.isdigit() else None
-            media.convert_video(item["path"], temp, max_height, trim, job["normalize"], length, progress)
+            media.convert_video(item["path"], temp, max_height, job["targetMb"], trim, job["normalize"],
+                                length, progress)
         else:
             kbps = quality if quality.isdigit() else "192"
             media.convert_audio(item["path"], temp, fmt, kbps, trim, job["normalize"], length, progress)

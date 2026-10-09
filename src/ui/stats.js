@@ -241,5 +241,3 @@ document.querySelectorAll("#statsRange button").forEach((b) => b.addEventListene
   loadStats();
 }));
 window.addEventListener("resize", drawStatsRange);
-
-if (!$("statsTab").hidden) openStats(); // (the app opened on this page)

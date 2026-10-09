@@ -68,7 +68,7 @@ function smoothHidden(el) {
 
 document.querySelectorAll(".modal, #chatPanel, #libMenu").forEach(smoothHidden);
 
-// ---- the glass behind the open page in the sidebar (it slides up and down to the one you pick)
+// ---- the line under the active tab
 
 const tabLine = document.createElement("span");
 tabLine.className = "tab-line";
@@ -77,23 +77,22 @@ let tabLineReady = false;
 tabLine.addEventListener("animationend", () => tabLine.classList.remove("moving"));
 
 function moveTabLine() {
-  const tabs = document.getElementById("tabs");
-  // (the chat is a page too: while it's open the glass sits on Chat)
-  const active = tabs.querySelector(".chat-button.open") || tabs.querySelector("button.active");
+  const active = document.getElementById("tabs").querySelector("button.active");
   if (!active || document.querySelector("#accountTab:not([hidden])")) {
     tabLine.style.opacity = "0";
     return;
   }
   tabLine.style.opacity = "1";
-  const y = `translateY(${active.offsetTop}px)`;
-  // Moving to another page, the glass stretches a little on the way, like a drop of liquid.
-  if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== y && !reduceMotion.matches) {
+  const x = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`; // (the tabs are a list down the side)
+  // Moving to another tab, the glass stretches a little on the way, like a drop of liquid.
+  if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
     tabLine.classList.remove("moving");
     void tabLine.offsetWidth;
     tabLine.classList.add("moving");
   }
+  tabLine.style.width = active.offsetWidth + "px";
   tabLine.style.height = active.offsetHeight + "px";
-  tabLine.style.transform = y;
+  tabLine.style.transform = x;
   if (!tabLineReady) {
     // The first time it just appears there; after that it slides.
     tabLineReady = true;
@@ -114,3 +113,22 @@ window.addEventListener("resize", () => {
 });
 document.fonts && document.fonts.ready.then(moveTabLine);
 moveTabLine();
+
+// ---- the side bar: fold it in (icons only) and out again; remembered. A narrow window always shows it small.
+function drawSideFold() {
+  const small = sideSmallNow();
+  document.documentElement.classList.toggle("side-small", small);
+  const fold = document.getElementById("sideFold");
+  fold.title = small ? "Show the side bar" : "Make the side bar smaller";
+  fold.classList.toggle("folded", small);
+}
+document.getElementById("sideFold").addEventListener("click", () => {
+  savePref("sideSmall", !document.documentElement.classList.contains("side-small"));
+  drawSideFold();
+});
+window.addEventListener("resize", drawSideFold);
+// The glass under the open page follows once the side bar has changed size.
+document.getElementById("sidebar").addEventListener("transitionend", (e) => {
+  if (e.target.id === "sidebar" && e.propertyName === "width") window.dispatchEvent(new Event("resize"));
+});
+drawSideFold();

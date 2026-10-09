@@ -17,6 +17,10 @@ function savePref(key, value) {
                             body: JSON.stringify({ key, value }) }).catch(() => {});
 }
 
+// The side bar: small (icons only) when it was folded in, or when the window is narrow. Set before drawing.
+function sideSmallNow() { return loadPref("sideSmall") === true || innerWidth <= 900; }
+document.documentElement.classList.toggle("side-small", sideSmallNow());
+
 // accent -> [color on dark themes, darker color for the light theme]
 const ACCENT_COLORS = {
   yellow: ["#ffcf3f", "#e9ab00"],
@@ -27,11 +31,10 @@ const ACCENT_COLORS = {
   blue: ["#62adff", "#2f86ea"],
   teal: ["#45dccb", "#14ad9d"],
   green: ["#8fdc6a", "#4cb337"],
-  white: ["#f2f2f5", "#3a3a3f"],
 };
 
 function applyTheme(theme, accent) {
-  if (!["ocean", "graphite", "dark", "black", "light"].includes(theme)) theme = "ocean";
+  if (!["dark", "black", "light"].includes(theme)) theme = "dark";
   if (!ACCENT_COLORS[accent]) accent = "yellow";
   const root = document.documentElement;
   root.dataset.theme = theme;
