@@ -631,6 +631,11 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "chat-delete":
                 library.chat_delete(data.get("id"))
                 result = {}
+            elif action == "call":
+                result = library.call(data.get("what"), data.get("call"), data.get("with"), data.get("sdp"))
+            elif action == "call-ringing":  # someone is calling: the app blinks in the taskbar
+                appwindow.flash()
+                result = {}
             elif action == "profile":
                 result = {"profile": library.profile(data.get("username"))}
             elif action == "playlists":
@@ -1318,8 +1323,11 @@ def main():
         f.write(f"{server.server_port} {TOKEN}")
 
     media.use_gpu(state.hardware)
+    # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
+    browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
     if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too
-        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--disable-gpu"
+        browser_args.append("--disable-gpu")
+    os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(browser_args)
     appwindow.set_zoom(state.zoom)
     appwindow.set_dark(state.theme != "light")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")

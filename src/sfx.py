@@ -515,6 +515,25 @@ class Library:
     def chat_delete(self, message_id):
         self._remove_file(_rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id)))
 
+    def call(self, what, call_id=None, with_user=None, sdp=None):
+        """Calls in private chats: "check" (every few seconds), "start", "answer" or "end" (see lelons_call)."""
+        if what not in ("check", "start", "answer", "end"):
+            raise Error("That didn't work. Try again.")
+        result = _rpc("lelons_call", token=self._token(), what=what, call_id=str(call_id) if call_id else None,
+                      with_user=str(with_user) if with_user else None, sdp=str(sdp) if sdp else None) or {}
+        if not result.get("ok"):
+            raise Error({"yourself": "You can't call yourself.",
+                         "slow": "Slow down a little! Wait a moment before calling again.",
+                         "daily": "You've made a lot of calls today. Try again tomorrow.",
+                         "in_call": "You're already in a call.",
+                         "offline": f"{with_user} isn't online right now. They need the app open to get your call.",
+                         "busy": f"{with_user} is in another call right now.",
+                         "gone": "That call already ended.",
+                         }.get(result.get("error"), "The call didn't work. Try again."))
+        result["calls"] = [{**c, "avatarUrl": public_url(c["avatar"]) if c.get("avatar") else ""}
+                           for c in result.get("calls") or []]
+        return result
+
     def profile(self, username):
         result = _rpc("lelons_profile", token=self._token(), username=str(username or ""))
         result["avatarUrl"] = public_url(result["avatar"]) if result.get("avatar") else ""

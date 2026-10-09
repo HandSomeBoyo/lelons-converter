@@ -99,6 +99,19 @@ def set_dark(dark):
         window.title_bar()
 
 
+class FLASHWINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("hwnd", wintypes.HWND), ("dwFlags", wintypes.DWORD),
+                ("uCount", wintypes.UINT), ("dwTimeout", wintypes.DWORD)]
+
+
+def flash():
+    """Blink the app in the taskbar until it's looked at (when it isn't in front already)."""
+    window = _window
+    if window and window.alive and window.hwnd:
+        info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), window.hwnd, 3 | 12, 0, 0)  # FLASHW_ALL | FLASHW_TIMERNOFG
+        window.user32.FlashWindowEx(ctypes.byref(info))
+
+
 def active():
     window = _window
     return bool(window and window.alive and window.hwnd)
@@ -144,6 +157,7 @@ CONTROLLER_DONE = "6c4819f3-c9b7-4260-8127-c9f5bde7f68c"
 CLOSE_REQUESTED = "5c19e9e0-092f-486b-affa-ca8231913039"
 NEW_WINDOW_REQUESTED = "d4c185fe-c81c-4989-97af-2d3fa7ab5651"
 CONTROLLER2 = "c979903e-d4ca-4228-92eb-47ee3fa96eab"
+PERMISSION_REQUESTED = "15e1c6a3-c72a-4df3-91d7-d097fbec6bfd"
 
 
 class Handler:
@@ -399,6 +413,10 @@ class Window:
         popup = Handler(NEW_WINDOW_REQUESTED, self._new_window, with_result=False)
         self.handlers.append(popup)
         _method(self.webview, 44, ctypes.c_void_p, ctypes.POINTER(Token))(popup.pointer, ctypes.byref(token))
+        # The microphone for calls, without a question every time (the page's address changes each start).
+        allow = Handler(PERMISSION_REQUESTED, self._permission, with_result=False)
+        self.handlers.append(allow)
+        _method(self.webview, 23, ctypes.c_void_p, ctypes.POINTER(Token))(allow.pointer, ctypes.byref(token))
 
         self._fit()
         self._zoom()
@@ -451,6 +469,13 @@ class Window:
 
     def _close_requested(self, this, sender, args):
         self.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
+        return S_OK
+
+    def _permission(self, this, sender, args):
+        kind = ctypes.c_int()
+        _method(args, 4, ctypes.POINTER(ctypes.c_int))(ctypes.byref(kind))  # get_PermissionKind
+        if kind.value == 1:  # COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+            _method(args, 7, ctypes.c_int)(1)  # put_State: COREWEBVIEW2_PERMISSION_STATE_ALLOW
         return S_OK
 
     def _new_window(self, this, sender, args):
