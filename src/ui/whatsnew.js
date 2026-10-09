@@ -2,7 +2,7 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.6.0", items: [
+  { version: "2.7.0", items: [
     "A new, simpler look! All the pages are now in a sidebar on the left, sorted into Convert, Create and Tools.",
     "Fold the sidebar with the button next to the name to make it just icons, and open it again the same way.",
     "The version you're on now shows right under VaultHub.",
