@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.10.0", items: [
+    "Calls! Open a private chat and press Call at the top to talk to your friend.",
+    "Share your screen in a call: press the screen button and pick a window or your whole screen. Their screen opens big, and you can make it small or full screen.",
+    "Someone calling you? A card pops up with Answer and Decline, even when the chat is closed, and the app blinks in the taskbar.",
+    "Mute yourself any time, and see how long you've been talking. Missed calls show up in the chat with a Call back button.",
+  ] },
   { version: "2.9.0", items: [
     "Playlists in the Library! Make your own lists of the sounds you use most. Only you can see them.",
     "Click the new playlist button on any sound to put it in a playlist, or to make a new one right there.",
