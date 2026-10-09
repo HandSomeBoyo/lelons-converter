@@ -3610,3 +3610,75 @@ label.set-row, .set-choice-label { cursor: pointer; }
 .set-choice input[type=radio]:checked::after { transform: scale(1); }
 .set-button { height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 9px; }
 @media (max-width: 900px) { .side-fold { display: none; } }
+
+/* ---------------------------------------------------------------- 2.8.0: Docs folders, and pages of their own kind */
+.docs-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: -6px 0 18px; }
+.docs-crumbs i { color: var(--muted); font-style: normal; opacity: .6; padding: 0 2px; }
+.docs-crumb {
+  all: unset; display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-radius: 9px; cursor: pointer;
+  color: var(--muted); font: 500 14px var(--head); max-width: 260px;
+}
+.docs-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-crumb svg { width: 16px; height: 16px; flex: none; }
+.docs-crumb:hover { background: var(--panel); color: var(--text); }
+.docs-crumb.on { color: var(--text); font-weight: 600; cursor: default; background: none; }
+.docs-crumb.on svg { color: var(--accent); }
+:root[data-theme="light"] .docs-crumb.on svg { color: var(--accent-text); }
+.docs-crumb.drop-in { background: rgba(var(--accent-rgb), .18); color: var(--text); }
+
+.doc-thumb-folder { background: var(--panel); }
+.doc-thumb-folder .doc-plus svg { width: 54px; height: 54px; stroke-width: 1.4; }
+
+.docs-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.docs-folders[hidden] { display: none; }
+.folder-card {
+  position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 8px 10px 12px; box-sizing: border-box;
+  border-radius: 14px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; outline: none;
+  transition: transform .3s var(--spring), box-shadow .2s var(--ease), background-color .2s var(--ease);
+}
+.folder-card:hover, .folder-card:focus-visible { background: var(--panel2); transform: translateY(-2px); }
+.folder-card:active { transform: scale(.98); transition-duration: .12s; }
+.folder-card > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.folder-card b { font: 600 14px var(--head); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder-card small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder-icon { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: rgba(var(--accent-rgb), .14); color: var(--accent); }
+:root[data-theme="light"] .folder-icon { color: var(--accent-text); }
+.folder-icon svg { width: 20px; height: 20px; }
+.folder-card:hover .doc-card-more, .folder-card:focus-within .doc-card-more { opacity: 1; }
+.folder-card.drop-in { box-shadow: inset 0 0 0 2px var(--accent); background: rgba(var(--accent-rgb), .12); transform: scale(1.03); }
+.folder-card.dragging, .doc-card.dragging { opacity: .45; }
+.doc-card[draggable="true"], .folder-card { -webkit-user-drag: element; } /* (all: unset takes it away) */
+
+.doc-move-dialog { width: min(440px, 100%); }
+.doc-move-list { display: flex; flex-direction: column; gap: 2px; max-height: 50vh; overflow: auto; margin: 14px 0 6px; }
+.doc-move-row {
+  all: unset; display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px calc(10px + var(--depth, 0) * 20px); border-radius: 10px;
+  cursor: pointer; font-size: 14px; color: var(--text);
+}
+.doc-move-row svg { width: 17px; height: 17px; flex: none; color: var(--accent); }
+:root[data-theme="light"] .doc-move-row svg { color: var(--accent-text); }
+.doc-move-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-move-row small { color: var(--muted); font-size: 12px; }
+.doc-move-row:hover:not(:disabled) { background: var(--panel2); }
+.doc-move-row:disabled { cursor: default; opacity: .5; }
+.doc-move-row.on:disabled { opacity: 1; }
+
+/* the tabs over the page: one per page at the top (the story, the script...) */
+.doc-sheet { display: flex; flex-direction: column; min-width: 0; }
+.doc-parts { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.doc-parts::-webkit-scrollbar { display: none; }
+.doc-part {
+  all: unset; flex: none; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 11px; max-width: 220px; box-sizing: border-box;
+  border-radius: 10px; cursor: pointer; color: var(--muted); font: 500 13.5px var(--head); background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line); transition: background-color .2s var(--ease), color .2s var(--ease);
+}
+.doc-part span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-part svg { width: 15px; height: 15px; flex: none; }
+.doc-part:hover { color: var(--text); background: var(--panel2); }
+.doc-part.on { color: var(--text); font-weight: 600; background: rgba(var(--accent-rgb), .16); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .45); }
+.doc-part.on svg { color: var(--accent); }
+:root[data-theme="light"] .doc-part.on svg { color: var(--accent-text); }
+.doc-part-add { background: none; box-shadow: none; padding: 0 10px; }
+.doc-part-add:hover { background: var(--panel); }
+body.doc-printing .doc-parts { display: none !important; }
+body.doc-printing .doc-sheet { display: block; }

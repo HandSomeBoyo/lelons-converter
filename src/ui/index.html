@@ -487,6 +487,7 @@
         </div>
       </div>
       <div id="docsMain">
+        <nav class="docs-crumbs" id="docsCrumbs" hidden></nav>
         <h3 class="docs-label">Start something new</h3>
         <div class="docs-templates" id="docsTemplates"></div>
         <div class="docs-list-head">
@@ -495,6 +496,7 @@
           <button type="button" class="docs-sort" id="docsSort" title="Sort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/></svg><span>Newest first</span></button>
           <label class="input docs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="docsSearch" placeholder="Search" autocomplete="off" spellcheck="false"></label>
         </div>
+        <div class="docs-folders" id="docsFolders"></div>
         <div class="docs-grid" id="docsGrid"></div>
         <p class="docs-empty" id="docsEmpty" hidden></p>
       </div>
@@ -540,8 +542,11 @@
           <div id="docOutlineList"></div>
         </aside>
         <div class="doc-canvas" id="docCanvas">
-          <div class="doc-page" id="docPage">
-            <div class="doc-text" id="docText" contenteditable="true" spellcheck="true"></div>
+          <div class="doc-sheet">
+            <div class="doc-parts" id="docParts"></div>
+            <div class="doc-page" id="docPage">
+              <div class="doc-text" id="docText" contenteditable="true" spellcheck="true"></div>
+            </div>
           </div>
         </div>
         <aside class="doc-guide" id="docGuide" hidden>
@@ -1088,6 +1093,19 @@
     <div class="dialog-actions">
       <span class="spacer"></span>
       <button type="button" class="small-button" id="docTypeCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="docMoveModal" hidden>
+  <div class="dialog doc-move-dialog" role="dialog" aria-labelledby="docMoveTitle">
+    <h2 id="docMoveTitle">Move to a folder</h2>
+    <p class="sub" id="docMoveText"></p>
+    <div class="doc-move-list" id="docMoveList"></div>
+    <div class="dialog-actions">
+      <button type="button" class="outline-button" id="docMoveNew">New folder</button>
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docMoveCancel">Cancel</button>
     </div>
   </div>
 </div>
