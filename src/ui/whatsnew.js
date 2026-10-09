@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.8.0", items: [
+    "Folders in Docs! Press New folder to keep a project together, and put folders inside folders too.",
+    "Drag a document onto a folder to put it in there, or use ··· and Move to folder.",
+    "Keep everything for one film in one document: press + above the page and add a movie script, a shot list or notes. Each one gets its own tab and its own guide.",
+    "A new kind of document: Story and ideas, for writing down your story and everything you think of.",
+    "Your Docs settings (like the dark page) are now remembered after you close the app.",
+    "Make a copy now keeps all the pages of a document.",
+  ] },
   { version: "2.7.0", items: [
     "A new, simpler look! All the pages are now in a sidebar on the left, sorted into Convert, Create and Tools.",
     "Fold the sidebar with the button next to the name to make it just icons, and open it again the same way.",
