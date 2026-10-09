@@ -101,7 +101,7 @@ def _summary(doc):
     blocks = doc.get("blocks") or []
     return {"id": doc["id"], "title": _title(doc.get("title")), "kind": doc.get("kind", "doc"),
             "updated_at": doc.get("updated", 0), "preview": [b["html"][:2000] for b in [b for b in blocks if "~" not in b["id"]][:14]],
-            "settings": doc.get("settings") or {}}
+            "settings": doc.get("settings") or {}, "pages": 1 + sum(1 for b in blocks if b["id"].startswith("t~"))}
 
 
 _summaries = {}  # id -> ((mtime, size), summary): the list is asked for often, the files can be big
@@ -160,6 +160,59 @@ def local_delete(doc_id):
             os.remove(_path(doc_id))
         except FileNotFoundError:
             pass
+
+
+# ---------------------------------------------------------------- folders (only on this computer)
+
+FOLDERS_FILE = os.path.join(FOLDER, "folders.json")
+_FOLDER_ID = re.compile(r"[0-9a-z]{4,16}$")
+
+
+def _clean_folders(value):
+    """{"local": {...}, "collab": {...}}, each {"folders": [{id, name, parent}], "place": {doc id: folder id}}."""
+    out = {}
+    for where in ("local", "collab"):
+        part = value.get(where) if isinstance(value, dict) else None
+        part = part if isinstance(part, dict) else {}
+        folders, ids = [], set()
+        for f in part.get("folders") if isinstance(part.get("folders"), list) else []:
+            if isinstance(f, dict) and _FOLDER_ID.match(str(f.get("id") or "")) and f["id"] not in ids and len(folders) < 500:
+                name = re.sub(r"\s+", " ", str(f.get("name") or "")).strip()[:80] or "New folder"
+                folders.append({"id": f["id"], "name": name, "parent": str(f.get("parent") or "")})
+                ids.add(f["id"])
+        for f in folders:
+            if f["parent"] not in ids or f["parent"] == f["id"]:
+                f["parent"] = ""
+        place = part.get("place") if isinstance(part.get("place"), dict) else {}
+        place = {str(k)[:40]: v for k, v in list(place.items())[:5000] if v in ids}
+        out[where] = {"folders": folders, "place": place}
+    return out
+
+
+def folders_get():
+    try:
+        with open(FOLDERS_FILE, encoding="utf-8") as f:
+            return _clean_folders(json.load(f))
+    except (OSError, ValueError):
+        return _clean_folders({})
+
+
+def folders_set(value):
+    clean = _clean_folders(value)
+    os.makedirs(FOLDER, exist_ok=True)
+    with _lock:
+        temp = FOLDERS_FILE + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(clean, f, ensure_ascii=False)
+        for attempt in range(6):
+            try:
+                os.replace(temp, FOLDERS_FILE)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.1)
+    return clean
 
 
 # ---------------------------------------------------------------- collab docs (Supabase)

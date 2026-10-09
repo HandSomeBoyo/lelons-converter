@@ -15,6 +15,9 @@ let docsCollab = null;       // {docs, invites} or null (not logged in / couldn'
 let docsCollabError = "";
 let docsListRun = 0;
 let docsListTimer = 0;
+let docsFolders = { local: { folders: [], place: {} }, collab: { folders: [], place: {} } }; // on this computer only
+let docsFolderAt = "";       // the folder you're in on the Docs home ("" = not in one)
+let docsFoldersBusy = 0;
 let docsInvitesSeen = new Set(JSON.parse(loadPref("docsInvitesSeen") || "[]"));
 
 // The open document.
@@ -110,6 +113,7 @@ const DOC_ICONS = {
   moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
@@ -248,6 +252,20 @@ const DOC_TYPES = [
       ],
       tip: "Enter takes you to the usual next block, Tab changes the kind of block, and Ctrl+1 to Ctrl+8 picks one straight away. One page is about one minute of film.",
     } },
+  { key: "ideas", kind: "doc", icon: "comment", name: "Story and ideas", note: "Your story and all your ideas", title: "Story and ideas",
+    hint: "Write down what your film is about, even if it's just a feeling",
+    guide: {
+      title: "How to collect your ideas",
+      intro: "This is your notebook for the film. Nothing here has to be good yet, just get it down.",
+      steps: [
+        ["The idea", "What's the film about, in a few sentences? What made you want to make it?"],
+        ["The story", "What happens, from start to end. Bullet points are fine."],
+        ["People", "Who's in it, what they're like and what they want."],
+        ["Places", "Where it happens. Real places you could film at are gold."],
+        ["Loose ideas", "Shots, lines, songs, jokes: anything you don't want to forget."],
+      ],
+      tip: "Add your movie script as another page of this same document with the + over the page, so the ideas and the script stay together.",
+    } },
   { key: "outline", kind: "doc", icon: "outline", name: "Story outline", note: "Plan your story before you write it", title: "Story outline",
     hint: "Start with your logline: the whole story in one sentence",
     guide: {
@@ -336,7 +354,7 @@ const DOC_TYPES = [
       tables: [["Add the schedule table", ["Time", "Scene", "What", "Who"], 5], ["Add the cast and crew table", ["Name", "Role", "Call time", "Phone"], 4]],
     } },
 ];
-const docTypeOf = (d) => DOC_TYPES.find((t) => t.key === (d && d.settings && d.settings.type)) || DOC_TYPES.find((t) => t.key === (d && d.kind === "script" ? "script" : "blank"));
+const docTypeOf = (d) => DOC_TYPES.find((t) => t.key === (d && d.type !== undefined ? d.type : d && d.settings && d.settings.type)) || DOC_TYPES.find((t) => t.key === (d && d.kind === "script" ? "script" : "blank"));
 
 function typeBlocks(t) {
   return [{ id: newBlockId(), pos: posBetween("", null), html: p("", t.kind === "script" ? "sp-scene" : "") }];
@@ -372,6 +390,7 @@ async function loadDocsList() {
     docsLocal = res.local;
     docsCollab = res.collab || null;
     docsCollabError = res.collabError || "";
+    if (res.folders && !docsFoldersBusy) docsFolders = res.folders;
   }
   drawInvitesBadge();
   if (!$("docsTab").hidden && !doc) drawDocsHome();
@@ -405,6 +424,7 @@ function drawInvitesBadge() {
 }
 
 function docsSwitchTo(where) {
+  if (where !== docsWhere) docsFolderAt = "";
   docsWhere = where;
   savePref("docsWhere", where);
   drawDocsHome();
@@ -479,20 +499,35 @@ function drawDocsHome() {
     b.className = "doc-template";
     b.innerHTML = `<span class="doc-thumb"><span class="doc-thumb-page"><span class="doc-plus">${docIcon("plus")}</span></span></span><b class="doc-name-line">New document</b><small class="doc-note-line">Choose what to write</small>`;
     b.addEventListener("click", () => openDocTypes());
-    $("docsTemplates").append(b);
+    const f = document.createElement("button");
+    f.type = "button";
+    f.className = "doc-template";
+    f.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus">${docIcon("folder")}</span></span><b class="doc-name-line">New folder</b><small class="doc-note-line">Keep a project together</small>`;
+    f.addEventListener("click", () => newFolder());
+    $("docsTemplates").append(b, f);
   }
+  if (!docsF().folders.some((f) => f.id === docsFolderAt)) docsFolderAt = "";
+  drawCrumbs();
   // The documents
   const search = $("docsSearch").value.trim().toLowerCase();
   let list = collab ? (docsCollab ? docsCollab.docs : []) : docsLocal;
+  const all = list;
   if (search) list = list.filter((d) => d.title.toLowerCase().includes(search));
+  else list = list.filter((d) => folderOf(d.id) === docsFolderAt);
+  let folders = search ? docsF().folders.filter((f) => f.name.toLowerCase().includes(search)) : folderKids(docsFolderAt);
+  folders = [...folders].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  setChildren($("docsFolders"), folders.map((f) => folderCard(f, all)));
+  $("docsFolders").hidden = !folders.length;
   const sort = loadPref("docsSort") || "new";
   list = [...list].sort(sort === "name" ? (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" })
     : sort === "old" ? (a, b) => whenOf(a) - whenOf(b) : (a, b) => whenOf(b) - whenOf(a));
   $("docsSort").querySelector("span").textContent = DOCS_SORTS[sort];
-  $("docsListTitle").textContent = collab ? "Shared with you" : "On this computer";
+  const here = docsF().folders.find((f) => f.id === docsFolderAt);
+  $("docsListTitle").textContent = here && !search ? `In ${here.name}` : collab ? "Shared with you" : "On this computer";
   setChildren($("docsGrid"), list.map(docCard));
-  $("docsEmpty").hidden = list.length > 0;
+  $("docsEmpty").hidden = list.length > 0 || (folders.length > 0 && !search);
   $("docsEmpty").textContent = search ? "Nothing with that name."
+    : here ? "This folder is empty. Start a document above, or drag documents onto the folder."
     : collab && docsCollabError ? docsCollabError
     : collab && !docsCollab ? "Loading..."
     : collab ? "No shared documents yet. Start one above, then invite people with the Invite button."
@@ -502,7 +537,7 @@ function drawDocsHome() {
 const docCards = new Map();
 function docCard(d) {
   const collab = docsWhere === "collab";
-  const sig = JSON.stringify([d.title, d.updated_at, d.preview, d.people && d.people.map((x) => x.username), d.updated_by, d.settings]);
+  const sig = JSON.stringify([d.title, d.updated_at, d.preview, d.people && d.people.map((x) => x.username), d.updated_by, d.settings, d.pages]);
   return keptNode(docCards, docsWhere + d.id, sig, () => {
     const card = document.createElement("div");
     card.className = "doc-card";
@@ -511,10 +546,13 @@ function docCard(d) {
       <div class="doc-card-info"><span class="doc-card-icon"></span><div><b></b><small></small></div>
       <button type="button" class="icon-button doc-card-more" title="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg></button></div>`;
     drawThumb(card.querySelector(".doc-thumb-page"), d.preview || [], d.kind, d.settings);
-    card.querySelector(".doc-card-icon").innerHTML = docIcon(d.kind === "script" ? "script" : "doc");
+    card.querySelector(".doc-card-icon").innerHTML = docIcon(docTypeOf(d).icon);
     card.querySelector(".doc-card-info b").textContent = d.title;
     const when = timeAgo(whenOf(d));
-    card.querySelector(".doc-card-info small").textContent = collab && d.updated_by ? `${d.updated_by}, ${when}` : when;
+    card.querySelector(".doc-card-info small").textContent = (collab && d.updated_by ? `${d.updated_by}, ${when}` : when) + (d.pages > 1 ? ` · ${d.pages} pages` : "");
+    card.draggable = true;
+    card.addEventListener("dragstart", (e) => { docsDrag = { doc: d.id }; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-vh-doc", d.id); card.classList.add("dragging"); document.body.classList.add("docs-dragging"); });
+    card.addEventListener("dragend", () => { docsDrag = null; card.classList.remove("dragging"); document.body.classList.remove("docs-dragging"); });
     if (collab && d.people && d.people.length > 1) {
       const faces = document.createElement("span");
       faces.className = "doc-faces";
@@ -588,7 +626,7 @@ function drawInvites() {
   const head = Object.assign(document.createElement("h3"), { className: "docs-label", textContent: invites.length === 1 ? "You're invited" : `You're invited (${invites.length})` });
   $("docsInvites").replaceChildren(head, ...rows);
   for (const inv of invites) docsInvitesSeen.add(inv.id);
-  savePref("docsInvitesSeen", JSON.stringify([...docsInvitesSeen].slice(-200)));
+  savePref("docsInvitesSeen", JSON.stringify([...docsInvitesSeen].slice(-90)));
   drawInvitesBadge();
 }
 
@@ -610,7 +648,9 @@ async function answerInvite(inv, join, row) {
 }
 
 // "What do you want to write?"
-function openDocTypes() {
+let docTypePicked = null;
+function openDocTypes(picked, page) {
+  docTypePicked = picked || newDoc;
   const grid = $("docTypes");
   if (!grid.children.length) {
     for (const t of DOC_TYPES) {
@@ -618,11 +658,13 @@ function openDocTypes() {
       b.innerHTML = `<span class="doc-type-icon">${docIcon(t.icon)}</span><span class="doc-type-text"><b></b><small></small></span>`;
       b.querySelector("b").textContent = t.name;
       b.querySelector("small").textContent = t.note;
-      b.addEventListener("click", () => { $("docTypeModal").hidden = true; newDoc(t); });
+      b.addEventListener("click", () => { $("docTypeModal").hidden = true; docTypePicked(t); });
       grid.append(b);
     }
   }
-  $("docTypeWhere").textContent = docsWhere === "collab" && sfxUser() ? "It's a Collab document: you can invite people to write it with you." : "It's saved on this computer, only you can see it.";
+  $("docTypeTitle").textContent = page ? "What do you want to add?" : "What do you want to write?";
+  $("docTypeWhere").textContent = page ? `It goes inside "${$("docTitle").value.trim() || "Untitled document"}" as its own page, with its own guide.`
+    : docsWhere === "collab" && sfxUser() ? "It's a Collab document: you can invite people to write it with you." : "It's saved on this computer, only you can see it.";
   $("docTypeModal").hidden = false;
   grid.firstElementChild.focus();
 }
@@ -634,8 +676,211 @@ async function newDoc(t) {
   const settings = t.key === "blank" ? {} : { type: t.key };
   const res = await api("/api/docs-create", { where, title: t.title, kind: t.kind, blocks: typeBlocks(t), settings }).catch(() => null);
   if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the document. Try again.");
+  if (docsFolderAt) { docsF().place[res.id] = docsFolderAt; saveFolders(); }
   await openDoc(where, res.id, { fresh: true });
 }
+
+// ---------------------------------------------------------------- folders (on the Docs home)
+
+// Folders are only on this computer (for Collab documents too: they're how YOU sort them, the others don't see them).
+const docsF = () => docsFolders[docsWhere === "collab" ? "collab" : "local"];
+const folderOf = (id) => { const f = docsF().place[id]; return f && docsF().folders.some((x) => x.id === f) ? f : ""; };
+const folderKids = (id) => docsF().folders.filter((f) => f.parent === id);
+const folderById = (id) => docsF().folders.find((f) => f.id === id);
+let docsDrag = null; // {doc} or {folder}: what's being dragged on the Docs home
+
+// The folder and all the folders inside it.
+function folderTree(id) {
+  const out = new Set([id]);
+  for (let more = true; more;) { more = false; for (const f of docsF().folders) if (!out.has(f.id) && out.has(f.parent)) { out.add(f.id); more = true; } }
+  return out;
+}
+function folderPath(id) {
+  const out = [];
+  for (let f = folderById(id), n = 0; f && n < 50; f = folderById(f.parent), n++) out.unshift(f);
+  return out;
+}
+
+async function saveFolders() {
+  docsFoldersBusy++;
+  const res = await api("/api/docs-folders", { folders: docsFolders }).catch(() => null);
+  docsFoldersBusy--;
+  if (!res || !res.ok) docToast("Couldn't save your folders. Try again.");
+}
+
+function drawCrumbs() {
+  const nav = $("docsCrumbs");
+  nav.hidden = !docsFolderAt;
+  if (!docsFolderAt) return;
+  const crumb = (id, name) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "docs-crumb" + (id === docsFolderAt ? " on" : "") });
+    b.innerHTML = (id ? docIcon("folder") : docIcon(docsWhere === "collab" ? "people" : "lock")) + "<span></span>";
+    b.querySelector("span").textContent = name;
+    b.addEventListener("click", () => openFolder(id));
+    if (id !== docsFolderAt) folderDropTarget(b, id);
+    return b;
+  };
+  const items = [crumb("", "All documents")];
+  for (const f of folderPath(docsFolderAt)) items.push(Object.assign(document.createElement("i"), { textContent: "/" }), crumb(f.id, f.name));
+  nav.replaceChildren(...items);
+}
+
+function openFolder(id) {
+  docsFolderAt = id;
+  $("docsSearch").value = "";
+  $("docsCardMenu").hidden = true;
+  drawDocsHome();
+}
+
+const folderCards = new Map();
+function folderCard(f, docs) {
+  const inside = folderTree(f.id);
+  const count = docs.filter((d) => inside.has(folderOf(d.id))).length;
+  const subs = folderKids(f.id).length;
+  const sig = JSON.stringify([f.name, count, subs]);
+  return keptNode(folderCards, docsWhere + f.id, sig, () => {
+    const card = document.createElement("div");
+    card.className = "folder-card";
+    card.tabIndex = 0;
+    card.innerHTML = `<span class="folder-icon">${docIcon("folder")}</span><div><b></b><small></small></div>
+      <button type="button" class="icon-button doc-card-more" title="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/></svg></button>`;
+    card.querySelector("b").textContent = f.name;
+    card.querySelector("small").textContent = [count ? `${count} ${count === 1 ? "document" : "documents"}` : subs ? "" : "Empty",
+      subs ? `${subs} ${subs === 1 ? "folder" : "folders"}` : ""].filter(Boolean).join(" · ");
+    const more = card.querySelector(".doc-card-more");
+    more.addEventListener("click", (e) => { e.stopPropagation(); const now = folderById(f.id); if (now) folderMenu(now, more); });
+    card.addEventListener("click", () => openFolder(f.id));
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter") openFolder(f.id); });
+    card.draggable = true;
+    card.addEventListener("dragstart", (e) => { docsDrag = { folder: f.id }; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-vh-folder", f.id); card.classList.add("dragging"); document.body.classList.add("docs-dragging"); });
+    card.addEventListener("dragend", () => { docsDrag = null; card.classList.remove("dragging"); document.body.classList.remove("docs-dragging"); });
+    folderDropTarget(card, f.id);
+    return card;
+  });
+}
+
+// Dropping a document (or a folder) on a folder puts it in there.
+function folderDropTarget(el, id) {
+  const ok = () => docsDrag && (docsDrag.doc || (docsDrag.folder && !folderTree(docsDrag.folder).has(id)));
+  el.addEventListener("dragover", (e) => { if (!ok()) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; el.classList.add("drop-in"); });
+  el.addEventListener("dragleave", (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove("drop-in"); });
+  el.addEventListener("drop", (e) => {
+    el.classList.remove("drop-in");
+    if (!ok()) return;
+    e.preventDefault();
+    const what = docsDrag;
+    docsDrag = null;
+    if (what.doc) moveDocTo(what.doc, id); else moveFolderTo(what.folder, id);
+  });
+}
+
+function moveDocTo(docId, folderId) {
+  if (folderOf(docId) === folderId) return;
+  if (folderId) docsF().place[docId] = folderId; else delete docsF().place[docId];
+  saveFolders();
+  drawDocsHome();
+  const f = folderById(folderId);
+  docToast(f ? `Moved to ${f.name}.` : "Moved out of the folder.");
+}
+
+function moveFolderTo(id, parent) {
+  const f = folderById(id);
+  if (!f || f.parent === parent || folderTree(id).has(parent)) return;
+  f.parent = parent;
+  saveFolders();
+  drawDocsHome();
+}
+
+async function newFolder(parent = docsFolderAt) {
+  const name = await docAskText("New folder", docsWhere === "collab" ? "What should the folder be called? Folders are just for you, the others don't see them." : "What should the folder be called?", "New folder");
+  if (name === null || !name.trim()) return null;
+  const f = { id: Math.random().toString(36).slice(2, 10).padEnd(8, "0"), name: name.trim().slice(0, 80), parent };
+  docsF().folders.push(f);
+  saveFolders();
+  drawDocsHome();
+  return f;
+}
+
+async function renameFolder(f) {
+  const name = await docAskText("Rename", "What should this folder be called?", f.name);
+  if (name === null || !name.trim() || name.trim() === f.name) return;
+  f.name = name.trim().slice(0, 80);
+  saveFolders();
+  drawDocsHome();
+}
+
+// The documents in it aren't deleted: they (and its folders) go where the folder was.
+async function deleteFolder(f) {
+  const up = folderById(f.parent);
+  const yes = await docAsk(`Delete the folder "${f.name}"?`, `The documents in it aren't deleted. They move to ${up ? up.name : "All documents"}.`, "Delete");
+  if (!yes) return;
+  const all = docsF();
+  for (const [docId, at] of Object.entries(all.place)) if (at === f.id) { if (f.parent) all.place[docId] = f.parent; else delete all.place[docId]; }
+  for (const x of all.folders) if (x.parent === f.id) x.parent = f.parent;
+  all.folders = all.folders.filter((x) => x.id !== f.id);
+  if (docsFolderAt === f.id) docsFolderAt = f.parent;
+  saveFolders();
+  drawDocsHome();
+}
+
+function folderMenu(f, button) {
+  const menu = $("docsCardMenu");
+  if (!menu.hidden && menu.dataset.id === "folder:" + f.id) { menu.hidden = true; return; }
+  menu.dataset.id = "folder:" + f.id;
+  menu.replaceChildren();
+  const item = (icon, label, fn, cls = "") => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "lib-menu-item " + cls });
+    b.innerHTML = docIcon(icon) + "<span></span>";
+    b.querySelector("span").textContent = label;
+    b.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = true; fn(); });
+    menu.append(b);
+  };
+  item("open", "Open", () => openFolder(f.id));
+  item("rename", "Rename", () => renameFolder(f));
+  item("folder", "Move to folder", () => docMovePicker({ folder: f.id, name: f.name }));
+  menu.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
+  item("trash", "Delete folder", () => deleteFolder(f), "danger");
+  menu.hidden = false;
+  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
+  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
+  menu.style.top = r.bottom - box.top + 6 + "px";
+}
+
+// "Move to folder": every folder, as a tree.
+let docMoving = null;
+function docMovePicker(what) {
+  docMoving = what;
+  $("docMoveTitle").textContent = `Move "${what.name}"`;
+  $("docMoveText").textContent = "Pick the folder it goes in.";
+  const now = what.doc ? folderOf(what.doc) : (folderById(what.folder) || {}).parent || "";
+  const blocked = what.folder ? folderTree(what.folder) : new Set();
+  const rows = [];
+  const row = (id, name, depth) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-move-row" + (id === now ? " on" : "") });
+    b.style.setProperty("--depth", depth);
+    b.innerHTML = (id ? docIcon("folder") : docIcon(docsWhere === "collab" ? "people" : "lock")) + "<span></span>" + (id === now ? `<small>Here now</small>` : "");
+    b.querySelector("span").textContent = name;
+    b.disabled = id === now || blocked.has(id);
+    b.addEventListener("click", () => {
+      $("docMoveModal").hidden = true;
+      if (what.doc) moveDocTo(what.doc, id); else moveFolderTo(what.folder, id);
+    });
+    rows.push(b);
+    for (const f of [...folderKids(id)].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))) row(f.id, f.name, depth + 1);
+  };
+  row("", "All documents (no folder)", 0);
+  $("docMoveList").replaceChildren(...rows);
+  $("docMoveModal").hidden = false;
+}
+$("docMoveCancel").addEventListener("click", () => { $("docMoveModal").hidden = true; });
+$("docMoveModal").addEventListener("mousedown", (e) => { if (e.target === $("docMoveModal")) $("docMoveModal").hidden = true; });
+$("docMoveNew").addEventListener("click", async () => {
+  const what = docMoving;
+  $("docMoveModal").hidden = true;
+  const f = await newFolder(docsFolderAt);
+  if (!f || !what) return;
+  if (what.doc) moveDocTo(what.doc, f.id); else moveFolderTo(what.folder, f.id);
+});
 
 // ---------------------------------------------------------------- opening and closing
 
@@ -654,7 +899,7 @@ async function openDoc(where, id, opts = {}) {
     return;
   }
   const d = res.doc;
-  doc = { where, id, kind: d.kind === "script" ? "script" : "doc", title: d.title, mine: where === "local" || d.mine,
+  doc = { where, id, kind: d.kind === "script" ? "script" : "doc", baseKind: d.kind === "script" ? "script" : "doc", title: d.title, mine: where === "local" || d.mine,
           people: d.people || [], rev: d.rev || 0, settings: docCleanSettings(d.settings), fresh: !!opts.fresh };
   docPending.clear(); docDeleted.clear(); docInFlight.clear();
   docTitleDirty = false; docSettingsDirty = false; docDirty = false; docSaveWanted = false; docHere = []; docFailed = 0;
@@ -1061,7 +1306,7 @@ function docTabMeta(html) {
   const m = /^<!--tab (.*)-->$/s.exec(html || "");
   try { return m ? JSON.parse(m[1]) : null; } catch (e) { return null; }
 }
-const docTabHtml = (t) => "<!--tab " + JSON.stringify({ title: t.title, parent: t.parent || "" }).replace(/[-<>]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "-->";
+const docTabHtml = (t) => "<!--tab " + JSON.stringify({ title: t.title, parent: t.parent || "", ...(t.type ? { type: t.type, settings: docCleanSettings(t.settings) } : {}) }).replace(/[-<>]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "-->";
 
 // [{id, title, parent, pos}] in order. parent "" = at the top, "0" = under the first page.
 function docTabsList() {
@@ -1069,7 +1314,7 @@ function docTabsList() {
   for (const [id, b] of docStore) {
     if (!id.startsWith("t~")) continue;
     const meta = docTabMeta(b.html);
-    if (meta) list.push({ id: id.slice(2), title: String(meta.title || "Untitled page").slice(0, 100), parent: String(meta.parent || ""), pos: b.pos });
+    if (meta) list.push({ id: id.slice(2), title: String(meta.title || "Untitled page").slice(0, 100), parent: String(meta.parent || ""), pos: b.pos, type: docPageType(meta) });
   }
   const ids = new Set(list.map((t) => t.id));
   for (const t of list) if (t.parent && t.parent !== "0" && !ids.has(t.parent)) t.parent = ""; // its page is gone
@@ -1085,8 +1330,33 @@ function docTabsList() {
   return list.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
 }
 
+// Every page can be its own kind of document: the story notes and the script, in one document.
+// A page's kind is in its name block ({type, settings}). Pages from before (no type) are like the first page.
+const docPageType = (meta) => meta && DOC_TYPES.some((t) => t.key === meta.type) ? meta.type : null;
+function docPageOwn(id) {
+  if (!doc || !id) return null;
+  const meta = docTabMeta((docStore.get("t~" + id) || {}).html);
+  return docPageType(meta) ? meta : null;
+}
+const docTypeByKey = (key) => DOC_TYPES.find((t) => t.key === key);
+const docMainType = () => docTypeOf({ settings: doc.settings, kind: doc.baseKind });
+const docPageTypeOf = (id) => { const own = docPageOwn(id); return own ? docTypeByKey(own.type) : docMainType(); };
+
+// The page on screen decides the kind (script or not), the guide and the page setup.
+function docUsePage() {
+  const own = docPageOwn(docTab);
+  const t = own ? docTypeByKey(own.type) : null;
+  doc.kind = t ? t.kind : doc.baseKind;
+  doc.type = t ? t.key : undefined;
+  docsText.classList.toggle("script", doc.kind === "script");
+  docsText.classList.toggle("numbers", doc.kind === "script" && loadPref("docSceneNumbers") === "1");
+  $("docKind").innerHTML = docIcon(doc.kind === "script" ? "script" : "doc");
+  $("docKind").title = doc.kind === "script" ? "Movie script" : "Document";
+}
+
 function drawTabs() {
   if (!doc) return;
+  drawParts();
   if ($("docTabsList").querySelector(".doc-tab-input")) return; // (not while you're naming a page; it draws again after)
   const list = docTabsList();
   const box = $("docTabsList");
@@ -1099,7 +1369,7 @@ function drawTabs() {
     r.style.setProperty("--depth", depth);
     r.dataset.tab = t.id;
     r.innerHTML = `<button type="button" class="doc-tab-fold" ${under.length ? "" : "hidden"}><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 9.5h8l-4 5z"/></svg></button>
-      <button type="button" class="doc-tab-name">${docIcon("doc")}<span></span></button>
+      <button type="button" class="doc-tab-name">${docIcon(docPageTypeOf(t.id).icon)}<span></span></button>
       <button type="button" class="doc-tab-more" title="More">${docIcon("more")}</button>`;
     r.querySelector(".doc-tab-name span").textContent = t.title;
     r.querySelector(".doc-tab-name").title = t.title;
@@ -1136,7 +1406,57 @@ function drawTabs() {
   box.replaceChildren(...rows);
   $("docTabsHint").hidden = list.length > 0;
 }
-$("docTitle").addEventListener("input", () => { const r = $("docTabsList").querySelector('[data-tab=""] .doc-tab-name span'); if (r) r.textContent = $("docTitle").value.trim() || "Untitled document"; });
+$("docTitle").addEventListener("input", () => {
+  const name = $("docTitle").value.trim() || "Untitled document";
+  const r = $("docTabsList").querySelector('[data-tab=""] .doc-tab-name span');
+  if (r) r.textContent = name;
+  const part = $("docParts").firstElementChild;
+  if (part && part.querySelector("span")) part.querySelector("span").textContent = name;
+});
+
+// The tabs over the page: the first page and the pages at the top, each with the icon of its kind.
+function drawParts() {
+  const parts = [{ id: "", title: $("docTitle").value.trim() || "Untitled document" }, ...docTabsList().filter((t) => t.parent === "")];
+  const box = $("docParts");
+  const tabs = parts.map((t) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-part" + (t.id === docTab || (t.id && docTabsList().some((x) => x.id === docTab && docTopOf(x.id) === t.id)) ? " on" : "") });
+    b.innerHTML = docIcon(docPageTypeOf(t.id).icon) + "<span></span>";
+    b.querySelector("span").textContent = t.title;
+    b.title = t.title;
+    b.addEventListener("click", () => docShowTab(t.id));
+    b.addEventListener("dblclick", () => docRenamePart(t.id));
+    b.addEventListener("contextmenu", (e) => { e.preventDefault(); docTabMenu(t, b); });
+    return b;
+  });
+  const add = Object.assign(document.createElement("button"), { type: "button", className: "doc-part doc-part-add", title: "Add a script, notes or another page to this document" });
+  add.innerHTML = docIcon("plus") + (parts.length === 1 ? "<span>Add a page</span>" : "");
+  add.addEventListener("click", docAddPart);
+  box.replaceChildren(...tabs, add);
+}
+async function docRenamePart(id) {
+  if (id === "") { $("docTitle").focus(); $("docTitle").select(); return; }
+  const b = docStore.get("t~" + id), meta = b && docTabMeta(b.html);
+  if (!meta) return;
+  const title = await docAskText("Rename", "What should this page be called?", meta.title || "");
+  const now = docStore.get("t~" + id);
+  if (title === null || !title.trim() || !now || title.trim() === meta.title) return;
+  docStore.set("t~" + id, { pos: now.pos, html: docTabHtml({ ...docTabMeta(now.html), title: title.trim().slice(0, 100) }) });
+  docPending.add("t~" + id);
+  docMarkDirty();
+  drawTabs();
+}
+// The page at the top that a page is under.
+function docTopOf(id) {
+  const list = docTabsList();
+  for (let at = id, n = 0; at && n <= list.length; n++) {
+    const t = list.find((x) => x.id === at);
+    if (!t) return "";
+    if (t.parent === "") return t.id;
+    if (t.parent === "0") return "";
+    at = t.parent;
+  }
+  return "";
+}
 
 // Dragging a page onto another page puts it under that page; near the top or bottom edge puts it before or after.
 let docTabDrag = null;
@@ -1183,6 +1503,8 @@ function docShowTab(id) {
   for (const el of docsText.children) docStore.set(el.dataset.id, { pos: el.dataset.pos, html: blockHtml(el) });
   docsText.replaceChildren();
   docTab = id;
+  const wasKind = doc.kind, wasType = doc.type;
+  docUsePage();
   const mine = [];
   for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
   mine.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
@@ -1193,6 +1515,14 @@ function docShowTab(id) {
   docApplying = false;
   docUndoReset();
   docHidePops();
+  if (doc.kind !== wasKind || doc.type !== wasType) { // another kind of page: its own tools, guide and look
+    buildToolbar();
+    drawMenubar();
+    drawGuide();
+    $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
+    docHint("");
+  }
+  docApplySettings();
   drawTabs();
   drawOutline();
   docCount();
@@ -1203,20 +1533,31 @@ function docShowTab(id) {
   if (docsText.firstElementChild) docPutCaret(docsText.firstElementChild, 0);
 }
 
-function docAddTab(parent) {
+// t = the kind of page (from "What do you want to add?"). Without one, a page under a page is the same kind as that page.
+function docAddTab(parent, t) {
   if (!doc) return;
   const list = docTabsList();
   const id = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
   const last = list.length ? list[list.length - 1].pos : "";
   const pos = posBetween(last, null);
-  docStore.set("t~" + id, { pos, html: docTabHtml({ title: "Untitled page", parent }) });
+  const from = !t && parent && parent !== "0" ? docPageOwn(parent) : null;
+  const meta = t ? { title: t.key === "blank" ? "Untitled page" : t.name, parent, type: t.key, settings: {} }
+    : from ? { title: "Untitled page", parent, type: from.type, settings: from.settings }
+    : { title: "Untitled page", parent };
+  docStore.set("t~" + id, { pos, html: docTabHtml(meta) });
   docPending.add("t~" + id);
+  const kind = t ? t.kind : from ? docTypeByKey(from.type).kind : doc.baseKind;
+  const first = id + "~" + newBlockId();
+  docStore.set(first, { pos: posBetween("", null), html: p("", kind === "script" ? "sp-scene" : "") });
+  docPending.add(first);
   if (parent) docTabsOpen.delete(parent);
   docMarkDirty();
   docShowTab(id);
-  docRenameTab(id);
+  if (!t) docRenameTab(id);
 }
-$("docTabAdd").addEventListener("click", () => docAddTab(""));
+// The + asks what kind of page it is (a script, story notes...).
+const docAddPart = () => openDocTypes((t) => docAddTab("", t), true);
+$("docTabAdd").addEventListener("click", docAddPart);
 
 function docRenameTab(id) {
   if (id === "") { $("docTitle").focus(); $("docTitle").select(); return; }
@@ -1818,6 +2159,7 @@ function docApplyRemote(blocks) {
   if (pages) {
     if (docTab && !docStore.has("t~" + docTab)) docShowTab(""); // the page you were on was deleted
     drawTabs();
+    docApplySettings(); // (someone may have changed this page's setup)
   }
 }
 
@@ -3226,10 +3568,11 @@ async function docCopyTo(where) {
   const blocks = [...docsText.children].map((el) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: blockHtml(el) }; });
   for (const [id, b] of docStore) blocks.push({ id, pos: b.pos, html: b.html }); // the other pages, as they are
   const title = where === doc.where ? `Copy of ${$("docTitle").value}` : $("docTitle").value;
-  const kind = doc.kind, settings = doc.settings;
+  const kind = doc.kind, settings = doc.settings, from = doc.where === where ? doc.id : null;
   if (!(await docLeave())) return;
   const res = await api("/api/docs-create", { where, title, kind, blocks, settings }).catch(() => null);
   if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the copy.");
+  if (from && folderOf(from)) { docsF().place[res.id] = folderOf(from); saveFolders(); } // the copy goes in the same folder
   await openDoc(where, res.id);
   docToast(where === "collab" ? "Copied to Collab. Now invite people with the Invite button." : where === "local" ? "Saved a copy on this computer." : "Made a copy.");
 }
@@ -3599,7 +3942,18 @@ function docCleanSettings(s) {
   if (DOC_TYPES.some((t) => t.key === s.type && t.key !== "blank")) out.type = s.type;
   return out;
 }
-function docSettings() { return doc ? { ...docDefaults(doc.kind), ...doc.settings } : docDefaults("doc"); }
+function docSettings() {
+  if (!doc) return docDefaults("doc");
+  const own = docPageOwn(docTab);
+  return { ...docDefaults(doc.kind), ...(own ? docCleanSettings(own.settings) : doc.settings) };
+}
+// A page of its own kind keeps its own page setup (in its name block); the rest is the document's.
+function docPutPageSettings(settings) {
+  const b = docStore.get("t~" + docTab), own = docPageOwn(docTab);
+  docStore.set("t~" + docTab, { pos: b.pos, html: docTabHtml({ ...own, settings }) });
+  docPending.add("t~" + docTab);
+  docMarkDirty();
+}
 
 function docFontCss(name) {
   if (name === "Inter") return "InterVar, Inter, Arial, sans-serif";
@@ -3647,8 +4001,14 @@ function docApplySettings() {
 
 function docSetSetting(key, value) {
   if (!doc) return;
-  const next = { ...doc.settings, [key]: value };
+  const own = docPageOwn(docTab);
+  const next = { ...(own ? docCleanSettings(own.settings) : doc.settings), [key]: value };
   if (docDefaults(doc.kind)[key] === value) delete next[key];
+  if (own) {
+    docPutPageSettings(docCleanSettings(next));
+    docApplySettings();
+    return;
+  }
   doc.settings = docCleanSettings(next);
   docSettingsDirty = true;
   docMarkDirty();
@@ -4014,6 +4374,7 @@ function drawPageSetup() {
 }
 $("docSetupDone").addEventListener("click", () => { $("docSetupModal").hidden = true; docsText.focus({ preventScroll: true }); });
 $("docSetupReset").addEventListener("click", () => {
+  if (doc && docPageOwn(docTab)) { docPutPageSettings({}); docApplySettings(); return; }
   if (!doc || !Object.keys(doc.settings).some((k) => k !== "type")) return;
   doc.settings = doc.settings.type ? { type: doc.settings.type } : {};
   docSettingsDirty = true;
@@ -4147,6 +4508,7 @@ function docCardMenu(d, collab, button) {
   item("open", "Open", () => openDoc(collab ? "collab" : "local", d.id));
   item("rename", "Rename", () => docCardRename(d, collab));
   item("copy", "Make a copy", () => docCardCopy(d, collab, collab ? "collab" : "local"));
+  item("folder", "Move to folder", () => docMovePicker({ doc: d.id, name: d.title }));
   if (!collab && sfxUser()) item("people", "Share a copy in Collab", () => docCardCopy(d, collab, "collab"));
   if (collab) item("lock", "Save a copy in Local", () => docCardCopy(d, collab, "local"));
   line();
@@ -4181,10 +4543,15 @@ async function docCardCopy(d, collab, where) {
   if (!res || !res.ok) return docToast((res && res.error) || "Couldn't make the copy.");
   let pos = "";
   const blocks = [...(res.doc.blocks || [])].sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0))
-    .map((b) => { pos = posBetween(pos, null); return { id: newBlockId(), pos, html: b.html }; });
+    .map((b) => { // (pages keep their names and what's on them: "t~<page>" and "<page>~<block>")
+      pos = posBetween(pos, null);
+      const page = b.id.startsWith("t~") ? null : b.id.includes("~") ? b.id.slice(0, b.id.indexOf("~") + 1) : "";
+      return { id: page === null ? b.id : page + newBlockId(), pos, html: b.html };
+    });
   const same = where === (collab ? "collab" : "local");
   const made = await api("/api/docs-create", { where, title: same ? `Copy of ${d.title}` : d.title, kind: res.doc.kind, blocks, settings: res.doc.settings || {} }).catch(() => null);
   if (!made || !made.ok) return docToast((made && made.error) || "Couldn't make the copy.");
+  if (same && folderOf(d.id)) { docsF().place[made.id] = folderOf(d.id); saveFolders(); } // the copy goes in the same folder
   docToast(where === "collab" && !same ? "Copied to Collab. Open it and invite people with the Invite button." : where === "local" && !same ? "Saved a copy on this computer." : "Made a copy.");
   if (!same) docsSwitchTo(where); else loadDocsList();
 }

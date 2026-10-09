@@ -695,7 +695,7 @@ class Handler(BaseHTTPRequestHandler):
         collab = data.get("where") == "collab"
         try:
             if action == "list":
-                result = {"local": docs.local_list()}
+                result = {"local": docs.local_list(), "folders": docs.folders_get()}
                 if data.get("collab"):
                     try:
                         result.update(collab=docs.collab_list())
@@ -703,6 +703,8 @@ class Handler(BaseHTTPRequestHandler):
                         result.update(collab=None)
                     except (docs.Error, sfx.Error) as e:
                         result.update(collab=None, collabError=str(e))
+            elif action == "folders":  # your folders (and what's in them) changed
+                result = {"folders": docs.folders_set(data.get("folders"))}
             elif action == "create":
                 args = (data.get("title"), data.get("kind"), data.get("blocks"), data.get("settings"))
                 result = {"id": docs.collab_create(*args) if collab else docs.local_create(*args)["id"]}
@@ -1106,7 +1108,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
             key, value = data.get("key"), data.get("value")
-            if key in PAGE_PREFS and len(json.dumps(value)) < 4000:
+            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < 4000:
                 with page_pref_lock:
                     saved = settings.load().get("page") or {}
                     settings.save(page={**saved, key: value})
