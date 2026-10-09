@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.6.0", items: [
+    "A new, simpler look! All the pages are now in a sidebar on the left, sorted into Convert, Create and Tools.",
+    "Fold the sidebar with the button next to the name to make it just icons, and open it again the same way.",
+    "The version you're on now shows right under VaultHub.",
+    "A tidier Settings window with pages on the left: General, Appearance, Sound and Performance.",
+    "The chat now opens next to the sidebar, so your pages stay one click away.",
+  ] },
   { version: "2.5.1", items: [
     "Smoother everywhere: scrolling, the chat and long download lists take a lot less work now, and the app rests when it's minimized.",
     "Waveforms in the Library show up much faster, because everyone shares them.",
