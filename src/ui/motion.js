@@ -83,7 +83,7 @@ function moveTabLine() {
     return;
   }
   tabLine.style.opacity = "1";
-  const x = `translateX(${active.offsetLeft}px)`;
+  const x = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`; // (the tabs are a list down the side)
   // Moving to another tab, the glass stretches a little on the way, like a drop of liquid.
   if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
     tabLine.classList.remove("moving");
@@ -91,6 +91,7 @@ function moveTabLine() {
     tabLine.classList.add("moving");
   }
   tabLine.style.width = active.offsetWidth + "px";
+  tabLine.style.height = active.offsetHeight + "px";
   tabLine.style.transform = x;
   if (!tabLineReady) {
     // The first time it just appears there; after that it slides.

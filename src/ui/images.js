@@ -30,7 +30,10 @@ function showTab(tab) {
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
-document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+  if (typeof chatIsOpen === "function" && chatIsOpen()) closeChat(); // (the chat sits next to the side bar: picking a page leaves it)
+  showTab(b.dataset.tab);
+}));
 // The app opens on the tab used last; after the update that added Home, on Home once.
 if (["video", "files", "images", "sfx", "docs", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);

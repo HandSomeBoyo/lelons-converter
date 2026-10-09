@@ -3411,3 +3411,129 @@ body.chat-page::after { -webkit-backdrop-filter: none; backdrop-filter: none; ba
   .chat-panel, .modal > .dialog { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) { .online-dot::after { animation: none; } }
+
+/* ================================================================ 3.0: simple and professional. The pages are listed down the left
+   in groups (like a pro app), the page titles are calm, and only things that float are glass: the side bar,
+   the player and popups. Later restyles should build on this section. */
+:root { --side-w: 232px; --side-gap: 12px; --content-left: calc(var(--side-w) + var(--side-gap) * 2); }
+
+/* A calm background: no grid, just two soft lights for the glass to catch */
+body::before, :root[data-theme="black"] body::before {
+  background-image: radial-gradient(760px 560px at 0% 0%, rgba(var(--accent-rgb), .055), transparent 70%),
+                    radial-gradient(900px 700px at 100% 105%, rgba(120, 140, 210, .07), transparent 70%);
+  background-size: auto; background-position: 0 0;
+}
+:root[data-theme="light"] body::before {
+  background-image: radial-gradient(760px 560px at 0% 0%, rgba(var(--accent-rgb), .12), transparent 70%),
+                    radial-gradient(900px 700px at 100% 105%, rgba(120, 140, 210, .14), transparent 70%);
+}
+
+body { padding-left: var(--content-left); }
+main { max-width: 1040px; padding: 16px 40px 40px; box-sizing: border-box; }
+
+/* ---- the side bar */
+.sidebar {
+  position: fixed; z-index: var(--z-tabs); top: var(--side-gap); bottom: var(--side-gap); left: var(--side-gap); width: var(--side-w);
+  box-sizing: border-box; display: flex; flex-direction: column; padding: 18px 10px 10px; border-radius: 20px;
+  background: var(--gl-fill), var(--gl-tint); -webkit-backdrop-filter: var(--gl-blur); backdrop-filter: var(--gl-blur);
+  box-shadow: var(--gl-rim), var(--gl-shadow);
+}
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 14px; }
+.side-brand .mark { width: 30px; height: 30px; border-radius: 9px; flex: none; }
+.side-brand .mark svg { width: 20px; height: 20px; }
+.side-brand .word { font: 700 17px var(--head); letter-spacing: -.02em; }
+
+.sidebar .tabs {
+  position: relative; top: auto; z-index: auto; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; align-self: stretch; gap: 1px; width: auto; max-width: none;
+  margin: 0; padding: 0; border-radius: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+}
+.sidebar .tabs::after { display: none; }
+.sidebar .tabs button, .side-link {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box;
+  padding: 9px 12px; margin: 0; border: 0; border-radius: 10px; background: none; box-shadow: none;
+  font: 500 14px/1.2 var(--head); letter-spacing: -.005em; text-align: left; white-space: nowrap; cursor: pointer;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+.sidebar .tabs button svg, .side-link svg { width: 18px; height: 18px; flex: none; opacity: .9; color: currentColor; }
+.sidebar .tabs button:hover, .side-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.sidebar .tabs button.active { color: var(--text); font-weight: 600; background: none; }
+.sidebar .tabs button.active svg { color: var(--accent); }
+:root[data-theme="light"] .sidebar .tabs button.active svg { color: var(--text); }
+.sidebar .tabs .tab-badge { position: static; margin-left: auto; }
+/* the glass drop under the open page slides up and down the list */
+.sidebar .tabs .tab-line { top: 0; left: 0; bottom: auto; border-radius: 10px; }
+.sidebar .tabs .tab-line.ready { transition: transform .5s var(--ease), height .5s var(--ease), width .5s var(--ease), opacity .2s; }
+.sidebar .tabs .tab-line.moving { animation: lens-drop .5s var(--ease); }
+@keyframes lens-drop { 35% { scale: .97 1.12; } 70% { scale: 1.01 .97; } }
+
+.tab-group { padding: 18px 12px 7px; font: 600 11px/1 var(--head); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.side-foot { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--gl-line); }
+.side-link .chat-badge { position: static; margin-left: auto; }
+.side-link.open { color: var(--text); background: var(--gl-lens); box-shadow: var(--gl-rim-soft); }
+
+/* ---- the top bar: just the buttons on the right */
+.top { justify-content: flex-end; margin-bottom: 14px; min-height: 40px; }
+
+/* ---- page titles: one calm line with a short grey line under it */
+.headline { font: 700 30px/1.15 var(--head); letter-spacing: -.025em; margin: 6px 0 26px; }
+.headline br { display: none; }
+.headline em { display: block; margin-top: 6px; font: 400 15px/1.4 var(--head); letter-spacing: 0; color: var(--muted); }
+
+/* ---- calmer controls: soft corners instead of pills, no glow */
+.convert, .small-button:not(.ghost-button):not(.outline-button) {
+  border-radius: 10px; background-image: none; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12);
+}
+.convert:hover:not(:disabled) { filter: brightness(1.05); box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.input { border-radius: 10px; }
+.toggle button, .chips button, .quality, .lib-tools .find-open, .lib-people-button, .ghost-button, .outline-button { border-radius: 9px; }
+.side-item.lib-cat, .lib-cats-pill { border-radius: 9px; }
+.head-button, .online-pill { box-shadow: none; background: none; }
+.head-button:hover, .online-pill:hover { background: color-mix(in srgb, var(--text) 6%, transparent); box-shadow: none; }
+
+/* cards: a quiet panel with a hairline edge */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list {
+  background: color-mix(in srgb, var(--panel) 55%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); border-radius: 14px;
+}
+.channel-card:hover, .home-card:hover { background: color-mix(in srgb, var(--panel) 75%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); }
+:root[data-theme="light"] .home-card, :root[data-theme="light"] .channel-card, :root[data-theme="light"] .sound-list,
+:root[data-theme="light"] .stats-card, :root[data-theme="light"] .upload-card, :root[data-theme="light"] .copy-card {
+  background: rgba(255, 255, 255, .7); box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08), 0 1px 2px rgba(20, 25, 40, .04);
+}
+
+/* ---- things fixed to the window leave room for the side bar */
+.player-bar { left: var(--content-left); }
+.lib-genres { top: 16px; }
+html { scroll-padding-top: 16px; }
+
+/* ---- smaller windows: the side bar shows icons only (the name shows when you point at it) */
+@media (max-width: 900px) {
+  :root { --side-w: 64px; }
+  .side-brand { justify-content: center; padding: 0 0 12px; }
+  .side-brand .word, .sidebar .tabs button span, .side-link span { display: none; }
+  .sidebar .tabs button, .side-link { justify-content: center; padding: 10px 0; }
+  .tab-group { height: 1px; padding: 0; margin: 10px 8px; overflow: hidden; color: transparent; background: var(--gl-line); }
+  .side-link .chat-badge, .sidebar .tabs .tab-badge { position: absolute; top: 2px; right: 6px; margin: 0; }
+  main { padding: 12px 22px 32px; }
+}
+/* the Library's own genre list sits next to the side bar now: a bit narrower, and the search row wraps */
+#sfxMain.lib-layout.has-genres { grid-template-columns: 176px minmax(0, 1fr); gap: 22px; }
+.lib-tools { flex-wrap: wrap; }
+.lib-tools .history-search { flex: 1 1 220px; }
+/* the open page: a quiet drop of glass, not a bright one */
+.sidebar .tabs .tab-line { background: color-mix(in srgb, var(--text) 9%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 0 0 .5px rgba(255, 255, 255, .1); }
+.sidebar .tabs .tab-line::after { display: none; }
+:root[data-theme="light"] .sidebar .tabs .tab-line { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .1), inset 0 0 0 .5px rgba(20, 25, 40, .08); }
+.sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .025)), var(--gl-tint); }
+:root[data-theme="light"] .sidebar { background: linear-gradient(180deg, rgba(255, 255, 255, .75), rgba(255, 255, 255, .5)), var(--gl-tint); }
+.lib-tools .history-search { flex: 1 1 150px; }
+/* the chat opens next to the side bar, so the pages stay one click away */
+.chat-panel, body.has-player .chat-panel { left: var(--content-left); }
+body.chat-page::after { left: calc(var(--content-left) - var(--side-gap)); }
+/* (the side bar's list is not a glass bar of its own in any theme) */
+.sidebar #tabs { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 0; }
+/* menus and popups: thicker glass, so what's behind never shows through as a smudge */
+.account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu { --gl-tint: rgba(28, 28, 32, .86); }
+:root[data-theme="light"] .account-panel, :root[data-theme="light"] .help-pop, :root[data-theme="light"] .people-pop,
+:root[data-theme="light"] .volume-pop, :root[data-theme="light"] .lib-menu { --gl-tint: rgba(255, 255, 255, .88); }
