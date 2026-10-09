@@ -929,6 +929,30 @@
   </section>
 </aside>
 
+<!-- A call (private chats): ringing, talking, and the other person's shared screen -->
+<div class="call" id="callBox" hidden>
+  <div class="call-card">
+    <span class="call-face" id="callFace"></span>
+    <div class="call-text"><b id="callName"></b><small id="callStatus"></small></div>
+    <div class="call-buttons" id="callButtons"></div>
+  </div>
+  <div class="call-sharing" id="callSharing" hidden>
+    <i></i><span>You're sharing your screen</span>
+    <button type="button" class="link" id="callStopShare">Stop</button>
+  </div>
+</div>
+<div class="call-stage" id="callStage" hidden>
+  <video id="callVideo" autoplay playsinline muted></video>
+  <div class="call-stage-bar">
+    <span id="callStageLabel"></span>
+    <button type="button" class="icon-button" id="callStageSize"></button>
+    <button type="button" class="icon-button" id="callStageFull" title="Full screen (double-click)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+</div>
+<audio id="callAudio" autoplay></audio>
+
 <!-- A group chat: make one, or change its name, picture and people. Also "pick a person" for a new private chat. -->
 <div class="modal" id="groupModal" hidden>
   <div class="dialog group-dialog" role="dialog" aria-labelledby="groupTitle">
@@ -1292,6 +1316,7 @@
 <script src="whatsnew.js"></script>
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
+<script src="call.js"></script>
 <script src="profile.js"></script>
 <script src="find.js"></script>
 <script src="home.js"></script>

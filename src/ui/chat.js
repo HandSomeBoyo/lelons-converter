@@ -266,8 +266,9 @@ let roomDrawn = "";
 function drawRoom() {
   const g = isGroupKey(chatWith) ? chatGroup || chatGroups.find((x) => "g:" + x.id === chatWith) : null;
   const sig = JSON.stringify([chatWith, g && [g.name, g.pictureUrl, (g.members || []).map((m) => m.username), g.people]]);
-  if (sig === roomDrawn) return;
-  roomDrawn = sig;
+  const sig2 = sig + (typeof callWith === "function" && chatWith && callWith(chatWith) ? " call" : "");
+  if (sig2 === roomDrawn) return;
+  roomDrawn = sig2;
   const room = $("chatRoom");
   const title = document.createElement("div");
   title.className = "chat-room-text";
@@ -307,6 +308,17 @@ function drawRoom() {
     };
     tools.push(tool(CHAT_ICONS.people, "Add people", () => openGroupModal("edit", true)));
     tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture and people", () => openGroupModal("edit")));
+  } else if (chatWith) {
+    const inCall = typeof callWith === "function" && callWith(chatWith);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "call-start" + (inCall ? " live" : "");
+    b.title = inCall ? `You're in a call with ${chatWith}` : `Call ${chatWith}. You can share your screen in the call.`;
+    b.innerHTML = CALL_ICONS.phone;
+    b.append(document.createTextNode(inCall ? "In call" : "Call"));
+    b.disabled = inCall;
+    b.addEventListener("click", () => callStart(chatWith));
+    tools.push(b);
   }
   $("chatRoomTools").replaceChildren(...tools);
 }
@@ -571,6 +583,28 @@ function chatAttachment(m) {
   return box;
 }
 
+// A call in a private chat: how long it was, or that nobody answered. Click to call back.
+function chatCallLine(m) {
+  const box = document.createElement("div");
+  const missed = m.call_seconds <= 0, declined = m.call_seconds < 0;
+  box.className = "chat-call" + (missed && !m.mine ? " missed" : "");
+  const icon = Object.assign(document.createElement("span"), { className: "chat-call-icon", innerHTML: CALL_ICONS.phone });
+  const text = document.createElement("div");
+  text.className = "info";
+  text.append(Object.assign(document.createElement("b"), {
+    textContent: declined ? (m.mine ? "Call declined" : "You declined a call")
+      : missed ? (m.mine ? "No answer" : "Missed call") : m.mine ? "You called" : `${m.username} called`,
+  }));
+  text.append(Object.assign(document.createElement("span"), { textContent: missed ? chatTime(m.created_at) : clock(m.call_seconds, false) }));
+  box.append(icon, text);
+  if (chatWith && !isGroupKey(chatWith)) {
+    const again = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: m.mine ? "Call again" : "Call back" });
+    again.addEventListener("click", () => callStart(chatWith));
+    box.append(again);
+  }
+  return box;
+}
+
 function reactionRow(m) {
   const row = document.createElement("div");
   row.className = "reactions";
@@ -663,6 +697,7 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
     text.title = chatTime(m.created_at);
     body.append(text);
   }
+  if (m.call_seconds != null) body.append(chatCallLine(m));
   if (m.sound || m.file || m.shared_gone) body.append(chatAttachment(m));
   if ((m.reactions || []).length) body.append(reactionRow(m));
   el.append(body);
