@@ -385,6 +385,14 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
           <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
         </div>
+        <div class="pl-bar" id="sfxPlaylistBar" hidden>
+          <span class="pl-tile" id="plBarLock"></span>
+          <div class="pl-bar-text"><h2 id="plBarName"></h2><p id="plBarSub"></p></div>
+          <span class="lib-faces pl-faces" id="plBarFaces"></span>
+          <button type="button" class="small-button pl-play" id="plBarPlay" title="Play the first sound"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>Play</button>
+          <button type="button" class="outline-button" id="plBarInvite" title="Let friends see it and add sounds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.3"/><path d="M3 19.5c.9-3.2 3.2-4.8 6-4.8s5.1 1.6 6 4.8M19 8v6M16 11h6"/></svg>Invite</button>
+          <button type="button" class="icon-button" id="plBarEdit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
+        </div>
         <p class="lib-showing" id="sfxShowing"></p>
         <div class="upload-list" id="sfxUploads"></div>
         <p class="history-empty" id="sfxEmpty"></p>
@@ -1001,6 +1009,39 @@
   </div>
 </div>
 
+<!-- "Add to playlist", from a sound's playlist button. -->
+<div class="people-pop pl-pop" id="plPop" hidden>
+  <h4 class="pl-pop-head">Add to playlist</h4>
+  <div class="pl-pop-list" id="plPopList"></div>
+  <div class="lib-menu-line"></div>
+  <button type="button" class="pl-pop-item pl-pop-new" id="plPopNewOpen"><i class="pl-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></i><span>New playlist</span></button>
+  <div class="pl-pop-form" id="plPopNew" hidden>
+    <label class="input"><input id="plPopName" maxlength="50" placeholder="Playlist name" autocomplete="off" spellcheck="false"></label>
+    <button type="button" class="small-button" id="plPopCreate">Create</button>
+  </div>
+</div>
+
+<!-- A playlist: make one, rename it, invite or remove people, delete it or leave it. -->
+<div class="modal" id="plModal" hidden>
+  <div class="dialog group-dialog" role="dialog" aria-labelledby="plTitle">
+    <h2 id="plTitle">New playlist</h2>
+    <label class="input pl-name" id="plNameRow"><input id="plName" maxlength="50" placeholder="Playlist name, like My go-to sounds" autocomplete="off" spellcheck="false"></label>
+    <p class="pl-help" id="plHelp"></p>
+    <h4 class="group-label" id="plMembersLabel">People in it</h4>
+    <div class="group-members" id="plMembers"></div>
+    <h4 class="group-label" id="plPickLabel">Invite people</h4>
+    <label class="input group-search" id="plSearchRow"><input id="plSearch" placeholder="Search names" autocomplete="off" spellcheck="false"></label>
+    <div class="group-pick" id="plPick"></div>
+    <p class="group-note" id="plNote"></p>
+    <div class="dialog-actions">
+      <button type="button" class="outline-button group-leave" id="plDanger">Delete playlist</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="plCancel">Cancel</button>
+      <button type="button" class="small-button" id="plSave">Create playlist</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="editSoundModal" hidden>
   <div class="dialog small-dialog" role="dialog" aria-labelledby="editSoundTitle">
     <h2 id="editSoundTitle">Edit sound</h2>
@@ -1246,6 +1287,7 @@
 <script src="files.js"></script>
 <script src="history.js"></script>
 <script src="sfx.js"></script>
+<script src="playlists.js"></script>
 <script src="account.js"></script>
 <script src="whatsnew.js"></script>
 <script src="feedback.js"></script>

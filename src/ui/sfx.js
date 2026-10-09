@@ -96,6 +96,7 @@ function setSfxAccount(account) {
     sfxSounds = [];
     sfxLastLoad = 0;
     $("sfxList").replaceChildren();
+    if (typeof playlistsForget === "function") playlistsForget();
   }
   drawSfxAccount();
   if (typeof chatAccountChanged === "function") chatAccountChanged();
@@ -240,6 +241,7 @@ async function loadSfx() {
   sfxLoading = true;
   sfxReloadPending = false;
   sfxLastLoad = Date.now();
+  if (typeof loadPlaylists === "function") loadPlaylists();
   if (!sfxSounds.length) {
     sfxError = "";
     $("sfxEmpty").hidden = false;
@@ -292,6 +294,7 @@ function sideButton(label, count, active, onclick, extraClass = "", key = extraC
 const CAT_ICONS = {
   all: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
   favorites: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>',
+  playlists: '<path d="M4 6h11M4 11h11M4 16h7"/><circle cx="16.5" cy="17.5" r="2.5"/><path d="M19 17.5V8l2.5-1"/>',
   sfx: '<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>',
   music: '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
   ambience: '<path d="M3 9c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0"/>',
@@ -321,6 +324,7 @@ function drawSfxSide() {
     people.set(s.uploader, who);
   }
   setChildren($("sfxCats"), [$("sfxCatsPill"), catPill("all", "All", counts.all), catPill("favorites", "Favorites", counts.favorites),
+    catPill("playlists", "Playlists", typeof plLists === "undefined" ? 0 : plLists.length),
     ...Object.entries(sfxAccount.categories).map(([value, label]) => catPill(value, label, counts[value] || 0))]);
   moveCatsPill();
   drawGenres();
@@ -358,6 +362,7 @@ const GENRE_ICONS = {
   ambience: '<path d="M3 9c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0"/>',
 };
 function drawGenres() {
+  if (sfxCategory === "playlists" && typeof drawPlaylistSide === "function") return drawPlaylistSide($("sfxGenres"));
   const genres = (sfxAccount.genres || {})[sfxCategory] || [];
   const box = $("sfxGenres");
   const open = genres.length > 0;
@@ -444,7 +449,7 @@ const sfxDownloading = new Set(); // ids being downloaded (a second click does n
 
 function rowFor(sound) {
   const note = sfxNotes.get(sound.id);
-  const sig = [sound.name, sound.category, sound.genre, sound.favorite, sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
+  const sig = [sound.name, sound.category, sound.genre, sound.favorite, plInAny(sound.id), sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
     note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload,
     sfxSongMatch(sound) ? sfxSongMatch(sound).title + "/" + sfxSongMatch(sound).artist : ""].join("|");
   const kept = sfxRows.get(sound.id);
@@ -487,7 +492,7 @@ function drawSfx() {
   drawSfxSide();
   const words = $("sfxSearch").value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = sfxSounds.filter((s) => (sfxCategory === "all" || s.category === sfxCategory ||
-    (sfxCategory === "favorites" && s.favorite)) && (!sfxGenre || s.genre === sfxGenre) && (!sfxUploader || s.uploader === sfxUploader) &&
+    (sfxCategory === "favorites" && s.favorite) || (sfxCategory === "playlists" && plHasSound(s.id))) && (!sfxGenre || s.genre === sfxGenre) && (!sfxUploader || s.uploader === sfxUploader) &&
     words.every((w) => `${s.name} ${s.uploader} ${s.categoryName} ${s.genre || ""}`.toLowerCase().includes(w)));
   shown.sort(SORTS[sfxSort] || SORTS.favorites);
   sfxShown = shown;
@@ -508,7 +513,9 @@ function drawSfx() {
   setChildren($("sfxList"), rows);
   const ids = new Set(sfxSounds.map((s) => s.id));
   for (const id of sfxRows.keys()) if (!ids.has(id)) sfxRows.delete(id);
+  if (typeof drawPlaylistBar === "function") drawPlaylistBar();
   const what = sfxCategory === "all" ? "All sounds" : sfxCategory === "favorites" ? "Favorites"
+    : sfxCategory === "playlists" ? (plCurrent() ? plCurrent().name : "Playlists")
     : sfxGenre || sfxAccount.categories[sfxCategory] || "Sounds";
   $("sfxShowing").textContent = `${what}${sfxUploader ? " from " + sfxUploader : ""} · ${shown.length} sound${shown.length === 1 ? "" : "s"}`;
   $("sfxEmpty").hidden = shown.length > 0;
@@ -516,6 +523,7 @@ function drawSfx() {
     (!sfxSounds.length ? "No sounds yet. Be the first: click Upload."
       : words.length ? "Nothing matches that search."
       : sfxCategory === "favorites" ? "No favorites yet. Click the star on a sound to add it here."
+      : sfxCategory === "playlists" ? playlistEmptyText()
       : sfxUploader ? `${sfxUploader} hasn't uploaded anything here.`
       : sfxGenre ? `No ${sfxGenre} sounds yet. Click the pencil on a sound to put it in ${sfxGenre}, or upload one.`
       : "No sounds in this category yet.");
@@ -623,6 +631,10 @@ function sfxRow(sound) {
     sound.favorite ? "Remove from your favorites" : "Add to your favorites (they show at the top)", () => toggleSfxFavorite(sound));
   star.classList.add("star");
   star.classList.toggle("on", !!sound.favorite);
+  const inList = plInAny(sound.id);
+  const list = add(PL_ICONS.add, inList ? "In your playlists (click to change)" : "Add to a playlist", (b) => openPlaylistPop(b, sound));
+  list.classList.add("pl-add");
+  list.classList.toggle("on", inList);
   if (note && note.path) add(ICONS.folder, "Show in folder", () => api("/api/sfx-show", { path: note.path }));
   add(SFX_ICONS.download, "Download as MP3", () => downloadSfx(sound));
   // The rest only shows when the mouse is over the row (less to look at).
