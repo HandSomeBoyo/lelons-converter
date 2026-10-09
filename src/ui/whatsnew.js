@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.9.0", items: [
+    "Playlists in the Library! Make your own lists of the sounds you use most. Only you can see them.",
+    "Click the new playlist button on any sound to put it in a playlist, or to make a new one right there.",
+    "Invite friends to a playlist: they can see it and add sounds to it too. Rename it or delete it any time.",
+    "Press Play on a playlist to start it, and skip through its sounds with the player bar.",
+  ] },
   { version: "2.8.0", items: [
     "Folders in Docs! Press New folder to keep a project together, and put folders inside folders too.",
     "Drag a document onto a folder to put it in there, or use ··· and Move to folder.",

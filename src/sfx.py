@@ -92,6 +92,8 @@ FRIENDLY = {
     "owner": "The owner's account can't be deleted.",
     "nogroup": "That group is gone, or you're not in it any more.",
     "many": "A group can have up to 50 people.",
+    "noplaylist": "That playlist is gone, or you're not in it any more.",
+    "many_people": "A playlist can have up to 50 people.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
@@ -572,6 +574,36 @@ class Library:
 
     def favorite(self, sound_id, starred):
         _rpc("lelons_favorite", token=self._token(), sound_id=str(sound_id), starred=bool(starred))
+
+    # ---- playlists: your own lists of sounds, only for you and the people you invite
+
+    def _playlists_result(self, result):
+        pictured = lambda row: {**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""}  # noqa: E731
+        return {"playlists": [{**p, "ownerAvatar": public_url(p["owner_avatar"]) if p.get("owner_avatar") else "",
+                               "members": [pictured(m) for m in p.get("members") or []]}
+                              for p in result.get("playlists") or []],
+                "people": [pictured(m) for m in result.get("people") or []],
+                **({"id": result["id"]} if result.get("id") else {})}
+
+    def playlists(self):
+        return self._playlists_result(_rpc("lelons_playlists", token=self._token()) or {})
+
+    def playlist(self, what, playlist_id=None, name=None, sound_id=None, usernames=None):
+        """Make, rename or delete a playlist, put a sound in or take it out, invite or remove people, or leave one."""
+        if what not in ("create", "rename", "delete", "add", "take_out", "invite", "remove", "leave"):
+            raise Error("That didn't work. Try again.")
+        people = [str(u) for u in usernames or [] if str(u).strip()][:50]
+        result = _rpc("lelons_playlist", token=self._token(), what=what,
+                      playlist_id=str(playlist_id) if playlist_id else None,
+                      playlist_name=_clean_name(name, 50) if name is not None else None,
+                      sound_id=str(sound_id) if sound_id else None, usernames=people or None) or {}
+        if not result.get("ok"):
+            raise Error({"name": "Give the playlist a name.",
+                         "denied": "Only the person who made the playlist can do that.",
+                         "many_lists": "You have a lot of playlists already (100 is the most).",
+                         "many_sounds": "That playlist is full (2000 sounds is the most).",
+                         }.get(result.get("error")) or FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
+        return self._playlists_result(result)
 
     def delete_me(self, password):
         """Deletes your own account (your sounds stay) and logs you out."""

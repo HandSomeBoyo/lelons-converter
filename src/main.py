@@ -75,7 +75,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -633,6 +633,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = {}
             elif action == "profile":
                 result = {"profile": library.profile(data.get("username"))}
+            elif action == "playlists":
+                result = library.playlists()
+            elif action == "playlist":
+                result = library.playlist(data.get("what"), data.get("playlist"), data.get("name"), data.get("sound"),
+                                          data.get("usernames"))
             elif action == "favorite":
                 library.favorite(data.get("id"), data.get("on"))
                 result = {}

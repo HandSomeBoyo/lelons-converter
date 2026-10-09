@@ -98,7 +98,6 @@ create index if not exists sounds_created on lelons.sounds (created_at);
 create index if not exists sounds_uploader on lelons.sounds (uploader_id);
 create index if not exists sounds_name on lelons.sounds (lower(btrim(name)));
 create index if not exists sessions_account on lelons.sessions (account_id);
-create index if not exists presence_seen on lelons.presence (seen_at);
 
 -- Bug reports and wishes people send to the owner.
 create table if not exists lelons.feedback (
@@ -126,6 +125,7 @@ create table if not exists lelons.presence (
   account_id uuid references lelons.accounts (id) on delete cascade,
   seen_at timestamptz not null default now()
 );
+create index if not exists presence_seen on lelons.presence (seen_at);
 
 -- The live chat.
 create table if not exists lelons.chat (
@@ -1706,6 +1706,138 @@ begin
   return json_build_object('ok', true, 'id', g.id, 'group', lelons.group_json(g.id), 'old_picture', old_picture);
 end $$;
 
+-- ---- (2.9.0) Playlists: your own lists of Library sounds (the ones you use most, say).
+-- Only you see a playlist, plus the people you invite to it. Everyone in it can add and take out
+-- sounds; only the one who made it can rename it, invite or remove people, or delete it.
+
+create table if not exists lelons.playlists (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(name) between 1 and 50),
+  owner_id uuid not null references lelons.accounts (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists playlists_by_owner on lelons.playlists (owner_id);
+create table if not exists lelons.playlist_members (
+  playlist_id uuid not null references lelons.playlists (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (playlist_id, account_id)
+);
+create index if not exists playlist_members_by_account on lelons.playlist_members (account_id);
+create table if not exists lelons.playlist_sounds (
+  playlist_id uuid not null references lelons.playlists (id) on delete cascade,
+  sound_id uuid not null references lelons.sounds (id) on delete cascade,
+  added_by uuid references lelons.accounts (id) on delete set null,
+  added_at timestamptz not null default now(),
+  primary key (playlist_id, sound_id)
+);
+alter table lelons.playlists enable row level security;
+alter table lelons.playlist_members enable row level security;
+alter table lelons.playlist_sounds enable row level security;
+revoke all on lelons.playlists, lelons.playlist_members, lelons.playlist_sounds from anon, authenticated;
+
+-- Your playlists (yours first, then the ones you were invited to), each with its sounds (newest
+-- added first) and its people, plus everyone's name (to pick who to invite).
+create or replace function lelons.playlists_json(me uuid) returns json
+  language sql stable set search_path = '' as $$
+  select json_build_object(
+    'playlists', coalesce((
+      select json_agg(json_build_object(
+        'id', p.id, 'name', p.name, 'mine', p.owner_id = me, 'owner', o.username, 'owner_avatar', o.avatar,
+        'created_at', p.created_at,
+        'sounds', coalesce((select json_agg(ps.sound_id order by ps.added_at desc)
+                            from lelons.playlist_sounds ps where ps.playlist_id = p.id), '[]'::json),
+        'members', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar) order by m.added_at)
+                             from lelons.playlist_members m join lelons.accounts a on a.id = m.account_id
+                             where m.playlist_id = p.id), '[]'::json))
+        order by (p.owner_id = me) desc, p.created_at)
+      from lelons.playlists p join lelons.accounts o on o.id = p.owner_id
+      where p.owner_id = me or exists (select 1 from lelons.playlist_members m where m.playlist_id = p.id and m.account_id = me)
+    ), '[]'::json),
+    'people', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar)
+                                        order by lower(a.username))
+                        from lelons.accounts a where a.id <> me), '[]'::json)) $$;
+
+create or replace function public.lelons_playlists(token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return lelons.playlists_json(me.id);
+end $$;
+
+-- Change your playlists. what: create (playlist_name), rename (playlist_name), delete, add or take
+-- out a sound (sound_id), invite or remove people (usernames), or leave one you were invited to.
+-- Returns {ok, id (of a new playlist), playlists, people}, or {ok: false, error}.
+create or replace function public.lelons_playlist(token text, what text, playlist_id uuid default null,
+                                                  playlist_name text default null, sound_id uuid default null,
+                                                  usernames text[] default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  p lelons.playlists;
+  new_name text := btrim(regexp_replace(coalesce(playlist_name, ''), '\s+', ' ', 'g'));
+begin
+  if what = 'create' then
+    if new_name = '' then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if (select count(*) from lelons.playlists x where x.owner_id = me.id) >= 100 then
+      return json_build_object('ok', false, 'error', 'many_lists');
+    end if;
+    insert into lelons.playlists (name, owner_id) values (left(new_name, 50), me.id) returning * into p;
+    return json_build_object('ok', true, 'id', p.id) :: jsonb || lelons.playlists_json(me.id) :: jsonb;
+  end if;
+  select x.* into p from lelons.playlists x where x.id = lelons_playlist.playlist_id;
+  if p.id is null or not (p.owner_id = me.id or exists (
+      select 1 from lelons.playlist_members m where m.playlist_id = p.id and m.account_id = me.id)) then
+    return json_build_object('ok', false, 'error', 'noplaylist');
+  end if;
+  if what in ('rename', 'delete', 'invite', 'remove') and p.owner_id <> me.id then
+    return json_build_object('ok', false, 'error', 'denied');
+  end if;
+  if what = 'rename' then
+    if new_name = '' then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    update lelons.playlists x set name = left(new_name, 50) where x.id = p.id;
+  elsif what = 'delete' then
+    delete from lelons.playlists x where x.id = p.id;
+  elsif what = 'add' then
+    if (select count(*) from lelons.playlist_sounds s where s.playlist_id = p.id) >= 2000 then
+      return json_build_object('ok', false, 'error', 'many_sounds');
+    end if;
+    insert into lelons.playlist_sounds (playlist_id, sound_id, added_by)
+    select p.id, s.id, me.id from lelons.sounds s where s.id = lelons_playlist.sound_id
+    on conflict do nothing;
+    if not found and not exists (select 1 from lelons.sounds s where s.id = lelons_playlist.sound_id) then
+      return json_build_object('ok', false, 'error', 'gone');
+    end if;
+  elsif what = 'take_out' then
+    delete from lelons.playlist_sounds s where s.playlist_id = p.id and s.sound_id = lelons_playlist.sound_id;
+  elsif what = 'invite' then
+    insert into lelons.playlist_members (playlist_id, account_id)
+    select p.id, a.id from lelons.accounts a
+    where lower(a.username) = any (select lower(u) from unnest(coalesce(usernames, '{}')) u) and a.id <> me.id
+    on conflict do nothing;
+    if (select count(*) from lelons.playlist_members m where m.playlist_id = p.id) > 50 then
+      raise exception 'too many people' using hint = 'many_people';
+    end if;
+  elsif what = 'remove' then
+    delete from lelons.playlist_members m using lelons.accounts a
+    where m.playlist_id = p.id and a.id = m.account_id
+      and lower(a.username) = any (select lower(u) from unnest(coalesce(usernames, '{}')) u);
+  elsif what = 'leave' then
+    if p.owner_id = me.id then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    delete from lelons.playlist_members m where m.playlist_id = p.id and m.account_id = me.id;
+  else
+    raise exception 'bad what';
+  end if;
+  return json_build_object('ok', true) :: jsonb || lelons.playlists_json(me.id) :: jsonb;
+end $$;
+
 revoke execute on all functions in schema lelons from public;
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
@@ -1730,7 +1862,8 @@ begin
     'lelons_doc_invite(text, uuid, text[])', 'lelons_doc_answer(text, uuid, boolean)',
     'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)', 'lelons_doc_comments(text, uuid)',
     'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
-    'lelons_chat_group(text, text, uuid, text, text[], text)'] loop
+    'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
+    'lelons_playlist(text, text, uuid, text, uuid, text[])'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
