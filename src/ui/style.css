@@ -3507,16 +3507,17 @@ main { max-width: 1040px; padding: 16px 40px 40px; box-sizing: border-box; }
 .lib-genres { top: 16px; }
 html { scroll-padding-top: 16px; }
 
-/* ---- smaller windows: the side bar shows icons only (the name shows when you point at it) */
-@media (max-width: 900px) {
-  :root { --side-w: 64px; }
-  .side-brand { justify-content: center; padding: 0 0 12px; }
-  .side-brand .word, .sidebar .tabs button span, .side-link span { display: none; }
-  .sidebar .tabs button, .side-link { justify-content: center; padding: 10px 0; }
-  .tab-group { height: 1px; padding: 0; margin: 10px 8px; overflow: hidden; color: transparent; background: var(--gl-line); }
-  .side-link .chat-badge, .sidebar .tabs .tab-badge { position: absolute; top: 2px; right: 6px; margin: 0; }
-  main { padding: 12px 22px 32px; }
-}
+/* ---- folded in (or a narrow window): the side bar shows icons only (the name shows when you point at it) */
+html.side-small { --side-w: 64px; }
+.sidebar { transition: width .45s var(--ease); }
+body { transition: padding-left .45s var(--ease); }
+.player-bar, .chat-panel { transition: left .45s var(--ease); }
+html.side-small .side-brand { flex-direction: column; gap: 12px; padding: 0 0 12px; }
+html.side-small .side-name, html.side-small .sidebar .tabs button span, html.side-small .side-link span { display: none; }
+html.side-small .sidebar .tabs button, html.side-small .side-link { justify-content: center; padding: 10px 0; }
+html.side-small .tab-group { height: 1px; padding: 0; margin: 10px 8px; overflow: hidden; color: transparent; background: var(--gl-line); }
+html.side-small .side-link .chat-badge, html.side-small .sidebar .tabs .tab-badge { position: absolute; top: 2px; right: 6px; margin: 0; }
+@media (max-width: 900px) { main { padding: 12px 22px 32px; } .side-fold { display: none; } }
 /* the Library's own genre list sits next to the side bar now: a bit narrower, and the search row wraps */
 #sfxMain.lib-layout.has-genres { grid-template-columns: 176px minmax(0, 1fr); gap: 22px; }
 .lib-tools { flex-wrap: wrap; }
@@ -3537,3 +3538,75 @@ body.chat-page::after { left: calc(var(--content-left) - var(--side-gap)); }
 .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu { --gl-tint: rgba(28, 28, 32, .86); }
 :root[data-theme="light"] .account-panel, :root[data-theme="light"] .help-pop, :root[data-theme="light"] .people-pop,
 :root[data-theme="light"] .volume-pop, :root[data-theme="light"] .lib-menu { --gl-tint: rgba(255, 255, 255, .88); }
+
+/* ---- the name, the version, and the fold button at the top of the side bar */
+.side-brand { position: relative; padding-right: 4px; }
+.side-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.side-name small { font: 500 11.5px/1.2 var(--head); color: var(--muted); white-space: nowrap; }
+.side-fold { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px;
+  background: none; color: var(--muted); cursor: pointer; transition: color .2s, background-color .2s; }
+.side-fold:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.side-fold svg { width: 18px; height: 18px; transition: transform .45s var(--ease); }
+.side-fold.folded svg { transform: scaleX(-1); }
+
+/* ================================================================ 3.0: Settings, like a pro app: pages on the left, tidy rows on the right */
+.settings-dialog.set2 { width: min(780px, calc(100vw - 48px)); height: min(560px, calc(100vh - 48px)); max-height: none; padding: 0;
+  display: grid; grid-template-columns: 210px minmax(0, 1fr); overflow: hidden; }
+.set-nav { display: flex; flex-direction: column; gap: 2px; padding: 22px 12px 16px; border-right: 1px solid var(--gl-line);
+  background: color-mix(in srgb, var(--text) 3%, transparent); }
+.set-nav h2 { margin: 0 10px 14px; font: 700 20px var(--head); letter-spacing: -.02em; }
+.set-nav button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px;
+  background: none; color: color-mix(in srgb, var(--text) 75%, transparent); font: 500 14px var(--head); text-align: left; cursor: pointer; }
+.set-nav button svg { width: 18px; height: 18px; flex: none; }
+.set-nav button:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.set-nav button.active { color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
+.set-nav button.active svg { color: var(--accent); }
+:root[data-theme="light"] .set-nav button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .1); }
+:root[data-theme="light"] .set-nav button.active svg { color: var(--text); }
+.set-about { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 10px; font-size: 12px; color: var(--muted); }
+.set-about b { color: var(--text); font: 600 13px var(--head); }
+
+.set-main { position: relative; overflow-y: auto; padding: 24px 28px 28px; }
+.set-close { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 50%; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--muted); cursor: pointer; }
+.set-close:hover { color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); }
+.set-close svg { width: 15px; height: 15px; }
+.set-page:not([hidden]) { animation: set-in .35s var(--ease-out) both; }
+@keyframes set-in { from { opacity: 0; transform: translateY(6px); } }
+.set-title { margin: 2px 0 18px; font: 700 22px var(--head); letter-spacing: -.02em; }
+.set-label { margin: 18px 4px 8px; font: 600 12px var(--head); color: var(--muted); }
+.set-title + .set-label { margin-top: 0; }
+.set-group { border-radius: 12px; background: color-mix(in srgb, var(--text) 4.5%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line); overflow: hidden; }
+:root[data-theme="light"] .set-group { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+.set-group.set-pad { padding: 14px 16px; }
+.set-row { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; min-height: 58px; padding: 10px 16px; margin: 0; cursor: default; }
+.set-row + .set-row { box-shadow: inset 0 1px 0 var(--gl-line); }
+label.set-row, .set-choice-label { cursor: pointer; }
+.set-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.set-text b { font: 500 14px var(--head); color: var(--text); }
+.set-text small { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.set-folder { font-weight: 700; }
+.set2 .check.set-row { display: flex; }
+.set2 .check.set-row input { order: 2; margin: 0 0 0 auto; flex: none; }
+.set-choice-label { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.set-choice input[type=radio] { flex: none; width: 18px; height: 18px; margin: 0; }
+.set-button { flex: none; padding: 7px 14px; font-size: 13px; }
+.set-help { margin: 8px 4px 0; padding: 0; font-size: 12.5px; color: var(--muted); }
+.set2 .theme-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.set2 .theme-picks button { width: auto; }
+.set2 .volume-row, .set2 .size-row { padding: 0; background: none; margin: 0; }
+.set2 .accent-picks { margin: 0; }
+@media (max-width: 640px) {
+  .settings-dialog.set2 { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .set-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--gl-line); padding: 12px; }
+  .set-nav h2, .set-about { display: none; }
+  .set-nav button { width: auto; flex: none; }
+}
+.set-choice input[type=radio] { appearance: none; -webkit-appearance: none; display: grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--text) 30%, transparent); background: none; cursor: pointer; transition: border-color .2s, background-color .2s; }
+.set-choice input[type=radio]::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink); transform: scale(0); transition: transform .25s var(--spring); }
+.set-choice input[type=radio]:checked { border-color: var(--accent); background: var(--accent); }
+.set-choice input[type=radio]:checked::after { transform: scale(1); }
+.set-button { height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 9px; }
+@media (max-width: 900px) { .side-fold { display: none; } }

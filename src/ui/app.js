@@ -976,6 +976,7 @@ function renderUpdatePopup(s) {
 
 function render(s) {
   $("version").textContent = "Version " + s.version;
+  $("sideVersion").textContent = "Version " + s.version;
   if (typeof checkWhatsNew === "function") checkWhatsNew(s);
   const key = format + ":" + s.quality[format];
   if (key !== shownQuality) {

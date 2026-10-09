@@ -54,8 +54,20 @@ async function changeSettings(changes) {
   if (s) syncSettings(s);
 }
 
+// The pages on the left of the Settings window.
+function showSettingsPage(page) {
+  if (!document.querySelector(`#setNav button[data-set="${page}"]`)) page = "general";
+  document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
+  document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
+}
+document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("click", () => {
+  showSettingsPage(b.dataset.set);
+  savePref("settingsPage", b.dataset.set);
+}));
+
 function openSettings(part) {
   drawSettings();
+  showSettingsPage(part === "save" ? "general" : loadPref("settingsPage") || "general");
   $("settingsModal").hidden = false;
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);

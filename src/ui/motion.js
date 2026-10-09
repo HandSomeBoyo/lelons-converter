@@ -113,3 +113,22 @@ window.addEventListener("resize", () => {
 });
 document.fonts && document.fonts.ready.then(moveTabLine);
 moveTabLine();
+
+// ---- the side bar: fold it in (icons only) and out again; remembered. A narrow window always shows it small.
+function drawSideFold() {
+  const small = sideSmallNow();
+  document.documentElement.classList.toggle("side-small", small);
+  const fold = document.getElementById("sideFold");
+  fold.title = small ? "Show the side bar" : "Make the side bar smaller";
+  fold.classList.toggle("folded", small);
+}
+document.getElementById("sideFold").addEventListener("click", () => {
+  savePref("sideSmall", !document.documentElement.classList.contains("side-small"));
+  drawSideFold();
+});
+window.addEventListener("resize", drawSideFold);
+// The glass under the open page follows once the side bar has changed size.
+document.getElementById("sidebar").addEventListener("transitionend", (e) => {
+  if (e.target.id === "sidebar" && e.propertyName === "width") window.dispatchEvent(new Event("resize"));
+});
+drawSideFold();

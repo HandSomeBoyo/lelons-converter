@@ -17,6 +17,10 @@ function savePref(key, value) {
                             body: JSON.stringify({ key, value }) }).catch(() => {});
 }
 
+// The side bar: small (icons only) when it was folded in, or when the window is narrow. Set before drawing.
+function sideSmallNow() { return loadPref("sideSmall") === true || innerWidth <= 900; }
+document.documentElement.classList.toggle("side-small", sideSmallNow());
+
 // accent -> [color on dark themes, darker color for the light theme]
 const ACCENT_COLORS = {
   yellow: ["#ffcf3f", "#e9ab00"],
