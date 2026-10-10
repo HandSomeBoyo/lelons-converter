@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.14.0", items: [
+    "Smoother everywhere! Folding the side bar is now one clean move: the icons stay put, the names fade and the highlight glides along.",
+    "Fixed the highlight sliding down from the top when you resize the window.",
+    "Switches now use your color instead of green, so everything matches.",
+    "Tidier Boards and Home: new dashed \"Create new board\" tiles, matching Log in buttons, and a calm grey dash while the channels load.",
+  ] },
   { version: "2.13.0", items: [
     "Turn on your camera in calls with the new camera button. Everyone in the call shows up as a tile, and a green outline shows who's talking.",
     "When someone shares their screen, the cameras sit in a row under it. Make it all small in the corner any time.",
