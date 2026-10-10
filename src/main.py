@@ -32,6 +32,7 @@ import downloader  # noqa: E402
 import files  # noqa: E402
 import findsounds  # noqa: E402
 import pagecache  # noqa: E402
+import boards  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import history  # noqa: E402
@@ -75,7 +76,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -700,6 +701,39 @@ class Handler(BaseHTTPRequestHandler):
             pagecache.put("account", result.get("account"))
         self.send_json({"ok": True, **result})
 
+    def handle_boards(self, action, data):
+        """The Boards tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        board_id = data.get("id")
+        try:
+            if action.startswith("team-"):  # team boards, shared through the accounts
+                try:
+                    result = boards.team(action[5:], data)
+                except sfx.LoggedOut as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+            elif action == "list":
+                result = {"boards": boards.list_all()}
+            elif action == "create":
+                result = {"board": boards.create(data.get("board"))}
+            elif action == "open":
+                result = {"board": boards.open_(board_id)}
+            elif action == "get":  # another board, to move a card or list there
+                result = {"board": boards.get(board_id)}
+            elif action == "save":
+                result = {"updated": boards.save(board_id, data.get("board"))}
+            elif action == "star":
+                boards.star(board_id, data.get("starred"))
+                result = {}
+            elif action == "delete":
+                boards.delete(board_id)
+                result = {}
+            else:
+                return self.send_error(404)
+        except boards.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't save the board. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_docs(self, action, data):
         """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         doc_id = data.get("id")
@@ -972,6 +1006,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_sfx(self.path[len("/api/sfx-"):], data)
         elif self.path.startswith("/api/docs-"):
             self.handle_docs(self.path[len("/api/docs-"):], data)
+        elif self.path.startswith("/api/boards-"):
+            self.handle_boards(self.path[len("/api/boards-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

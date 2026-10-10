@@ -2097,6 +2097,170 @@ begin
 end $$;
 
 revoke execute on all functions in schema lelons from public;
+-- ---- Team boards (2.12.0): Trello-like boards you share with people you invite.
+-- (Boards that are "just me" never come here: they stay on your own computer.)
+-- A board is kept as one piece (its lists and cards) with a number (rev) that goes up with every save.
+-- When two people change it at the same time, the app puts both changes together and saves again.
+
+create table if not exists lelons.boards (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references lelons.accounts (id) on delete cascade,
+  title text not null default 'Untitled board' check (length(title) <= 120),
+  data jsonb not null default '{}'::jsonb,
+  rev bigint not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references lelons.accounts (id) on delete set null
+);
+create index if not exists boards_owner on lelons.boards (owner_id);
+-- Who's on a board (the one who made it too): invited (joined = false) until they say yes.
+create table if not exists lelons.board_members (
+  board_id uuid not null references lelons.boards (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  joined boolean not null default false,
+  starred boolean not null default false,
+  invited_by uuid references lelons.accounts (id) on delete set null,
+  invited_at timestamptz not null default now(),
+  seen_at timestamptz,                     -- had the board open (the faces at the top)
+  primary key (board_id, account_id)
+);
+create index if not exists board_members_account on lelons.board_members (account_id);
+alter table lelons.boards enable row level security;
+alter table lelons.board_members enable row level security;
+revoke all on lelons.boards, lelons.board_members from anon, authenticated;
+
+create or replace function lelons.board_people(b uuid, owner uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'owner', a.id = owner,
+                                             'joined', m.joined, 'here', coalesce(m.seen_at > now() - interval '12 seconds', false))
+                           order by a.id <> owner, not m.joined, lower(a.username)), '[]'::json)
+  from lelons.board_members m join lelons.accounts a on a.id = m.account_id
+  where m.board_id = b
+$$;
+
+create or replace function lelons.board_cards(data jsonb) returns int
+language sql immutable set search_path = '' as $$
+  select count(*)::int from jsonb_array_elements(case when jsonb_typeof(data->'lists') = 'array' then data->'lists' else '[]'::jsonb end) l,
+    jsonb_array_elements(case when jsonb_typeof(l->'cards') = 'array' then l->'cards' else '[]'::jsonb end) c
+  where not coalesce((l->>'archived')::boolean, false) and not coalesce((c->>'archived')::boolean, false)
+$$;
+
+-- Everything about team boards in one place. what:
+--   list               your team boards and the invitations waiting for an answer
+--   people             everyone you could invite
+--   create (data)      a new board, made from data
+--   open / check       the board (check: only when it changed since base_rev), who's on it and who has it open
+--   save (data, base_rev)  saves it, unless someone saved in between: then you get theirs back (conflict)
+--   star (data: true/false)    your own star
+--   invite (usernames) / remove (usernames: one) / leave / answer (data: true = join, false = no) / delete
+create or replace function public.lelons_board(token text, what text, board_id uuid default null, data jsonb default null,
+                                               base_rev bigint default null, usernames text[] default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  b lelons.boards;
+  member lelons.board_members;
+  them uuid;
+  new_id uuid;
+begin
+  if what = 'list' then
+    return json_build_object(
+      'boards', coalesce((select json_agg(json_build_object('id', x.id, 'title', x.title, 'bg', coalesce(x.data->>'bg', 'blue'),
+                                            'mine', x.owner_id = me.id, 'starred', m.starred, 'updated', extract(epoch from x.updated_at),
+                                            'opened', extract(epoch from m.seen_at), 'created', extract(epoch from x.created_at),
+                                            'cards', lelons.board_cards(x.data), 'people', lelons.board_people(x.id, x.owner_id))
+                                          order by x.created_at)
+                          from lelons.boards x join lelons.board_members m on m.board_id = x.id and m.account_id = me.id and m.joined),
+                         '[]'::json),
+      'invites', coalesce((select json_agg(json_build_object('id', x.id, 'title', x.title, 'bg', coalesce(x.data->>'bg', 'blue'),
+                                             'from', coalesce(a.username, '?'), 'avatar', a.avatar, 'at', m.invited_at)
+                                           order by m.invited_at desc)
+                           from lelons.board_members m join lelons.boards x on x.id = m.board_id
+                           left join lelons.accounts a on a.id = m.invited_by
+                           where m.account_id = me.id and not m.joined),
+                          '[]'::json));
+  elsif what = 'people' then
+    return coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar) order by lower(a.username))
+                     from lelons.accounts a where a.id <> me.id), '[]'::json);
+  elsif what = 'create' then
+    if jsonb_typeof(data) <> 'object' or length(data::text) > 2000000 then
+      raise exception 'bad board' using hint = 'board_big';
+    end if;
+    if (select count(*) from lelons.boards x where x.owner_id = me.id) >= 100 then
+      raise exception 'too many boards' using hint = 'board_many';
+    end if;
+    insert into lelons.boards (owner_id, title, data, updated_by)
+    values (me.id, left(coalesce(nullif(btrim(data->>'title'), ''), 'Untitled board'), 120), data, me.id) returning id into new_id;
+    insert into lelons.board_members (board_id, account_id, joined, invited_by, seen_at) values (new_id, me.id, true, me.id, now());
+    return json_build_object('id', new_id, 'rev', 1);
+  elsif what = 'answer' then
+    if coalesce((data #>> '{}')::boolean, false) then
+      update lelons.board_members m set joined = true where m.board_id = lelons_board.board_id and m.account_id = me.id;
+    else
+      delete from lelons.board_members m where m.board_id = lelons_board.board_id and m.account_id = me.id and not m.joined;
+    end if;
+    if not found then
+      raise exception 'no invite' using hint = 'board_gone';
+    end if;
+    return '{}'::json;
+  end if;
+
+  -- Everything else needs a board you're on.
+  select x.* into b from lelons.boards x where x.id = lelons_board.board_id;
+  select m.* into member from lelons.board_members m where m.board_id = b.id and m.account_id = me.id and m.joined;
+  if b.id is null or member.account_id is null then
+    raise exception 'no such board' using hint = 'board_gone';
+  end if;
+
+  if what in ('open', 'check') then
+    update lelons.board_members m set seen_at = now() where m.board_id = b.id and m.account_id = me.id;
+    return json_build_object('rev', b.rev, 'mine', b.owner_id = me.id, 'starred', member.starred,
+                             'board', case when what = 'open' or base_rev is null or b.rev <> base_rev then b.data end,
+                             'people', lelons.board_people(b.id, b.owner_id));
+  elsif what = 'save' then
+    if jsonb_typeof(data) <> 'object' or length(data::text) > 2000000 then
+      raise exception 'bad board' using hint = 'board_big';
+    end if;
+    if base_rev is distinct from b.rev then  -- someone saved in between: the app puts the two together and tries again
+      return json_build_object('conflict', true, 'rev', b.rev, 'board', b.data);
+    end if;
+    update lelons.boards x set data = lelons_board.data, rev = x.rev + 1, updated_at = now(), updated_by = me.id,
+      title = left(coalesce(nullif(btrim(lelons_board.data->>'title'), ''), 'Untitled board'), 120)
+    where x.id = b.id returning x.rev into b.rev;
+    return json_build_object('rev', b.rev);
+  elsif what = 'star' then
+    update lelons.board_members m set starred = coalesce((data #>> '{}')::boolean, false) where m.board_id = b.id and m.account_id = me.id;
+    return '{}'::json;
+  elsif what = 'invite' then
+    if b.owner_id <> me.id then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    insert into lelons.board_members (board_id, account_id, invited_by)
+    select b.id, a.id, me.id from lelons.accounts a
+    where lower(a.username) = any (select lower(btrim(u)) from unnest(coalesce(usernames, '{}')) u) and a.id <> me.id
+    on conflict on constraint board_members_pkey do nothing;
+    if (select count(*) from lelons.board_members m where m.board_id = b.id) > 50 then
+      raise exception 'too many people' using hint = 'board_people';
+    end if;
+    return lelons.board_people(b.id, b.owner_id);
+  elsif what in ('remove', 'leave') then
+    them := case when what = 'leave' then me.id else
+      (select a.id from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(usernames[1], '')))) end;
+    if them is null or them = b.owner_id or (b.owner_id <> me.id and them <> me.id) then
+      raise exception 'not allowed' using hint = 'denied';
+    end if;
+    delete from lelons.board_members m where m.board_id = b.id and m.account_id = them;
+    return lelons.board_people(b.id, b.owner_id);
+  elsif what = 'delete' then
+    if b.owner_id <> me.id then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    delete from lelons.boards x where x.id = b.id;
+    return '{}'::json;
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -2121,7 +2285,8 @@ begin
     'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)', 'lelons_doc_comments(text, uuid)',
     'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
-    'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)'] loop
+    'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
+    'lelons_board(text, text, uuid, jsonb, bigint, text[])'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
