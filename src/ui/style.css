@@ -4233,7 +4233,7 @@ select.bd-input { cursor: pointer; }
 .bd-feed > .bd-face { position: relative; }
 .bd-plain-btn.bd-wide { display: flex; }
 
-/* ---- 2.12.0: cameras in calls. Alone they fill the stage as tiles (everyone in the call, a picture for who has
+/* ---- 2.13.0: cameras in calls. Alone they fill the stage as tiles (everyone in the call, a picture for who has
    their camera off); with a shared screen they sit in a row under it. A green outline shows who's talking. */
 .call-tiles { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 8px; padding: 8px; }
 .call-tiles[hidden] { display: none; }
