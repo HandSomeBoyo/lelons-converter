@@ -101,6 +101,7 @@ function setSfxAccount(account) {
   drawSfxAccount();
   if (typeof chatAccountChanged === "function") chatAccountChanged();
   if (typeof homeAccountChanged === "function") homeAccountChanged(!sfxUser() || sfxUser().id !== was);
+  if (typeof fxAccountChanged === "function") fxAccountChanged();
 }
 
 // Something said the login ran out: back to the log in screen.
