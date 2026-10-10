@@ -109,6 +109,7 @@ function drawChannels() {
   const known = d.channels.filter((c) => c.info && c.info.subscribers != null);
   const total = known.reduce((sum, c) => sum + c.info.subscribers, 0);
   rollNumber($("homeTotal"), known.length ? total : null);
+  $("homeTotal").classList.toggle("waiting", !known.length); // a quiet grey dash until there's a number
   $("homeTotalNote").textContent = !d.channels.length ? "No channels picked yet."
     : d.channels.every((c) => c.loading) ? "Looking at the channels..."
     : `subscribers across ${d.channels.length === 1 ? "1 channel" : d.channels.length + " channels"}`;
