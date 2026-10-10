@@ -76,7 +76,7 @@ document.getElementById("tabs").append(tabLine);
 let tabLineReady = false;
 tabLine.addEventListener("animationend", () => tabLine.classList.remove("moving"));
 
-function moveTabLine() {
+function moveTabLine(instant) {
   const active = document.getElementById("tabs").querySelector("button.active");
   if (!active || document.querySelector("#accountTab:not([hidden])")) {
     tabLine.style.opacity = "0";
@@ -85,7 +85,7 @@ function moveTabLine() {
   tabLine.style.opacity = "1";
   const x = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`; // (the tabs are a list down the side)
   // Moving to another tab, the glass stretches a little on the way, like a drop of liquid.
-  if (tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
+  if (!instant && tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
     tabLine.classList.remove("moving");
     void tabLine.offsetWidth;
     tabLine.classList.add("moving");
@@ -105,11 +105,15 @@ new MutationObserver((changes) => { if (changes.some((c) => c.target !== tabLine
   .observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class"] });
 new MutationObserver(moveTabLine).observe(document.getElementById("accountTab"), { attributes: true, attributeFilter: ["hidden"] });
 // Resizing the window: the glass follows at once (no slide, no stretch).
-window.addEventListener("resize", () => {
+// (Snapped without the slide: putting the slide back on only after the new spot is drawn.)
+function snapTabLine() {
   tabLine.classList.remove("ready", "moving");
-  tabLine.style.transform = "";
-  moveTabLine();
-  requestAnimationFrame(() => tabLine.classList.add("ready"));
+  moveTabLine(true);
+  void tabLine.offsetWidth;
+}
+window.addEventListener("resize", () => {
+  snapTabLine();
+  if (!following) requestAnimationFrame(() => tabLine.classList.add("ready"));
 });
 document.fonts && document.fonts.ready.then(moveTabLine);
 moveTabLine();
@@ -122,13 +126,28 @@ function drawSideFold() {
   fold.title = small ? "Show the side bar" : "Make the side bar smaller";
   fold.classList.toggle("folded", small);
 }
+// While the side bar changes size, the glass under the open page is moved along every frame,
+// until the side bar is done (or a moment later, if that never comes).
+let following = false, followGiveUp = 0;
+function followTabLine() {
+  followGiveUp = performance.now() + 1500;
+  if (following) return;
+  following = true;
+  (function frame() {
+    snapTabLine();
+    if (following && performance.now() < followGiveUp) return void requestAnimationFrame(frame);
+    following = false;
+    tabLine.classList.add("ready");
+  })();
+}
 document.getElementById("sideFold").addEventListener("click", () => {
   savePref("sideSmall", !document.documentElement.classList.contains("side-small"));
   drawSideFold();
+  followTabLine();
 });
 window.addEventListener("resize", drawSideFold);
 // The glass under the open page follows once the side bar has changed size.
 document.getElementById("sidebar").addEventListener("transitionend", (e) => {
-  if (e.target.id === "sidebar" && e.propertyName === "width") window.dispatchEvent(new Event("resize"));
+  if (e.target.id === "sidebar" && e.propertyName === "width") { following = false; window.dispatchEvent(new Event("resize")); }
 });
 drawSideFold();

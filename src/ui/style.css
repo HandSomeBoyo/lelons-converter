@@ -4262,3 +4262,45 @@ select.bd-input { cursor: pointer; }
 .call-card { max-width: min(640px, calc(100vw - 32px)); }
 .call-in .call-text { min-width: 120px; }
 .call-in .call-text small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ================================================================ 2.14.0: a clean pass over the whole app.
+   The side bar folds in one smooth move: the icons stay put, the names fade, the group names close up,
+   and the glass under the open page rides along (see motion.js). */
+.sidebar { overflow: hidden; }
+.side-brand { flex: none; height: 44px; box-sizing: border-box; flex-direction: row; gap: 10px; padding: 0 0 14px 7px;
+  transition: height .45s var(--ease), padding .45s var(--ease); }
+.side-name { overflow: hidden; white-space: nowrap; transition: opacity .25s var(--ease); }
+.side-fold { position: absolute; top: 0; left: calc(100% - 30px); transition: color .2s, background-color .2s, top .45s var(--ease), left .45s var(--ease); }
+html.side-small .side-brand { flex-direction: row; align-items: flex-start; gap: 10px; height: 84px; padding: 0 0 12px 7px; }
+html.side-small .side-name { display: flex; opacity: 0; pointer-events: none; }
+html.side-small .side-fold { top: 42px; left: 7px; }
+
+.sidebar .tabs button, .side-link, html.side-small .sidebar .tabs button, html.side-small .side-link {
+  justify-content: flex-start; padding: 9px 13px; }
+.sidebar .tabs button > span, .side-link > span { transition: opacity .25s var(--ease); }
+html.side-small .sidebar .tabs button > span, html.side-small .side-link > span { display: inline; opacity: 0; }
+
+.tab-group { box-sizing: border-box; height: 36px; overflow: hidden; white-space: nowrap;
+  transition: height .45s var(--ease), padding .45s var(--ease), margin .45s var(--ease), color .25s, background-color .25s; }
+html.side-small .tab-group { height: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .side-brand, .side-name, .side-fold, .tab-group, .sidebar .tabs button > span, .side-link > span { transition: none; }
+}
+
+/* ---- one accent everywhere: switches that are on use the app's color, like the round picks next to them */
+:root, :root[data-theme="light"] { --switch-on: var(--accent); }
+
+/* ---- Boards: "Create new board" looks like the other "start something" places (a dashed outline with a plus) */
+.bd-tile-new { background: transparent; box-shadow: none; border: 1px dashed var(--line2);
+  flex-direction: column; gap: 8px; text-align: center; font: 500 13.5px var(--head); color: var(--muted); }
+.bd-tile-new::before { content: "+"; font: 300 26px/1 var(--head); color: var(--accent); transition: transform .35s var(--spring); }
+.bd-tile-new:hover { background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); transform: translateY(-2px); }
+.bd-tile-new:hover::before { transform: scale(1.15); }
+
+/* ---- pages arrive a touch quicker, so clicking around feels snappy */
+.tab-page:not([hidden]) { animation-duration: .4s; }
+@media (prefers-reduced-motion: reduce) { .tab-page:not([hidden]) { animation: none; } }
+
+/* ---- Home: the big number is a quiet grey dash while the channels load, not a yellow bar */
+.roll.big.waiting { color: var(--muted); opacity: .45; animation: pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .roll.big.waiting { animation: none; } }
