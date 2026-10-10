@@ -84,6 +84,7 @@
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
+      <button data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
       <div class="tab-group">Tools</div>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
@@ -600,6 +601,39 @@
       <div id="bdHomeLists"></div>
     </div>
     <div class="bd-board" id="bdBoard" hidden></div>
+  </section>
+
+  <section class="tab-page" id="fxTab" hidden>
+    <div class="fx-page" id="fxPage">
+      <div class="fx-hero" id="fxHero">
+        <canvas class="fx-hero-art" id="fxHeroArt"></canvas>
+        <div class="fx-hero-text">
+          <span class="fx-kicker">New pack</span>
+          <h1 class="headline">Film assets.<br><em>Make it go boom.</em></h1>
+          <p>Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.</p>
+          <div class="fx-hero-buttons">
+            <button type="button" class="convert small-button" id="fxHeroOpen">See the pack</button>
+            <span class="fx-hero-meta" id="fxHeroMeta"></span>
+          </div>
+        </div>
+      </div>
+      <div class="fx-tools">
+        <label class="input fx-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="fxSearch" placeholder="Search explosions, fire, smoke..." autocomplete="off" spellcheck="false">
+        </label>
+        <label class="quality fx-sort">
+          <select id="fxSort"><option value="new">Newest</option><option value="popular">Most downloaded</option><option value="name">A to Z</option></select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </label>
+      </div>
+      <div class="fx-cats" id="fxCats"></div>
+      <div class="fx-grid-head"><h2 id="fxGridTitle">All packs</h2><span id="fxGridCount"></span></div>
+      <div class="fx-grid" id="fxGrid"></div>
+      <p class="fx-empty" id="fxEmpty" hidden>Nothing found. Try another word.</p>
+      <p class="fx-sample-note">This is a first look with sample packs. The previews are drawn live, real clips come later.</p>
+    </div>
+    <div class="fx-pack" id="fxPack" hidden></div>
   </section>
 
   <section class="tab-page" id="copyrightTab" hidden>
@@ -1343,6 +1377,7 @@
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
 <script src="boards.js"></script>
+<script src="fx.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>
