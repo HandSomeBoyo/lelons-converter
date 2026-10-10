@@ -3813,3 +3813,42 @@ body.has-player .call-stage.small { bottom: 96px; }
 .chat-call .info b { font-size: 13.5px; }
 .chat-call .info span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chat-call .link { margin-left: 8px; font-size: 13px; }
+
+/* ---- 2.11.0: group calls, who's talking, deafen, and the screen sharing and microphone windows */
+.call-people { display: flex; align-items: center; flex: none; }
+.call-people:empty { display: none; }
+.call-person { position: relative; display: grid; margin-left: 5px; border-radius: 50%; transition: box-shadow .15s, opacity .2s; box-shadow: 0 0 0 2.5px var(--panel); }
+.call-person:first-child { margin-left: 0; }
+.call-person .avatar { width: 34px; height: 34px; font-size: 14px; }
+.call-person.speaking { box-shadow: 0 0 0 2.5px var(--panel), 0 0 0 4.5px var(--green); z-index: 1; }
+.call-person.waiting { opacity: .45; }
+.call-person-icon { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+  background: #e5484d; color: #fff; box-shadow: 0 0 0 2px var(--panel); }
+.call-person-icon.live { background: var(--green); color: #111; }
+.call-person-icon svg { width: 10px; height: 10px; stroke-width: 2.6; }
+.call-btn.off { background: color-mix(in srgb, #e5484d 22%, var(--panel2)); color: #ff6b6b; }
+.call-btn.open { box-shadow: inset 0 0 0 2px var(--text); }
+.call-in .call-card, .call-joining .call-card { gap: 14px; }
+
+.call-pop { width: 360px; max-width: calc(100vw - 32px); padding: 14px 16px 16px; box-sizing: border-box; border-radius: 18px; align-self: center;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--g-edge, var(--line)), var(--shadow-lg); animation: call-in .3s var(--spring) both; }
+.call-pop[hidden] { display: none; }
+.call-pop h4 { margin: 12px 0 7px; font: 600 11.5px var(--head); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.call-pop h4:first-child { margin-top: 0; }
+.call-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.call-chips button { all: unset; cursor: pointer; padding: 6px 11px; border-radius: 10px; background: var(--panel2); font: 600 13px var(--head); font-variant-numeric: tabular-nums; }
+.call-chips button:hover { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.call-chips button.on { background: var(--text); color: var(--bg); }
+.call-pop-note { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.call-pop-actions { display: flex; gap: 8px; margin-top: 14px; }
+.call-pop-actions button { flex: 1; justify-content: center; }
+.call-stop { color: #ff6b6b; }
+.call-select { width: 100%; height: 38px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font: 13.5px Inter, "Segoe UI", sans-serif; }
+
+.call-stage-tabs { display: flex; gap: 4px; }
+.call-stage-tabs button { all: unset; cursor: pointer; padding: 5px 10px; border-radius: 9px; background: rgba(0, 0, 0, .5); color: #fff; font: 600 12.5px var(--head); backdrop-filter: blur(10px); }
+.call-stage-tabs button.on { background: #fff; color: #111; }
+.call-stage-tabs:not(:empty) ~ .icon-button, .call-stage:has(.call-stage-tabs:not(:empty)) .call-stage-bar { opacity: 1; }
+.call-start.join { background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--green); }
+.call-start.join:hover { background: color-mix(in srgb, var(--green) 32%, transparent); }
