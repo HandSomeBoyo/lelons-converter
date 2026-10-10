@@ -474,7 +474,7 @@ class Window:
     def _permission(self, this, sender, args):
         kind = ctypes.c_int()
         _method(args, 4, ctypes.POINTER(ctypes.c_int))(ctypes.byref(kind))  # get_PermissionKind
-        if kind.value == 1:  # COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+        if kind.value in (1, 2):  # COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, _CAMERA (for calls)
             _method(args, 7, ctypes.c_int)(1)  # put_State: COREWEBVIEW2_PERMISSION_STATE_ALLOW
         return S_OK
 

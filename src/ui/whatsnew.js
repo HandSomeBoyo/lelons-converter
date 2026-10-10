@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.13.0", items: [
+    "Turn on your camera in calls with the new camera button. Everyone in the call shows up as a tile, and a green outline shows who's talking.",
+    "When someone shares their screen, the cameras sit in a row under it. Make it all small in the corner any time.",
+    "AI noise suppression: keyboard clicks, fans and background noise get taken away, so only your voice comes through. It's on by default.",
+    "Pick how strong it is (Off, Standard, Strong or Max), and which camera to use, with the sliders button in a call.",
+  ] },
   { version: "2.12.0", items: [
     "New Boards tab, like Trello! Make boards with lists and cards, and drag the cards along as things get done. Start empty or with a ready setup, like YouTube video.",
     "Open a card to give it labels, a due date, a description, checklists, links, a cover color and comments. Use the pencil or right-click a card for quick changes.",
