@@ -83,6 +83,7 @@
       <div class="tab-group">Create</div>
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
+      <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span></button>
       <div class="tab-group">Tools</div>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
@@ -593,6 +594,14 @@
     </div>
   </section>
 
+  <section class="tab-page" id="boardsTab" hidden>
+    <div class="bd-home" id="bdHome">
+      <h1 class="headline">Plan it out.<br><em>Boards for anything.</em></h1>
+      <div id="bdHomeLists"></div>
+    </div>
+    <div class="bd-board" id="bdBoard" hidden></div>
+  </section>
+
   <section class="tab-page" id="copyrightTab" hidden>
     <h1 class="headline">Is it copyrighted?<br><em>Check before you post.</em></h1>
     <label class="dropzone" id="copyDrop">
@@ -1049,6 +1058,12 @@
 </div>
 
 <!-- A playlist: make one, rename it, invite or remove people, delete it or leave it. -->
+<div class="modal bd-card-modal" id="bdCardModal" hidden>
+  <div class="dialog bd-card-dialog" id="bdCardDialog" role="dialog" aria-label="Card"></div>
+</div>
+
+<div class="bd-pop" id="bdPop" hidden></div>
+
 <div class="modal" id="plModal" hidden>
   <div class="dialog group-dialog" role="dialog" aria-labelledby="plTitle">
     <h2 id="plTitle">New playlist</h2>
@@ -1326,6 +1341,7 @@
 <script src="stats.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
+<script src="boards.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>
