@@ -8,28 +8,10 @@ const FX_CATS = [
   { key: "muzzle", name: "Muzzle flashes" }, { key: "sparks", name: "Sparks" }, { key: "debris", name: "Debris" },
   { key: "dust", name: "Dust" }, { key: "blood", name: "Blood" }, { key: "lightning", name: "Lightning" },
   { key: "water", name: "Water" }, { key: "magic", name: "Magic" }, { key: "lightleak", name: "Light leaks" },
+  { key: "other", name: "Other" },
 ];
-// Sample packs: [name, category, clips, size in GB, downloads, days since added]
-const FX_PACKS = [
-  ["Inferno", "fire", 24, 6.2, 1840, 1], ["Big Booms", "explosion", 32, 9.4, 3120, 2], ["Street Smoke", "smoke", 18, 4.1, 960, 3],
-  ["Gunfire Essentials", "muzzle", 40, 1.2, 4410, 5], ["Grinder Sparks", "sparks", 22, 2.8, 1270, 6], ["Concrete Hits", "debris", 16, 3.6, 720, 8],
-  ["Desert Dust", "dust", 20, 3.9, 640, 9], ["Splatter Kit", "blood", 26, 1.9, 1530, 11], ["Storm Strikes", "lightning", 14, 1.4, 880, 12],
-  ["Splash Zone", "water", 28, 5.1, 1010, 14], ["Spell Book", "magic", 30, 2.4, 2260, 15], ["Golden Hour Leaks", "lightleak", 36, 7.8, 2980, 17],
-  ["Car Explosions", "explosion", 12, 5.6, 2050, 20], ["Campfire & Embers", "fire", 18, 3.3, 1190, 22], ["Ground Smoke", "smoke", 15, 3.0, 540, 25],
-  ["Welding Sparks", "sparks", 14, 1.6, 610, 28],
-].map(([name, cat, clips, gb, downloads, days], i) => ({ id: "p" + i, name, cat, clips, gb, downloads, days, seed: i * 97 + 13 }));
-
-const FX_CLIP_WORDS = {
-  explosion: ["Ground Blast", "Air Burst", "Fireball", "Shockwave", "Big Boom"], fire: ["Flame Loop", "Fire Burst", "Torch", "Wall of Fire", "Embers"],
-  smoke: ["Plume", "Drift", "Wisps", "Smoke Column", "Haze"], muzzle: ["Pistol Flash", "Rifle Flash", "Shotgun Blast", "Side Flash", "Burst Fire"],
-  sparks: ["Shower", "Spray", "Sparkle Hit", "Spark Fall", "Cut Sparks"], debris: ["Rock Chunks", "Bullet Hit", "Wall Burst", "Gravel Spray", "Shards"],
-  dust: ["Ground Puff", "Dust Wave", "Footstep Dust", "Landing Dust", "Dust Cloud"], blood: ["Hit Splat", "Spray", "Drip", "Side Splat", "Mist"],
-  lightning: ["Strike", "Branching Bolt", "Arc", "Flicker", "Sky Bolt"], water: ["Splash", "Drop Hit", "Spray", "Wave Crash", "Puddle Jump"],
-  magic: ["Portal", "Spell Cast", "Orb", "Swirl", "Shimmer"], lightleak: ["Warm Leak", "Flare Sweep", "Orange Glow", "Film Burn", "Soft Flash"],
-};
-
 const fxCatName = (key) => (FX_CATS.find((c) => c.key === key) || {}).name || key;
-let fxCat = "", fxQuery = "", fxOpenPack = null, fxReady = false;
+
 
 // ---- live previews
 
@@ -166,145 +148,500 @@ function fxTick() {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && fxPlaying.size && !fxLoop) fxLoop = requestAnimationFrame(fxTick); });
 
-// A preview tile: still until the mouse is on it, then it plays.
-function fxPreview(kind, seed, hoverEl) {
-  const canvas = document.createElement("canvas");
-  canvas.className = "fx-art";
-  const art = fxArt(canvas, kind, seed);
-  requestAnimationFrame(() => art.warm());
-  (hoverEl || canvas).addEventListener("mouseenter", () => fxPlay(art));
-  (hoverEl || canvas).addEventListener("mouseleave", () => fxStop(art));
-  return canvas;
-}
-
 // ---- the page
 
+let fxData = null, fxCat = "", fxQuery = "", fxOpen = null, fxHeroArt = null, fxReady = false, fxLoading = false;
 const fxEl = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
-const fxGb = (gb) => (gb < 1 ? Math.round(gb * 1000) + " MB" : gb.toFixed(1) + " GB");
-const fxNum = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n));
-const fxBadges = (pack) => { const b = fxEl("div", "fx-badges"); for (const t of ["4K", "Alpha"]) b.append(fxEl("span", "fx-badge", t)); if (pack.days <= 7) b.append(fxEl("span", "fx-badge new", "New")); return b; };
+const fxSvg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const FX_ICONS = {
+  download: fxSvg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'), back: fxSvg('<path d="M15 5l-7 7 7 7"/>'),
+  trash: fxSvg('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>'), pencil: fxSvg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  close: fxSvg('<path d="M6 6l12 12M18 6L6 18"/>'), film: fxSvg('<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/>'),
+};
+const fxSize = (bytes) => { const b = +bytes || 0; if (b < 1024 ** 2) return Math.round(b / 1024) + " KB"; if (b < 1024 ** 3) return Math.round(b / 1024 ** 2) + " MB"; return (b / 1024 ** 3).toFixed(1) + " GB"; };
+const fxNum = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n || 0));
+const fxQuality = (w) => (!w ? "" : w >= 3800 ? "4K" : w >= 2500 ? "2.7K" : w >= 2000 ? "2K" : w >= 1900 ? "1080p" : w >= 1260 ? "720p" : w + "px");
+const fxIsNew = (pack) => Date.now() / 1000 - pack.created < 7 * 86400;
+const fxSecs = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : (Math.round(s * 10) / 10) + "s");
+
+function fxUrl(path) {
+  const files = fxData && fxData.files;
+  if (!path || !files) return "";
+  return files.base + path.split("/").map(encodeURIComponent).join("/") + "?Authorization=" + encodeURIComponent(files.auth);
+}
+
+// A picture of a pack or clip; its preview video plays while the mouse is on hoverEl.
+function fxThumb(thumb, preview, hoverEl, cat) {
+  const box = fxEl("div", "fx-thumb");
+  if (thumb && fxUrl(thumb)) {
+    const img = fxEl("img");
+    img.loading = "lazy";
+    img.alt = "";
+    img.src = fxUrl(thumb);
+    img.addEventListener("error", () => img.remove());
+    box.append(img);
+  } else {
+    const none = fxEl("div", "fx-noart");
+    none.innerHTML = FX_ICONS.film;
+    if (cat) none.append(fxEl("span", "fx-cat-dot " + cat));
+    box.append(none);
+  }
+  if (preview && fxUrl(preview)) {
+    let video = null;
+    hoverEl.addEventListener("mouseenter", () => {
+      video = fxEl("video", "fx-video");
+      Object.assign(video, { muted: true, loop: true, playsInline: true, src: fxUrl(preview) });
+      video.addEventListener("playing", () => video && video.classList.add("on"));
+      box.append(video);
+      video.play().catch(() => {});
+    });
+    hoverEl.addEventListener("mouseleave", () => { if (video) { video.pause(); video.remove(); video = null; } });
+  }
+  return box;
+}
+
+function fxBadges(pack) {
+  const b = fxEl("div", "fx-badges");
+  const q = fxQuality(pack.width);
+  if (q) b.append(fxEl("span", "fx-badge", q));
+  if (fxIsNew(pack)) b.append(fxEl("span", "fx-badge new", "New"));
+  return b;
+}
+
+async function loadFx() {
+  if (fxLoading) return;
+  fxLoading = true;
+  const res = await api("/api/fx-list", {}).catch(() => ({ ok: false, error: "Couldn't load the packs." }));
+  fxLoading = false;
+  if (!res.ok) {
+    if (typeof sfxLoggedOut === "function" && sfxLoggedOut(res)) return renderFxPage();
+    $("fxStatus").textContent = res.error;
+    $("fxStatus").hidden = false;
+    return;
+  }
+  $("fxStatus").hidden = true;
+  fxData = res;
+  renderFxPage();
+}
+
+function renderFxPage() {
+  const loggedIn = typeof sfxUser === "function" && !!sfxUser();
+  const ready = loggedIn && fxData && fxData.ready;
+  $("fxOut").hidden = loggedIn;
+  $("fxSetup").hidden = !(loggedIn && fxData && !fxData.ready && fxData.canSetup);
+  $("fxWait").hidden = !(loggedIn && fxData && !fxData.ready && !fxData.canSetup);
+  $("fxBrowse").hidden = !ready;
+  if (ready) renderFx();
+  renderFxHero();
+}
+
+function renderFxHero() {
+  const pack = fxData && fxData.ready && (typeof sfxUser !== "function" || sfxUser()) && fxData.packs[0];
+  const video = $("fxHeroVideo");
+  $("fxHeroButtons").hidden = !pack;
+  if (pack) {
+    $("fxHeroKicker").textContent = fxIsNew(pack) ? "New pack" : "Newest pack";
+    $("fxHeroTitle").replaceChildren(document.createTextNode(pack.name), document.createElement("br"), fxEl("em", "", fxCatName(pack.category)));
+    $("fxHeroAbout").textContent = pack.about || "Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.";
+    $("fxHeroMeta").textContent = `${pack.clips} ${pack.clips === 1 ? "clip" : "clips"} · ${fxSize(pack.size)}${pack.by ? " · by " + pack.by : ""}`;
+    $("fxHeroOpen").onclick = () => openFxPack(pack.id);
+  } else {
+    $("fxHeroKicker").textContent = "Film assets";
+    $("fxHeroTitle").replaceChildren(document.createTextNode("Film assets."), document.createElement("br"), fxEl("em", "", "Make it go boom."));
+    $("fxHeroAbout").textContent = "Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.";
+  }
+  const src = pack && pack.cover ? fxUrl(pack.cover.preview) : "";
+  const poster = pack && pack.cover ? fxUrl(pack.cover.thumb) : "";
+  if (src || poster) {
+    if (video.dataset.src !== src + poster) {
+      video.dataset.src = src + poster;
+      video.poster = poster;
+      if (src) video.src = src; else video.removeAttribute("src");
+    }
+    video.hidden = false;
+    if (src && !$("fxTab").hidden) video.play().catch(() => {});
+    fxStop(fxHeroArt);
+    $("fxHeroArt").hidden = true;
+  } else {
+    video.hidden = true;
+    video.pause();
+    $("fxHeroArt").hidden = false;
+    if (!$("fxTab").hidden && !fxOpen) fxPlay(fxHeroArt);
+  }
+}
 
 function renderFxCats() {
-  const box = $("fxCats");
+  const packs = fxData.packs;
   const pill = (key, name, count) => {
     const b = fxEl("button", "fx-cat" + (fxCat === key ? " active" : ""));
     b.type = "button";
-    if (key) { const dot = fxEl("span", "fx-cat-dot " + key); b.append(dot); }
+    if (key) b.append(fxEl("span", "fx-cat-dot " + key));
     b.append(fxEl("span", "", name), fxEl("small", "", String(count)));
     b.addEventListener("click", () => { fxCat = key; renderFx(); });
     return b;
   };
-  box.replaceChildren(pill("", "All", FX_PACKS.length), ...FX_CATS.map((c) => pill(c.key, c.name, FX_PACKS.filter((p) => p.cat === c.key).length)));
+  const used = FX_CATS.filter((c) => packs.some((p) => p.category === c.key) || c.key === fxCat);
+  $("fxCats").replaceChildren(pill("", "All", packs.length), ...used.map((c) => pill(c.key, c.name, packs.filter((p) => p.category === c.key).length)));
 }
 
 function fxCard(pack) {
   const card = fxEl("button", "fx-card");
   card.type = "button";
-  const thumb = fxEl("div", "fx-thumb");
-  thumb.append(fxPreview(pack.cat, pack.seed, card), fxBadges(pack), fxEl("span", "fx-play", "Hover to play"));
+  const thumb = fxThumb(pack.cover && pack.cover.thumb, pack.cover && pack.cover.preview, card, pack.category);
+  thumb.append(fxBadges(pack));
+  if (pack.cover && pack.cover.preview) thumb.append(fxEl("span", "fx-play", "Hover to play"));
   const info = fxEl("div", "fx-info");
-  info.append(fxEl("strong", "", pack.name), fxEl("span", "", `${fxCatName(pack.cat)} · ${pack.clips} clips · ${fxGb(pack.gb)}`));
+  info.append(fxEl("strong", "", pack.name), fxEl("span", "", `${fxCatName(pack.category)} · ${pack.clips} ${pack.clips === 1 ? "clip" : "clips"} · ${fxSize(pack.size)}`));
   const dl = fxEl("span", "fx-dl");
-  dl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+  dl.innerHTML = FX_ICONS.download;
   dl.append(fxNum(pack.downloads));
+  dl.title = "Downloads";
   info.append(dl);
   card.append(thumb, info);
-  card.addEventListener("click", () => openFxPack(pack));
+  card.addEventListener("click", () => openFxPack(pack.id));
   return card;
 }
 
 function renderFx() {
   renderFxCats();
   const sort = $("fxSort").value, q = fxQuery.trim().toLowerCase();
-  let list = FX_PACKS.filter((p) => (!fxCat || p.cat === fxCat) && (!q || (p.name + " " + fxCatName(p.cat)).toLowerCase().includes(q)));
-  list = list.slice().sort(sort === "popular" ? (a, b) => b.downloads - a.downloads : sort === "name" ? (a, b) => a.name.localeCompare(b.name) : (a, b) => a.days - b.days);
-  for (const art of fxPlaying) if (art !== fxHeroArt) fxPlaying.delete(art);
+  let list = fxData.packs.filter((p) => (!fxCat || p.category === fxCat) && (!q || (p.name + " " + fxCatName(p.category) + " " + (p.about || "") + " " + (p.by || "")).toLowerCase().includes(q)));
+  list = list.slice().sort(sort === "popular" ? (a, b) => b.downloads - a.downloads : sort === "name" ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.created - a.created);
   $("fxGrid").replaceChildren(...list.map(fxCard));
   $("fxGridTitle").textContent = fxCat ? fxCatName(fxCat) : q ? "Results" : "All packs";
   $("fxGridCount").textContent = list.length + (list.length === 1 ? " pack" : " packs");
+  $("fxNew").hidden = !fxData.canAdd;
+  $("fxUsed").textContent = fxData.canAdd && fxData.used != null ? `${fxSize(fxData.used)} of 10 GB free storage used` : "";
   $("fxEmpty").hidden = list.length > 0;
+  $("fxEmpty").textContent = fxData.packs.length ? "Nothing found. Try another word." : fxData.canAdd ? "No packs yet. Click + New pack to add the first one." : "No packs yet. They'll show up here.";
 }
 
-function openFxPack(pack) {
-  fxOpenPack = pack;
-  fxPlaying.clear();
+// ---- one pack
+
+async function openFxPack(packId, quiet) {
+  const res = await api("/api/fx-pack", { pack: packId }).catch(() => ({ ok: false, error: "Couldn't open the pack." }));
+  if (!res.ok) {
+    if (typeof sfxLoggedOut === "function" && sfxLoggedOut(res)) return closeFxPack();
+    if (!quiet) alert(res.error);
+    return;
+  }
+  if (res.files && fxData) fxData.files = res.files;
+  const wasOpen = fxOpen && fxOpen.pack.id === packId;
+  fxOpen = res;
+  fxStop(fxHeroArt);
+  $("fxHeroVideo").pause();
+  drawFxPack();
+  $("fxPage").hidden = true;
+  $("fxPack").hidden = false;
+  if (!wasOpen) window.scrollTo(0, 0);
+}
+
+function drawFxPack() {
+  const { pack, clips, canEdit } = fxOpen;
   const box = $("fxPack");
   const back = fxEl("button", "fx-back");
   back.type = "button";
-  back.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
+  back.innerHTML = FX_ICONS.back;
   back.append("All packs");
   back.addEventListener("click", closeFxPack);
 
   const top = fxEl("div", "fx-pack-top");
   const big = fxEl("div", "fx-pack-art");
-  const canvas = document.createElement("canvas");
-  canvas.className = "fx-art";
-  big.append(canvas, fxBadges(pack));
+  const cover = pack.cover || {};
+  if (cover.preview || cover.thumb) {
+    const video = fxEl("video", "fx-art");
+    Object.assign(video, { muted: true, loop: true, playsInline: true, autoplay: true, poster: fxUrl(cover.thumb) });
+    if (cover.preview) video.src = fxUrl(cover.preview);
+    big.append(video);
+  } else {
+    const none = fxEl("div", "fx-noart");
+    none.innerHTML = FX_ICONS.film;
+    big.append(none);
+  }
+  big.append(fxBadges(pack));
   const side = fxEl("div", "fx-pack-side");
-  side.append(fxEl("span", "fx-kicker", fxCatName(pack.cat)), fxEl("h1", "", pack.name),
-    fxEl("p", "", `${pack.clips} clips shot on black, ready to drop on top of your video. Set the clip to "Screen" or "Add" in your editor, or use the alpha version.`));
+  side.append(fxEl("span", "fx-kicker", fxCatName(pack.category)), fxEl("h1", "", pack.name),
+    fxEl("p", "", pack.about || "Put a clip on top of your video and set it to \"Screen\" or \"Add\" in your editor, so the black goes away."));
   const facts = fxEl("div", "fx-facts");
-  for (const [k, v] of [["Clips", pack.clips], ["Size", fxGb(pack.gb)], ["Quality", "4K, 60 fps"], ["Format", "MOV + alpha"], ["Downloads", fxNum(pack.downloads)]]) {
-    const f = fxEl("div"); f.append(fxEl("small", "", k), fxEl("strong", "", String(v))); facts.append(f);
+  for (const [k, v] of [["Clips", pack.clips], ["Size", fxSize(pack.size)], ["Quality", fxQuality(pack.width) || "-"], ["Downloads", fxNum(pack.downloads)], ["Shared by", pack.by || "-"]]) {
+    const f = fxEl("div");
+    f.append(fxEl("small", "", k), fxEl("strong", "", String(v)));
+    facts.append(f);
   }
   const buttons = fxEl("div", "fx-pack-buttons");
-  const get = fxEl("button", "convert small-button", "Download pack");
+  const get = fxEl("button", "convert small-button", clips.length ? "Download pack" : "No clips yet");
   get.type = "button";
-  get.addEventListener("click", () => fxSoon(get));
+  get.disabled = !clips.length;
+  get.addEventListener("click", () => fxDownload(pack.id));
   buttons.append(get);
+  if (canEdit) {
+    const edit = fxEl("button", "ghost-button");
+    edit.type = "button";
+    edit.innerHTML = FX_ICONS.pencil;
+    edit.append("Edit");
+    edit.addEventListener("click", () => openFxPackModal(pack));
+    const del = fxEl("button", "ghost-button fx-danger");
+    del.type = "button";
+    del.innerHTML = FX_ICONS.trash;
+    del.append("Delete");
+    del.addEventListener("click", () => deleteFxPack(pack));
+    buttons.append(edit, del);
+  }
   side.append(facts, buttons);
   top.append(big, side);
 
-  const r = fxRandom(pack.seed), words = FX_CLIP_WORDS[pack.cat] || ["Clip"];
-  const clips = fxEl("div", "fx-clips");
-  for (let i = 0; i < Math.min(pack.clips, 12); i++) {
-    const tile = fxEl("div", "fx-clip");
-    const thumb = fxEl("div", "fx-thumb");
-    thumb.append(fxPreview(pack.cat, pack.seed + i * 31 + 1, tile));
-    const secs = (2 + r() * 6).toFixed(1);
-    tile.append(thumb, fxEl("strong", "", `${words[i % words.length]} ${String(Math.floor(i / words.length) + 1).padStart(2, "0")}`), fxEl("span", "", `${secs}s · 4K`));
-    clips.append(tile);
-  }
+  const parts = [back, top];
+  if (canEdit) parts.push(fxDropzone(pack.id));
   const head = fxEl("div", "fx-grid-head");
-  head.append(fxEl("h2", "", "In this pack"), fxEl("span", "", pack.clips > 12 ? `12 of ${pack.clips} shown` : `${pack.clips} clips`));
-  box.replaceChildren(back, top, head, clips);
-  $("fxPage").hidden = true;
-  box.hidden = false;
-  window.scrollTo(0, 0);
-  const art = fxArt(canvas, pack.cat, pack.seed);
-  requestAnimationFrame(() => { art.warm(); fxPlay(art); });
+  head.append(fxEl("h2", "", "In this pack"), fxEl("span", "", `${clips.length} ${clips.length === 1 ? "clip" : "clips"}`));
+  const list = fxEl("div", "fx-clips");
+  for (const clip of clips) list.append(fxClip(pack, clip, canEdit));
+  if (!clips.length) list.append(fxEl("p", "fx-empty", canEdit ? "No clips yet. Add them above." : "No clips yet."));
+  parts.push(head, list);
+  box.replaceChildren(...parts);
+}
+
+function fxClip(pack, clip, canEdit) {
+  const tile = fxEl("div", "fx-clip");
+  const thumb = fxThumb(clip.thumb, clip.preview, tile, pack.category);
+  const tools = fxEl("div", "fx-clip-tools");
+  const dl = fxEl("button", "fx-icon");
+  dl.type = "button";
+  dl.title = "Download this clip";
+  dl.innerHTML = FX_ICONS.download;
+  dl.addEventListener("click", () => fxDownload(pack.id, clip.id));
+  tools.append(dl);
+  if (canEdit) {
+    const del = fxEl("button", "fx-icon");
+    del.type = "button";
+    del.title = "Delete this clip";
+    del.innerHTML = FX_ICONS.trash;
+    del.addEventListener("click", async () => {
+      if (!confirm(`Delete "${clip.name}"?`)) return;
+      const res = await api("/api/fx-delete-clip", { pack: pack.id, clip: clip.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
+      if (!res.ok) return alert(res.error);
+      openFxPack(pack.id, true);
+      loadFx();
+    });
+    tools.append(del);
+  }
+  thumb.append(tools);
+  const meta = [clip.seconds ? fxSecs(clip.seconds) : "", fxQuality(clip.width), fxSize(clip.size)].filter(Boolean).join(" · ");
+  tile.append(thumb, fxEl("strong", "", clip.name), fxEl("span", "", meta));
+  return tile;
 }
 
 function closeFxPack() {
-  fxOpenPack = null;
-  fxPlaying.clear();
+  fxOpen = null;
   $("fxPack").hidden = true;
+  $("fxPack").querySelectorAll("video").forEach((v) => v.pause());
   $("fxPage").hidden = false;
-  if (fxHeroArt) fxPlay(fxHeroArt);
+  renderFxHero();
 }
 
-function fxSoon(button) {
-  const old = button.textContent;
-  button.textContent = "Coming soon";
-  button.disabled = true;
-  setTimeout(() => { button.textContent = old; button.disabled = false; }, 1600);
+// ---- adding clips (owner and admins)
+
+function fxDropzone(packId) {
+  const zone = fxEl("label", "dropzone fx-drop");
+  const input = fxEl("input");
+  Object.assign(input, { type: "file", multiple: true, hidden: true, accept: "video/*,image/*,.mov,.mxf,.exr,.zip" });
+  zone.innerHTML = FX_ICONS.film;
+  const text = fxEl("span", "drop-text");
+  text.innerHTML = "<strong>Drop clips here</strong> or <span class=\"link\">choose files</span>";
+  zone.append(input, text, fxEl("span", "drop-hint", "Videos with a black or see-through background work best. Big files are fine."));
+  zone.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const res = await api("/api/fx-pick", { pack: packId }).catch(() => ({ ok: false, fallback: true }));
+    if (res.fallback) input.click();
+    else if (!res.ok) alert(res.error);
+    else if (res.added) fxPollJobs();
+  });
+  input.addEventListener("change", () => { fxSendFiles(packId, [...input.files]); input.value = ""; });
+  return zone;
 }
 
-let fxHeroArt = null;
-function fxTabChanged(tab) {
-  if (tab !== "fx") { fxPlaying.clear(); return; }
+// A file dropped anywhere on an open pack you can add to (see the window's drop in images.js).
+function fxTakesDrop(files) {
+  if ($("fxTab").hidden || !fxOpen || !fxOpen.canEdit || $("fxPack").hidden) return false;
+  fxSendFiles(fxOpen.pack.id, files);
+  return true;
+}
+
+async function fxSendFiles(packId, files) {
+  fxShowJobs();
+  for (const file of files) {
+    const res = await fetch("/api/fx-add", { method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name), "X-Pack": packId }, body: file })
+      .then((r) => r.json()).catch(() => ({ ok: false, error: "Couldn't open " + file.name }));
+    if (!res.ok) alert(res.error);
+    fxPollJobs();
+  }
+}
+
+// ---- uploads and downloads in the corner
+
+let fxJobs = { uploads: [], downloads: [] }, fxJobsTimer = 0, fxDoneUploads = 0;
+function fxShowJobs() { $("fxJobs").hidden = false; }
+
+async function fxPollJobs() {
+  clearTimeout(fxJobsTimer);
+  const res = await api("/api/fx-jobs", {}).catch(() => null);
+  if (res && res.ok) {
+    fxJobs = res;
+    drawFxJobs();
+    const done = res.uploads.filter((u) => u.status === "done").length;
+    if (done !== fxDoneUploads) {
+      fxDoneUploads = done;
+      if (fxOpen) openFxPack(fxOpen.pack.id, true);
+      loadFx();
+    }
+  }
+  const busy = [...fxJobs.uploads, ...fxJobs.downloads].some((j) => j.status === "waiting" || j.status === "working");
+  if (busy) fxJobsTimer = setTimeout(fxPollJobs, 700);
+}
+
+function drawFxJobs() {
+  const all = [...fxJobs.uploads.map((j) => ({ ...j, up: true })), ...fxJobs.downloads];
+  const box = $("fxJobs");
+  box.hidden = !all.length;
+  if (!all.length) return box.replaceChildren();
+  const head = fxEl("div", "fx-jobs-head");
+  head.append(fxEl("strong", "", "Uploads and downloads"));
+  const clear = fxEl("button", "link", "Clear");
+  clear.type = "button";
+  clear.addEventListener("click", async () => { const res = await api("/api/fx-clear", {}); if (res.ok) { fxJobs = res; drawFxJobs(); } });
+  head.append(clear);
+  const rows = all.map((j) => {
+    const row = fxEl("div", "fx-job " + j.status);
+    const pct = j.total ? Math.min(100, Math.round((j.done / j.total) * 100)) : 0;
+    const label = j.status === "done" ? (j.up ? "Uploaded" : "Downloaded") : j.status === "error" ? j.message
+      : j.status === "waiting" ? "Waiting..." : j.step === "Making the preview" ? "Making the preview..." : `${j.up ? "Uploading" : "Downloading"} ${pct}% · ${fxSize(j.done)} of ${fxSize(j.total)}`;
+    const text = fxEl("div", "fx-job-text");
+    text.append(fxEl("b", "", (j.up ? "↑ " : "↓ ") + j.name), fxEl("small", "", label));
+    const bar = fxEl("div", "fx-job-bar");
+    const fill = fxEl("i");
+    fill.style.width = (j.status === "done" ? 100 : pct) + "%";
+    bar.append(fill);
+    row.append(text);
+    if (j.status === "working" || j.status === "waiting") {
+      const stop = fxEl("button", "fx-icon");
+      stop.type = "button";
+      stop.title = "Stop";
+      stop.innerHTML = FX_ICONS.close;
+      stop.addEventListener("click", async () => { await api("/api/fx-cancel", { id: j.id }); fxPollJobs(); });
+      row.append(stop);
+    } else if (j.status === "done" && !j.up && j.path) {
+      const show = fxEl("button", "link", "Show");
+      show.type = "button";
+      show.addEventListener("click", () => api("/api/fx-show", { path: j.path }));
+      row.append(show);
+    }
+    row.append(bar);
+    return row;
+  });
+  box.replaceChildren(head, ...rows);
+}
+
+async function fxDownload(packId, clipId) {
+  const folder = await whereToSave();
+  if (!folder) return;
+  const res = await api("/api/fx-download", { pack: packId, clip: clipId || "", folder }).catch(() => ({ ok: false, error: "Couldn't start the download." }));
+  if (!res.ok) return alert(res.error);
+  fxShowJobs();
+  fxPollJobs();
+}
+
+// ---- making and editing packs
+
+let fxEditing = null;
+function openFxPackModal(pack) {
+  fxEditing = pack || null;
+  $("fxPackHeading").textContent = pack ? "Edit pack" : "New pack";
+  $("fxPackSave").textContent = pack ? "Save" : "Make the pack";
+  $("fxPackName").value = pack ? pack.name : "";
+  $("fxPackCat").replaceChildren(...FX_CATS.map((c) => { const o = fxEl("option", "", c.name); o.value = c.key; return o; }));
+  $("fxPackCat").value = pack ? pack.category : fxCat || "explosion";
+  $("fxPackAbout").value = pack ? pack.about || "" : "";
+  $("fxPackNote").textContent = "";
+  $("fxPackModal").hidden = false;
+  $("fxPackName").focus();
+}
+const closeFxPackModal = () => { $("fxPackModal").hidden = true; };
+
+$("fxPackForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { name: $("fxPackName").value, category: $("fxPackCat").value, about: $("fxPackAbout").value };
+  if (fxEditing) body.pack = fxEditing.id;
+  $("fxPackSave").disabled = true;
+  const res = await api(fxEditing ? "/api/fx-edit-pack" : "/api/fx-new-pack", body).catch(() => ({ ok: false, error: "That didn't work. Try again." }));
+  $("fxPackSave").disabled = false;
+  if (!res.ok) { $("fxPackNote").textContent = res.error; return; }
+  closeFxPackModal();
+  await loadFx();
+  openFxPack(res.pack.id);
+});
+$("fxPackCancel").addEventListener("click", closeFxPackModal);
+$("fxPackModal").addEventListener("click", (e) => { if (e.target === $("fxPackModal")) closeFxPackModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("fxPackModal").hidden) closeFxPackModal(); });
+
+async function deleteFxPack(pack) {
+  if (!confirm(`Delete the pack "${pack.name}" and all its clips? This can't be undone.`)) return;
+  const res = await api("/api/fx-delete-pack", { pack: pack.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
+  if (!res.ok) return alert(res.error);
+  closeFxPack();
+  loadFx();
+}
+
+// ---- the owner sets up the storage
+
+$("fxSetupGo").addEventListener("click", async () => {
+  const keyId = $("fxKeyId").value.trim(), key = $("fxKey").value.trim();
+  if (!keyId || !key) { $("fxSetupNote").textContent = "Paste both the keyID and the applicationKey."; return; }
+  $("fxSetupGo").disabled = true;
+  $("fxSetupNote").textContent = "Setting it up...";
+  const res = await api("/api/fx-setup", { keyId, key }).catch(() => ({ ok: false, error: "That didn't work. Try again." }));
+  $("fxSetupGo").disabled = false;
+  if (!res.ok) { $("fxSetupNote").textContent = res.error; return; }
+  $("fxKeyId").value = $("fxKey").value = "";
+  fxData = res;
+  renderFxPage();
+});
+$("fxB2Site").addEventListener("click", () => api("/api/docs-open-link", { url: "https://www.backblaze.com/sign-up/cloud-storage" }));
+$("fxLogin").addEventListener("click", () => openLogin("login"));
+$("fxNew").addEventListener("click", () => openFxPackModal(null));
+$("fxSearch").addEventListener("input", (e) => { fxQuery = e.target.value; renderFx(); });
+$("fxSort").addEventListener("change", renderFx);
+
+// ---- opening the tab
+
+let fxUserId = null;
+function fxAccountChanged() {
+  const id = typeof sfxUser === "function" && sfxUser() ? sfxUser().id : null;
+  if (id === fxUserId) return;
+  fxUserId = id;
+  fxData = null;
+  if (fxOpen) closeFxPack();
+  if (!$("fxTab").hidden) fxTabChanged("fx");
+}
+
+async function fxTabChanged(tab) {
+  if (tab !== "fx") {
+    fxPlaying.clear();
+    $("fxHeroVideo").pause();
+    $("fxPack").querySelectorAll("video").forEach((v) => v.pause());
+    return;
+  }
   if (!fxReady) {
     fxReady = true;
-    const hero = FX_PACKS[1];
-    fxHeroArt = fxArt($("fxHeroArt"), hero.cat, hero.seed);
-    $("fxHeroMeta").textContent = `${hero.name} · ${hero.clips} clips · 4K with alpha`;
-    $("fxHeroOpen").addEventListener("click", () => openFxPack(hero));
-    $("fxSearch").addEventListener("input", (e) => { fxQuery = e.target.value; renderFx(); });
-    $("fxSort").addEventListener("change", renderFx);
-    renderFx();
+    fxHeroArt = fxArt($("fxHeroArt"), "explosion", 13);
     requestAnimationFrame(() => fxHeroArt.warm());
   }
-  if (!fxOpenPack) fxPlay(fxHeroArt);
-  else openFxPack(fxOpenPack);
+  renderFxPage();
+  if (fxOpen) $("fxPack").querySelectorAll("video[autoplay]").forEach((v) => v.play().catch(() => {}));
+  if (typeof sfxAccount !== "undefined" && (!sfxAccount || sfxFromCache)) await loadAccount();
+  renderFxPage();
+  if (typeof sfxUser === "function" && sfxUser()) {
+    await loadFx();
+    fxPollJobs();
+  }
 }
 if (!$("fxTab").hidden) fxTabChanged("fx");

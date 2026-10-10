@@ -96,6 +96,7 @@ window.addEventListener("drop", (e) => {
   // The SFX upload window takes the first file itself.
   if (typeof sfxTakesDrop === "function" && sfxTakesDrop(files)) return;
   if (typeof copyTakesDrop === "function" && copyTakesDrop(files)) return;
+  if (typeof fxTakesDrop === "function" && fxTakesDrop(files)) return;
   const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
   const pictures = files.filter(isPicture), others = files.filter((f) => !isPicture(f));
   if (others.length) addMediaFiles(others);

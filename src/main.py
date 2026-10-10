@@ -35,6 +35,7 @@ import pagecache  # noqa: E402
 import boards  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
+import film  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -735,6 +736,67 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Couldn't save the board. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_film(self, action, data):
+        """The Film assets tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        f = film.film
+        pack_id = str(data.get("pack") or "") or None
+        try:
+            if action == "list":
+                result = f.list()
+            elif action == "pack":
+                result = f.pack(pack_id)
+            elif action == "setup":
+                result = f.setup(data.get("keyId"), data.get("key"))
+            elif action == "new-pack":
+                result = {"pack": f.new_pack(data)}
+            elif action == "edit-pack":
+                result = {"pack": f.edit_pack(pack_id, data)}
+            elif action == "delete-pack":
+                f.delete_pack(pack_id)
+                result = {}
+            elif action == "delete-clip":
+                f.delete_clip(pack_id, data.get("clip"))
+                result = {}
+            elif action == "pick":  # choose clips to upload (Windows' Open window)
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick the clips for this pack", film.PICK_KINDS)
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if paths:
+                    f.add_paths(pack_id, paths)
+                result = {"added": len(paths)}
+            elif action == "download":
+                f.download(pack_id, save_folder(data), str(data.get("clip") or "") or None)
+                result = {}
+            elif action == "jobs":
+                result = f.snapshot()
+            elif action == "cancel":
+                f.cancel(str(data.get("id") or ""))
+                result = f.snapshot()
+            elif action == "clear":
+                f.clear_done()
+                result = f.snapshot()
+            elif action == "show":
+                path = str(data.get("path") or "")
+                if path and path in [d["path"] for d in f.downloads] and os.path.exists(path):
+                    if os.path.isdir(path):
+                        open_folder(path)
+                    else:
+                        show_in_folder(path)
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (film.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
+        self.send_json({"ok": True, **result})
+
     def handle_docs(self, action, data):
         """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         doc_id = data.get("id")
@@ -813,6 +875,15 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length)})
             except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/fx-add":  # the body is a clip for a Film assets pack
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "clip")
+            try:
+                film.film.add_stream(self.headers.get("X-Pack") or "", os.path.basename(name), self.rfile, length)
+                return self.send_json({"ok": True})
+            except film.Error as e:
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
@@ -1009,6 +1080,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_docs(self.path[len("/api/docs-"):], data)
         elif self.path.startswith("/api/boards-"):
             self.handle_boards(self.path[len("/api/boards-"):], data)
+        elif self.path.startswith("/api/fx-"):
+            self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

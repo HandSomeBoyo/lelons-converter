@@ -607,33 +607,58 @@
     <div class="fx-page" id="fxPage">
       <div class="fx-hero" id="fxHero">
         <canvas class="fx-hero-art" id="fxHeroArt"></canvas>
+        <video class="fx-hero-video" id="fxHeroVideo" muted loop playsinline hidden></video>
         <div class="fx-hero-text">
-          <span class="fx-kicker">New pack</span>
-          <h1 class="headline">Film assets.<br><em>Make it go boom.</em></h1>
-          <p>Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.</p>
-          <div class="fx-hero-buttons">
+          <span class="fx-kicker" id="fxHeroKicker">Film assets</span>
+          <h1 class="headline" id="fxHeroTitle">Film assets.<br><em>Make it go boom.</em></h1>
+          <p id="fxHeroAbout">Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.</p>
+          <div class="fx-hero-buttons" id="fxHeroButtons" hidden>
             <button type="button" class="convert small-button" id="fxHeroOpen">See the pack</button>
             <span class="fx-hero-meta" id="fxHeroMeta"></span>
           </div>
         </div>
       </div>
-      <div class="fx-tools">
-        <label class="input fx-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="fxSearch" placeholder="Search explosions, fire, smoke..." autocomplete="off" spellcheck="false">
-        </label>
-        <label class="quality fx-sort">
-          <select id="fxSort"><option value="new">Newest</option><option value="popular">Most downloaded</option><option value="name">A to Z</option></select>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </label>
+      <p class="fx-status" id="fxStatus" hidden></p>
+      <div class="fx-out" id="fxOut" hidden>
+        <p>Log in to see the packs your friends shared.</p>
+        <button type="button" class="small-button" id="fxLogin">Log in</button>
       </div>
-      <div class="fx-cats" id="fxCats"></div>
-      <div class="fx-grid-head"><h2 id="fxGridTitle">All packs</h2><span id="fxGridCount"></span></div>
-      <div class="fx-grid" id="fxGrid"></div>
-      <p class="fx-empty" id="fxEmpty" hidden>Nothing found. Try another word.</p>
-      <p class="fx-sample-note">This is a first look with sample packs. The previews are drawn live, real clips come later.</p>
+      <div class="fx-setup" id="fxSetup" hidden>
+        <h2>Set up the storage (once)</h2>
+        <p>Film clips are big, so they go in your own free Backblaze storage: 10 GB free, no card needed.</p>
+        <ol>
+          <li>Make a free account on <button type="button" class="link" id="fxB2Site">backblaze.com</button> (pick <b>B2 Cloud Storage</b>) and confirm your email.</li>
+          <li>On the left click <b>Application Keys</b>, then <b>Generate New Master Application Key</b>.</li>
+          <li>Copy the <b>keyID</b> and the <b>applicationKey</b> into the boxes here and click Set up.</li>
+        </ol>
+        <div class="fx-setup-keys">
+          <label class="input"><input id="fxKeyId" placeholder="keyID" autocomplete="off" spellcheck="false"></label>
+          <label class="input"><input id="fxKey" type="password" placeholder="applicationKey" autocomplete="off" spellcheck="false"></label>
+          <button type="button" class="convert small-button" id="fxSetupGo">Set up</button>
+        </div>
+        <p class="fx-setup-note" id="fxSetupNote">The app makes a private folder there and two keys only for it. Your master key isn't saved anywhere.</p>
+      </div>
+      <p class="fx-wait" id="fxWait" hidden>The owner is setting up the storage for film assets. Check back soon!</p>
+      <div class="fx-browse" id="fxBrowse" hidden>
+        <div class="fx-tools">
+          <label class="input fx-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <input id="fxSearch" placeholder="Search explosions, fire, smoke..." autocomplete="off" spellcheck="false">
+          </label>
+          <label class="quality fx-sort">
+            <select id="fxSort"><option value="new">Newest</option><option value="popular">Most downloaded</option><option value="name">A to Z</option></select>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+          <button type="button" class="convert small-button fx-new" id="fxNew" hidden>+ New pack</button>
+        </div>
+        <div class="fx-cats" id="fxCats"></div>
+        <div class="fx-grid-head"><h2 id="fxGridTitle">All packs</h2><span id="fxGridCount"></span><span class="fx-used" id="fxUsed"></span></div>
+        <div class="fx-grid" id="fxGrid"></div>
+        <p class="fx-empty" id="fxEmpty" hidden></p>
+      </div>
     </div>
     <div class="fx-pack" id="fxPack" hidden></div>
+    <div class="fx-jobs" id="fxJobs" hidden></div>
   </section>
 
   <section class="tab-page" id="copyrightTab" hidden>
@@ -905,6 +930,25 @@
       <button type="button" class="ghost-button" id="updateLater">Later</button>
       <button type="button" class="small-button" id="updateInstall">Install update</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="fxPackModal" hidden>
+  <div class="dialog fx-pack-dialog" role="dialog" aria-labelledby="fxPackHeading">
+    <h2 id="fxPackHeading">New pack</h2>
+    <p class="sub">A pack is a group of clips, like "Big explosions". You add the clips next.</p>
+    <form id="fxPackForm">
+      <label class="fx-field"><span>Name</span><span class="input"><input id="fxPackName" maxlength="80" placeholder="Big explosions" autocomplete="off"></span></label>
+      <label class="fx-field"><span>Kind</span><span class="quality"><select id="fxPackCat"></select>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></label>
+      <label class="fx-field"><span>About it (optional)</span><textarea id="fxPackAbout" maxlength="600" placeholder="What's in it, how it was shot..."></textarea></label>
+      <p class="acct-note" id="fxPackNote"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="fxPackCancel">Cancel</button>
+        <button type="submit" class="small-button" id="fxPackSave">Make the pack</button>
+      </div>
+    </form>
   </div>
 </div>
 

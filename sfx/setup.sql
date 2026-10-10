@@ -2261,6 +2261,142 @@ begin
   raise exception 'what?' using hint = 'bad_input';
 end $$;
 
+-- ---- Film assets (2.15.0): packs of VFX clips (explosions, fire, smoke...) like ActionVFX.
+-- The clips themselves are big, so they live in the owner's free Backblaze B2 storage, not here.
+-- Here: the list of packs and clips, and the Backblaze keys (only the app can read them, through
+-- lelons_fx: everyone logged in gets the key that can only download, owner and admins the one that can upload).
+alter table lelons.config add column if not exists fx_storage jsonb;
+create table if not exists lelons.fx_packs (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(name) between 1 and 80),
+  category text not null check (category in ('explosion', 'fire', 'smoke', 'muzzle', 'sparks', 'debris', 'dust', 'blood',
+                                             'lightning', 'water', 'magic', 'lightleak', 'other')),
+  about text not null default '' check (length(about) <= 600),
+  uploader_id uuid references lelons.accounts (id) on delete set null,
+  downloads int not null default 0,
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.fx_clips (
+  id uuid primary key default gen_random_uuid(),
+  pack_id uuid not null references lelons.fx_packs (id) on delete cascade,
+  name text not null check (length(name) between 1 and 120),
+  path text not null check (length(path) <= 300),
+  file_id text not null check (length(file_id) <= 300),
+  size bigint not null default 0,
+  seconds real not null default 0,
+  width int not null default 0,
+  height int not null default 0,
+  preview text check (length(preview) <= 300),
+  preview_id text check (length(preview_id) <= 300),
+  thumb text check (length(thumb) <= 300),
+  thumb_id text check (length(thumb_id) <= 300),
+  created_at timestamptz not null default now()
+);
+create index if not exists fx_clips_pack on lelons.fx_clips (pack_id, created_at);
+alter table lelons.fx_packs enable row level security;
+alter table lelons.fx_clips enable row level security;
+revoke all on lelons.fx_packs, lelons.fx_clips from anon, authenticated;
+
+create or replace function lelons.fx_pack_json(p lelons.fx_packs) returns json
+  language sql stable security definer set search_path = '' as
+  $$ select json_build_object('id', p.id, 'name', p.name, 'category', p.category, 'about', p.about,
+                             'by', (select a.username from lelons.accounts a where a.id = p.uploader_id),
+                             'downloads', p.downloads, 'created', extract(epoch from p.created_at),
+                             'clips', (select count(*) from lelons.fx_clips c where c.pack_id = p.id),
+                             'size', (select coalesce(sum(c.size), 0) from lelons.fx_clips c where c.pack_id = p.id),
+                             'width', (select max(c.width) from lelons.fx_clips c where c.pack_id = p.id),
+                             'cover', (select json_build_object('thumb', c.thumb, 'preview', c.preview) from lelons.fx_clips c
+                                       where c.pack_id = p.id and c.thumb is not null order by c.created_at limit 1)) $$;
+
+-- what: list / pack / setup (owner) / upload_key, add_pack, edit_pack, add_clip, delete_clip, delete_pack (owner, admins) / downloaded
+create or replace function public.lelons_fx(token text, what text, pack_id uuid default null, data jsonb default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  can_add boolean := me.role in ('owner', 'admin');
+  store jsonb := (select c.fx_storage from lelons.config c where c.id = 1);
+  p lelons.fx_packs;
+  gone json;
+begin
+  if what = 'list' then
+    return json_build_object(
+      'packs', coalesce((select json_agg(lelons.fx_pack_json(x) order by x.created_at desc) from lelons.fx_packs x), '[]'::json),
+      'storage', case when store is null then null
+                      else json_build_object('bucket', store->>'bucket', 'key_id', store->>'read_id', 'key', store->>'read_key') end,
+      'used', case when can_add then (select coalesce(sum(c.size), 0) from lelons.fx_clips c) end,
+      'can_add', can_add, 'can_setup', me.role = 'owner');
+  elsif what = 'pack' then
+    select x.* into p from lelons.fx_packs x where x.id = lelons_fx.pack_id;
+    if p.id is null then
+      raise exception 'no pack' using hint = 'nopack';
+    end if;
+    return json_build_object('pack', lelons.fx_pack_json(p), 'mine', can_add,
+      'clips', coalesce((select json_agg(json_build_object('id', c.id, 'name', c.name, 'path', c.path, 'size', c.size,
+                                                            'seconds', c.seconds, 'width', c.width, 'height', c.height,
+                                                            'preview', c.preview, 'thumb', c.thumb) order by c.created_at, c.name)
+                         from lelons.fx_clips c where c.pack_id = p.id), '[]'::json));
+  elsif what = 'downloaded' then
+    update lelons.fx_packs x set downloads = x.downloads + 1 where x.id = lelons_fx.pack_id;
+    return '{}'::json;
+  end if;
+
+  if what = 'setup' then
+    if me.role <> 'owner' then
+      raise exception 'owner only' using hint = 'denied';
+    end if;
+    if jsonb_typeof(data) <> 'object' or coalesce(data->>'bucket', '') = '' or coalesce(data->>'read_key', '') = ''
+       or coalesce(data->>'write_key', '') = '' or length(data::text) > 4000 then
+      raise exception 'bad storage' using hint = 'bad_input';
+    end if;
+    update lelons.config set fx_storage = data where id = 1;
+    return '{}'::json;
+  end if;
+  if not can_add then
+    raise exception 'admins only' using hint = 'denied';
+  end if;
+  if what = 'upload_key' then
+    if store is null then
+      raise exception 'no storage' using hint = 'nostorage';
+    end if;
+    return json_build_object('bucket', store->>'bucket', 'bucket_id', store->>'bucket_id',
+                             'key_id', store->>'write_id', 'key', store->>'write_key');
+  elsif what = 'add_pack' then
+    insert into lelons.fx_packs (name, category, about, uploader_id)
+    values (left(btrim(data->>'name'), 80), data->>'category', left(coalesce(data->>'about', ''), 600), me.id) returning * into p;
+    return lelons.fx_pack_json(p);
+  elsif what = 'edit_pack' then
+    update lelons.fx_packs x set name = left(btrim(data->>'name'), 80), category = data->>'category',
+      about = left(coalesce(data->>'about', ''), 600) where x.id = lelons_fx.pack_id returning * into p;
+    if p.id is null then
+      raise exception 'no pack' using hint = 'nopack';
+    end if;
+    return lelons.fx_pack_json(p);
+  elsif what = 'add_clip' then
+    if not exists (select 1 from lelons.fx_packs x where x.id = lelons_fx.pack_id) then
+      raise exception 'no pack' using hint = 'nopack';
+    end if;
+    insert into lelons.fx_clips (pack_id, name, path, file_id, size, seconds, width, height, preview, preview_id, thumb, thumb_id)
+    values (lelons_fx.pack_id, left(btrim(data->>'name'), 120), data->>'path', data->>'file_id',
+            greatest(0, coalesce((data->>'size')::bigint, 0)), greatest(0, coalesce((data->>'seconds')::real, 0)),
+            greatest(0, coalesce((data->>'width')::int, 0)), greatest(0, coalesce((data->>'height')::int, 0)),
+            nullif(data->>'preview', ''), nullif(data->>'preview_id', ''), nullif(data->>'thumb', ''), nullif(data->>'thumb_id', ''));
+    return '{}'::json;
+  elsif what = 'delete_clip' then
+    -- The files to delete from Backblaze go back to the app.
+    with d as (delete from lelons.fx_clips c where c.id = (data->>'id')::uuid and c.pack_id = lelons_fx.pack_id returning c.*)
+    select json_agg(json_build_object('path', f.path, 'id', f.id)) into gone
+    from d, lateral (values (d.path, d.file_id), (d.preview, d.preview_id), (d.thumb, d.thumb_id)) f(path, id) where f.id is not null;
+    return json_build_object('files', coalesce(gone, '[]'::json));
+  elsif what = 'delete_pack' then
+    with d as (delete from lelons.fx_clips c where c.pack_id = lelons_fx.pack_id returning c.*)
+    select json_agg(json_build_object('path', f.path, 'id', f.id)) into gone
+    from d, lateral (values (d.path, d.file_id), (d.preview, d.preview_id), (d.thumb, d.thumb_id)) f(path, id) where f.id is not null;
+    delete from lelons.fx_packs x where x.id = lelons_fx.pack_id;
+    return json_build_object('files', coalesce(gone, '[]'::json));
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -2286,7 +2422,7 @@ begin
     'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
-    'lelons_board(text, text, uuid, jsonb, bigint, text[])'] loop
+    'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

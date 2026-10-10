@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.15.0", items: [
+    "New Film assets tab, like ActionVFX! Explosions, fire, smoke, sparks, muzzle flashes and more, in packs you can share with your friends.",
+    "Put your mouse on a pack to watch its preview, open it to see every clip, and download the whole pack or just one clip, ready to drop into Resolve or Premiere.",
+    "The owner and admins make packs with + New pack and drop clips in. The app makes the previews by itself, and big files are fine.",
+    "The clips go in the owner's own free Backblaze storage (10 GB free). The owner sets it up once in the Film assets tab.",
+  ] },
   { version: "2.14.0", items: [
     "Smoother everywhere! Folding the side bar is now one clean move: the icons stay put, the names fade and the highlight glides along.",
     "Fixed the highlight sliding down from the top when you resize the window.",
