@@ -1838,132 +1838,262 @@ begin
   return json_build_object('ok', true) :: jsonb || lelons.playlists_json(me.id) :: jsonb;
 end $$;
 
--- (3.0.0) Calls in private chats. The two apps use lelons_call to ring each other and swap how to reach
--- each other (offer and answer); the sound and the shared screen then go straight between the two apps.
-create table if not exists lelons.calls (
+-- (2.11.0) Calls: in private chats and in group chats. A call is a "room"; everyone in it connects to
+-- everyone else (each pair swaps an offer and an answer through lelons_room), then the sound and
+-- shared screens go straight between the apps. (2.10.0's one-to-one calls, lelons_call, are replaced.)
+drop function if exists public.lelons_call(text, text, uuid, text, text);
+drop function if exists lelons.calls_json(uuid);
+drop function if exists lelons.call_tidy(uuid);
+drop function if exists lelons.call_end(uuid, text);
+drop table if exists lelons.calls;
+
+create table if not exists lelons.rooms (
   id uuid primary key default gen_random_uuid(),
-  caller uuid not null references lelons.accounts (id) on delete cascade,
-  callee uuid not null references lelons.accounts (id) on delete cascade,
-  state text not null default 'ringing' check (state in ('ringing', 'active', 'ended')),
-  why text,  -- how it ended: declined, cancelled, missed, hung_up, dropped
-  offer text check (length(offer) <= 30000),
-  answer text check (length(answer) <= 30000),
-  caller_seen timestamptz not null default now(),
-  callee_seen timestamptz,
+  group_id uuid references lelons.chat_groups (id) on delete cascade,  -- a group call, or null
+  started_by uuid references lelons.accounts (id) on delete set null,
+  peer_id uuid references lelons.accounts (id) on delete set null,     -- a private call: who was called
   created_at timestamptz not null default now(),
-  answered_at timestamptz,
-  ended_at timestamptz
+  talked_at timestamptz,  -- when a second person joined
+  ended_at timestamptz,
+  why text                -- private calls: declined, missed, cancelled
 );
-alter table lelons.calls enable row level security;
-create index if not exists calls_caller on lelons.calls (caller, created_at);
-create index if not exists calls_callee on lelons.calls (callee, created_at);
--- A call in a private chat leaves a line there: how long it was (seconds), 0 if nobody answered, -1 if declined.
+create table if not exists lelons.room_people (
+  room_id uuid not null references lelons.rooms (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  state text not null check (state in ('ringing', 'in', 'left', 'declined', 'missed')),
+  rang_at timestamptz not null default now(),
+  seen_at timestamptz not null default now(),
+  primary key (room_id, account_id)
+);
+create table if not exists lelons.room_signals (
+  id bigint generated always as identity primary key,
+  room_id uuid not null references lelons.rooms (id) on delete cascade,
+  from_id uuid not null references lelons.accounts (id) on delete cascade,
+  to_id uuid not null references lelons.accounts (id) on delete cascade,
+  kind text not null check (kind in ('offer', 'answer')),
+  sdp text not null check (length(sdp) <= 30000),
+  created_at timestamptz not null default now()
+);
+alter table lelons.rooms enable row level security;
+alter table lelons.room_people enable row level security;
+alter table lelons.room_signals enable row level security;
+create index if not exists rooms_live on lelons.rooms (group_id) where ended_at is null;
+create index if not exists room_people_by_account on lelons.room_people (account_id, state);
+create index if not exists room_signals_to on lelons.room_signals (to_id, id);
+-- A call leaves a line in its chat: how long it was (seconds), 0 if nobody answered, -1 if declined.
 alter table lelons.chat add column if not exists call_seconds int;
 
--- End a call, and leave its line in the private chat.
-create or replace function lelons.call_end(call_id uuid, reason text) returns void
+-- End a call and leave its line in the chat.
+create or replace function lelons.room_end(rid uuid, reason text default null) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
-  c lelons.calls;
+  r lelons.rooms;
 begin
-  update lelons.calls x set state = 'ended', why = reason, ended_at = now()
-  where x.id = call_id and x.state <> 'ended' returning * into c;
-  if c.id is not null then
-    insert into lelons.chat (account_id, to_id, message, call_seconds)
-    values (c.caller, c.callee, '', case when c.answered_at is not null then greatest(1, extract(epoch from now() - c.answered_at)::int)
-                                         when reason = 'declined' then -1 else 0 end);
+  update lelons.rooms x set ended_at = now(), why = coalesce(x.why, reason)
+  where x.id = rid and x.ended_at is null returning * into r;
+  if r.id is null then
+    return;
+  end if;
+  update lelons.room_people p set state = case when p.state = 'ringing' then 'missed' else 'left' end
+  where p.room_id = rid and p.state in ('ringing', 'in');
+  delete from lelons.room_signals s where s.room_id = rid;
+  if r.started_by is not null and (r.group_id is not null or r.peer_id is not null) then
+    insert into lelons.chat (account_id, to_id, group_id, message, call_seconds)
+    values (r.started_by, case when r.group_id is null then r.peer_id end, r.group_id, '',
+            case when r.talked_at is not null then greatest(1, extract(epoch from now() - r.talked_at)::int)
+                 when r.why = 'declined' then -1 else 0 end);
   end if;
 end $$;
 
--- Calls whose app went quiet (closed, crashed, lost its internet) end by themselves.
-create or replace function lelons.call_tidy(person uuid) returns void
+-- Who went quiet (app closed, internet gone) leaves; nobody answering stops ringing; empty calls end.
+create or replace function lelons.room_tidy(rid uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
-  c lelons.calls;
+  r lelons.rooms;
+  inside int;
+  ringing int;
 begin
-  for c in select * from lelons.calls x where x.state <> 'ended' and (x.caller = person or x.callee = person) loop
-    if c.state = 'ringing' and (c.created_at < now() - interval '45 seconds' or c.caller_seen < now() - interval '15 seconds') then
-      perform lelons.call_end(c.id, 'missed');
-    elsif c.state = 'active' and (c.caller_seen < now() - interval '25 seconds' or c.callee_seen < now() - interval '25 seconds') then
-      perform lelons.call_end(c.id, 'dropped');
-    end if;
-  end loop;
+  select * into r from lelons.rooms x where x.id = rid and x.ended_at is null;
+  if r.id is null then
+    return;
+  end if;
+  update lelons.room_people p set state = 'left' where p.room_id = rid and p.state = 'in' and p.seen_at < now() - interval '25 seconds';
+  update lelons.room_people p set state = 'missed' where p.room_id = rid and p.state = 'ringing' and p.rang_at < now() - interval '45 seconds';
+  select count(*) filter (where p.state = 'in'), count(*) filter (where p.state = 'ringing') into inside, ringing
+  from lelons.room_people p where p.room_id = rid;
+  if inside = 0 then
+    perform lelons.room_end(rid, 'missed');
+  elsif r.group_id is null and inside = 1 and ringing = 0 then  -- a private call: the other one hung up or never came
+    perform lelons.room_end(rid, case when r.talked_at is null and exists (select 1 from lelons.room_people p
+                                        where p.room_id = rid and p.state = 'declined') then 'declined'
+                                      when r.talked_at is null then 'missed' end);
+  end if;
 end $$;
 
--- Your calls going on now (ringing or talking), and the ones that ended in the last minute.
-create or replace function lelons.calls_json(me uuid) returns json
+-- Your calls going on (ringing you, or you're in them) and the ones you were in that ended in the
+-- last minute, with who's in each; plus offers and answers sent to you after signal id "after".
+create or replace function lelons.rooms_json(me uuid, after bigint) returns json
 language sql stable security definer set search_path = '' as $$
-  select json_build_object('ok', true, 'calls', coalesce((
-    select json_agg(json_build_object(
-      'id', c.id, 'state', c.state, 'why', c.why, 'outgoing', c.caller = me,
-      'username', a.username, 'avatar', a.avatar,
-      'offer', case when c.callee = me and c.state = 'ringing' then c.offer end,
-      'answer', case when c.caller = me then c.answer end,
-      'created_at', c.created_at, 'answered_at', c.answered_at) order by c.created_at)
-    from lelons.calls c join lelons.accounts a on a.id = case when c.caller = me then c.callee else c.caller end
-    where (c.caller = me or c.callee = me) and (c.state <> 'ended' or c.ended_at > now() - interval '1 minute')),
-    '[]'::json))
+  select json_build_object('ok', true,
+    'rooms', coalesce((
+      select json_agg(json_build_object(
+        'id', r.id, 'live', r.ended_at is null, 'why', r.why, 'my_state', mine.state,
+        'group', case when r.group_id is null then null
+                      else (select json_build_object('id', g.id, 'name', g.name, 'picture', g.picture)
+                            from lelons.chat_groups g where g.id = r.group_id) end,
+        'started_by', (select a.username from lelons.accounts a where a.id = r.started_by),
+        'created_at', r.created_at, 'talked_at', r.talked_at,
+        'people', (select coalesce(json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'state', p.state)
+                                            order by p.rang_at, lower(a.username)), '[]'::json)
+                   from lelons.room_people p join lelons.accounts a on a.id = p.account_id
+                   where p.room_id = r.id)) order by r.created_at)
+      from lelons.rooms r join lelons.room_people mine on mine.room_id = r.id and mine.account_id = me
+      where (r.ended_at is null and mine.state in ('ringing', 'in'))
+         or (r.ended_at > now() - interval '1 minute')
+         or (r.ended_at is null and mine.state in ('left', 'declined', 'missed') and r.group_id is not null)), '[]'::json),
+    'signals', coalesce((
+      select json_agg(json_build_object('id', s.id, 'room', s.room_id, 'from', a.username, 'kind', s.kind, 'sdp', s.sdp) order by s.id)
+      from lelons.room_signals s join lelons.accounts a on a.id = s.from_id
+      where s.to_id = me and s.id > coalesce(after, 0)), '[]'::json),
+    'live_groups', coalesce((
+      select json_agg(json_build_object('group', r.group_id, 'room', r.id,
+                                        'people', (select count(*) from lelons.room_people p where p.room_id = r.id and p.state = 'in')))
+      from lelons.rooms r where r.ended_at is null and r.group_id in
+        (select m.group_id from lelons.chat_group_members m where m.account_id = me)), '[]'::json))
 $$;
 
--- what: 'check' (every few seconds: still here, anything ringing?), 'start' (call with_user, sdp = the offer),
--- 'answer' (call_id, sdp = the answer), 'end' (hang up, decline, or stop ringing).
-create or replace function public.lelons_call(token text, what text, call_id uuid default null,
-                                               with_user text default null, sdp text default null)
+-- what:
+--   'check'  (every few seconds) say you're still here; get your calls and the offers/answers for you (after: the last signal id you have)
+--   'start'  with_user = a username or 'g:<group id>'; rings them (a group call that's already going is joined instead)
+--   'join'   room_id: answer, or join a group call
+--   'signal' room_id, to_user, kind ('offer' or 'answer'), sdp: how to reach you, for one person in the call
+--   'leave'  room_id: hang up, or decline
+create or replace function public.lelons_room(token text, what text, room_id uuid default null, with_user text default null,
+                                               to_user text default null, kind text default null, sdp text default null,
+                                               after bigint default 0)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
   peer uuid;
-  c lelons.calls;
+  gid uuid;
+  rid uuid := room_id;
+  r lelons.rooms;
+  target uuid;
+  x record;
 begin
-  update lelons.calls x set caller_seen = now() where x.caller = me.id and x.state <> 'ended';
-  update lelons.calls x set callee_seen = now() where x.callee = me.id and x.state <> 'ended';
-  perform lelons.call_tidy(me.id);
+  update lelons.room_people p set seen_at = now() where p.account_id = me.id and p.state = 'in';
+  for x in select p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+           where p.account_id = me.id and rr.ended_at is null
+           union select rr.id from lelons.rooms rr join lelons.chat_group_members m on m.group_id = rr.group_id
+           where m.account_id = me.id and rr.ended_at is null loop
+    perform lelons.room_tidy(x.room_id);
+  end loop;
+
   if what = 'start' then
-    peer := lelons.peer_of(with_user);
-    if peer is null or peer = me.id then
-      return json_build_object('ok', false, 'error', 'yourself');
-    end if;
-    if coalesce(length(sdp), 0) < 10 or length(sdp) > 30000 then
-      return json_build_object('ok', false, 'error', 'bad');
-    end if;
-    if (select count(*) from lelons.calls x where x.caller = me.id and x.created_at > now() - interval '1 minute') >= 6 then
-      return json_build_object('ok', false, 'error', 'slow');
-    end if;
-    if (select count(*) from lelons.calls x where x.caller = me.id and x.created_at > now() - interval '1 day') >= 300 then
-      return json_build_object('ok', false, 'error', 'daily');
-    end if;
-    if exists (select 1 from lelons.calls x where x.state <> 'ended' and (x.caller = me.id or x.callee = me.id)) then
+    if exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+               where p.account_id = me.id and p.state = 'in' and rr.ended_at is null) then
       return json_build_object('ok', false, 'error', 'in_call');
     end if;
-    if not exists (select 1 from lelons.presence p where p.account_id = peer and p.seen_at > now() - interval '150 seconds') then
-      return json_build_object('ok', false, 'error', 'offline');
+    if (select count(*) from lelons.rooms rr where rr.started_by = me.id and rr.created_at > now() - interval '1 minute') >= 6 then
+      return json_build_object('ok', false, 'error', 'slow');
     end if;
-    perform lelons.call_tidy(peer);
-    if exists (select 1 from lelons.calls x where x.state <> 'ended' and (x.caller = peer or x.callee = peer)) then
-      return json_build_object('ok', false, 'error', 'busy');
+    if (select count(*) from lelons.rooms rr where rr.started_by = me.id and rr.created_at > now() - interval '1 day') >= 300 then
+      return json_build_object('ok', false, 'error', 'daily');
     end if;
-    insert into lelons.calls (caller, callee, offer) values (me.id, peer, sdp) returning * into c;
-    delete from lelons.calls x where x.state = 'ended' and x.ended_at < now() - interval '1 day';
-    return lelons.calls_json(me.id)::jsonb || jsonb_build_object('call', c.id);
-  elsif what = 'answer' then
-    if coalesce(length(sdp), 0) < 10 or length(sdp) > 30000 then
-      return json_build_object('ok', false, 'error', 'bad');
+    gid := lelons.group_of(with_user, me.id);
+    if gid is not null then
+      select rr.id into rid from lelons.rooms rr where rr.group_id = gid and rr.ended_at is null;
+      if rid is null then
+        insert into lelons.rooms (group_id, started_by) values (gid, me.id) returning id into rid;
+        insert into lelons.room_people (room_id, account_id, state)
+        select rid, m.account_id, case when m.account_id = me.id then 'in' else 'ringing' end
+        from lelons.chat_group_members m where m.group_id = gid
+          and (m.account_id = me.id or exists (select 1 from lelons.presence pr where pr.account_id = m.account_id
+                                                and pr.seen_at > now() - interval '150 seconds'));
+        return lelons.rooms_json(me.id, after)::jsonb || jsonb_build_object('room', rid);
+      end if;
+      what := 'join';  -- someone already started one: join it
+    else
+      peer := lelons.peer_of(with_user);
+      if peer is null or peer = me.id then
+        return json_build_object('ok', false, 'error', 'yourself');
+      end if;
+      if not exists (select 1 from lelons.presence pr where pr.account_id = peer and pr.seen_at > now() - interval '150 seconds') then
+        return json_build_object('ok', false, 'error', 'offline');
+      end if;
+      for x in select distinct p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+               where p.account_id = peer and rr.ended_at is null loop
+        perform lelons.room_tidy(x.room_id);
+      end loop;
+      if exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+                 where p.account_id = peer and p.state in ('in', 'ringing') and rr.ended_at is null) then
+        return json_build_object('ok', false, 'error', 'busy');
+      end if;
+      insert into lelons.rooms (started_by, peer_id) values (me.id, peer) returning id into rid;
+      insert into lelons.room_people (room_id, account_id, state) values (rid, me.id, 'in'), (rid, peer, 'ringing');
+      delete from lelons.rooms rr where rr.ended_at < now() - interval '2 days';
+      return lelons.rooms_json(me.id, after)::jsonb || jsonb_build_object('room', rid);
     end if;
-    update lelons.calls x set state = 'active', answer = sdp, answered_at = now(), callee_seen = now()
-    where x.id = call_id and x.callee = me.id and x.state = 'ringing' returning * into c;
-    if c.id is null then
+  end if;
+
+  if what = 'join' then
+    select * into r from lelons.rooms rr where rr.id = rid and rr.ended_at is null;
+    if r.id is null then
       return json_build_object('ok', false, 'error', 'gone');
     end if;
-  elsif what = 'end' then
-    select * into c from lelons.calls x where x.id = call_id and (x.caller = me.id or x.callee = me.id) and x.state <> 'ended';
-    if c.id is not null then
-      perform lelons.call_end(c.id, case when c.state = 'active' then 'hung_up'
-                                         when c.callee = me.id then 'declined' else 'cancelled' end);
+    if exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+               where p.account_id = me.id and p.state = 'in' and rr.ended_at is null and rr.id <> rid) then
+      return json_build_object('ok', false, 'error', 'in_call');
+    end if;
+    if r.group_id is not null then
+      if not exists (select 1 from lelons.chat_group_members m where m.group_id = r.group_id and m.account_id = me.id) then
+        return json_build_object('ok', false, 'error', 'gone');
+      end if;
+      if (select count(*) from lelons.room_people p where p.room_id = rid and p.state = 'in' and p.account_id <> me.id) >= 8 then
+        return json_build_object('ok', false, 'error', 'full');
+      end if;
+      insert into lelons.room_people as p (room_id, account_id, state) values (rid, me.id, 'in')
+      on conflict on constraint room_people_pkey do update set state = 'in', seen_at = now();
+    else
+      update lelons.room_people p set state = 'in', seen_at = now()
+      where p.room_id = rid and p.account_id = me.id and p.state = 'ringing';
+      if not found then
+        return json_build_object('ok', false, 'error', 'gone');
+      end if;
+    end if;
+    delete from lelons.room_signals s where s.room_id = rid and (s.from_id = me.id or s.to_id = me.id);
+    update lelons.rooms rr set talked_at = coalesce(rr.talked_at, now()) where rr.id = rid;
+  elsif what = 'signal' then
+    if kind not in ('offer', 'answer') or coalesce(length(sdp), 0) < 10 or length(sdp) > 30000 then
+      return json_build_object('ok', false, 'error', 'bad');
+    end if;
+    select a.id into target from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(to_user, '')));
+    if target is null
+       or not exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+                      where p.room_id = rid and p.account_id = me.id and p.state = 'in' and rr.ended_at is null)
+       or not exists (select 1 from lelons.room_people p where p.room_id = rid and p.account_id = target and p.state = 'in') then
+      return json_build_object('ok', false, 'error', 'gone');
+    end if;
+    if (select count(*) from lelons.room_signals s where s.from_id = me.id and s.created_at > now() - interval '1 minute') >= 60 then
+      return json_build_object('ok', false, 'error', 'slow');
+    end if;
+    insert into lelons.room_signals (room_id, from_id, to_id, kind, sdp)
+    values (rid, me.id, target, lelons_room.kind, lelons_room.sdp);
+    delete from lelons.room_signals s where s.created_at < now() - interval '3 minutes';
+  elsif what = 'leave' then
+    update lelons.room_people p set state = case when p.state = 'ringing' then 'declined' else 'left' end
+    where p.room_id = rid and p.account_id = me.id and p.state in ('ringing', 'in');
+    delete from lelons.room_signals s where s.room_id = rid and (s.from_id = me.id or s.to_id = me.id);
+    select * into r from lelons.rooms rr where rr.id = rid and rr.ended_at is null;
+    if r.id is not null and r.group_id is null and r.talked_at is null and r.started_by = me.id then
+      perform lelons.room_end(rid, 'cancelled');  -- (hung up while it was ringing)
+    elsif r.id is not null then
+      perform lelons.room_tidy(rid);
     end if;
   elsif what <> 'check' then
     raise exception 'bad what';
   end if;
-  return lelons.calls_json(me.id);
+  return lelons.rooms_json(me.id, after);
 end $$;
 
 revoke execute on all functions in schema lelons from public;
@@ -1991,7 +2121,7 @@ begin
     'lelons_doc_remove(text, uuid, text)', 'lelons_doc_delete(text, uuid)', 'lelons_doc_comments(text, uuid)',
     'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
-    'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_call(text, text, uuid, text, text)'] loop
+    'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

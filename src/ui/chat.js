@@ -266,7 +266,8 @@ let roomDrawn = "";
 function drawRoom() {
   const g = isGroupKey(chatWith) ? chatGroup || chatGroups.find((x) => "g:" + x.id === chatWith) : null;
   const sig = JSON.stringify([chatWith, g && [g.name, g.pictureUrl, (g.members || []).map((m) => m.username), g.people]]);
-  const sig2 = sig + (typeof callWith === "function" && chatWith && callWith(chatWith) ? " call" : "");
+  const calls = typeof callWith === "function"; // (call.js loads after this file)
+  const sig2 = sig + (calls ? JSON.stringify([callWith(chatWith), callLiveIn(chatWith)]) : "");
   if (sig2 === roomDrawn) return;
   roomDrawn = sig2;
   const room = $("chatRoom");
@@ -308,14 +309,19 @@ function drawRoom() {
     };
     tools.push(tool(CHAT_ICONS.people, "Add people", () => openGroupModal("edit", true)));
     tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture and people", () => openGroupModal("edit")));
-  } else if (chatWith) {
-    const inCall = typeof callWith === "function" && callWith(chatWith);
+  }
+  if (chatWith && calls) {
+    // Call them, or the whole group (or join the group's call that's going on).
+    const inCall = callWith(chatWith);
+    const live = !inCall && callLiveIn(chatWith);
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "call-start" + (inCall ? " live" : "");
-    b.title = inCall ? `You're in a call with ${chatWith}` : `Call ${chatWith}. You can share your screen in the call.`;
+    b.className = "call-start" + (inCall ? " live" : live ? " join" : "");
+    b.title = inCall ? "You're in this call" : live ? `Join the call (${live.people} in it)`
+      : isGroupKey(chatWith) ? "Call everyone in the group. You can share your screen in the call."
+      : `Call ${chatWith}. You can share your screen in the call.`;
     b.innerHTML = CALL_ICONS.phone;
-    b.append(document.createTextNode(inCall ? "In call" : "Call"));
+    b.append(document.createTextNode(inCall ? "In call" : live ? `Join call · ${live.people}` : "Call"));
     b.disabled = inCall;
     b.addEventListener("click", () => callStart(chatWith));
     tools.push(b);
@@ -586,19 +592,22 @@ function chatAttachment(m) {
 // A call in a private chat: how long it was, or that nobody answered. Click to call back.
 function chatCallLine(m) {
   const box = document.createElement("div");
-  const missed = m.call_seconds <= 0, declined = m.call_seconds < 0;
+  const missed = m.call_seconds <= 0, declined = m.call_seconds < 0, group = isGroupKey(chatWith);
   box.className = "chat-call" + (missed && !m.mine ? " missed" : "");
   const icon = Object.assign(document.createElement("span"), { className: "chat-call-icon", innerHTML: CALL_ICONS.phone });
   const text = document.createElement("div");
   text.className = "info";
   text.append(Object.assign(document.createElement("b"), {
-    textContent: declined ? (m.mine ? "Call declined" : "You declined a call")
+    textContent: group ? (missed ? (m.mine ? "Nobody joined your call" : `Missed a call from ${m.username}`)
+                                 : `${m.mine ? "You" : m.username} started a call`)
+      : declined ? (m.mine ? "Call declined" : "You declined a call")
       : missed ? (m.mine ? "No answer" : "Missed call") : m.mine ? "You called" : `${m.username} called`,
   }));
   text.append(Object.assign(document.createElement("span"), { textContent: missed ? chatTime(m.created_at) : clock(m.call_seconds, false) }));
   box.append(icon, text);
-  if (chatWith && !isGroupKey(chatWith)) {
-    const again = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: m.mine ? "Call again" : "Call back" });
+  if (chatWith) {
+    const again = Object.assign(document.createElement("button"), { type: "button", className: "link",
+      textContent: group ? "Call" : m.mine ? "Call again" : "Call back" });
     again.addEventListener("click", () => callStart(chatWith));
     box.append(again);
   }

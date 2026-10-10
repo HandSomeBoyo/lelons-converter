@@ -75,7 +75,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -632,7 +632,8 @@ class Handler(BaseHTTPRequestHandler):
                 library.chat_delete(data.get("id"))
                 result = {}
             elif action == "call":
-                result = library.call(data.get("what"), data.get("call"), data.get("with"), data.get("sdp"))
+                result = library.room(data.get("what"), data.get("room"), data.get("with"), data.get("to"),
+                                      data.get("kind"), data.get("sdp"), data.get("after"))
             elif action == "call-ringing":  # someone is calling: the app blinks in the taskbar
                 appwindow.flash()
                 result = {}

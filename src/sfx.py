@@ -515,23 +515,39 @@ class Library:
     def chat_delete(self, message_id):
         self._remove_file(_rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id)))
 
-    def call(self, what, call_id=None, with_user=None, sdp=None):
-        """Calls in private chats: "check" (every few seconds), "start", "answer" or "end" (see lelons_call)."""
-        if what not in ("check", "start", "answer", "end"):
+    def room(self, what, room_id=None, with_user=None, to_user=None, kind=None, sdp=None, after=0):
+        """Calls (private and group): "check" (every few seconds), "start", "join", "signal" or "leave"
+        (see lelons_room)."""
+        if what not in ("check", "start", "join", "signal", "leave"):
             raise Error("That didn't work. Try again.")
-        result = _rpc("lelons_call", token=self._token(), what=what, call_id=str(call_id) if call_id else None,
-                      with_user=str(with_user) if with_user else None, sdp=str(sdp) if sdp else None) or {}
+        try:
+            after = max(0, int(after or 0))
+        except (TypeError, ValueError):
+            after = 0
+        result = _rpc("lelons_room", token=self._token(), what=what, room_id=str(room_id) if room_id else None,
+                      with_user=str(with_user) if with_user else None, to_user=str(to_user) if to_user else None,
+                      kind=str(kind) if kind else None, sdp=str(sdp) if sdp else None, after=after) or {}
         if not result.get("ok"):
             raise Error({"yourself": "You can't call yourself.",
                          "slow": "Slow down a little! Wait a moment before calling again.",
                          "daily": "You've made a lot of calls today. Try again tomorrow.",
-                         "in_call": "You're already in a call.",
+                         "in_call": "You're already in a call. Hang up first.",
                          "offline": f"{with_user} isn't online right now. They need the app open to get your call.",
                          "busy": f"{with_user} is in another call right now.",
                          "gone": "That call already ended.",
+                         "full": "That call is full (9 people at most).",
                          }.get(result.get("error"), "The call didn't work. Try again."))
-        result["calls"] = [{**c, "avatarUrl": public_url(c["avatar"]) if c.get("avatar") else ""}
-                           for c in result.get("calls") or []]
+
+        def pictured(row):
+            return {**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""}
+
+        rooms = []
+        for room in result.get("rooms") or []:
+            group = room.get("group")
+            if group:
+                group = {**group, "pictureUrl": public_url(group["picture"]) if group.get("picture") else ""}
+            rooms.append({**room, "group": group, "people": [pictured(p) for p in room.get("people") or []]})
+        result["rooms"] = rooms
         return result
 
     def profile(self, username):

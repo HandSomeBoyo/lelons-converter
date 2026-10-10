@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.11.0", items: [
+    "Group calls! Press Call in a group chat and everyone online can join. Already a call going? The button says Join call. Up to 9 people.",
+    "See who's talking: a green ring lights up around their picture.",
+    "New Deafen button: you hear nobody and nobody hears you. Everyone can see when someone is muted or deafened.",
+    "Pick your microphone and your speakers or headphones with the sliders button in a call. The app remembers them.",
+    "Screen sharing got options: pick 360p up to 1440p and 15, 30 or 60 fps, switch to another screen with Change screen, and pick whose screen to watch when more than one person shares.",
+  ] },
   { version: "2.10.0", items: [
     "Calls! Open a private chat and press Call at the top to talk to your friend.",
     "Share your screen in a call: press the screen button and pick a window or your whole screen. Their screen opens big, and you can make it small or full screen.",
