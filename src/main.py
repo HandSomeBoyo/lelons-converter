@@ -705,7 +705,12 @@ class Handler(BaseHTTPRequestHandler):
         """The Boards tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         board_id = data.get("id")
         try:
-            if action == "list":
+            if action.startswith("team-"):  # team boards, shared through the accounts
+                try:
+                    result = boards.team(action[5:], data)
+                except sfx.LoggedOut as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+            elif action == "list":
                 result = {"boards": boards.list_all()}
             elif action == "create":
                 result = {"board": boards.create(data.get("board"))}

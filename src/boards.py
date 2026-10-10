@@ -1,8 +1,9 @@
 """The Boards tab: Trello-like boards with lists and cards.
 
-For now boards live on this computer only (in the app's data folder), one file per board. The page
-does all the work (moving cards, labels, checklists...) and sends the whole board back to be saved;
-this just keeps the files.
+"Just me" boards live on this computer only (in the app's data folder), one file per board. Team
+boards live in Supabase (see sfx/setup.sql): only the one who made it and the people they invited
+(and who said yes) can open them. The page does all the work (moving cards, labels, checklists...)
+and sends the whole board back to be saved; this keeps the files and talks to Supabase.
 """
 
 import json
@@ -13,6 +14,7 @@ import time
 import uuid
 
 import settings
+import sfx
 
 FOLDER = os.path.join(settings.DATA_DIR, "Boards")
 MAX_BYTES = 8 * 1024 * 1024  # one board
@@ -144,3 +146,56 @@ def star(board_id, starred):
         board = _read(board_id)
         board["starred"] = bool(starred)
         _write(board)
+
+
+# ---------------------------------------------------------------- team boards (Supabase, see sfx/setup.sql)
+
+FRIENDLY = {
+    "board_gone": "That board isn't there any more, or you're not on it any more.",
+    "board_many": "You've made as many team boards as you can. Delete some old ones first.",
+    "board_big": "This board is too big to save. Archive and delete some old cards.",
+    "board_people": "A board can have up to 50 people.",
+}
+sfx.FRIENDLY.update(FRIENDLY)
+TEAM_ACTIONS = ("list", "people", "create", "open", "check", "save", "star", "invite", "remove", "leave", "answer", "delete")
+
+
+def _people(people):
+    return [{**p, "avatarUrl": sfx.public_url(p["avatar"]) if p.get("avatar") else ""} for p in people or []]
+
+
+def team(what, data):
+    """One team-board action (what) with what the page sent (data). Raises sfx.LoggedOut or Error."""
+    if what not in TEAM_ACTIONS:
+        raise Error("That didn't work.")
+    args = {"what": what}
+    if what not in ("list", "people"):
+        args["board_id"] = str(data.get("id") or "") or None
+        if what != "create" and not args["board_id"]:
+            raise Error("That board isn't there any more.")
+    if what in ("create", "save"):
+        board = _clean(data.get("board"))
+        board.pop("id", None)
+        args["data"] = board
+    if what in ("save", "check"):
+        args["base_rev"] = int(data.get("rev") or 0)
+    if what in ("star", "answer"):
+        args["data"] = bool(data.get("on"))
+    if what == "invite":
+        args["usernames"] = [str(u)[:40] for u in (data.get("usernames") or [])][:50]
+    if what == "remove":
+        args["usernames"] = [str(data.get("username") or "")[:40]]
+    try:
+        result = sfx._rpc("lelons_board", token=sfx.library._token(), **args)
+    except sfx.LoggedOut:
+        raise
+    except sfx.Error as e:
+        raise Error(str(e)) from None
+    if what == "people" or what in ("invite", "remove", "leave"):
+        return {"people": _people(result)}
+    if what == "list":
+        return {"boards": [{**b, "people": _people(b.get("people"))} for b in result.get("boards") or []],
+                "invites": [{**i, "avatarUrl": sfx.public_url(i["avatar"]) if i.get("avatar") else ""} for i in result.get("invites") or []]}
+    if isinstance(result, dict) and "people" in result:
+        result["people"] = _people(result["people"])
+    return result if isinstance(result, dict) else {}

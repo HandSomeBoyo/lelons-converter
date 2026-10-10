@@ -1,8 +1,12 @@
 // The Boards tab: Trello-like boards. A board has lists, a list has cards, and a card can have
-// labels, dates, a description, checklists, links, a cover color and comments. Drag cards between
-// lists and drag lists around. Boards are saved on this computer only for now (see boards.py):
-// every change is sent back as the whole board a moment later.
-// Uses $, api() from app.js, showTab() from images.js, sfxUser() from sfx.js, loadPref()/savePref() from theme.js.
+// labels, dates, a description, checklists, links, a cover color, members and comments. Drag cards
+// between lists and drag lists around. Every change is sent back as the whole board a moment later.
+//  - Just me: saved on this computer only (see boards.py).
+//  - Team: shared through the accounts with people you invite (see sfx/setup.sql). The app checks for
+//    other people's changes every few seconds; when two people change the board at the same time, both
+//    changes are put together (bdMerge) and saved again.
+// Uses $, api() from app.js, showTab() from images.js, sfxUser()/avatarEl()/openLogin() from sfx.js,
+// loadPref()/savePref() from theme.js.
 
 const BD_BGS = {
   blue: "#0c66e4", orange: "#c25100", green: "#1f845a", red: "#c9372c", purple: "#6e5dc6",
@@ -56,6 +60,8 @@ const BD_ICONS = {
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg>',
   collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l-4 7 4 7M15 5l4 7-4 7"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><path d="M16 11v6M13 14h6"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -68,10 +74,18 @@ let bdComposer = null;        // {list, text}: the "add a card" box that's open
 let bdAddingList = null;      // the text in the "add another list" box, or null when it's closed
 let bdMenu = "";              // the board menu on the right: "" (closed), "main", "about", "bg", "labels", "archive", "activity"
 let bdArchiveView = "cards";
-let bdFilter = { text: "", labels: new Set(), due: new Set() };
+const bdNoFilter = () => ({ text: "", labels: new Set(), due: new Set(), members: new Set() });
+let bdFilter = bdNoFilter();
 let bdCardId = "";            // the card that's open
 let bdDetails = true;         // show the card's history under its comments
 let bdDragged = false;        // a drag just ended: the click that follows isn't a click
+// Team boards
+let bdTeam = null;            // the open board is a team board: {rev, base (the board as last saved), mine, people, starred}
+let bdTeamBoards = null;      // team boards on the home (null: not logged in or couldn't load)
+let bdInvites = [];
+let bdTeamError = "";
+let bdPollTimer = 0;
+let bdEveryone = null;        // everyone you could invite
 
 const bdNewId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
 const bdMe = () => (typeof sfxUser === "function" && sfxUser() && sfxUser().username) || "You";
@@ -128,7 +142,7 @@ function bdLog(text, card) {
 }
 
 function bdNewCard(title) {
-  return { id: bdNewId(), title, desc: "", labels: [], start: "", due: "", done: false, checklists: [], links: [], comments: [], cover: "", created: Date.now(), log: [] };
+  return { id: bdNewId(), title, desc: "", labels: [], members: [], start: "", due: "", done: false, checklists: [], links: [], comments: [], cover: "", created: Date.now(), log: [] };
 }
 
 function bdNewBoard(title, bg, template) {
@@ -154,10 +168,118 @@ async function bdSave() {
   if (!bd) return;
   if (bdSaving) { bdSaveAgain = true; return; }
   bdSaving = true;
-  const res = await api("/api/boards-save", { id: bd.id, board: bd }).catch(() => ({ ok: false, error: "Couldn't save the board." }));
+  let res;
+  if (bdTeam) {
+    const team = bdTeam;
+    const { id, ...sent } = bdCopy(bd);
+    res = await api("/api/boards-team-save", { id, board: sent, rev: team.rev }).catch(() => ({ ok: false, error: "Couldn't save the board. Check your internet connection." }));
+    if (res.ok && bdTeam === team) {
+      if (res.conflict) { bdSaving = false; bdTakeTheirs(res.board, res.rev); return; }  // (saves again if your changes are still needed)
+      team.rev = res.rev;
+      team.base = sent;
+    }
+  } else {
+    res = await api("/api/boards-save", { id: bd.id, board: bd }).catch(() => ({ ok: false, error: "Couldn't save the board." }));
+  }
   bdSaving = false;
   if (!res.ok) bdToast(res.error || "Couldn't save the board.");
   if (bdSaveAgain) { bdSaveAgain = false; bdSave(); }
+}
+
+// ---------------------------------------------------------------- team boards: putting two people's changes together
+
+const bdCopy = (x) => JSON.parse(JSON.stringify(x));
+const bdSame = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const bdKeyed = (a) => Array.isArray(a) && a.every((x) => x && typeof x === "object" && "id" in x);
+
+// base: the board as both started from; mine: with your changes; theirs: with the other changes.
+// Things only one side changed take that side's change; when both changed the same thing, yours wins.
+function bdMerge(base, mine, theirs) {
+  if (bdSame(mine, base)) return theirs === undefined ? undefined : bdCopy(theirs);
+  if (bdSame(theirs, base) || bdSame(mine, theirs)) return mine === undefined ? undefined : bdCopy(mine);
+  if (mine === undefined || theirs === undefined) return mine === undefined ? undefined : bdCopy(mine);  // (one deleted, one changed: keep the change... unless it was you who deleted it)
+  if (bdKeyed(mine) && bdKeyed(theirs) && bdKeyed(base || [])) return bdMergeList(base || [], mine, theirs);
+  if (mine && theirs && typeof mine === "object" && typeof theirs === "object" && !Array.isArray(mine) && !Array.isArray(theirs)) {
+    const b = base && typeof base === "object" && !Array.isArray(base) ? base : {};
+    const out = {};
+    for (const k of new Set([...Object.keys(mine), ...Object.keys(theirs)])) {
+      const v = bdMerge(b[k], mine[k], theirs[k]);
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  }
+  return bdCopy(mine);
+}
+
+// Lists of things with an id (lists, cards, labels, checklist items...): added on either side stays, taken
+// out (deleted or moved somewhere else) on either side goes, the rest is merged one by one.
+function bdMergeList(base, mine, theirs) {
+  const b = new Map(base.map((x) => [x.id, x])), m = new Map(mine.map((x) => [x.id, x])), t = new Map(theirs.map((x) => [x.id, x]));
+  const order = bdSame(mine.map((x) => x.id), base.map((x) => x.id)) ? theirs : mine;   // whoever changed the order
+  const other = order === theirs ? mine : theirs;
+  const out = [];
+  const pick = (id) => {
+    if (b.has(id) && (!m.has(id) || !t.has(id))) return undefined;   // somebody took it out
+    if (!b.has(id)) return bdCopy((m.get(id) || t.get(id)));           // somebody added it
+    return bdMerge(b.get(id), m.get(id), t.get(id));
+  };
+  for (const x of order) { const v = pick(x.id); if (v !== undefined) out.push(v); }
+  other.forEach((x, i) => {
+    if (b.has(x.id) || out.some((y) => y.id === x.id)) return;
+    const before = other.slice(0, i).reverse().find((y) => out.some((z) => z.id === y.id));
+    out.splice(before ? out.findIndex((z) => z.id === before.id) + 1 : 0, 0, bdCopy(x));
+  });
+  return out;
+}
+
+// Someone else saved: put their board and your unsaved changes together.
+function bdTakeTheirs(theirs, rev) {
+  if (!bd || !bdTeam) return;
+  const { id, ...mine } = bdCopy(bd);
+  const merged = bdTidy(bdMerge(bdTeam.base, mine, theirs));
+  bdTeam.base = bdCopy(theirs);
+  bdTeam.rev = rev;
+  const changedHere = !bdSame(merged, theirs);   // (your changes are still to be saved)
+  bd = { ...merged, id };
+  bdDraw();
+  if (bdCardId) bdDrawCard();
+  if (changedHere) { clearTimeout(bdSaveTimer); bdSaveTimer = setTimeout(bdSave, 150); }
+}
+
+// Busy writing or picking something: other people's changes wait a moment (drawing the board again would get in the way).
+function bdBusy() {
+  if (!$("bdPop").hidden || document.querySelector(".bd-quick") || document.body.classList.contains("bd-dragging")) return true;
+  const a = document.activeElement;
+  return !!(a && a.matches("input, textarea, select") && a.closest("#bdBoard, #bdCardModal") && !a.matches(".bd-compose, .bd-add-list input, .bd-comment-new, .bd-desc-edit"));
+}
+
+async function bdPoll() {
+  clearTimeout(bdPollTimer);
+  if (!bd || !bdTeam || $("boardsTab").hidden) return;
+  const team = bdTeam;
+  const res = await api("/api/boards-team-check", { id: bd.id, rev: team.rev }).catch(() => null);
+  if (bdTeam !== team) return;
+  if (res && res.ok) {
+    const peopleChanged = !bdSame(team.people, res.people) || team.mine !== res.mine;
+    team.people = res.people;
+    team.mine = res.mine;
+    if (res.board && res.rev !== team.rev && !bdSaving && !bdBusy()) bdTakeTheirs(res.board, res.rev);
+    else if (peopleChanged && !bdBusy()) bdDraw();
+  } else if (res && (res.loggedOut || /isn't there any more/.test(res.error || ""))) {
+    bdToast(res.error);
+    bdTeam = null;
+    bd = null;
+    return bdClose();
+  }
+  bdPollTimer = setTimeout(bdPoll, document.hidden ? 8000 : 2500);
+}
+
+const bdPerson = (name) => (bdTeam && bdTeam.people.find((p) => p.username === name)) || null;
+function bdFace(name, cls = "") {
+  const p = bdPerson(name);
+  const el = avatarEl(p ? p.avatarUrl : "", name || "?", "bd-face " + cls);
+  el.title = name || "";
+  return el;
 }
 
 function bdToast(text) {
@@ -191,7 +313,7 @@ function bdDueState(card) {
 
 // ---------------------------------------------------------------- the filter
 
-const bdFiltering = () => !!(bdFilter.text.trim() || bdFilter.labels.size || bdFilter.due.size);
+const bdFiltering = () => !!(bdFilter.text.trim() || bdFilter.labels.size || bdFilter.due.size || bdFilter.members.size);
 function bdShows(card) {
   const text = bdFilter.text.trim().toLowerCase();
   if (text) {
@@ -199,6 +321,7 @@ function bdShows(card) {
     if (!text.split(/\s+/).every((w) => words.includes(w))) return false;
   }
   if (bdFilter.labels.size && ![...bdFilter.labels].some((id) => id === "none" ? !card.labels.filter(bdLabel).length : card.labels.includes(id))) return false;
+  if (bdFilter.members.size && ![...bdFilter.members].some((who) => who === "" ? !(card.members || []).length : (card.members || []).includes(who))) return false;
   if (bdFilter.due.size) {
     const state = bdDueState(card);
     const ok = [...bdFilter.due].some((want) =>
@@ -212,9 +335,16 @@ function bdShows(card) {
 // ---------------------------------------------------------------- the Boards home
 
 async function bdLoadHome() {
-  const res = await api("/api/boards-list", {}).catch(() => ({ ok: false }));
+  const [res, team] = await Promise.all([api("/api/boards-list", {}).catch(() => ({ ok: false })),
+    typeof sfxUser === "function" && sfxUser() ? api("/api/boards-team-list", {}).catch(() => ({ ok: false, error: "Couldn't load the team boards." })) : null]);
   if (res.ok) bdBoards = res.boards;
+  bdTeamBoards = team && team.ok ? team.boards.map((b) => ({ ...b, team: true })) : null;
+  bdInvites = team && team.ok ? team.invites : [];
+  bdTeamError = team && !team.ok && !team.loggedOut ? team.error || "" : "";
   bdDrawHome();
+  const n = bdInvites.length;
+  const badge = $("boardsTabBadge");
+  if (badge) { badge.hidden = !n; badge.textContent = n; }
 }
 
 function bdTile(b) {
@@ -224,30 +354,66 @@ function bdTile(b) {
       e.stopPropagation();
       b.starred = !b.starred;
       bdDrawHome();
-      await api("/api/boards-star", { id: b.id, starred: b.starred }).catch(() => {});
+      if (b.team) await api("/api/boards-team-star", { id: b.id, on: b.starred }).catch(() => {});
+      else await api("/api/boards-star", { id: b.id, starred: b.starred }).catch(() => {});
     } });
+  const open = () => b.team ? bdOpenTeam(b.id) : bdOpen(b.id);
+  const faces = b.team ? bdEl("span", { class: "bd-tile-faces" }, (b.people || []).filter((p) => p.joined).slice(0, 5).map((p) => {
+    const f = avatarEl(p.avatarUrl, p.username, "bd-face");
+    f.title = p.username;
+    return f;
+  })) : null;
   return bdEl("div", { class: "bd-tile", tabindex: "0", style: { background: BD_BGS[b.bg] || BD_BGS.blue },
-    onclick: () => bdOpen(b.id), onkeydown: (e) => { if (e.key === "Enter") bdOpen(b.id); } },
+    onclick: open, onkeydown: (e) => { if (e.key === "Enter") open(); } },
   bdEl("span", { class: "bd-tile-title", text: b.title }),
-  bdEl("span", { class: "bd-tile-count", text: b.cards === 1 ? "1 card" : b.cards + " cards" }), star);
+  bdEl("span", { class: "bd-tile-foot" }, bdEl("span", { class: "bd-tile-count", text: b.cards === 1 ? "1 card" : b.cards + " cards" }), faces), star);
+}
+
+function bdInviteCard(inv) {
+  const answer = async (join, btn) => {
+    btn.disabled = true;
+    const res = await api("/api/boards-team-answer", { id: inv.id, on: join }).catch(() => ({ ok: false }));
+    if (!res.ok) { btn.disabled = false; return bdToast(res.error || "That didn't work. Try again."); }
+    bdInvites = bdInvites.filter((i) => i !== inv);
+    const badge = $("boardsTabBadge");
+    if (badge) { badge.hidden = !bdInvites.length; badge.textContent = bdInvites.length; }
+    if (join) bdOpenTeam(inv.id); else bdLoadHome();
+  };
+  const face = avatarEl(inv.avatarUrl, inv.from, "bd-face big");
+  return bdEl("div", { class: "bd-invite" },
+    bdEl("span", { class: "bd-invite-bg", style: { background: BD_BGS[inv.bg] || BD_BGS.blue } }), face,
+    bdEl("div", { class: "bd-invite-text" }, bdEl("p", {}, bdEl("b", { text: inv.from }), " invited you to the board ", bdEl("b", { text: inv.title })),
+      bdEl("small", { text: bdAgo(new Date(inv.at).getTime()) })),
+    bdEl("button", { type: "button", class: "small-button", text: "Join", onclick: (e) => answer(true, e.currentTarget) }),
+    bdEl("button", { type: "button", class: "bd-plain-btn", text: "No thanks", onclick: (e) => answer(false, e.currentTarget) }));
 }
 
 function bdDrawHome() {
-  const box = $("bdHomeLists");
+  const box = bdSafe($("bdHomeLists"));
   box.replaceChildren();
-  const starred = bdBoards.filter((b) => b.starred);
-  const recent = [...bdBoards].filter((b) => b.opened).sort((a, b) => b.opened - a.opened).slice(0, 4);
-  if (starred.length) box.append(bdEl("h3", { class: "bd-home-head", html: BD_ICONS.star + "<span>Starred boards</span>" }), bdEl("div", { class: "bd-grid" }, starred.map(bdTile)));
-  if (recent.length && bdBoards.length > 4) box.append(bdEl("h3", { class: "bd-home-head", html: BD_ICONS.clock + "<span>Recently viewed</span>" }), bdEl("div", { class: "bd-grid" }, recent.map(bdTile)));
-  const add = bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: (e) => bdCreatePop(e.currentTarget) },
+  const team = bdTeamBoards || [];
+  const all = [...bdBoards, ...team];
+  const starred = all.filter((b) => b.starred);
+  const recent = [...all].filter((b) => b.opened).sort((a, b) => b.opened - a.opened).slice(0, 4);
+  const head = (icon, text, note) => bdEl("h3", { class: "bd-home-head" }, bdEl("span", { html: BD_ICONS[icon] }), bdEl("span", { text }), note ? bdEl("small", { text: note }) : null);
+  if (bdInvites.length) box.append(head("plus", "Invitations"), bdEl("div", { class: "bd-invites" }, bdInvites.map(bdInviteCard)));
+  if (starred.length) box.append(head("star", "Starred boards"), bdEl("div", { class: "bd-grid" }, starred.map(bdTile)));
+  if (recent.length && all.length > 4) box.append(head("clock", "Recently viewed"), bdEl("div", { class: "bd-grid" }, recent.map(bdTile)));
+  const add = (forTeam) => bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: (e) => bdCreatePop(e.currentTarget, forTeam) },
     bdEl("span", { text: "Create new board" }));
-  box.append(bdEl("h3", { class: "bd-home-head", html: BD_ICONS.card + "<span>Your boards</span>" }), bdEl("div", { class: "bd-grid" }, bdBoards.map(bdTile), add));
-  if (!bdBoards.length) box.append(bdEl("p", { class: "bd-home-empty", text: "Make a board for a video, a project or your week. Put lists on it (like To do, Doing, Done) and cards in the lists, then drag the cards along as things get done." }));
+  box.append(head("card", "Your boards", "Just you, saved on this computer"), bdEl("div", { class: "bd-grid" }, bdBoards.map(bdTile), add(false)));
+  box.append(head("people", "Team boards", "Shared with people you invite"));
+  if (bdTeamBoards) box.append(bdEl("div", { class: "bd-grid" }, team.map(bdTile), add(true)));
+  else if (bdTeamError) box.append(bdEl("p", { class: "bd-home-empty", text: bdTeamError }));
+  else box.append(bdEl("div", { class: "bd-grid" }, bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: () => openLogin("login") },
+    bdEl("span", { text: "Log in to make boards with your friends" }))));
+  if (!all.length && !bdInvites.length) box.append(bdEl("p", { class: "bd-home-empty", text: "Make a board for a video, a project or your week. Put lists on it (like To do, Doing, Done) and cards in the lists, then drag the cards along as things get done." }));
 }
 
-function bdCreatePop(anchor) {
+function bdCreatePop(anchor, forTeam) {
   let bg = "blue";
   let template = "todo";
+  let who = forTeam ? "team" : "me";
   bdPop(anchor, "Create board", (box) => {
     const preview = bdEl("div", { class: "bd-create-preview" }, bdEl("i"), bdEl("i"), bdEl("i"));
     const swatches = (keys, cls) => bdEl("div", { class: "bd-swatches " + cls }, keys.map((key) =>
@@ -257,12 +423,37 @@ function bdCreatePop(anchor) {
     const title = bdEl("input", { class: "bd-input", maxlength: "120", placeholder: "Like My next video", autocomplete: "off", spellcheck: "false" });
     const pick = bdEl("select", { class: "bd-input" }, Object.entries(BD_TEMPLATES).map(([key, t]) => bdEl("option", { value: key, text: t.name, selected: key === template })));
     pick.addEventListener("change", () => { template = pick.value; });
+    const loggedIn = typeof sfxUser === "function" && !!sfxUser();
+    const whoPick = bdEl("select", { class: "bd-input" },
+      bdEl("option", { value: "me", text: "Just me (saved on this computer)", selected: who === "me" }),
+      bdEl("option", { value: "team", text: "Team (invite people to it)", selected: who === "team" }));
+    const whoNote = bdEl("p", { class: "bd-pop-note bd-small-note" });
     const go = bdEl("button", { type: "button", class: "small-button bd-wide", text: "Create", disabled: true, onclick: create });
-    title.addEventListener("input", () => { go.disabled = !title.value.trim(); });
+    const paintWho = () => {
+      who = whoPick.value;
+      whoNote.textContent = who === "team" ? (loggedIn ? "Only you and the people you invite can see it." : "Log in first to make a team board.") : "Nobody else can see it.";
+      go.textContent = who === "team" && !loggedIn ? "Log in" : "Create";
+      go.disabled = !(who === "team" && !loggedIn) && !title.value.trim();
+    };
+    whoPick.addEventListener("change", paintWho);
+    title.addEventListener("input", paintWho);
     title.addEventListener("keydown", (e) => { if (e.key === "Enter" && title.value.trim()) create(); });
     async function create() {
+      if (who === "team" && !loggedIn) { bdPopClose(); return openLogin("login"); }
+      if (!title.value.trim()) return;
       go.disabled = true;
-      const res = await api("/api/boards-create", { board: bdNewBoard(title.value.trim(), bg, template) }).catch(() => ({ ok: false }));
+      const board = bdNewBoard(title.value.trim(), bg, template);
+      if (who === "team") {
+        delete board.starred;
+        const res = await api("/api/boards-team-create", { board }).catch(() => ({ ok: false }));
+        if (!res.ok) { go.disabled = false; return bdToast(res.error || "Couldn't make the board."); }
+        bdPopClose();
+        await bdOpenTeam(res.id);
+        const share = $("bdBoard").querySelector(".bd-share");
+        if (share) bdSharePop(share);
+        return;
+      }
+      const res = await api("/api/boards-create", { board }).catch(() => ({ ok: false }));
       if (!res.ok) { go.disabled = false; return bdToast(res.error || "Couldn't make the board."); }
       bdPopClose();
       bdShow(res.board);
@@ -270,7 +461,9 @@ function bdCreatePop(anchor) {
     paint();
     box.append(preview, bdEl("label", { class: "bd-label-text", text: "Background" }), swatches(BD_BG_GRADIENTS, "big"), swatches(BD_BG_COLORS, ""),
       bdEl("label", { class: "bd-label-text", text: "Board title" }), title,
+      bdEl("label", { class: "bd-label-text", text: "Who can see it" }), whoPick, whoNote,
       bdEl("label", { class: "bd-label-text", text: "Start with" }), pick, go);
+    paintWho();
     setTimeout(() => title.focus(), 30);
   });
 }
@@ -283,14 +476,36 @@ async function bdOpen(id) {
   bdShow(res.board);
 }
 
-function bdShow(board) {
+async function bdOpenTeam(id) {
+  const res = await api("/api/boards-team-open", { id }).catch(() => ({ ok: false }));
+  if (!res.ok) { savePref("boardOpen", ""); bdToast(res.error || "Couldn't open that board."); return bdLoadHome(); }
+  const board = res.board || {};
+  board.id = id;
+  bdShow(board, { rev: res.rev, base: bdCopy(res.board || {}), mine: res.mine, people: res.people || [], starred: !!res.starred });
+}
+
+// The board as it should be: everything there, and no card twice (two people moved it to different lists).
+function bdTidy(board) {
   board.lists = (board.lists || []).filter((l) => l && Array.isArray(l.cards));
   board.labels = board.labels || [];
-  for (const list of board.lists) for (const c of list.cards) Object.assign(c, { ...bdNewCard(""), ...c });
-  bd = board;
-  bdFilter = { text: "", labels: new Set(), due: new Set() };
+  board.title = board.title || "Untitled board";
+  const seen = new Set();
+  for (const list of board.lists) {
+    list.cards = list.cards.filter((c) => c && c.id && !seen.has(c.id) && seen.add(c.id));
+    for (const c of list.cards) Object.assign(c, { ...bdNewCard(""), ...c, id: c.id });
+  }
+  return board;
+}
+
+function bdShow(board, team) {
+  clearTimeout(bdPollTimer);
+  bdTeam = team || null;
+  bd = bdTidy(board);
+  bdFilter = bdNoFilter();
   bdMenu = ""; bdComposer = null; bdAddingList = null; bdCardId = "";
-  if (loadPref("boardOpen") !== board.id) savePref("boardOpen", board.id);
+  const pref = (team ? "team:" : "") + board.id;
+  if (loadPref("boardOpen") !== pref) savePref("boardOpen", pref);
+  if (team) bdPollTimer = setTimeout(bdPoll, 2500);
   $("bdHome").hidden = true;
   $("bdBoard").hidden = false;
   document.body.classList.add("board-open");
@@ -299,7 +514,9 @@ function bdShow(board) {
 
 async function bdClose() {
   if (bd) await bdSave();
+  clearTimeout(bdPollTimer);
   bd = null;
+  bdTeam = null;
   bdCardClose();
   bdPopClose();
   savePref("boardOpen", "");
@@ -317,9 +534,10 @@ function boardsTabChanged(tab) {
     if (bd) bdSave();
     return;
   }
-  if (bd) { document.body.classList.add("board-open"); return bdDraw(); }
+  if (bd) { document.body.classList.add("board-open"); if (bdTeam) bdPoll(); return bdDraw(); }
   const last = loadPref("boardOpen");
-  if (last) bdOpen(last);
+  if (last && last.startsWith("team:")) bdOpenTeam(last.slice(5));
+  else if (last) bdOpen(last);
   else bdLoadHome();
 }
 
@@ -376,18 +594,30 @@ function bdInlineEdit(holder, value, onDone, opts = {}) {
 function bdBar() {
   const title = bdEl("button", { type: "button", class: "bd-title", text: bd.title, title: "Rename the board",
     onclick: (e) => bdInlineEdit(e.currentTarget, bd.title, (v) => { bdLog(`renamed this board to "${v}"`); bd.title = v; bdChanged(); }, { cls: "bd-title-edit", max: "120" }) });
-  const star = bdEl("button", { type: "button", class: "bd-bar-btn bd-star" + (bd.starred ? " on" : ""), title: bd.starred ? "Unstar" : "Star this board",
-    html: bd.starred ? BD_ICONS.starOn : BD_ICONS.star, onclick: () => { bd.starred = !bd.starred; bdChanged(); } });
+  const starred = bdTeam ? bdTeam.starred : bd.starred;
+  const star = bdEl("button", { type: "button", class: "bd-bar-btn bd-star" + (starred ? " on" : ""), title: starred ? "Unstar" : "Star this board",
+    html: starred ? BD_ICONS.starOn : BD_ICONS.star, onclick: () => {
+      if (!bdTeam) { bd.starred = !bd.starred; return bdChanged(); }
+      bdTeam.starred = !bdTeam.starred;
+      bdDraw();
+      api("/api/boards-team-star", { id: bd.id, on: bdTeam.starred }).catch(() => {});
+    } });
   const count = bdFiltering() ? bd.lists.filter((l) => !l.archived).reduce((n, l) => n + l.cards.filter((c) => !c.archived && bdShows(c)).length, 0) : 0;
   const filter = bdEl("button", { type: "button", class: "bd-bar-btn bd-filter-btn" + (bdFiltering() ? " on" : ""), onclick: (e) => bdFilterPop(e.currentTarget) },
     bdEl("span", { html: BD_ICONS.filter }), bdEl("span", { text: bdFiltering() ? `${count} match${count === 1 ? "" : "es"}` : "Filter" }));
-  const clear = bdFiltering() ? bdEl("button", { type: "button", class: "bd-bar-btn", text: "Clear all", onclick: () => { bdFilter = { text: "", labels: new Set(), due: new Set() }; bdDraw(); } }) : null;
-  const me = bdEl("span", { class: "bd-me", title: bdMe(), text: bdMe()[0].toUpperCase() });
+  const clear = bdFiltering() ? bdEl("button", { type: "button", class: "bd-bar-btn", text: "Clear all", onclick: () => { bdFilter = bdNoFilter(); bdDraw(); } }) : null;
+  const me = bdTeam ? bdEl("span", { class: "bd-people" }, bdTeam.people.filter((p) => p.joined).slice(0, 8).map((p) => {
+    const f = bdFace(p.username, p.here ? "here" : "");
+    f.title = p.username + (p.here ? " (looking at this board)" : "");
+    return f;
+  })) : bdEl("span", { class: "bd-me", title: bdMe(), text: bdMe()[0].toUpperCase() });
+  const share = bdTeam ? bdEl("button", { type: "button", class: "bd-bar-btn bd-share", onclick: (e) => bdSharePop(e.currentTarget) },
+    bdEl("span", { html: BD_ICONS.people }), bdEl("span", { text: "Share" })) : null;
   const menu = bdEl("button", { type: "button", class: "bd-bar-btn" + (bdMenu ? " on" : ""), title: "Menu", html: BD_ICONS.dots,
     onclick: () => { bdMenu = bdMenu ? "" : "main"; bdDraw(); } });
   return bdEl("div", { class: "bd-bar" },
     bdEl("button", { type: "button", class: "bd-bar-btn bd-back", title: "All boards", onclick: bdClose }, bdEl("span", { html: BD_ICONS.back }), bdEl("span", { text: "Boards" })),
-    title, star, bdEl("span", { class: "bd-spacer" }), filter, clear, me, menu);
+    title, star, bdTeam ? bdEl("span", { class: "bd-team-tag", text: "Team" }) : null, bdEl("span", { class: "bd-spacer" }), filter, clear, me, share, menu);
 }
 
 function bdCanvas() {
@@ -502,7 +732,11 @@ function bdCardEl(card, list) {
   bdEl("div", { class: "bd-card-body" },
     bdCardLabels(card),
     bdEl("div", { class: "bd-card-title", text: card.title }),
-    (() => { const b = bdBadges(card); return b.length ? bdEl("div", { class: "bd-badges" }, b) : null; })()),
+    (() => {
+      const b = bdBadges(card);
+      const faces = bdTeam && card.members.length ? bdEl("span", { class: "bd-card-faces" }, card.members.slice(0, 5).map((m) => bdFace(m))) : null;
+      return b.length || faces ? bdEl("div", { class: "bd-badges" }, b, faces) : null;
+    })()),
   bdEl("button", { type: "button", class: "bd-card-edit", title: "Quick edit", html: BD_ICONS.pencil, onclick: (e) => { e.stopPropagation(); bdQuickEdit(el, card, list); } }));
   el.addEventListener("pointerdown", (e) => bdCardDragStart(e, card, el));
   el.addEventListener("contextmenu", (e) => { e.preventDefault(); bdQuickEdit(el, card, list); });
@@ -667,8 +901,8 @@ const bdMenuItem = (icon, text, onclick, cls = "") => bdEl("button", { type: "bu
 
 // Pick a board, a list on it and a place in that list (for moving and copying). done(board, list, index).
 function bdWhereFields(box, startList, startIndex, done, opts = {}) {
-  const boardPick = bdEl("select", { class: "bd-input" }, bdBoards.map((b) => bdEl("option", { value: b.id, text: b.title + (b.id === bd.id ? " (this board)" : ""), selected: b.id === bd.id })));
-  if (!bdBoards.some((b) => b.id === bd.id)) boardPick.prepend(bdEl("option", { value: bd.id, text: bd.title + " (this board)", selected: true }));
+  const boardPick = bdEl("select", { class: "bd-input" }, (bdTeam ? [] : bdBoards).map((b) => bdEl("option", { value: b.id, text: b.title + (b.id === bd.id ? " (this board)" : ""), selected: b.id === bd.id })));
+  if (bdTeam || !bdBoards.some((b) => b.id === bd.id)) boardPick.prepend(bdEl("option", { value: bd.id, text: bd.title + " (this board)", selected: true }));
   const listPick = bdEl("select", { class: "bd-input" });
   const posPick = bdEl("select", { class: "bd-input" });
   let target = bd;
@@ -724,6 +958,7 @@ async function bdSaveOther(board) {
 }
 
 async function bdEnsureBoards() {
+  if (bdTeam) return;
   if (!bdBoards.length || !bdBoards.some((b) => b.id === bd.id)) {
     const res = await api("/api/boards-list", {}).catch(() => ({ ok: false }));
     if (res.ok) bdBoards = res.boards;
@@ -789,6 +1024,88 @@ function bdArchiveCard(card) {
   bdChanged();
 }
 
+// ---------------------------------------------------------------- sharing a team board
+
+async function bdSharePop(anchor) {
+  if (!bdTeam) return;
+  if (!bdEveryone) {
+    const res = await api("/api/boards-team-people", {}).catch(() => ({ ok: false }));
+    bdEveryone = res.ok ? res.people : [];
+  }
+  let query = "";
+  bdPop(anchor, "Share board", (box) => {
+    const team = bdTeam;
+    const mine = team.mine;
+    const me = bdMe();
+    const search = bdEl("input", { class: "bd-input", placeholder: "Find people by name", value: query, spellcheck: "false", autocomplete: "off" });
+    const results = bdEl("div", { class: "bd-share-pick" });
+    const update = (people) => { team.people = people; bdDraw(); bdPopAgain(); };
+    const drawResults = () => {
+      const q = search.value.trim().toLowerCase();
+      query = search.value;
+      const on = new Set(team.people.map((p) => p.username.toLowerCase()));
+      const found = bdEveryone.filter((p) => !on.has(p.username.toLowerCase()) && (!q || p.username.toLowerCase().includes(q))).slice(0, 8);
+      results.replaceChildren(...found.map((p) => bdEl("button", { type: "button", class: "bd-person-row",
+        onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          const res = await api("/api/boards-team-invite", { id: bd.id, usernames: [p.username] }).catch(() => ({ ok: false }));
+          if (!res.ok) return bdToast(res.error || "Couldn't invite them.");
+          bdLog(`invited ${p.username} to this board`);
+          bdChanged();
+          update(res.people);
+        } }, avatarEl(p.avatarUrl, p.username, "bd-face"), bdEl("span", { text: p.username }), bdEl("small", { text: "Invite" }))));
+      if (!found.length) results.append(bdEl("p", { class: "bd-muted", text: bdEveryone.length ? "Nobody else with that name." : "No one else has an account yet." }));
+    };
+    search.addEventListener("input", drawResults);
+    if (mine) {
+      box.append(search, results);
+      drawResults();
+    }
+    box.append(bdEl("label", { class: "bd-label-text", text: "On this board" }),
+      team.people.map((p) => bdEl("div", { class: "bd-person-row still" }, bdFace(p.username, p.here ? "here" : ""),
+        bdEl("span", { text: p.username + (p.username === me ? " (you)" : "") }),
+        bdEl("small", { text: p.owner ? "Made it" : p.joined ? (p.here ? "Here now" : "Member") : "Invited" }),
+        mine && !p.owner ? bdEl("button", { type: "button", class: "bd-icon-btn", title: p.joined ? "Take them off the board" : "Take back the invitation", html: BD_ICONS.close,
+          onclick: async () => {
+            const res = await api("/api/boards-team-remove", { id: bd.id, username: p.username }).catch(() => ({ ok: false }));
+            if (!res.ok) return bdToast(res.error || "That didn't work.");
+            update(res.people);
+          } }) : null)),
+      mine ? bdEl("p", { class: "bd-pop-note bd-small-note", text: "People you invite get an invitation in their Boards tab and join with one click." })
+        : bdEl("button", { type: "button", class: "bd-plain-btn bd-wide bd-danger-text", text: "Leave board", onclick: () => bdLeavePop() }));
+    if (mine) setTimeout(() => search.focus(), 30);
+  });
+}
+
+function bdLeavePop(anchor) {
+  bdPop(anchor || null, "Leave board?", (b) => {
+    b.append(bdEl("p", { class: "bd-pop-note", text: `You won't see "${bd.title}" any more. Someone on the board can invite you again.` }),
+      bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Leave board", onclick: async () => {
+        const res = await api("/api/boards-team-leave", { id: bd.id }).catch(() => ({ ok: false }));
+        if (!res.ok) return bdToast(res.error || "That didn't work.");
+        clearTimeout(bdSaveTimer);
+        bd = null;
+        bdPopClose();
+        bdClose();
+      } }));
+  }, !anchor);
+}
+
+function bdMembersPop(anchor, card) {
+  bdPop(anchor, "Members", (box) => {
+    const people = bdTeam ? bdTeam.people.filter((p) => p.joined) : [];
+    box.append(bdEl("label", { class: "bd-label-text", text: "Board members" }), people.map((p) => {
+      const on = card.members.includes(p.username);
+      return bdEl("button", { type: "button", class: "bd-person-row" + (on ? " on" : ""), onclick: () => {
+        card.members = on ? card.members.filter((m) => m !== p.username) : [...card.members, p.username];
+        bdLog(on ? `took ${p.username} off "${card.title}"` : `added ${p.username} to "${card.title}"`, card);
+        bdChanged();
+        bdPopAgain();
+      } }, bdFace(p.username), bdEl("span", { text: p.username }), on ? bdEl("small", { class: "bd-tick", html: BD_ICONS.check }) : null);
+    }));
+  });
+}
+
 // ---------------------------------------------------------------- quick edit (the pencil on a card)
 
 function bdQuickEdit(el, card, list) {
@@ -809,9 +1126,11 @@ function bdQuickEdit(el, card, list) {
   const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(false); } };
   document.addEventListener("keydown", key, true);
   text.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); close(true); } });
-  const side = bdEl("div", { class: "bd-quick-side" },
+  const side = bdSafe(bdEl("div", { class: "bd-quick-side" }));
+  side.append(
     bdMenuItem("card", "Open card", () => { close(true); bdCardOpen(card.id); }),
     bdMenuItem("tag", "Edit labels", (e) => bdLabelsPop(e.currentTarget, card)),
+    bdTeam ? bdMenuItem("person", "Change members", (e) => bdMembersPop(e.currentTarget, card)) : null,
     bdMenuItem("clock", "Edit dates", (e) => bdDatesPop(e.currentTarget, card)),
     bdMenuItem("cover", "Change cover", (e) => bdCoverPop(e.currentTarget, card)),
     bdMenuItem("move", "Move", (e) => bdMovePop(e.currentTarget, card)),
@@ -925,6 +1244,7 @@ function bdListPop(anchor, list) {
 
 function bdFilterPop(anchor) {
   bdPop(anchor, "Filter", (box) => {
+    box = bdSafe(box);
     const text = bdEl("input", { class: "bd-input", placeholder: "Enter a word...", value: bdFilter.text, spellcheck: "false" });
     text.addEventListener("input", () => { bdFilter.text = text.value; bdDraw(); });
     const check = (set, key, label) => {
@@ -934,6 +1254,10 @@ function bdFilterPop(anchor) {
     };
     box.append(bdEl("label", { class: "bd-label-text", text: "Keyword" }), text,
       bdEl("p", { class: "bd-pop-note", text: "Search cards by title, description or label." }),
+      bdTeam ? [bdEl("label", { class: "bd-label-text", text: "Members" }),
+        check(bdFilter.members, "", bdEl("span", { class: "bd-filter-nolabel", html: BD_ICONS.person + "<span>No members</span>" })),
+        check(bdFilter.members, bdMe(), bdEl("span", { class: "bd-filter-person" }, bdFace(bdMe()), bdEl("span", { text: "Cards for me" }))),
+        ...bdTeam.people.filter((p) => p.joined && p.username !== bdMe()).map((p) => check(bdFilter.members, p.username, bdEl("span", { class: "bd-filter-person" }, bdFace(p.username), bdEl("span", { text: p.username }))))] : null,
       bdEl("label", { class: "bd-label-text", text: "Due date" }),
       check(bdFilter.due, "none", bdEl("span", { text: "No dates" })),
       check(bdFilter.due, "overdue", bdEl("span", { class: "bd-filter-due overdue", html: BD_ICONS.clock + "<span>Overdue</span>" })),
@@ -1167,6 +1491,9 @@ function bdDrawCard() {
 
   // labels and dates
   const meta = bdEl("div", { class: "bd-cd-meta" });
+  if (bdTeam && card.members.length) meta.append(bdEl("div", { class: "bd-cd-meta-box" }, bdEl("h4", { text: "Members" }), bdEl("div", { class: "bd-cd-labels" },
+    card.members.map((m) => bdFace(m, "mid")),
+    bdEl("button", { type: "button", class: "bd-square round", title: "Add a member", html: BD_ICONS.plus, onclick: (e) => bdMembersPop(e.currentTarget, card) }))));
   const labels = card.labels.map(bdLabel).filter(Boolean);
   if (labels.length) meta.append(bdEl("div", { class: "bd-cd-meta-box" }, bdEl("h4", { text: "Labels" }), bdEl("div", { class: "bd-cd-labels" },
     labels.map((l) => bdEl("button", { type: "button", class: "bd-lbl-wide" + (bdDarkText(l.color) ? " dark" : ""), style: { background: bdColor(l.color) }, text: l.name, onclick: (e) => bdLabelsPop(e.currentTarget, card) })),
@@ -1269,7 +1596,7 @@ function bdDrawCard() {
     ...(bdDetails ? (card.log || []).map((l) => ({ at: l.at, log: l })) : []),
   ].sort((a, b) => b.at - a.at);
   const feedEls = feed.map((f) => {
-    if (f.log) return bdEl("div", { class: "bd-feed bd-feed-log" }, bdEl("span", { class: "bd-avatar", text: (f.log.who || "Y")[0].toUpperCase() }),
+    if (f.log) return bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFace(f.log.who, "feed") : bdEl("span", { class: "bd-avatar", text: (f.log.who || "Y")[0].toUpperCase() })),
       bdEl("div", {}, bdEl("p", {}, bdEl("b", { text: f.log.who || "You" }), " " + f.log.text), bdEl("small", { text: bdAgo(f.at) })));
     const c = f.comment;
     let body;
@@ -1286,17 +1613,19 @@ function bdDrawCard() {
             bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete comment", onclick: () => { card.comments = card.comments.filter((x) => x !== c); bdPopClose(); bdChanged(); } }));
         }) }))];
     }
-    return bdEl("div", { class: "bd-feed" }, bdEl("span", { class: "bd-avatar", text: (c.who || "Y")[0].toUpperCase() }),
+    return bdEl("div", { class: "bd-feed" }, (bdTeam ? bdFace(c.who, "feed") : bdEl("span", { class: "bd-avatar", text: (c.who || "Y")[0].toUpperCase() })),
       bdEl("div", { class: "bd-feed-main" }, bdEl("p", {}, bdEl("b", { text: c.who || "You" }), " ", bdEl("small", { text: bdAgo(c.at) + (c.edited ? " (edited)" : "") })), body));
   });
   const activity = bdSection("activity", "Activity", bdEl("button", { type: "button", class: "bd-plain-btn", text: bdDetails ? "Hide details" : "Show details", onclick: () => { bdDetails = !bdDetails; bdDrawCard(); } }),
-    bdEl("div", { class: "bd-feed bd-feed-new" }, bdEl("span", { class: "bd-avatar", text: bdMe()[0].toUpperCase() }), bdEl("div", { class: "bd-feed-main" }, commentBox,
+    bdEl("div", { class: "bd-feed bd-feed-new" }, (bdTeam ? bdFace(bdMe(), "feed") : bdEl("span", { class: "bd-avatar", text: bdMe()[0].toUpperCase() })), bdEl("div", { class: "bd-feed-main" }, commentBox,
       bdCommentDraft ? bdEl("div", { class: "bd-row" }, sendBtn) : null)), feedEls);
   commentBox.addEventListener("focus", () => { if (!bdCommentDraft && !commentBox.parentElement.querySelector(".bd-row")) commentBox.after(bdEl("div", { class: "bd-row" }, sendBtn)); });
 
   // the side: add things, actions
   const side = bdEl("aside", { class: "bd-cd-side" },
     bdEl("h4", { text: "Add to card" }),
+    bdTeam && !card.members.includes(bdMe()) ? bdMenuItem("person", "Join", () => { card.members.push(bdMe()); bdLog(`joined "${card.title}"`, card); bdChanged(); }, "side") : null,
+    bdTeam ? bdMenuItem("people", "Members", (e) => bdMembersPop(e.currentTarget, card), "side") : null,
     bdMenuItem("tag", "Labels", (e) => bdLabelsPop(e.currentTarget, card), "side"),
     bdMenuItem("check", "Checklist", (e) => bdChecklistPop(e.currentTarget, card), "side"),
     bdMenuItem("clock", "Dates", (e) => bdDatesPop(e.currentTarget, card), "side"),
@@ -1367,6 +1696,13 @@ function bdMenuPanel() {
               copy.lists = copy.lists.filter((l) => !l.archived);
               for (const l of copy.lists) { l.cards = keep.checked ? l.cards.filter((c) => !c.archived) : []; for (const c of l.cards) c.log = []; }
               await bdSave();
+              if (bdTeam) {  // (a copy of a team board is a new team board, with only you on it)
+                delete copy.starred;
+                const res = await api("/api/boards-team-create", { board: copy }).catch(() => ({ ok: false }));
+                if (!res.ok) return bdToast(res.error || "Couldn't copy the board.");
+                bdPopClose();
+                return bdOpenTeam(res.id);
+              }
               const res = await api("/api/boards-create", { board: copy }).catch(() => ({ ok: false }));
               if (!res.ok) return bdToast(res.error || "Couldn't copy the board.");
               bdPopClose();
@@ -1375,13 +1711,16 @@ function bdMenuPanel() {
           setTimeout(() => name.select(), 30);
         });
       }),
+      bdTeam && !bdTeam.mine ? bdMenuItem("trash", "Leave board", (e) => bdLeavePop(e.currentTarget), "bd-danger") :
       bdMenuItem("trash", "Delete board", (e) => bdPop(e.currentTarget, "Delete board?", (b) => {
-        b.append(bdEl("p", { class: "bd-pop-note", text: `"${bd.title}" and all its lists and cards will be gone for good. There is no undo.` }),
+        b.append(bdEl("p", { class: "bd-pop-note", text: `"${bd.title}" and all its lists and cards will be gone for good${bdTeam ? ", for everyone on it" : ""}. There is no undo.` }),
           bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete board", onclick: async () => {
             const id = bd.id;
+            const team = !!bdTeam;
             clearTimeout(bdSaveTimer);
             bd = null;
-            await api("/api/boards-delete", { id }).catch(() => {});
+            const res = await api(team ? "/api/boards-team-delete" : "/api/boards-delete", { id }).catch(() => ({ ok: false }));
+            if (!res.ok) bdToast(res.error || "Couldn't delete the board.");
             bdPopClose();
             bdClose();
           } }));
@@ -1395,7 +1734,7 @@ function bdMenuPanel() {
     body.append(bdEl("h4", { text: "Description" }), t,
       bdEl("h4", { text: "On this board" }),
       bdEl("p", { class: "bd-muted", text: `${lists.length} list${lists.length === 1 ? "" : "s"}, ${cards.length} card${cards.length === 1 ? "" : "s"}, ${cards.filter((c) => c.done).length} done.` }),
-      bdEl("p", { class: "bd-muted", text: "Saved on this computer only. Nobody else can see it." }));
+      bdEl("p", { class: "bd-muted", text: bdTeam ? `A team board: ${bdTeam.people.filter((p) => p.joined).length} people on it. Only they can see it.` : "Saved on this computer only. Nobody else can see it." }));
   } else if (bdMenu === "bg") {
     const pick = (keys, cls) => bdEl("div", { class: "bd-bg-grid " + cls }, keys.map((key) => bdEl("button", { type: "button", class: "bd-bg-pick" + (bd.bg === key ? " on" : ""), style: { background: BD_BGS[key] }, title: key, onclick: () => { bd.bg = key; bdChanged(); } })));
     body.append(bdEl("h4", { text: "Gradients" }), pick(BD_BG_GRADIENTS, ""), bdEl("h4", { text: "Colors" }), pick(BD_BG_COLORS, ""));
@@ -1435,7 +1774,7 @@ function bdMenuPanel() {
   } else if (bdMenu === "activity") {
     const log = bd.log || [];
     if (!log.length) body.append(bdEl("p", { class: "bd-muted bd-center", text: "Nothing yet." }));
-    body.append(...log.slice(0, 120).map((l) => bdEl("div", { class: "bd-feed bd-feed-log" }, bdEl("span", { class: "bd-avatar", text: (l.who || "Y")[0].toUpperCase() }),
+    body.append(...log.slice(0, 120).map((l) => bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFace(l.who, "feed") : bdEl("span", { class: "bd-avatar", text: (l.who || "Y")[0].toUpperCase() })),
       bdEl("div", {}, bdEl("p", {}, bdEl("b", { text: l.who || "You" }), " " + l.text), bdEl("small", { text: bdAgo(l.at) })))));
   }
   return bdEl("aside", { class: "bd-menu" }, bdEl("div", { class: "bd-menu-head" }, back, bdEl("h4", { text: titles[bdMenu] }),
@@ -1456,10 +1795,20 @@ document.addEventListener("keydown", (e) => {
   }
   if (typing || e.ctrlKey || e.altKey || e.metaKey || !bd || bdCardId) return;
   if (e.key === "f") { e.preventDefault(); bdFilterPop($("bdBoard").querySelector(".bd-filter-btn")); }
-  if (e.key === "x" && bdFiltering()) { bdFilter = { text: "", labels: new Set(), due: new Set() }; bdDraw(); }
+  if (e.key === "x" && bdFiltering()) { bdFilter = bdNoFilter(); bdDraw(); }
   if (e.key === ";") { bd.labelsWide = !bd.labelsWide; bdChanged(); }
 }, true);
 
 addEventListener("beforeunload", () => { if (bd) navigator.sendBeacon && bdSave(); });
 
 if (!$("boardsTab").hidden) boardsTabChanged("boards");
+
+// Invitations show as a number on the Boards tab, even before you open it.
+async function bdCheckInvites() {
+  if (typeof sfxUser !== "function" || !sfxUser() || !$("boardsTab").hidden) return;
+  const res = await api("/api/boards-team-list", {}).catch(() => null);
+  const badge = $("boardsTabBadge");
+  if (res && res.ok && badge) { badge.hidden = !res.invites.length; badge.textContent = res.invites.length; }
+}
+setTimeout(bdCheckInvites, 5000);
+setInterval(bdCheckInvites, 120000);

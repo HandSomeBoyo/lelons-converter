@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.12.0", items: [
+    "New Boards tab, like Trello! Make boards with lists and cards, and drag the cards along as things get done. Start empty or with a ready setup, like YouTube video.",
+    "Open a card to give it labels, a due date, a description, checklists, links, a cover color and comments. Use the pencil or right-click a card for quick changes.",
+    "Team boards: pick Team when you make a board and invite your friends. They get an invitation in their Boards tab, and everyone's changes show up for the others in a few seconds.",
+    "On team boards you can put people on cards, see who's looking at the board right now, and filter to only your cards.",
+    "Boards that are Just me stay on your computer, and nobody else can see them.",
+  ] },
   { version: "2.11.0", items: [
     "Group calls! Press Call in a group chat and everyone online can join. Already a call going? The button says Join call. Up to 9 people.",
     "See who's talking: a green ring lights up around their picture.",
