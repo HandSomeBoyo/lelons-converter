@@ -15,20 +15,20 @@
     <div class="top-right">
       <div class="where"><span id="whereText">Saving to <strong id="folder">Downloads</strong></span> · <button class="link" id="change">Change</button></div>
       <div class="help-menu">
-        <button type="button" class="icon-button head-button" id="helpButton" title="Help" aria-haspopup="menu">
+        <button type="button" class="icon-button head-button" id="helpButton" title="Help and more" aria-haspopup="menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.85.85c0 1.7-2.45 2.2-2.45 3.6"/><path d="M12 17h.01"/></svg>
         </button>
         <div class="lib-menu help-pop" id="helpPop" hidden>
-          <button type="button" id="tourOpen">How to use</button>
-          <button type="button" id="whatsNewOpen">What's new</button>
+          <button type="button" id="tourOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14v15H5z"/><path d="M10 9.5l4.5 2.5-4.5 2.5z"/></svg><span>How to use</span></button>
+          <button type="button" id="whatsNewOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.2 5.3 5.3 2.2-5.3 2.2-2.2 5.3-2.2-5.3-5.3-2.2 5.3-2.2z"/></svg><span>What's new</span></button>
+          <button type="button" id="feedbackOpen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg><span>Send feedback</span>
+          </button>
+          <button type="button" id="refreshButton">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg><span>Refresh</span><kbd>F5</kbd>
+          </button>
         </div>
       </div>
-      <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
-      </button>
-      <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
-      </button>
       <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
         <i class="online-dot"></i><span id="onlineText"></span><b class="chat-unread" id="chatUnread" hidden></b>
       </button>
