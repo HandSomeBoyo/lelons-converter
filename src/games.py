@@ -22,6 +22,7 @@ COUNTRY = "no"  # Steam prices in Norwegian kroner, whoever posts the game
 CURRENCY = "NOK"
 REFRESH_AFTER = 12 * 3600
 REFRESH_AT_ONCE = 8  # games read again from Steam per list load
+RETRY_AFTER = 3600  # a game Steam couldn't read (or that has no price in kroner) is asked about again after this
 MAX_AT_ONCE = 25  # links in one paste
 YT_RESULTS = 12  # YouTube videos looked at for "how big is it on YouTube"
 FRIENDLY = {  # what the database says -> what the page shows
@@ -169,6 +170,7 @@ class Games:
     def __init__(self):
         self.lock = threading.Lock()
         self.refreshing = set()
+        self.tried = {}  # game id -> when Steam was last asked about it (so a game Steam can't read isn't asked about on every look)
 
     def _pictured(self, game):
         game["byAvatar"] = sfx.public_url(game["by_avatar"]) if game.get("by_avatar") else ""
@@ -178,8 +180,11 @@ class Games:
 
     def list(self):
         games = [self._pictured(g) for g in _rpc("list").get("games") or []]
-        old = [g for g in games if time.time() - (g.get("refreshed") or 0) > REFRESH_AFTER
-               or ((g.get("info") or {}).get("price") or {}).get("currency", CURRENCY) != CURRENCY]
+        now = time.time()
+        with self.lock:
+            old = [g for g in games if (now - (g.get("refreshed") or 0) > REFRESH_AFTER
+                   or ((g.get("info") or {}).get("price") or {}).get("currency", CURRENCY) != CURRENCY)
+                   and now - self.tried.get(g["id"], 0) > RETRY_AFTER]
         if old:
             threading.Thread(target=self._refresh_old, args=(old[:REFRESH_AT_ONCE],), daemon=True).start()
         return {"games": games}
@@ -191,6 +196,7 @@ class Games:
                 if game["id"] in self.refreshing:
                     continue
                 self.refreshing.add(game["id"])
+                self.tried[game["id"]] = time.time()
             try:
                 _rpc("refresh", game["id"], {"info": steam_info(game["app_id"])})
             except (Error, sfx.Error):

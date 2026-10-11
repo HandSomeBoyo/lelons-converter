@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.2", items: [
+    "Bug fixes: a change on a board is no longer lost if you close the board right after making it (or close the app). If saving fails for a moment, it tries again by itself.",
+    "Games without a picture now still show their Recording, Done and sale tags.",
+    "Games are smoother: the list doesn't redraw itself every 30 seconds when nothing changed, the \"New sale!\" tag pulses without slowing the page, and games Steam can't read aren't asked about over and over.",
+    "Film assets: clips added right as the app finished the last one could get stuck on \"waiting\". Fixed.",
+    "Calls let go of everything properly when they end, so many calls in a row don't slowly use more of your computer.",
+    "Home opens a bit faster.",
+  ] },
   { version: "2.17.1", items: [
     "Game prices in the Games tab are always in Norwegian kroner (NOK) again, no matter who posted the game. Older games switch over by themselves.",
   ] },

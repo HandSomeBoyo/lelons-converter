@@ -1110,6 +1110,7 @@ class Presence:
     def _loop(self):
         failed = 0
         while True:
+            self.wake.clear()  # (a poke while asking below still counts)
             try:
                 token = settings.load().get("library_token") or ""
                 self.remember(_rpc("lelons_ping", client_id=self.client_id(), token=token))
@@ -1120,7 +1121,6 @@ class Presence:
                     with self.lock:
                         self.online = None
             self.wake.wait(self.EVERY)
-            self.wake.clear()
 
     def bye(self):
         if not self.started:

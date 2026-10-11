@@ -124,6 +124,19 @@ def items():
     return found
 
 
+def recent(count):
+    """The newest few downloads whose files are still there (without checking all 300 files)."""
+    with _lock:
+        found = [dict(i) for i in _load()]
+    recent = []
+    for item in found:
+        if item.get("file") and os.path.isfile(item["file"]):
+            recent.append({**item, "exists": True})
+            if len(recent) == count:
+                break
+    return recent
+
+
 def find(item_id):
     with _lock:
         return next((dict(i) for i in _load() if i["id"] == item_id), None)
