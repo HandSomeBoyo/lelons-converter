@@ -18,6 +18,8 @@ import urllib.request
 import sfx
 
 STORE = "https://store.steampowered.com"
+COUNTRY = "no"  # Steam prices in Norwegian kroner, whoever posts the game
+CURRENCY = "NOK"
 REFRESH_AFTER = 12 * 3600
 REFRESH_AT_ONCE = 8  # games read again from Steam per list load
 MAX_AT_ONCE = 25  # links in one paste
@@ -120,7 +122,7 @@ def youtube_check(name):
 
 def steam_info(app_id):
     """What the page shows about a game, read from Steam's store."""
-    found = (_get(f"/api/appdetails?appids={app_id}&l=english") or {}).get(str(app_id)) or {}
+    found = (_get(f"/api/appdetails?appids={app_id}&cc={COUNTRY}&l=english") or {}).get(str(app_id)) or {}
     d = found.get("data") if found.get("success") else None
     if not isinstance(d, dict) or not d.get("name"):
         raise Error("Steam doesn't know that game. Check the link.")
@@ -176,7 +178,8 @@ class Games:
 
     def list(self):
         games = [self._pictured(g) for g in _rpc("list").get("games") or []]
-        old = [g for g in games if time.time() - (g.get("refreshed") or 0) > REFRESH_AFTER]
+        old = [g for g in games if time.time() - (g.get("refreshed") or 0) > REFRESH_AFTER
+               or ((g.get("info") or {}).get("price") or {}).get("currency", CURRENCY) != CURRENCY]
         if old:
             threading.Thread(target=self._refresh_old, args=(old[:REFRESH_AT_ONCE],), daemon=True).start()
         return {"games": games}
