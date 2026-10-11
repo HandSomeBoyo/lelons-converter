@@ -36,6 +36,7 @@ import boards  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import film  # noqa: E402
+import games  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -797,6 +798,49 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
         self.send_json({"ok": True, **result})
 
+    def handle_games(self, action, data):
+        """The Games tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        g = games.games
+        game_id = str(data.get("game") or "") or None
+        try:
+            if action == "list":
+                result = g.list()
+            elif action == "add":
+                result = g.add(data.get("text"), data.get("note"))
+            elif action == "refresh":
+                result = {"game": g.refresh(game_id)}
+            elif action == "vote":
+                result = {"game": g.vote(game_id, data.get("on"))}
+            elif action == "status":
+                result = {"game": g.set_status(game_id, data.get("status"), data.get("video"))}
+            elif action == "note":
+                result = {"game": g.set_note(game_id, data.get("note"))}
+            elif action == "delete":
+                g.delete(game_id)
+                result = {}
+            elif action == "comments":
+                result = {"comments": g.comments(game_id)}
+            elif action == "comment":
+                result = {"comments": g.comment(game_id, data.get("text"))}
+            elif action == "delete-comment":
+                result = {"comments": g.delete_comment(game_id, data.get("comment"))}
+            elif action == "open":  # the game's Steam page, or the video made of it
+                url = str(data.get("url") or "")
+                if data.get("app"):
+                    url = games.store_url(data["app"])
+                if re.fullmatch(r"https?://[^\s]+", url, re.I):
+                    webbrowser.open(url)
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (games.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except (TypeError, ValueError):
+            return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_docs(self, action, data):
         """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         doc_id = data.get("id")
@@ -1082,6 +1126,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_boards(self.path[len("/api/boards-"):], data)
         elif self.path.startswith("/api/fx-"):
             self.handle_film(self.path[len("/api/fx-"):], data)
+        elif self.path.startswith("/api/games-"):
+            self.handle_games(self.path[len("/api/games-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

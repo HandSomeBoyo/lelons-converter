@@ -31,6 +31,7 @@ function sfxAgo(when) {
   if (seconds < 90) return "just now";
   if (seconds < 3600) return Math.round(seconds / 60) + " min ago";
   if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
+  if (seconds < 86400 * 1.5) return "1 day ago";
   if (seconds < 86400 * 30) return Math.round(seconds / 86400) + " days ago";
   return new Date(when).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 }
@@ -102,6 +103,7 @@ function setSfxAccount(account) {
   if (typeof chatAccountChanged === "function") chatAccountChanged();
   if (typeof homeAccountChanged === "function") homeAccountChanged(!sfxUser() || sfxUser().id !== was);
   if (typeof fxAccountChanged === "function") fxAccountChanged();
+  if (typeof gamesAccountChanged === "function") gamesAccountChanged();
 }
 
 // Something said the login ran out: back to the log in screen.

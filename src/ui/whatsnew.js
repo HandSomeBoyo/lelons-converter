@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.16.0", items: [
+    "New Games tab! Paste Steam links of games you might record for YouTube, and they show up as cards with the Steam picture, price, description and reviews.",
+    "Paste a whole bunch of links at once (straight from Discord) and add a note about why you posted a game.",
+    "Give a thumbs up to games you want to record, and mark each game as Idea, Recording or Done. When it's done, add the YouTube link.",
+    "Open a game to see its pictures, talk about it with your friends and open it in Steam. Filter by Free, On sale or Co-op, and see sales right away. Prices update by themselves.",
+  ] },
   { version: "2.15.0", items: [
     "New Film assets tab, like ActionVFX! Explosions, fire, smoke, sparks, muzzle flashes and more, in packs you can share with your friends.",
     "Put your mouse on a pack to watch its preview, open it to see every clip, and download the whole pack or just one clip, ready to drop into Resolve or Premiere.",
