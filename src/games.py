@@ -21,6 +21,7 @@ STORE = "https://store.steampowered.com"
 REFRESH_AFTER = 12 * 3600
 REFRESH_AT_ONCE = 8  # games read again from Steam per list load
 MAX_AT_ONCE = 25  # links in one paste
+YT_RESULTS = 12  # YouTube videos looked at for "how big is it on YouTube"
 FRIENDLY = {  # what the database says -> what the page shows
     "no game": "That game isn't in the list any more.",
     "too many games": "The list is full. Delete some old games first.",
@@ -84,6 +85,39 @@ def _text(value, limit):
     return re.sub(r"\s+", " ", value).strip()[:limit]
 
 
+def _movie(m):
+    """A trailer: Steam gives an mp4 or webm file for older ones and only a stream (HLS) for newer ones."""
+    pick = lambda d: str((d or {}).get("max") or (d or {}).get("480") or "")[:400] if isinstance(d, dict) else ""  # noqa: E731
+    movie = {"name": _text(m.get("name"), 80), "thumb": str(m.get("thumbnail") or "")[:400],
+             "mp4": pick(m.get("mp4")), "webm": pick(m.get("webm")), "hls": str(m.get("hls_h264") or "")[:400]}
+    return movie if movie["mp4"] or movie["webm"] or movie["hls"] else None
+
+
+def youtube_check(name):
+    """How videos about a game do on YouTube: the top search results and their views."""
+    import downloader
+    import yt_dlp
+
+    try:
+        options = {"quiet": True, "no_warnings": True, "extract_flat": True, "socket_timeout": 20,
+                   "js_runtimes": downloader._js_runtimes()}
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(f"ytsearch{YT_RESULTS}:{name} gameplay", download=False)
+    except Exception:
+        raise Error("Couldn't look on YouTube. Check your internet connection.") from None
+    videos = []
+    for e in info.get("entries") or []:
+        if not e.get("id") or e.get("ie_key") not in (None, "Youtube"):
+            continue
+        videos.append({"id": str(e["id"])[:20], "title": _text(e.get("title"), 120), "channel": _text(e.get("channel") or e.get("uploader"), 60),
+                       "views": int(e.get("view_count") or 0), "seconds": int(e.get("duration") or 0)})
+    videos.sort(key=lambda v: v["views"], reverse=True)
+    views = sorted(v["views"] for v in videos)
+    middle = views[len(views) // 2] if views else 0
+    return {"middle": middle, "top": views[-1] if views else 0, "count": len(videos),
+            "big": sum(1 for v in views if v >= 100_000), "videos": videos[:6]}
+
+
 def steam_info(app_id):
     """What the page shows about a game, read from Steam's store."""
     found = (_get(f"/api/appdetails?appids={app_id}&l=english") or {}).get(str(app_id)) or {}
@@ -114,6 +148,7 @@ def steam_info(app_id):
         "screens": [{"thumb": str(s.get("path_thumbnail") or "")[:400], "full": str(s.get("path_full") or "")[:400]}
                     for s in (d.get("screenshots") or [])[:6] if isinstance(s, dict)],
         "windows": bool((d.get("platforms") or {}).get("windows", True)),
+        "movies": [m for m in (_movie(m) for m in (d.get("movies") or [])[:3] if isinstance(m, dict)) if m],
     }
     try:  # how people liked it ("Very Positive"); not every game has reviews yet
         summary = (_get(f"/appreviews/{app_id}?json=1&language=all&purchase_type=all&num_per_page=0&filter=summary") or {}).get("query_summary") or {}
@@ -187,6 +222,9 @@ class Games:
         if game_id not in games:
             raise Error(FRIENDLY["no game"])
         return self._pictured(_rpc("refresh", game_id, {"info": steam_info(games[game_id]["app_id"])}))
+
+    def youtube(self, game_id, name):
+        return self._pictured(_rpc("youtube", game_id, {"youtube": youtube_check(str(name or "")[:120])}))
 
     def vote(self, game_id, on):
         return self._pictured(_rpc("vote", game_id, {"on": bool(on)}))

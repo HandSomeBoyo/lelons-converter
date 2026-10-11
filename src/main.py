@@ -79,7 +79,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -809,6 +809,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = g.add(data.get("text"), data.get("note"))
             elif action == "refresh":
                 result = {"game": g.refresh(game_id)}
+            elif action == "youtube":
+                result = {"game": g.youtube(game_id, data.get("name"))}
             elif action == "vote":
                 result = {"game": g.vote(game_id, data.get("on"))}
             elif action == "status":

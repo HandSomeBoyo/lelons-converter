@@ -2424,6 +2424,10 @@ create table if not exists lelons.game_comments (
   created_at timestamptz not null default now()
 );
 create index if not exists game_comments_game on lelons.game_comments (game_id, id);
+-- 2.17.0: when a game went on sale (for the badge on the Games tab), and how big it is on YouTube.
+alter table lelons.games add column if not exists sale_at timestamptz;
+alter table lelons.games add column if not exists youtube jsonb check (youtube is null or length(youtube::text) <= 8000);
+alter table lelons.games add column if not exists youtube_at timestamptz;
 alter table lelons.games enable row level security;
 alter table lelons.game_votes enable row level security;
 alter table lelons.game_comments enable row level security;
@@ -2440,10 +2444,12 @@ create or replace function lelons.game_json(g lelons.games, me lelons.accounts) 
                              'voters', coalesce((select json_agg(json_build_object('username', va.username, 'avatar', va.avatar) order by v.created_at)
                                                  from lelons.game_votes v join lelons.accounts va on va.id = v.account_id
                                                  where v.game_id = g.id), '[]'::json),
-                             'comments', (select count(*) from lelons.game_comments c where c.game_id = g.id))
+                             'comments', (select count(*) from lelons.game_comments c where c.game_id = g.id),
+                             'sale_at', extract(epoch from g.sale_at), 'youtube', g.youtube,
+                             'youtube_at', extract(epoch from g.youtube_at))
      from (select 1) one left join lelons.accounts a on a.id = g.poster_id $$;
 
--- what: list / add / refresh / vote / status / note / delete / comments / comment / delete_comment
+-- what: list / add / refresh / youtube / vote / status / note / delete / comments / comment / delete_comment
 create or replace function public.lelons_games(token text, what text, game_id uuid default null, data jsonb default null)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -2483,7 +2489,20 @@ begin
     if jsonb_typeof(data->'info') <> 'object' or coalesce(data->'info'->>'name', '') = '' then
       raise exception 'bad game' using hint = 'bad_input';
     end if;
-    update lelons.games x set info = data->'info', refreshed_at = now() where x.id = g.id returning * into g;
+    -- A sale that just started (or a game that just became free) lights up everyone's Games tab.
+    update lelons.games x set info = data->'info', refreshed_at = now(),
+      sale_at = case
+        when coalesce((data->'info'->>'free')::boolean, false) and not coalesce((g.info->>'free')::boolean, false) then now()
+        when coalesce((data->'info'->'price'->>'discount')::int, 0) = 0 and not coalesce((data->'info'->>'free')::boolean, false) then null
+        when coalesce((data->'info'->'price'->>'discount')::int, 0) > coalesce((g.info->'price'->>'discount')::int, 0) then now()
+        else x.sale_at end
+    where x.id = g.id returning * into g;
+    return lelons.game_json(g, me);
+  elsif what = 'youtube' then  -- how videos about the game do on YouTube (looked up by whoever opens it)
+    if jsonb_typeof(data->'youtube') <> 'object' then
+      raise exception 'bad youtube' using hint = 'bad_input';
+    end if;
+    update lelons.games x set youtube = data->'youtube', youtube_at = now() where x.id = g.id returning * into g;
     return lelons.game_json(g, me);
   elsif what = 'vote' then
     if coalesce((data->>'on')::boolean, false) then
