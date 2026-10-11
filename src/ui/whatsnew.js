@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.1", items: [
+    "Game prices in the Games tab are always in Norwegian kroner (NOK) again, no matter who posted the game. Older games switch over by themselves.",
+  ] },
   { version: "2.17.0", items: [
     "Sale alerts in Games: when a game in your list goes on sale (or turns free), the Games tab gets a little number and a banner shows you which ones. Cards get a \"New sale!\" tag.",
     "Watch the Steam trailer right inside the game window, before the pictures.",
