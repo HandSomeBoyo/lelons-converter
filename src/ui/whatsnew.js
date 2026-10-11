@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.0", items: [
+    "Sale alerts in Games: when a game in your list goes on sale (or turns free), the Games tab gets a little number and a banner shows you which ones. Cards get a \"New sale!\" tag.",
+    "Watch the Steam trailer right inside the game window, before the pictures.",
+    "YouTube check: see how big a game is on YouTube (how many views gameplay videos get) and sort the list by \"Biggest on YouTube\".",
+  ] },
   { version: "2.16.0", items: [
     "New Games tab! Paste Steam links of games you might record for YouTube, and they show up as cards with the Steam picture, price, description and reviews.",
     "Paste a whole bunch of links at once (straight from Discord) and add a note about why you posted a game.",

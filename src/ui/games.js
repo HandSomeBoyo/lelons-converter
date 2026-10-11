@@ -23,6 +23,7 @@ const GM_ICONS = {
   trash: gmSvg('<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>'),
   refresh: gmSvg('<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>'),
   pencil: gmSvg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  yt: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/><path d="M10 9v6l5-3z" fill="var(--yt-play, #fff)"/></svg>',
   people: gmSvg('<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.4.2 4 1.7 4.5 4.5"/>'),
 };
 
@@ -55,6 +56,7 @@ async function loadGames(quiet) {
   }
   $("gmStatus").hidden = true;
   gmGames = res.games;
+  if (!$("gamesTab").hidden) gmSeeSales();
   renderGamesPage();
   if (gmOpen) {
     const fresh = gmGames.find((g) => g.id === gmOpen.id);
@@ -143,6 +145,15 @@ function gameCard(game) {
     pic.append(tag);
   }
   if (info.price && info.price.discount) pic.append(gmEl("span", "gm-sale", "-" + info.price.discount + "%"));
+  let ytPill = null;
+  if (game.youtube && game.youtube.count) {
+    const yt = gmEl("span", "gm-yt-pill " + gmYtKind(game.youtube));
+    yt.innerHTML = GM_ICONS.yt;
+    yt.append(gmViews(game.youtube.middle) + " views");
+    yt.title = `YouTube videos about it usually get ${gmViews(game.youtube.middle)} views`;
+    ytPill = yt;
+  }
+  if (gmNewSale(game)) pic.append(gmEl("span", "gm-new-sale", info.free ? "Free now!" : "New sale!"));
 
   const body = gmEl("div", "gm-body");
   body.append(gmEl("h3", "", info.name));
@@ -165,6 +176,7 @@ function gameCard(game) {
 
   const by = gmEl("p", "gm-by");
   by.append(`Posted by ${game.by || "someone"} · ${gmAgo(game.created)}`);
+  if (ytPill) by.append(ytPill);
   if (game.comments) {
     const c = gmEl("span", "gm-count");
     c.innerHTML = GM_ICONS.chat;
@@ -188,6 +200,7 @@ function renderGames() {
     votes: (a, b) => b.voters.length - a.voters.length || b.created - a.created,
     cheap: (a, b) => gmCents(a) - gmCents(b) || a.info.name.localeCompare(b.info.name),
     reviews: (a, b) => ((b.info.reviews || {}).percent || 0) - ((a.info.reviews || {}).percent || 0),
+    youtube: (a, b) => ((b.youtube || {}).middle || 0) - ((a.youtube || {}).middle || 0),
     new: (a, b) => b.created - a.created,
   };
   list = list.slice().sort(by[sort] || by.new);
@@ -253,38 +266,58 @@ async function openGame(id) {
   $("gmModal").hidden = false;
   $("gmDialog").scrollTop = 0;
   loadGameComments();
+  // Games posted before 2.17.0 don't have their trailers yet: read them from Steam now.
+  if (!game.info.movies) {
+    const res = await api("/api/games-refresh", { game: game.id }).catch(() => null);
+    if (res && res.ok && gmOpen && gmOpen.id === game.id) { gmReplace(res.game); gmShot = 0; drawGame(); loadGameComments(); }
+  }
 }
 
 function closeGame() {
   gmOpen = null;
+  gmStopTrailer();
   $("gmModal").hidden = true;
 }
 
 function drawGame() {
   const game = gmOpen, { info } = game;
   const box = $("gmDialog");
+  gmStopTrailer();
   const hero = gmEl("div", "gm-hero");
-  const pics = info.screens && info.screens.length ? info.screens : [{ thumb: info.header, full: info.header }];
-  const big = gmEl("img", "gm-hero-img");
-  big.alt = "";
-  big.src = pics[Math.min(gmShot, pics.length - 1)].full;
-  big.id = "gmHeroImg";
-  hero.append(big, gmButton("gm-close", GM_ICONS.close, "", closeGame));
-
+  hero.id = "gmHero";
+  const movies = info.movies || [];
+  // The strip under the text: trailers first (with a play sign), then the screenshots.
+  const pics = [...movies.map((m) => ({ thumb: m.thumb, movie: m })),
+    ...(info.screens && info.screens.length ? info.screens : [{ thumb: info.header, full: info.header }])];
   const shots = gmEl("div", "gm-shots");
-  pics.forEach((s, i) => {
-    const b = gmButton("gm-shot" + (i === gmShot ? " on" : ""), "", "", () => {
-      gmShot = i;
-      $("gmHeroImg").src = s.full;
-      shots.querySelectorAll(".gm-shot").forEach((x, j) => x.classList.toggle("on", j === i));
-    });
+  const show = (i, play) => {
+    gmShot = i;
+    shots.querySelectorAll(".gm-shot").forEach((x, j) => x.classList.toggle("on", j === i));
+    const p = pics[i];
+    if (p.movie && play) return gmPlayTrailer(p.movie);
+    gmStopTrailer();
+    const img = gmEl("img", "gm-hero-img");
+    img.alt = "";
+    img.src = p.movie ? p.movie.thumb : p.full;
+    const keep = hero.querySelector(".gm-close");
+    hero.replaceChildren(img, keep);
+    if (p.movie) {
+      const go = gmButton("gm-trailer-go", GM_ICONS.play, "Watch the trailer", () => gmPlayTrailer(p.movie));
+      hero.append(go);
+    }
+  };
+  pics.forEach((p, i) => {
+    const b = gmButton("gm-shot" + (p.movie ? " movie" : ""), "", "", () => show(i, true));
     const img = gmEl("img");
     img.alt = "";
     img.loading = "lazy";
-    img.src = s.thumb;
+    img.src = p.thumb;
     b.append(img);
+    if (p.movie) { const play = gmEl("span", "gm-shot-play"); play.innerHTML = GM_ICONS.play; b.append(play); }
     shots.append(b);
   });
+  hero.append(gmButton("gm-close", GM_ICONS.close, "", closeGame));
+  show(Math.min(gmShot, pics.length - 1), false);
 
   const main = gmEl("div", "gm-detail-main");
   main.append(gmEl("h2", "", info.name));
@@ -295,7 +328,7 @@ function drawGame() {
   for (const t of [...(info.genres || []), ...(info.players || [])]) tags.append(gmEl("span", "", t));
   main.append(tags);
   if (pics.length > 1) main.append(shots);
-  main.append(gmEl("div", "gm-note-box"), gmEl("div", "gm-talk"));
+  main.append(gmEl("div", "gm-yt"), gmEl("div", "gm-note-box"), gmEl("div", "gm-talk"));
 
   const side = gmEl("div", "gm-detail-side");
   side.id = "gmSide";
@@ -303,7 +336,165 @@ function drawGame() {
   cols.append(main, side);
   box.replaceChildren(hero, cols);
   drawGameSide();
+  drawGameYoutube();
 }
+
+// ---- trailers (Steam's own, played right here)
+
+let gmHls = null, gmHlsLoading = null;
+function gmLoadHls() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (!gmHlsLoading) gmHlsLoading = new Promise((ok, bad) => {
+    const tag = document.createElement("script");
+    tag.src = "hls/hls.light.min.js";
+    tag.onload = () => ok(window.Hls);
+    tag.onerror = bad;
+    document.head.append(tag);
+  });
+  return gmHlsLoading;
+}
+
+async function gmPlayTrailer(movie) {
+  const hero = $("gmHero");
+  if (!hero) return;
+  gmStopTrailer();
+  const video = gmEl("video", "gm-hero-img gm-trailer");
+  Object.assign(video, { controls: true, autoplay: true, playsInline: true, poster: movie.thumb });
+  hero.replaceChildren(video, hero.querySelector(".gm-close"));
+  const file = movie.webm || movie.mp4;
+  if (file) video.src = file;
+  else if (video.canPlayType("application/vnd.apple.mpegurl")) video.src = movie.hls;
+  else {
+    try {
+      const Hls = await gmLoadHls();
+      if (!video.isConnected) return;
+      gmHls = new Hls();
+      gmHls.loadSource(movie.hls);
+      gmHls.attachMedia(video);
+    } catch (e) {
+      hero.append(gmEl("p", "gm-trailer-bad", "Couldn't play the trailer. Open it in Steam instead."));
+      return;
+    }
+  }
+  video.play().catch(() => {});
+}
+
+function gmStopTrailer() {
+  if (gmHls) { gmHls.destroy(); gmHls = null; }
+  document.querySelectorAll("#gmHero video").forEach((v) => { v.pause(); v.removeAttribute("src"); v.load(); });
+}
+
+// ---- how big it is on YouTube
+
+const gmViews = (n) => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n || 0));
+const gmYtKind = (yt) => (yt.middle >= 500000 ? "huge" : yt.middle >= 100000 ? "big" : yt.middle >= 20000 ? "ok" : "small");
+const GM_YT_SAY = {
+  huge: ["Huge on YouTube", "Videos about it get loads of views. Lots of people search for it, but there are many videos too."],
+  big: ["Big on YouTube", "Videos about it do really well. A good pick for views."],
+  ok: ["Doing OK on YouTube", "Videos about it get a fair amount of views."],
+  small: ["Not big on YouTube yet", "Not many views yet. That can be a chance: be one of the first to post it."],
+};
+const gmYtBusy = new Set();
+
+async function gmCheckYoutube(game) {
+  if (gmYtBusy.has(game.id)) return;
+  gmYtBusy.add(game.id);
+  drawGameYoutube();
+  const res = await api("/api/games-youtube", { game: game.id, name: game.info.name }).catch(() => ({ ok: false, error: "Couldn't look on YouTube." }));
+  gmYtBusy.delete(game.id);
+  if (res.ok) gmReplace(res.game);
+  else if (gmOpen && gmOpen.id === game.id) gmOpen.ytError = res.error;
+  drawGameYoutube();
+}
+
+function drawGameYoutube() {
+  const box = $("gmDialog").querySelector(".gm-yt");
+  if (!box || !gmOpen) return;
+  const game = gmOpen, yt = game.youtube;
+  const head = gmEl("div", "gm-note-head");
+  head.append(gmEl("small", "gm-label", "On YouTube"));
+  if (gmYtBusy.has(game.id)) {
+    box.replaceChildren(head, gmEl("p", "gm-yt-wait", "Looking at YouTube videos about it..."));
+    return;
+  }
+  // Looked up again when it's 3 days old (by whoever opens it).
+  if (!game.ytError && (!yt || Date.now() / 1000 - (game.youtube_at || 0) > 3 * 86400)) { gmCheckYoutube(game); if (!yt) return drawGameYoutube(); }
+  if (!yt) {
+    head.append(gmButton("link", GM_ICONS.refresh, "Try again", () => { game.ytError = ""; gmCheckYoutube(game); }));
+    return box.replaceChildren(head, gmEl("p", "gm-yt-wait", game.ytError || ""));
+  }
+  head.append(gmButton("link", GM_ICONS.refresh, "Check again", () => gmCheckYoutube(game)));
+  const kind = gmYtKind(yt), [title, say] = yt.count ? GM_YT_SAY[kind] : ["No videos yet", "Nobody has posted videos about it. You could be the first!"];
+  const sum = gmEl("div", "gm-yt-sum " + (yt.count ? kind : "small"));
+  const big = gmEl("div", "gm-yt-big");
+  big.innerHTML = GM_ICONS.yt;
+  big.append(gmEl("strong", "", title));
+  sum.append(big, gmEl("p", "", say));
+  const stats = gmEl("div", "gm-yt-stats");
+  for (const [k, v] of [["Usual views", gmViews(yt.middle)], ["Best video", gmViews(yt.top)], ["Over 100K views", `${yt.big} of ${yt.count}`]]) {
+    const st = gmEl("div");
+    st.append(gmEl("strong", "", v), gmEl("small", "", k));
+    stats.append(st);
+  }
+  sum.append(stats);
+  const list = gmEl("div", "gm-yt-list");
+  for (const v of yt.videos || []) {
+    const row = gmButton("gm-yt-video", "", "", () => api("/api/games-open", { url: "https://www.youtube.com/watch?v=" + v.id }));
+    const pic = gmEl("span", "gm-yt-thumb");
+    const img = gmEl("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+    pic.append(img);
+    if (v.seconds) pic.append(gmEl("i", "", `${Math.floor(v.seconds / 60)}:${String(v.seconds % 60).padStart(2, "0")}`));
+    const text = gmEl("span", "gm-yt-text");
+    text.append(gmEl("b", "", v.title), gmEl("small", "", `${v.channel} · ${gmViews(v.views)} views`));
+    row.append(pic, text);
+    list.append(row);
+  }
+  const when = gmEl("p", "gm-yt-when", `Top ${yt.count} videos for "${game.info.name} gameplay", checked ${gmAgo(game.youtube_at)}.`);
+  box.replaceChildren(head, sum, list, when);
+}
+
+// ---- sale alerts: a badge on the Games tab when a game on the list goes on sale or becomes free
+
+const gmOnSale = (g) => g.info.free || (g.info.price && g.info.price.discount > 0);
+const gmSaleSeen = () => +loadPref("gamesSaleSeen") || 0;
+let gmShownSales = new Set(); // sales that were new when you opened the tab (they keep their tag until you leave)
+const gmNewSale = (g) => gmShownSales.has(g.id) || (!!g.sale_at && g.sale_at > gmSaleSeen() && gmOnSale(g));
+
+function gmDrawBadge() {
+  const n = gmLoggedIn() && $("gamesTab").hidden ? gmGames.filter((g) => g.sale_at && g.sale_at > gmSaleSeen() && gmOnSale(g)).length : 0;
+  $("gamesTabBadge").hidden = !n;
+  $("gamesTabBadge").textContent = n;
+  $("gamesTabBadge").title = n === 1 ? "A game on your list went on sale" : n + " games on your list went on sale";
+}
+
+// Opening the tab: show what went on sale since last time, then count it as seen.
+function gmSeeSales() {
+  const fresh = gmGames.filter((g) => g.sale_at && g.sale_at > gmSaleSeen() && gmOnSale(g));
+  fresh.forEach((g) => gmShownSales.add(g.id));
+  const banner = $("gmSales");
+  const all = gmGames.filter((g) => gmShownSales.has(g.id) && gmOnSale(g));
+  banner.hidden = !all.length;
+  if (all.length) {
+    const names = all.slice(0, 3).map((g) => g.info.name + (g.info.free ? " (free!)" : ` (-${g.info.price.discount}%)`)).join(", ");
+    $("gmSalesText").textContent = (all.length === 1 ? "A game on your list went on sale: " : `${all.length} games on your list went on sale: `) + names + (all.length > 3 ? " and more" : "");
+  }
+  const newest = Math.max(gmSaleSeen(), ...gmGames.map((g) => g.sale_at || 0));
+  if (newest > gmSaleSeen()) savePref("gamesSaleSeen", newest);
+  gmDrawBadge();
+}
+
+// While the app is open, look now and then, so the badge shows up without opening the tab.
+async function gmBackgroundCheck() {
+  if (!gmLoggedIn() || !$("gamesTab").hidden || document.hidden) return;
+  const res = await api("/api/games-list", {}).catch(() => null);
+  if (res && res.ok && $("gamesTab").hidden) { gmGames = res.games; gmDrawBadge(); }
+}
+setTimeout(gmBackgroundCheck, 15000);
+setTimeout(gmBackgroundCheck, 120000); // (the first look asks Steam for new prices; this one sees them)
+setInterval(gmBackgroundCheck, 20 * 60000);
 
 // The parts that change when someone votes or moves the game along.
 function drawGameSide() {
@@ -381,7 +572,7 @@ function drawGameNote() {
   box.replaceChildren();
   if (!game.note && !game.can_edit) return;
   const head = gmEl("div", "gm-note-head");
-  head.append(gmEl("small", "gm-label", game.note ? `Why ${game.by || "they"} posted it` : "Why you posted it"));
+  head.append(gmEl("small", "gm-label", game.note ? `Why ${game.by || "they"} posted it` : "Note"));
   if (game.can_edit) head.append(gmButton("link", GM_ICONS.pencil, game.note ? "Change" : "Add a note", () => {
     const text = prompt("Why this game? (optional)", game.note || "");
     if (text === null) return;
@@ -457,6 +648,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("gmMo
 $("gmLogin").addEventListener("click", () => openLogin("login"));
 $("gmSearch").addEventListener("input", (e) => { gmQuery = e.target.value; renderGames(); });
 $("gmSort").addEventListener("change", renderGames);
+$("gmSalesShow").addEventListener("click", () => { gmChips.add("sale"); gmStatus = ""; renderGames(); });
 
 // ---- opening the tab
 
@@ -465,12 +657,19 @@ function gamesAccountChanged() {
   if (id === gmUserId) return;
   gmUserId = id;
   gmGames = [];
+  gmShownSales = new Set();
+  gmDrawBadge();
   if (gmOpen) closeGame();
   if (!$("gamesTab").hidden) gamesTabChanged("games");
 }
 
 async function gamesTabChanged(tab) {
-  if (tab !== "games") { clearTimeout(gmTimer); return; }
+  if (tab !== "games") {
+    clearTimeout(gmTimer);
+    if (gmShownSales.size) { gmShownSales = new Set(); $("gmSales").hidden = true; }
+    gmDrawBadge();
+    return;
+  }
   renderGamesPage();
   if (typeof sfxAccount !== "undefined" && (!sfxAccount || sfxFromCache)) await loadAccount();
   renderGamesPage();
