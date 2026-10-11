@@ -85,6 +85,7 @@
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
       <button data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
+      <button data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span></button>
       <div class="tab-group">Tools</div>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
@@ -661,6 +662,42 @@
     <div class="fx-jobs" id="fxJobs" hidden></div>
   </section>
 
+  <section class="tab-page" id="gamesTab" hidden>
+    <h1 class="headline">Games to record.<br><em>Pick the next video.</em></h1>
+    <p class="fx-status" id="gmStatus" hidden></p>
+    <div class="fx-out" id="gmOut" hidden>
+      <p>Log in to see the games your friends posted.</p>
+      <button type="button" class="small-button" id="gmLogin">Log in</button>
+    </div>
+    <div class="gm-main" id="gmMain" hidden>
+      <form class="gm-add" id="gmAdd" autocomplete="off">
+        <label class="input gm-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          <input id="gmLink" placeholder="Paste a Steam link (or a bunch of them)" spellcheck="false">
+        </label>
+        <label class="input gm-note"><input id="gmNote" maxlength="300" placeholder="Why this one? (optional)"></label>
+        <button type="submit" class="convert small-button" id="gmAddGo">Post game</button>
+      </form>
+      <p class="gm-add-msg" id="gmAddMsg"></p>
+      <div class="gm-bar">
+        <div class="gm-pills" id="gmPills" role="tablist" aria-label="Show"></div>
+        <div class="gm-chips" id="gmChips"></div>
+      </div>
+      <div class="fx-tools gm-tools">
+        <label class="input fx-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="gmSearch" placeholder="Search games, genres, who posted..." spellcheck="false">
+        </label>
+        <label class="quality fx-sort">
+          <select id="gmSort"><option value="new">Newest</option><option value="votes">Most wanted</option><option value="cheap">Cheapest</option><option value="reviews">Best reviews</option></select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </label>
+      </div>
+      <div class="gm-grid" id="gmGrid"></div>
+      <p class="fx-empty gm-empty" id="gmEmpty" hidden></p>
+    </div>
+  </section>
+
   <section class="tab-page" id="copyrightTab" hidden>
     <h1 class="headline">Is it copyrighted?<br><em>Check before you post.</em></h1>
     <label class="dropzone" id="copyDrop">
@@ -950,6 +987,10 @@
       </div>
     </form>
   </div>
+</div>
+
+<div class="modal gm-modal" id="gmModal" hidden>
+  <div class="dialog gm-dialog" role="dialog" aria-label="Game" id="gmDialog"></div>
 </div>
 
 <div class="modal" id="feedbackModal" hidden>
@@ -1422,6 +1463,7 @@
 <script src="docs.js"></script>
 <script src="boards.js"></script>
 <script src="fx.js"></script>
+<script src="games.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

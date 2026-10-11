@@ -2397,6 +2397,139 @@ begin
   raise exception 'what?' using hint = 'bad_input';
 end $$;
 
+-- ---- Games (2.16.0): Steam games friends post to maybe record for YouTube (like a Discord channel of links).
+-- The app reads the game's picture, price and description from Steam and keeps a copy here.
+create table if not exists lelons.games (
+  id uuid primary key default gen_random_uuid(),
+  app_id int not null unique check (app_id > 0),
+  info jsonb not null check (jsonb_typeof(info) = 'object' and length(info::text) <= 20000),
+  note text not null default '' check (length(note) <= 300),
+  status text not null default 'idea' check (status in ('idea', 'recording', 'done')),
+  video text not null default '' check (length(video) <= 300),
+  poster_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now(),
+  refreshed_at timestamptz not null default now()
+);
+create table if not exists lelons.game_votes (
+  game_id uuid not null references lelons.games (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (game_id, account_id)
+);
+create table if not exists lelons.game_comments (
+  id bigserial primary key,
+  game_id uuid not null references lelons.games (id) on delete cascade,
+  account_id uuid references lelons.accounts (id) on delete set null,
+  text text not null check (length(text) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists game_comments_game on lelons.game_comments (game_id, id);
+alter table lelons.games enable row level security;
+alter table lelons.game_votes enable row level security;
+alter table lelons.game_comments enable row level security;
+revoke all on lelons.games, lelons.game_votes, lelons.game_comments from anon, authenticated;
+
+create or replace function lelons.game_json(g lelons.games, me lelons.accounts) returns json
+  language sql stable security definer set search_path = '' as
+  $$ select json_build_object('id', g.id, 'app_id', g.app_id, 'info', g.info, 'note', g.note, 'status', g.status,
+                             'video', g.video, 'created', extract(epoch from g.created_at),
+                             'refreshed', extract(epoch from g.refreshed_at),
+                             'by', a.username, 'by_avatar', a.avatar,
+                             'can_edit', g.poster_id is not distinct from me.id or me.role in ('owner', 'admin'),
+                             'voted', exists (select 1 from lelons.game_votes v where v.game_id = g.id and v.account_id = me.id),
+                             'voters', coalesce((select json_agg(json_build_object('username', va.username, 'avatar', va.avatar) order by v.created_at)
+                                                 from lelons.game_votes v join lelons.accounts va on va.id = v.account_id
+                                                 where v.game_id = g.id), '[]'::json),
+                             'comments', (select count(*) from lelons.game_comments c where c.game_id = g.id))
+     from (select 1) one left join lelons.accounts a on a.id = g.poster_id $$;
+
+-- what: list / add / refresh / vote / status / note / delete / comments / comment / delete_comment
+create or replace function public.lelons_games(token text, what text, game_id uuid default null, data jsonb default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  g lelons.games;
+  app int;
+  st text;
+begin
+  if what = 'list' then
+    return json_build_object('games', coalesce((select json_agg(lelons.game_json(x, me) order by x.created_at desc)
+                                                from lelons.games x), '[]'::json));
+  elsif what = 'add' then
+    app := (data->>'app_id')::int;
+    if app is null or app <= 0 or jsonb_typeof(data->'info') <> 'object' or coalesce(data->'info'->>'name', '') = '' then
+      raise exception 'bad game' using hint = 'bad_input';
+    end if;
+    select x.* into g from lelons.games x where x.app_id = app;
+    if g.id is not null then
+      return json_build_object('game', lelons.game_json(g, me), 'existed', true);
+    end if;
+    if (select count(*) from lelons.games) >= 3000 then
+      raise exception 'too many games' using hint = 'games_full';
+    end if;
+    if (select count(*) from lelons.games x where x.poster_id = me.id and x.created_at > now() - interval '1 hour') >= 60 then
+      raise exception 'slow down' using hint = 'games_slow';
+    end if;
+    insert into lelons.games (app_id, info, note, poster_id)
+    values (app, data->'info', left(btrim(coalesce(data->>'note', '')), 300), me.id) returning * into g;
+    return json_build_object('game', lelons.game_json(g, me), 'existed', false);
+  end if;
+
+  select x.* into g from lelons.games x where x.id = lelons_games.game_id;
+  if g.id is null then
+    raise exception 'no game' using hint = 'nogame';
+  end if;
+  if what = 'refresh' then  -- a newer price and description from Steam (anyone's app does this when it's old)
+    if jsonb_typeof(data->'info') <> 'object' or coalesce(data->'info'->>'name', '') = '' then
+      raise exception 'bad game' using hint = 'bad_input';
+    end if;
+    update lelons.games x set info = data->'info', refreshed_at = now() where x.id = g.id returning * into g;
+    return lelons.game_json(g, me);
+  elsif what = 'vote' then
+    if coalesce((data->>'on')::boolean, false) then
+      insert into lelons.game_votes (game_id, account_id) values (g.id, me.id) on conflict do nothing;
+    else
+      delete from lelons.game_votes v where v.game_id = g.id and v.account_id = me.id;
+    end if;
+    return lelons.game_json(g, me);
+  elsif what = 'status' then  -- anyone can move a game along (it's a list for friends)
+    st := data->>'status';
+    if st not in ('idea', 'recording', 'done') then
+      raise exception 'bad status' using hint = 'bad_input';
+    end if;
+    update lelons.games x set status = st, video = left(btrim(coalesce(data->>'video', x.video)), 300)
+    where x.id = g.id returning * into g;
+    return lelons.game_json(g, me);
+  elsif what = 'comments' then
+    return json_build_object('comments', coalesce((select json_agg(json_build_object('id', c.id, 'text', c.text,
+        'by', a.username, 'avatar', a.avatar, 'created', extract(epoch from c.created_at),
+        'mine', c.account_id is not distinct from me.id or me.role in ('owner', 'admin')) order by c.id)
+      from lelons.game_comments c left join lelons.accounts a on a.id = c.account_id where c.game_id = g.id), '[]'::json));
+  elsif what = 'comment' then
+    if length(btrim(coalesce(data->>'text', ''))) = 0 then
+      raise exception 'empty' using hint = 'bad_input';
+    end if;
+    insert into lelons.game_comments (game_id, account_id, text) values (g.id, me.id, left(btrim(data->>'text'), 500));
+    return '{}'::json;
+  elsif what = 'delete_comment' then
+    delete from lelons.game_comments c where c.id = (data->>'id')::bigint and c.game_id = g.id
+      and (c.account_id = me.id or me.role in ('owner', 'admin'));
+    return '{}'::json;
+  end if;
+
+  if g.poster_id is distinct from me.id and me.role not in ('owner', 'admin') then
+    raise exception 'not yours' using hint = 'denied';
+  end if;
+  if what = 'note' then
+    update lelons.games x set note = left(btrim(coalesce(data->>'note', '')), 300) where x.id = g.id returning * into g;
+    return lelons.game_json(g, me);
+  elsif what = 'delete' then
+    delete from lelons.games x where x.id = g.id;
+    return '{}'::json;
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -2422,7 +2555,8 @@ begin
     'lelons_doc_comment(text, uuid, text, bigint, text, text, text)',
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
-    'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)'] loop
+    'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
+    'lelons_games(text, text, uuid, jsonb)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
