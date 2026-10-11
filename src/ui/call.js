@@ -232,6 +232,8 @@ function callFinish(note) {
   clearInterval(was.clock);
   for (const name of [...callPeers.keys()]) callDropPeer(name);
   callMicClose(callMicStream, callMicParts);
+  for (const key of [...callSpeaking.keys()]) callStopWatching(key);
+  if (callAudioCtx && callAudioCtx.state === "running") callAudioCtx.suspend().catch(() => {});  // (resumed by the next call)
   for (const stream of [callScreen, callCam]) if (stream) stream.getTracks().forEach((t) => t.stop());
   callMicStream = callMicParts = callScreen = callCam = null;
   callWatching = "";
@@ -448,7 +450,7 @@ function callDropPeer(key) {
   try { if (p.dc) p.dc.close(); } catch (e) { /* closed */ }
   try { p.pc.close(); } catch (e) { /* closed */ }
   p.audio.srcObject = null;
-  callSpeaking.delete(key);
+  callStopWatching(key);
   if (callWatching === key) callWatching = "";
   drawCall();
 }
@@ -600,9 +602,18 @@ function callWatchSpeaking(key, stream) {
     if (callAudioCtx.state === "suspended") callAudioCtx.resume().catch(() => {});
     const analyser = callAudioCtx.createAnalyser();
     analyser.fftSize = 512;
-    callAudioCtx.createMediaStreamSource(stream).connect(analyser);
-    callSpeaking.set(key, { analyser, data: new Uint8Array(analyser.fftSize), on: false, quietSince: 0 });
+    const source = callAudioCtx.createMediaStreamSource(stream);
+    source.connect(analyser);
+    callStopWatching(key);
+    callSpeaking.set(key, { source, analyser, data: new Uint8Array(analyser.fftSize), on: false, quietSince: 0 });
   } catch (e) { /* no rings, no problem */ }
+}
+// Stop listening for someone's voice (they left, or your microphone changed): unplug it, or it keeps working.
+function callStopWatching(key) {
+  const s = callSpeaking.get(key);
+  if (!s) return;
+  callSpeaking.delete(key);
+  try { s.source.disconnect(); } catch (e) { /* already */ }
 }
 setInterval(() => {
   if (!callIsLive() || call.phase !== "in") return;

@@ -374,6 +374,8 @@ class Film:
         _rpc("setup", data={"bucket": bucket, "bucket_id": bucket_id, "read_id": read["applicationKeyId"],
                             "read_key": read["applicationKey"], "write_id": write["applicationKeyId"],
                             "write_key": write["applicationKey"]})
+        with self.lock:
+            self.writer = None  # (the new bucket has new keys)
         return self.list()
 
     # ---- owner and admins: packs
@@ -454,10 +456,11 @@ class Film:
         self.add_paths(pack_id, [path], copied=True)
 
     def _start(self):
-        self.wake.set()
-        if not self.worker or not self.worker.is_alive():
-            self.worker = threading.Thread(target=self._work, daemon=True)
-            self.worker.start()
+        with self.lock:
+            self.wake.set()
+            if not self.worker:
+                self.worker = threading.Thread(target=self._work, daemon=True)
+                self.worker.start()
 
     def _next(self):
         with self.lock:
@@ -473,11 +476,14 @@ class Film:
 
     def _work(self):
         while True:
+            self.wake.clear()  # (before looking, so something added while looking isn't missed)
             kind, item = self._next()
             if not item:
-                self.wake.clear()
                 if not self.wake.wait(30):
-                    return
+                    with self.lock:  # (so a clip added right now isn't left waiting for a worker that's gone)
+                        if not self.wake.is_set():
+                            self.worker = None
+                            return
                 continue
             try:
                 (self._upload if kind == "up" else self._download)(item)

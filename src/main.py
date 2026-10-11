@@ -333,7 +333,7 @@ def home_page():
         except sfx.Error as e:
             error = str(e)
     links = (crew or {}).get("channels") or version_channels()
-    recent = [i for i in history.items() if i["exists"]][:5]
+    recent = history.recent(5)
     return {
         "ok": True,
         "channels": [home.channel(url) for url in links],

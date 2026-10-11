@@ -4612,8 +4612,12 @@ html.side-small .tab-group { height: 1px; }
 .gm-sales p { margin: 0; flex: 1; font-size: 13.5px; }
 .gm-sales .small-button { flex: none; height: 34px; }
 .gm-new-sale { position: absolute; right: 10px; top: 10px; padding: 4px 9px; border-radius: 999px; background: #beee11; color: #1b2508;
-  font: 700 11.5px var(--head); box-shadow: 0 0 0 0 rgba(190, 238, 17, .6); animation: gm-pulse 1.8s ease-out infinite; }
-@keyframes gm-pulse { 0% { box-shadow: 0 0 0 0 rgba(190, 238, 17, .55); } 100% { box-shadow: 0 0 0 10px rgba(190, 238, 17, 0); } }
+  font: 700 11.5px var(--head); }
+/* the pulse grows a ring on its own layer (scale + fade) instead of repainting a shadow every frame */
+.gm-new-sale::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 2px rgba(190, 238, 17, .55);
+  pointer-events: none; animation: gm-pulse 1.8s ease-out infinite; will-change: transform, opacity; }
+@keyframes gm-pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.18, 1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gm-new-sale::after { animation: none; opacity: 0; } }
 .gm-yt-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font: 600 11.5px var(--head); color: var(--muted); white-space: nowrap; }
 .gm-yt-pill.huge, .gm-yt-pill.big { color: var(--text); }
 .gm-yt-pill + .gm-count { margin-left: 0; }

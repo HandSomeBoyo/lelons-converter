@@ -27,7 +27,7 @@ const GM_ICONS = {
   people: gmSvg('<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.4.2 4 1.7 4.5 4.5"/>'),
 };
 
-let gmGames = [], gmStatus = "", gmChips = new Set(), gmQuery = "", gmOpen = null, gmLoading = false, gmTimer = 0, gmUserId = null, gmShot = 0;
+let gmGames = [], gmStatus = "", gmChips = new Set(), gmQuery = "", gmOpen = null, gmLoading = false, gmTimer = 0, gmUserId = null, gmShot = 0, gmSig = "";
 const gmEl = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
 const gmButton = (cls, html, text, onclick) => {
   const b = gmEl("button", cls);
@@ -55,6 +55,11 @@ async function loadGames(quiet) {
     return;
   }
   $("gmStatus").hidden = true;
+  // A look every 30 seconds usually finds nothing new: then the cards stay as they are (no flicker, and the
+  // pictures and where your mouse is aren't drawn again).
+  const sig = JSON.stringify(res.games);
+  if (quiet && sig === gmSig) return;
+  gmSig = sig;
   gmGames = res.games;
   if (!$("gamesTab").hidden) gmSeeSales();
   renderGamesPage();
@@ -137,7 +142,7 @@ function gameCard(game) {
   img.alt = "";
   img.loading = "lazy";
   img.src = info.header;
-  img.addEventListener("error", () => { img.remove(); pic.classList.add("none"); pic.textContent = info.name; });
+  img.addEventListener("error", () => { img.remove(); pic.classList.add("none"); pic.prepend(gmEl("span", "", info.name)); }); // (keeps the tags on the picture)
   pic.append(img);
   if (game.status !== "idea") {
     const tag = gmEl("span", "gm-tag " + game.status);
@@ -490,7 +495,7 @@ function gmSeeSales() {
 async function gmBackgroundCheck() {
   if (!gmLoggedIn() || !$("gamesTab").hidden || document.hidden) return;
   const res = await api("/api/games-list", {}).catch(() => null);
-  if (res && res.ok && $("gamesTab").hidden) { gmGames = res.games; gmDrawBadge(); }
+  if (res && res.ok && $("gamesTab").hidden) { gmGames = res.games; gmSig = ""; gmDrawBadge(); }
 }
 setTimeout(gmBackgroundCheck, 15000);
 setTimeout(gmBackgroundCheck, 120000); // (the first look asks Steam for new prices; this one sees them)
@@ -657,6 +662,7 @@ function gamesAccountChanged() {
   if (id === gmUserId) return;
   gmUserId = id;
   gmGames = [];
+  gmSig = "";
   gmShownSales = new Set();
   gmDrawBadge();
   if (gmOpen) closeGame();

@@ -70,6 +70,7 @@ let bd = null;                // the open board
 let bdSaveTimer = 0;
 let bdSaving = false;
 let bdSaveAgain = false;
+let bdSaveTries = 0;  // saves tried again after one didn't work
 let bdComposer = null;        // {list, text}: the "add a card" box that's open
 let bdAddingList = null;      // the text in the "add another list" box, or null when it's closed
 let bdMenu = "";              // the board menu on the right: "" (closed), "main", "about", "bg", "labels", "archive", "activity"
@@ -160,11 +161,13 @@ function bdChanged() {
   bdDraw();
   if (bdCardId) bdDrawCard();
   clearTimeout(bdSaveTimer);
+  bdSaveTries = 0;
   bdSaveTimer = setTimeout(bdSave, 400);
 }
 
 async function bdSave() {
   clearTimeout(bdSaveTimer);
+  bdSaveTimer = 0;  // (not 0: a save is waiting to happen)
   if (!bd) return;
   if (bdSaving) { bdSaveAgain = true; return; }
   bdSaving = true;
@@ -182,8 +185,20 @@ async function bdSave() {
     res = await api("/api/boards-save", { id: bd.id, board: bd }).catch(() => ({ ok: false, error: "Couldn't save the board." }));
   }
   bdSaving = false;
-  if (!res.ok) bdToast(res.error || "Couldn't save the board.");
+  if (!res.ok) {
+    bdToast(res.error || "Couldn't save the board.");
+    // (no internet for a moment, say): try again soon, so the change isn't lost if you don't change anything else
+    if (!res.loggedOut && bd && !bdSaveAgain && bdSaveTries++ < 3) { clearTimeout(bdSaveTimer); bdSaveTimer = setTimeout(bdSave, 5000); }
+  } else bdSaveTries = 0;
   if (bdSaveAgain) { bdSaveAgain = false; bdSave(); }
+}
+
+// Wait for a save that's on its way, then save what's there now (closing the board must not lose the last change).
+async function bdSaveNow() {
+  clearTimeout(bdSaveTimer);
+  bdSaveTimer = 0;
+  while (bdSaving) await new Promise((r) => setTimeout(r, 40));
+  if (bd) await bdSave();
 }
 
 // ---------------------------------------------------------------- team boards: putting two people's changes together
@@ -513,7 +528,7 @@ function bdShow(board, team) {
 }
 
 async function bdClose() {
-  if (bd) await bdSave();
+  if (bd) await bdSaveNow();
   clearTimeout(bdPollTimer);
   bd = null;
   bdTeam = null;
@@ -1799,7 +1814,17 @@ document.addEventListener("keydown", (e) => {
   if (e.key === ";") { bd.labelsWide = !bd.labelsWide; bdChanged(); }
 }, true);
 
-addEventListener("beforeunload", () => { if (bd) navigator.sendBeacon && bdSave(); });
+// The app is closing with a change not saved yet (the last 0.4 seconds): send it on its way so it isn't lost.
+addEventListener("pagehide", () => {
+  if (!bd || (!bdSaveTimer && !bdSaving)) return;
+  clearTimeout(bdSaveTimer);
+  const { id, ...board } = bdCopy(bd);
+  const body = bdTeam ? { id, board, rev: bdTeam.rev } : { id, board: { ...board, id } };
+  const text = JSON.stringify(body);
+  const path = bdTeam ? "/api/boards-team-save" : "/api/boards-save";
+  if (text.length < 60000 && navigator.sendBeacon(path, new Blob([text], { type: "application/json" }))) return;
+  fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: text, keepalive: text.length < 60000 }).catch(() => {});
+});
 
 if (!$("boardsTab").hidden) boardsTabChanged("boards");
 
