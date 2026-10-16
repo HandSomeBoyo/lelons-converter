@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.3", items: [
+    "Docs: copying a centered (or right-side) line and pasting it on another page keeps it centered. Before, it showed up on the left while the buttons said it was centered, and you couldn't change it. Lines that already got stuck like that fix themselves when you open the document.",
+    "Docs: copied text no longer brings the page's colors and font along, so it matches the rest of your document.",
+    "Settings: the X in the corner works when you click right in the middle of it.",
+  ] },
   { version: "2.17.2", items: [
     "Bug fixes: a change on a board is no longer lost if you close the board right after making it (or close the app). If saving fails for a moment, it tries again by itself.",
     "Games without a picture now still show their Recording, Done and sale tags.",

@@ -152,10 +152,22 @@ const DOC_STYLES = ["color", "background-color", "font-family", "font-size", "fo
 const DOC_CLASS = /^(sp-(scene|action|character|paren|dialogue|transition|shot|centered|title|contact)|doc-(title|subtitle|table)|checklist|checked|page-break)$/;
 const SCRIPT_KINDS = ["scene", "action", "character", "paren", "dialogue", "transition", "shot", "centered"];
 
-function cleanStyle(from, to) {
+const DOC_BLOCKS = new Set("P H1 H2 H3 DIV LI BLOCKQUOTE PRE TD TH".split(" "));
+const DOC_BLOCK_STYLES = new Set(["text-align", "margin-left", "line-height"]);
+let docCleanAlign = ""; // the alignment of pasted words that weren't a whole paragraph (see the paste below)
+
+function cleanStyle(from, to, parent) {
   for (const name of DOC_STYLES) {
     let value = from.style.getPropertyValue(name);
     if (!value || /url\(|expression|javascript|[<>]|var\(/i.test(value)) continue;
+    // Lining up only works on a paragraph. Copying part of a centered line puts "centered" on the words
+    // themselves: then the editor said it was centered while it wasn't, and couldn't change it. It goes on the paragraph.
+    if (DOC_BLOCK_STYLES.has(name) && !DOC_BLOCKS.has(to.tagName)) {
+      if (name !== "text-align") continue;
+      if (parent && DOC_BLOCKS.has(parent.tagName)) { if (!parent.style.textAlign) parent.style.textAlign = value; }
+      else if (parent && parent.nodeType === 11) docCleanAlign = docCleanAlign || value;
+      continue;
+    }
     if (name === "font-size" && !/^\d+(\.\d+)?(px|pt|em|rem|%)$/.test(value)) continue;
     if (name === "margin-left" && !/^\d+(\.\d+)?(px|pt|em)$/.test(value)) continue;
     if (name === "width" && !/^\d+(\.\d+)?(%|px)$/.test(value)) continue;
@@ -164,7 +176,7 @@ function cleanStyle(from, to) {
   }
 }
 
-function cleanInto(from, to) {
+function cleanInto(from, to, block = to) {  // block: the paragraph (or the whole paste) it's in
   for (const node of from.childNodes) {
     if (node.nodeType === 3) { to.append(node.data); continue; }
     if (node.nodeType !== 1) continue;
@@ -173,9 +185,9 @@ function cleanInto(from, to) {
     // Google Docs puts everything inside <b style="font-weight:normal">: that's not bold.
     const fakeBold = (tag === "B" || tag === "STRONG") && /^(normal|400)$/.test(node.style.fontWeight);
     let keepTag = tag === "H4" || tag === "H5" || tag === "H6" ? "H3" : tag === "FONT" ? "SPAN" : tag;
-    if (fakeBold || !DOC_TAGS.has(keepTag)) { cleanInto(node, to); continue; }
+    if (fakeBold || !DOC_TAGS.has(keepTag)) { cleanInto(node, to, block); continue; }
     const el = document.createElement(keepTag);
-    cleanStyle(node, el);
+    cleanStyle(node, el, block);
     if (tag === "FONT" && node.getAttribute("color") && /^#?\w+$/.test(node.getAttribute("color"))) el.style.color = node.getAttribute("color");
     for (const c of node.classList) if (DOC_CLASS.test(c)) el.classList.add(c);
     if (keepTag === "A") {
@@ -189,7 +201,7 @@ function cleanInto(from, to) {
     } else if (keepTag === "TD" || keepTag === "TH") {
       for (const a of ["colspan", "rowspan"]) if (/^\d{1,2}$/.test(node.getAttribute(a) || "")) el.setAttribute(a, node.getAttribute(a));
     }
-    cleanInto(node, el);
+    cleanInto(node, el, DOC_BLOCKS.has(keepTag) ? el : block);
     to.append(el);
   }
   return to;
@@ -197,6 +209,7 @@ function cleanInto(from, to) {
 
 // html (from anywhere) -> a fragment of clean nodes, made in this page.
 function docClean(html) {
+  docCleanAlign = "";
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
   return cleanInto(parsed.body, document.createDocumentFragment());
 }
@@ -206,8 +219,10 @@ function blockFromHtml(block) {
   const frag = docClean(block.html);
   let el = frag.firstElementChild;
   if (!el || frag.children.length !== 1 || !DOC_TOP.has(el.tagName)) {
+    const align = docCleanAlign;
     el = document.createElement("p");
     el.append(frag);
+    if (align) el.style.textAlign = align;
   }
   if (!el.childNodes.length && el.tagName !== "HR") el.append(document.createElement("br"));
   el.dataset.id = block.id;
@@ -1807,7 +1822,21 @@ async function docForgetFresh(d) {
 
 // After every change: every top-level element is a block with its own id and position, loose text
 // goes into a paragraph, and no two blocks share an id (the browser copies them when you press Enter).
+// Lining up belongs on the paragraph. The browser sometimes puts it on words (pasting a centered line into
+// the middle of another): then the buttons said "centered" but nothing was, and it couldn't be changed.
+function docFixWordAlign() {
+  for (const el of docsText.querySelectorAll('[style*="text-align"]')) {
+    if (DOC_BLOCKS.has(el.tagName)) continue;
+    const block = el.closest("p, h1, h2, h3, li, blockquote, pre, td, th");
+    const align = el.style.textAlign;
+    el.style.removeProperty("text-align");
+    if (!el.getAttribute("style")) el.removeAttribute("style");
+    if (block && !block.style.textAlign && el.textContent.trim() === block.textContent.trim()) block.style.textAlign = align;
+  }
+}
+
 function docNormalize() {
+  docFixWordAlign();
   const seen = new Set();
   let prev = null;
   let node = docsText.firstChild;
@@ -2904,8 +2933,14 @@ docsText.addEventListener("paste", (e) => {
   if (html && doc.kind !== "script") {
     const holder = document.createElement("div");
     holder.append(docClean(html.replace(/<!--StartFragment-->|<!--EndFragment-->/g, "")));
+    const align = docCleanAlign;
     holder.querySelectorAll("img").forEach((img) => { if (!img.getAttribute("src")) img.remove(); });
+    const into = docCaretBlock();
+    const empty = into && !into.textContent.trim() && !into.querySelector("img, hr, table");
     document.execCommand("insertHTML", false, holder.innerHTML);
+    // A line copied from a centered paragraph, pasted on an empty line: that line is centered too.
+    const now = docCaretBlock();
+    if (align && empty && now && !now.style.textAlign && DOC_BLOCKS.has(now.tagName)) now.style.textAlign = align;
   } else {
     const text = data.getData("text/plain");
     if (doc.kind === "script" && text.includes("\n")) docPasteScript(text);
@@ -2913,6 +2948,42 @@ docsText.addEventListener("paste", (e) => {
   }
   docUndoCommit();
 });
+
+// Copying: the words as they are in the document (with their paragraph when you copied all of it), instead of
+// what the browser makes of them (which bakes the page's colors and font into every word, and the
+// paragraph's centering into the words themselves).
+function docCopyHtml(range) {
+  let wrap = range.cloneContents();
+  let node = range.commonAncestorContainer;
+  if (node.nodeType !== 1) node = node.parentNode;
+  const block = node !== docsText ? docBlockOf(node) : null;
+  if (block) {
+    const all = document.createRange();
+    all.selectNodeContents(block);
+    const whole = range.toString().trim() === all.toString().trim();
+    for (let n = node; n && n !== docsText; n = n.parentNode) {
+      if (n === block && !whole) break; // (part of a line: just the words, not the line's look)
+      const c = n.cloneNode(false);
+      c.append(wrap);
+      wrap = c;
+    }
+  }
+  const box = document.createElement("div");
+  box.append(wrap);
+  box.querySelectorAll("[data-id], [data-pos]").forEach((el) => { el.removeAttribute("data-id"); el.removeAttribute("data-pos"); });
+  box.querySelectorAll(".doc-held").forEach((el) => el.classList.remove("doc-held"));
+  return box.innerHTML;
+}
+for (const kind of ["copy", "cut"]) {
+  docsText.addEventListener(kind, (e) => {
+    const sel = getSelection();
+    if (!doc || !sel.rangeCount || sel.isCollapsed || !docsText.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/html", docCopyHtml(sel.getRangeAt(0)));
+    e.clipboardData.setData("text/plain", sel.toString());
+    if (kind === "cut" && !docBlockHeld()) { docUndoCommit(); document.execCommand("delete"); docUndoCommit(); }
+  });
+}
 
 let docDragInside = false; // moving text around inside the document (that's already clean)
 docsText.addEventListener("dragstart", () => { docDragInside = true; });
