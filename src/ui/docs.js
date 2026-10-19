@@ -234,7 +234,7 @@ function blockFromHtml(block) {
 function blockHtml(el) {
   const copy = el.cloneNode(true);
   for (const a of ["data-id", "data-pos", "contenteditable", "data-who", "style"]) {
-    if (a === "style" && copy.getAttribute("style")) { const keep = document.createElement("x"); cleanStyle(copy, keep); copy.setAttribute("style", keep.getAttribute("style") || ""); if (!copy.getAttribute("style")) copy.removeAttribute("style"); continue; }
+    if (a === "style" && copy.getAttribute("style")) { const keep = document.createElement(copy.tagName); cleanStyle(copy, keep); copy.setAttribute("style", keep.getAttribute("style") || ""); if (!copy.getAttribute("style")) copy.removeAttribute("style"); continue; }
     copy.removeAttribute(a);
   }
   copy.classList.remove("doc-held", "doc-other", "doc-find-hit");

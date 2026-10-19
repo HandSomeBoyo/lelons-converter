@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.5", items: [
+    "Docs: centered (and right-side or indented) lines stay that way when you go to another page and come back, and when you save. Lines that already lost it need to be centered once more.",
+  ] },
   { version: "2.17.4", items: [
     "Docs: changing the text size on an empty line (or with just the text cursor somewhere) works now. Before, the size jumped back, for example to 48 under a big title, and what you typed came out the wrong size.",
     "Docs: double-clicking the size box to pick the number no longer makes the new size go nowhere.",
