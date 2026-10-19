@@ -1,6 +1,6 @@
 """The app's version, and where it looks for new versions."""
 
-VERSION = "2.17.3"
+VERSION = "2.17.4"
 
 # GitHub repository ("owner/name") whose Releases hold new versions of the
 # installer. Leave empty to turn the update check off.
