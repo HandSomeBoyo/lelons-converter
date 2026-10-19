@@ -2459,7 +2459,9 @@ function buildToolbar() {
   $("docToolbar").querySelectorAll("[data-pop]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); docOpenPop(b.dataset.pop, b); }));
   const size = $("docSize");
   if (size) {
-    size.addEventListener("mousedown", () => { docKeepRange = docRange(); });
+    // Only the first click: a double or triple click (to pick the number) happens with the focus already
+    // in the box, and would forget where the text cursor was.
+    size.addEventListener("mousedown", () => { if (document.activeElement !== size) docKeepRange = docRange(); });
     size.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); docSetSize(parseFloat(size.value)); docsText.focus(); }
       if (e.key === "Escape") docsText.focus();
@@ -2612,6 +2614,14 @@ function docSetSize(pt) {
   if (!pt || pt < 1 || pt > 400) return;
   docBackToRange();
   docUndoCommit();
+  const sel = getSelection();
+  if (sel.rangeCount && sel.isCollapsed && docsText.contains(sel.anchorNode)) {
+    // Just a text cursor: the browser has nothing to resize, so make a spot with the new size to type into.
+    docSizeAt(sel.getRangeAt(0), pt);
+    $("docSize").value = pt;
+    docUndoCommit();
+    return;
+  }
   document.execCommand("styleWithCSS", false, true);
   document.execCommand("fontSize", false, "7");
   for (const el of docsText.querySelectorAll('span[style*="xxx-large"], font[size="7"]')) {
@@ -2627,6 +2637,56 @@ function docSetSize(pt) {
   $("docSize").value = pt;
   docUndoCommit();
 }
+
+let docSizeSpot = null; // an empty spot made by docSizeAt, waiting for typing
+function docSizeAt(range, pt) {
+  docSizeTidy(true);
+  let node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentNode;
+  const block = node.closest("p, h1, h2, h3, li, blockquote, td, th, pre");
+  if (block && docsText.contains(block) && !block.textContent.replace(/\u200b/g, "")) {
+    // An empty line: give the size to what holds its line break, so typing there uses it.
+    const br = block.querySelector("br");
+    let holder = br ? br.parentNode : block;
+    if (holder === block) {
+      holder = document.createElement("span");
+      if (br) br.before(holder), holder.append(br);
+      else block.append(holder);
+    }
+    holder.style.fontSize = pt + "pt";
+    range.setStart(holder, 0);
+  } else {
+    const span = document.createElement("span");
+    span.style.fontSize = pt + "pt";
+    span.textContent = "\u200b";
+    range.insertNode(span);
+    range.setStart(span.firstChild, 1);
+    docSizeSpot = span;
+  }
+  range.collapse(true);
+  const sel = getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+// Drop the invisible space once something is typed there, or the whole spot if the cursor left it empty.
+function docSizeTidy(force) {
+  const span = docSizeSpot;
+  if (!span) return;
+  const sel = getSelection();
+  const inside = sel.rangeCount && span.contains(sel.anchorNode);
+  if (!span.isConnected) { docSizeSpot = null; return; }
+  if (span.textContent === "\u200b") {
+    if (force || !inside) { span.remove(); docSizeSpot = null; }
+    return;
+  }
+  for (const t of [...span.childNodes].filter((n) => n.nodeType === 3 && n.data.includes("\u200b"))) {
+    const at = inside && sel.anchorNode === t ? sel.anchorOffset - (t.data.slice(0, sel.anchorOffset).split("\u200b").length - 1) : -1;
+    t.data = t.data.replace(/\u200b/g, "");
+    if (at >= 0) sel.collapse(t, at);
+  }
+  docSizeSpot = null;
+}
+docsText.addEventListener("input", () => docSizeTidy(false));
+document.addEventListener("selectionchange", () => { if (docSizeSpot && document.activeElement === docsText) docSizeTidy(false); });
 
 // ---------------------------------------------------------------- menus under the toolbar buttons
 

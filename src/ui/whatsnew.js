@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.17.4", items: [
+    "Docs: changing the text size on an empty line (or with just the text cursor somewhere) works now. Before, the size jumped back, for example to 48 under a big title, and what you typed came out the wrong size.",
+    "Docs: double-clicking the size box to pick the number no longer makes the new size go nowhere.",
+  ] },
   { version: "2.17.3", items: [
     "Docs: copying a centered (or right-side) line and pasting it on another page keeps it centered. Before, it showed up on the left while the buttons said it was centered, and you couldn't change it. Lines that already got stuck like that fix themselves when you open the document.",
     "Docs: copied text no longer brings the page's colors and font along, so it matches the rest of your document.",
