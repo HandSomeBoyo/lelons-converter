@@ -3508,7 +3508,7 @@ main { max-width: 1040px; padding: 16px 40px 40px; box-sizing: border-box; }
 html { scroll-padding-top: 16px; }
 
 /* ---- folded in (or a narrow window): the side bar shows icons only (the name shows when you point at it) */
-html.side-small { --side-w: 64px; }
+html.side-small, html.side-small[data-theme] { --side-w: 64px; }
 .sidebar { transition: width .45s var(--ease); }
 body { transition: padding-left .45s var(--ease); }
 .player-bar, .chat-panel { transition: left .45s var(--ease); }
@@ -4660,3 +4660,177 @@ html.side-small .tab-group { height: 1px; }
 .gm-yt-when { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
 @media (max-width: 860px) { .gm-yt-list { grid-template-columns: 1fr; } .gm-yt-sum { grid-template-columns: 1fr; } .gm-yt-stats { grid-column: 1; grid-row: auto; } .gm-yt-stats div { align-items: flex-start; } }
 .gm-by { white-space: nowrap; }
+
+/* ================================================================ 4.0: one new look for everyone.
+   The themes and colors are gone: one calm dark look, one violet accent. Flat surfaces with thin
+   edges, no glass or blur (faster to draw), and quick, soft animations everywhere (only opacity and
+   transform, so they stay smooth). New restyles should build on this section. */
+:root, :root[data-theme] {
+  --bg: #0c0c0e; --side-bg: #0c0c0e; --panel: #141417; --panel2: #1c1c21; --panel3: #25252b;
+  --line: rgba(255, 255, 255, .065); --line2: rgba(255, 255, 255, .11);
+  --text: #f1f1f3; --muted: #8b8b95; --ink: #ffffff;
+  --red: #ff6b6b; --green: #4ade80; --switch-on: var(--accent);
+  --bars: #2c2c33; --bars-hover: #4a4a54; --wave: #d4d4dc; --shade: rgba(12, 12, 14, .8); --overlay: rgba(0, 0, 0, .6);
+  --head: InterVar, Inter, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --ease: cubic-bezier(.2, .8, .2, 1); --ease-out: cubic-bezier(.2, .8, .2, 1); --spring: cubic-bezier(.3, 1.3, .5, 1);
+  --fast: .14s; --mid: .22s;
+  --side-w: 228px; --side-gap: 0px; --content-left: var(--side-w);
+  --gl-fill: none; --gl-tint: var(--panel); --gl-line: var(--line); --gl-rim: 0 0 0 1px var(--line); --gl-rim-soft: none;
+  --gl-shadow: 0 16px 48px rgba(0, 0, 0, .45); --gl-lens: var(--panel2); --gl-card: var(--panel);
+  --g-fill: none; --g-edge: var(--line); --g-shine: transparent;
+  color-scheme: dark;
+}
+html.side-small, html.side-small[data-theme] { --side-w: 64px; }
+html, body { background: var(--bg); background-image: none; }
+body::before { display: none; }
+::selection { background: rgba(var(--accent-rgb), .35); }
+
+/* no glass anywhere: blur costs a lot to draw, and flat looks cleaner */
+*, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* ---- the side bar: flat, against the left edge */
+.sidebar {
+  top: 0; bottom: 0; left: 0; width: var(--side-w); padding: 16px 10px 12px; border-radius: 0;
+  background: var(--side-bg); box-shadow: inset -1px 0 0 var(--line);
+  transition: width var(--mid) var(--ease);
+}
+body { transition: padding-left var(--mid) var(--ease); }
+.player-bar, .chat-panel { transition: left var(--mid) var(--ease); }
+.side-brand { padding-left: 8px; }
+.side-brand .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); box-shadow: none; }
+.side-brand .mark svg { width: 17px; height: 17px; fill: #fff; }
+.side-brand .word { font: 650 15.5px var(--head); letter-spacing: -.015em; }
+.side-brand .word span { font-weight: 650; color: var(--text); }
+.side-name small { font-size: 11px; color: var(--muted); }
+.side-fold { color: var(--muted); }
+.tab-group { padding: 16px 12px 6px; font: 600 10.5px/1 var(--head); letter-spacing: .07em; color: #5c5c66; }
+.sidebar .tabs { gap: 1px; }
+.sidebar .tabs button, .side-link {
+  height: 34px; padding: 0 11px; gap: 11px; border-radius: 8px; font: 500 13.5px/1 var(--head); letter-spacing: -.005em;
+  color: #a3a3ad; transition: color var(--fast) var(--ease), background-color var(--fast) var(--ease);
+}
+html.side-small .sidebar .tabs button, html.side-small .side-link { padding: 0 11px; }
+.sidebar .tabs button svg, .side-link svg { width: 17px; height: 17px; opacity: 1; }
+.sidebar .tabs button:hover, .side-link:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+.sidebar .tabs button.active, .sidebar .tabs button.active svg { color: var(--text); font-weight: 550; }
+.sidebar .tabs button.active svg { color: var(--accent); }
+/* the open page: a soft block that slides to the one you pick */
+.sidebar .tabs .tab-line { background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line); border-radius: 8px; }
+.sidebar .tabs .tab-line::after, .sidebar .tabs .tab-line::before { display: none; }
+.sidebar .tabs .tab-line.ready { transition: transform var(--mid) var(--ease), height var(--mid) var(--ease), width var(--mid) var(--ease), opacity var(--fast); }
+.sidebar .tabs .tab-line.moving { animation: none; }
+.side-foot { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.side-link.open { background: var(--panel2); box-shadow: none; color: var(--text); }
+.tab-badge, .chat-badge { background: var(--accent); color: #fff; }
+
+/* ---- the top right: a few quiet icons */
+.top { min-height: 36px; margin-bottom: 8px; }
+.head-button, .online-pill { width: 34px; height: 34px; border-radius: 8px; color: var(--muted); background: none; box-shadow: none; transition: color var(--fast), background-color var(--fast); }
+.online-pill { width: auto; padding: 0 12px; }
+.head-button:hover, .online-pill:hover { color: var(--text); background: var(--panel2); box-shadow: none; }
+.account-button { width: 34px; height: 34px; border: 0; }
+.account-button .avatar { width: 30px; height: 30px; }
+.help-pop button { display: flex; align-items: center; gap: 10px; }
+.help-pop button svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.help-pop button span { flex: 1; }
+.help-pop kbd { font: 500 11px var(--head); color: var(--muted); padding: 2px 6px; border-radius: 5px; background: var(--panel3); }
+
+/* ---- pages: calm titles, room to breathe */
+main { max-width: 1060px; padding: 18px 44px 64px; }
+.headline { font: 650 26px/1.2 var(--head); letter-spacing: -.022em; margin: 4px 0 28px; }
+.headline em { margin-top: 6px; font: 400 14px/1.45 var(--head); letter-spacing: 0; color: var(--muted); }
+h2, .home-head h2 { font-weight: 600; letter-spacing: -.015em; }
+.player-bar { left: calc(var(--side-w) + 12px); }
+.chat-panel, body.has-player .chat-panel { left: var(--side-w); }
+body.chat-page::after { left: var(--side-w); }
+
+/* ---- surfaces: one kind of card, flat with a thin edge */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list, .fx-out, .fx-wait, .lib-genres, .gm-card, .bd-tile, .fx-card {
+  background: var(--panel); border: 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line);
+}
+.channel-card, .home-card, .gm-card, .bd-tile, .fx-card, .upload-card { transition: background-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease), transform var(--mid) var(--ease); }
+.channel-card:hover, .home-card:hover, .gm-card:hover, .bd-tile:hover, .fx-card:hover, .upload-card:hover { background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line2); }
+.lib-out, .fx-out { max-width: none; padding: 36px 24px; text-align: center; color: var(--muted); }
+.lib-out p, .fx-out p { margin: 0 0 16px; color: var(--muted); }
+.lib-out-buttons { justify-content: center; margin: 0 0 12px; }
+.lib-out-hint { margin: 0; font-size: 12.5px; }
+.dropzone { border-radius: 12px; background: var(--panel); border: 1px dashed var(--line2); transition: border-color var(--fast), background-color var(--fast); }
+.dropzone:hover, .dragging .dropzone { border-color: var(--accent); background: rgba(var(--accent-rgb), .05); }
+.dropzone svg { color: var(--accent); }
+
+/* ---- controls */
+.input, :root[data-theme] .input {
+  height: 46px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line2);
+  transition: box-shadow var(--fast) var(--ease);
+}
+.input:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+.input:focus-within { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px rgba(var(--accent-rgb), .22); }
+.input input { font-size: 14.5px; caret-color: var(--accent); }
+.convert, .small-button:not(.ghost-button):not(.outline-button) {
+  height: 46px; padding: 0 20px; border-radius: 10px; background: var(--accent); background-image: none; color: #fff;
+  font: 600 14.5px var(--head); box-shadow: none; filter: none;
+  transition: background-color var(--fast) var(--ease), transform var(--fast) var(--ease), opacity var(--fast);
+}
+.small-button:not(.ghost-button):not(.outline-button) { height: 36px; padding: 0 14px; font-size: 13.5px; border-radius: 9px; }
+.convert:hover:not(:disabled), .small-button:not(.ghost-button):not(.outline-button):hover { background: #9d90ff; filter: none; box-shadow: none; }
+.convert:active:not(:disabled), .small-button:active, .ghost-button:active, .head-button:active { transform: scale(.97); }
+.lib-out-buttons .small-button, .lib-out-buttons .small-button:hover { background: var(--panel3); color: var(--text); border: 0; }
+.lib-out-buttons .convert, .lib-out-buttons .small-button { height: 38px; padding: 0 18px; font-size: 14px; }
+.ghost-button, .outline-button {
+  border-radius: 9px; border: 0; background: var(--panel2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line);
+  transition: background-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.ghost-button:hover, .outline-button:hover { background: var(--panel3); }
+.toggle button, .quality, .chips button, .lib-tools .find-open, .side-item.lib-cat, .lib-people-button {
+  height: 34px; border: 0; border-radius: 8px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+  color: #a3a3ad; transition: color var(--fast), background-color var(--fast), box-shadow var(--fast);
+}
+.toggle button:hover, .quality:hover, .chips button:hover, .side-item.lib-cat:hover { color: var(--text); background: var(--panel2); }
+.toggle button.active, .chips button.active, .side-item.lib-cat.active {
+  background: rgba(var(--accent-rgb), .16); color: #fff; box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .55);
+}
+.link, .link-button { color: #a99eff; }
+.bar { height: 3px; border-radius: 3px; background: var(--panel3); }
+.bar div { border-radius: 3px; background: var(--accent); transition: width .3s var(--ease); }
+
+/* ---- popups and menus: solid, a thin edge and a soft shadow */
+.modal, :root[data-theme] .modal { background: rgba(0, 0, 0, .62); }
+.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar, .chat-msg .msg-tools, :root[data-theme] .modal > .dialog {
+  background: var(--panel); border: 0; box-shadow: 0 0 0 1px var(--line2), 0 20px 56px rgba(0, 0, 0, .5);
+}
+.account-panel .lib-menu { background: none; box-shadow: none; }
+.dialog { border-radius: 16px; }
+.account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu { border-radius: 12px; }
+.lib-menu button, .help-pop button, .people-pop button { border-radius: 7px; transition: background-color var(--fast); }
+.lib-menu button:hover, .help-pop button:hover, .people-pop button:hover { background: var(--panel2); }
+.settings-dialog .set-nav { background: var(--bg); }
+.settings-dialog .set-group, .settings-dialog .set-block > .check, .settings-dialog .set-block > .volume-row, .settings-dialog .set-block > .size-row {
+  background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); border: 0;
+}
+#setNav button.active { background: var(--panel2); box-shadow: none; }
+
+/* ---- motion: short and soft. Things come in with a little fade and lift and leave a bit faster. */
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
+@keyframes sheet-out { to { opacity: 0; transform: translateY(4px) scale(.985); } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes pop-out { to { opacity: 0; transform: translateY(-2px) scale(.98); } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes rise-card { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.tab-page:not([hidden]) { animation: page-in .26s var(--ease) both; }
+.modal:not([hidden]) { animation: fade-in .18s ease-out both; }
+.modal > .dialog { animation: sheet-in .24s var(--ease) both; }
+.modal.leaving { animation: fade-out .14s ease-in both; }
+.modal.leaving > .dialog { animation: sheet-out .14s ease-in both; }
+.account-panel, .help-pop, .lib-menu, .people-pop, .volume-pop { animation-duration: .16s; animation-timing-function: var(--ease); }
+.account-panel.leaving, .help-pop.leaving, .lib-menu.leaving { animation-duration: .12s; }
+.help-pop { transform-origin: top right; }
+@media (prefers-reduced-motion: reduce) {
+  .tab-page:not([hidden]), .modal:not([hidden]), .modal > .dialog { animation: none; }
+  .sidebar, body, .sidebar .tabs .tab-line.ready { transition: none; }
+}
+@media (max-width: 900px) { main { padding: 14px 24px 48px; } }
+.lib-out-buttons .small-button:not(.ghost-button):not(.outline-button) { background: var(--panel3); color: var(--text); }
+.lib-out-buttons .small-button:not(.ghost-button):not(.outline-button):hover { background: #303038; }

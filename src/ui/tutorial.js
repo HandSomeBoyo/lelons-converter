@@ -111,8 +111,8 @@ const TOUR = [
   {
     key: "yours", seconds: 7.5,
     title: "Make it yours",
-    text: "In Settings: themes, colors, size and volume. The speaker at the top changes the volume too.",
-    say: "And make it yours! In Settings, you can pick a theme and a color, change the size, and set the volume.",
+    text: "In Settings: where to save, the size and the volume.",
+    say: "And make it yours! In Settings, you can pick where things are saved, change the size, and set the volume.",
     html: `<div class="t-yours">
       <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>VaultHub</b></div>
         <div class="t-win-line w1"></div><div class="t-win-line w2"></div><div class="t-win-button"></div></div>

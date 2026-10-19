@@ -1,8 +1,6 @@
-// The Settings window: hardware acceleration, theme and color.
-// Uses $, api() from app.js and applyTheme(), ACCENT_COLORS from theme.js.
+// The Settings window: where to save, updates, size, sound and hardware acceleration.
+// Uses $, api() from app.js and applyTheme() from theme.js.
 
-const ACCENT_NAMES = { yellow: "Yellow", orange: "Orange", red: "Red", pink: "Pink", purple: "Purple", blue: "Blue",
-  teal: "Teal", green: "Green" };
 let appSettings = { hardware: true, theme: "dark", accent: "yellow", zoom: 1, saveMode: "ask", folder: "", folderName: "" };
 const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8];
 
@@ -14,17 +12,6 @@ function drawSettings() {
   $("setHardware").checked = appSettings.hardware;
   drawSize();
   $("setChatSound").checked = loadPref("chatSound") !== false;
-  document.querySelectorAll("#themePicks button").forEach((b) => b.classList.toggle("active", b.dataset.theme === appSettings.theme));
-  const light = appSettings.theme === "light";
-  setChildren($("accentPicks"), Object.keys(ACCENT_COLORS).map((name) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.title = ACCENT_NAMES[name];
-    b.style.setProperty("--swatch", ACCENT_COLORS[name][light ? 1 : 0]);
-    b.classList.toggle("active", name === appSettings.accent);
-    b.addEventListener("click", () => changeSettings({ accent: name }));
-    return b;
-  }));
 }
 
 // From the app's state, every refresh. Only redraws when something changed.
@@ -91,7 +78,6 @@ $("setChatSound").addEventListener("change", () => {
   if ($("setChatSound").checked && typeof chatDing === "function") chatDing();  // what it sounds like
 });
 $("setHardware").addEventListener("change", () => changeSettings({ hardware: $("setHardware").checked }));
-document.querySelectorAll("#themePicks button").forEach((b) => b.addEventListener("click", () => changeSettings({ theme: b.dataset.theme })));
 
 // ---- Size: the buttons in Settings, Ctrl and scroll, Ctrl and + / - / 0
 
