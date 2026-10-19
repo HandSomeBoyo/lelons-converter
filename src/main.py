@@ -1488,7 +1488,7 @@ def main():
         browser_args.append("--disable-gpu")
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(browser_args)
     appwindow.set_zoom(state.zoom)
-    appwindow.set_dark(True)  # one dark look since 4.0
+    appwindow.set_dark(False)  # one light look since 4.0
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     sfx.presence.start()
     home.on_update = sfx.library.log_channel

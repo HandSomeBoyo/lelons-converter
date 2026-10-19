@@ -126,8 +126,8 @@ const TOUR = [
   {
     key: "done", seconds: 5,
     title: "You're all set!",
-    text: "You can watch this again any time: click the question mark at the top, then \"How to use\".",
-    say: "That's it, you're all set! Want to watch this again? Just click the question mark at the top.",
+    text: "You can watch this again any time: click the question mark at the bottom left, then \"How to use\".",
+    say: "That's it, you're all set! Want to watch this again? Just click the question mark at the bottom left.",
     html: `<div class="t-center">
       <svg class="t-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
       <div class="t-words"><span>Have fun!</span></div>

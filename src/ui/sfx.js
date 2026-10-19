@@ -137,6 +137,8 @@ function drawSfxAccount() {
       $("sfxCategory").append(b);
     }
   }
+  $("libMeLabel").textContent = user ? user.username : "Log in";
+  $("libMeSub").textContent = user ? user.roleName : "or create an account";
   if (!user) {
     $("libMeButton").classList.remove("has-news");
     $("libMeAvatar").replaceWith(Object.assign(document.createElement("span"), {

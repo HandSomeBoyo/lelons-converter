@@ -21,15 +21,15 @@ function savePref(key, value) {
 function sideSmallNow() { return loadPref("sideSmall") === true || innerWidth <= 900; }
 document.documentElement.classList.toggle("side-small", sideSmallNow());
 
-// One look for everyone (4.0): the old dark/black/light themes and accent colors are gone.
-// applyTheme() stays so older calls keep working; it always sets the same look.
-const ACCENT = "#8b7cff";
+// One look for everyone (4.0, "light and friendly"): the old dark/black/light themes and accent
+// colors are gone. applyTheme() stays so older calls keep working; it always sets the same look.
+const ACCENT = "#6d5dfc";
 function applyTheme() {
   const root = document.documentElement;
-  root.dataset.theme = "dark";
+  root.dataset.theme = "light";
   root.dataset.accent = "violet";
   root.style.setProperty("--accent", ACCENT);
-  root.style.setProperty("--accent-rgb", "139, 124, 255");
+  root.style.setProperty("--accent-rgb", "109, 93, 252");
 }
 
 applyTheme(pageSaved.theme, pageSaved.accent);

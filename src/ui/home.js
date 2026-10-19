@@ -434,3 +434,8 @@ if (pageCache.home && pageCache.home.channels && (!pageCache.home.loggedIn || sf
   drawHome();
 }
 if (!$("homeTab").hidden) loadHome();
+
+// The shortcuts under the link box: each one opens its page.
+for (const b of $("homeGo").querySelectorAll("button[data-go]")) {
+  b.addEventListener("click", () => document.querySelector(`#tabs button[data-tab="${b.dataset.go}"]`)?.click());
+}
