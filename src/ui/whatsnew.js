@@ -2,8 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.18.1", items: [
+  { version: "2.19.1", items: [
     "Docs: centered (and right-side or indented) lines stay that way when you go to another page and come back, and when you save. Lines that already lost it need to be centered once more.",
+  ] },
+  { version: "2.19.0", items: [
+    "Docs: a PDF can now open just as it looks, like in Edge. When you import one, pick \"Keep how it looks\" and click any text to change it.",
+    "You can also add new text, draw, highlight, erase and add pictures on top of the PDF, then click \"Download PDF\" or print it.",
+    "Want normal text you can restyle freely instead? Pick \"Turn into a document\" when you import, or use Tools > \"Turn it into a normal document\" later.",
+    "PDF imports that turn into a document got better too: two-column pages (like a CV with a sidebar), bold text, numbers and centered lines come out right more often.",
   ] },
   { version: "2.18.0", items: [
     "Docs: you can import a PDF now. Click \"Import a PDF\" on the Docs page (or drag a PDF onto it) and it turns into a normal document you can change however you like: text, headings, lists, tables and pictures.",

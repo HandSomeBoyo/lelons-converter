@@ -20,6 +20,52 @@ let pdfCancelled = false;
 
 // ---------------------------------------------------------------- reading the pages
 
+// The bits of text on a page, with the top of the page at 0: [{x, x1, y (the baseline), size, str, bold, italic, mono, serif}].
+// (the fonts have to be loaded first: getOperatorList or render)
+function pdfPageBits(page, vp, tc) {
+  const fontName = (id) => { try { return page.commonObjs.has(id) ? page.commonObjs.get(id).name || "" : ""; } catch (e) { return ""; } };
+  // Some PDFs name the bold font just like the normal one. Bold letters are wider, so the wider twin is the bold one.
+  const widths = new Map();
+  for (const it of tc.items) {
+    const h = it.transform ? Math.hypot(it.transform[2], it.transform[3]) : 0, n = (it.str || "").replace(/\s/g, "").length;
+    if (!h || !n || !it.width) continue;
+    const w = widths.get(it.fontName) || { w: 0, n: 0 };
+    w.w += it.width / h * n / (it.str || "").length; w.n += n;
+    widths.set(it.fontName, w);
+  }
+  const twinBold = new Set();
+  const byName = new Map();
+  for (const id of widths.keys()) { const name = fontName(id); if (!byName.has(name)) byName.set(name, []); byName.get(name).push(id); }
+  for (const [name, ids] of byName) {
+    if (ids.length < 2 || /bold|black|heavy|semibold|demi|light|thin|italic|oblique/i.test(name)) continue;
+    const per = (id) => widths.get(id).w / widths.get(id).n;
+    const base = ids.reduce((a, b) => (widths.get(b).n > widths.get(a).n ? b : a));
+    for (const id of ids) if (id !== base && widths.get(id).n >= 4 && per(id) > per(base) * 1.05) twinBold.add(id);
+  }
+  const fontCache = new Map();
+  const fontOf = (id) => {
+    if (!fontCache.has(id)) {
+      const name = fontName(id), family = (tc.styles[id] && tc.styles[id].fontFamily) || "";
+      fontCache.set(id, { bold: /bold|black|heavy|semibold|demi/i.test(name) || twinBold.has(id), italic: /italic|oblique/i.test(name),
+                          mono: /courier|mono|fixed|typewriter/i.test(name) || family === "monospace",
+                          serif: /times|serif|georgia|garamond|cambria|minion|palatino/i.test(name) && !/sans/i.test(name) || family === "serif" });
+    }
+    return fontCache.get(id);
+  };
+  // The bits of text, with the top of the page at 0.
+  const bits = [];
+  for (const it of tc.items) {
+    if (typeof it.str !== "string" || !it.str) continue;
+    const t = pdfLib.Util.transform(vp.transform, it.transform);
+    const size = Math.hypot(t[2], t[3]);
+    if (size < 1) continue;
+    const f = fontOf(it.fontName);
+    const x = t[4], y = t[5];
+    bits.push({ x, x1: x + it.width * vp.scale, y, size, str: it.str, bold: f.bold, italic: f.italic, mono: f.mono, serif: f.serif });
+  }
+  return bits;
+}
+
 // [{w, h, lines: [{top, y, x0, x1, size, text, runs, bold, mono}], pics: [{top, bottom, x0, x1, url}], scan}]
 async function pdfReadPages(pdf, progress) {
   const lib = pdfLib;
@@ -32,27 +78,7 @@ async function pdfReadPages(pdf, progress) {
     const vp = page.getViewport({ scale: 1 });
     const ops = await page.getOperatorList(); // (also loads the fonts, so their names are known)
     const tc = await page.getTextContent();
-    const fontName = (id) => { try { return page.commonObjs.has(id) ? page.commonObjs.get(id).name || "" : ""; } catch (e) { return ""; } };
-    const fontCache = new Map();
-    const fontOf = (id) => {
-      if (!fontCache.has(id)) {
-        const name = fontName(id), family = (tc.styles[id] && tc.styles[id].fontFamily) || "";
-        fontCache.set(id, { bold: /bold|black|heavy|semibold|demi/i.test(name), italic: /italic|oblique/i.test(name),
-                            mono: /courier|mono|fixed|typewriter/i.test(name) || family === "monospace" });
-      }
-      return fontCache.get(id);
-    };
-    // The bits of text, with the top of the page at 0.
-    const bits = [];
-    for (const it of tc.items) {
-      if (typeof it.str !== "string" || !it.str) continue;
-      const t = pdfLib.Util.transform(vp.transform, it.transform);
-      const size = Math.hypot(t[2], t[3]);
-      if (size < 1) continue;
-      const f = fontOf(it.fontName);
-      const x = t[4], y = t[5];
-      bits.push({ x, x1: x + it.width * vp.scale, y, size, str: it.str, bold: f.bold, italic: f.italic, mono: f.mono });
-    }
+    const bits = pdfPageBits(page, vp, tc);
     const lines = pdfLines(bits, vp.width);
     const pics = pdfPictures(lib, ops, vp);
     const chars = lines.reduce((a, l) => a + l.text.length, 0);
@@ -105,28 +131,43 @@ function pdfLines(bits, pageW) {
     const across = row.bits.some((b) => b.x < gutter - 2 && b.x1 > gutter + 2);
     if (across) { endBand(); const l = pdfLine(row); if (l) out.push(l); continue; }
     const parts = [row.bits.filter((b) => b.x1 <= gutter + 2), row.bits.filter((b) => b.x1 > gutter + 2)];
-    for (const part of parts) if (part.length) { const l = pdfLine({ y: row.y, size: Math.max(...part.map((b) => b.size)), bits: part }); if (l) band.push(l); }
+    // (each side keeps its own height: a big title on one side can share a row with a heading on the other)
+    for (const part of parts) if (part.length) { const l = pdfLine({ y: pdfMode(part.map((b) => [b.y, b.str.length])), size: Math.max(...part.map((b) => b.size)), bits: part }); if (l) band.push(l); }
   }
   endBand();
   return out;
 }
 
 // The x where two columns are split, or null when the page is one column.
+// Columns don't have to be the same width (a CV with a sidebar) or have their lines at the same height.
 function pdfGutter(rows, pageW) {
-  const textRows = rows.filter((r) => r.bits.some((b) => b.str.trim()));
+  const textRows = rows.map((r) => r.bits.filter((b) => b.str.trim())).filter((bs) => bs.length);
   if (textRows.length < 8) return null;
-  let best = null, bestGaps = 0;
-  for (let x = pageW * 0.3; x <= pageW * 0.7; x += 3) {
-    let gaps = 0, across = 0;
-    for (const r of textRows) {
-      const bs = r.bits.filter((b) => b.str.trim());
-      if (!bs.length || bs[bs.length - 1].x1 < x || bs[0].x > x) continue; // all on one side
-      if (bs.some((b, i) => i && bs[i - 1].x1 < x - 6 && b.x > x + 6 && b.x - bs[i - 1].x1 > b.size * 1.2)) gaps++;
-      else across++;
+  const n = textRows.length, ok = [];
+  for (let x = pageW * 0.2; x <= pageW * 0.8; x += 2) {
+    let across = 0, leftOnly = 0, rightOnly = 0, both = 0;
+    for (const bs of textRows) {
+      if (bs[bs.length - 1].x1 < x) { leftOnly++; continue; }
+      if (bs[0].x > x) { rightOnly++; continue; }
+      // text crossing x, or words on both sides with only a normal space between them
+      if (bs.some((b, i) => (b.x < x - 3 && b.x1 > x + 3) || (i && bs[i - 1].x1 <= x && b.x >= x && b.x - bs[i - 1].x1 < b.size * 1.2))) across++;
+      else both++;
     }
-    if (gaps >= textRows.length * 0.35 && across <= textRows.length * 0.2 && gaps > bestGaps) { best = x; bestGaps = gaps; }
+    const sideBySide = (leftOnly + both >= n * 0.15 && rightOnly + both >= n * 0.15 && leftOnly >= n * 0.1 && rightOnly >= n * 0.1) || both >= n * 0.35;
+    if (sideBySide && across <= Math.max(1, n * 0.08)) ok.push({ x, across });
   }
-  return best;
+  if (!ok.length) return null;
+  // the middle of the widest clear stretch
+  const least = Math.min(...ok.map((o) => o.across));
+  let best = null, run = [];
+  for (const o of ok.filter((o) => o.across === least).concat([{ x: Infinity }])) {
+    if (run.length && o.x - run[run.length - 1].x > 2.5) {
+      if (!best || run.length > best.length) best = run;
+      run = [];
+    }
+    run.push(o);
+  }
+  return best[Math.floor(best.length / 2)].x;
 }
 
 function pdfLine(row) {
@@ -333,8 +374,11 @@ function pdfToDoc(pages) {
       const starts = [];
       // (a line that was broken early on purpose: its first word would still have fitted on the line before)
       const fits = (k) => ls[k - 1].x1 + (ls[k].text.split(" ")[0].length + 1) * ls[k].size * 0.5 < mR(ls[k]);
-      for (let k = i; k < j; k++) starts.push(k === i || (/^[A-Z0-9"“(]/.test(ls[k].text) && fits(k)));
-      if (starts.filter(Boolean).length >= 2) for (let k = i; k < j; k++) ls[k].item = starts[k - i] ? "start" : "more";
+      // (or there's more space above it than between the lines of one item)
+      const apart = (k) => ls[k].y - ls[k - 1].y > Math.max(pitch, ls[k].size * 1.15) * 1.3;
+      for (let k = i; k < j; k++) starts.push(k === i || apart(k) || (/^[A-Z0-9"“(]/.test(ls[k].text) && fits(k)));
+      // (two lines that only look like items could just as well be an address)
+      if (starts.filter(Boolean).length >= 3 || (starts.filter(Boolean).length === 2 && starts.some((st, k) => k && st && apart(i + k)))) for (let k = i; k < j; k++) ls[k].item = starts[k - i] ? "start" : "more";
       i = j;
     }
   }
@@ -369,6 +413,13 @@ function pdfToDoc(pages) {
   for (const page of pages) {
     // The lines are in reading order already; a picture goes before the first line under it (in its column).
     const things = page.lines.map((l) => ({ line: l }));
+    // A number at the start of just one line ("17. desember") isn't a list.
+    const numbered = new Set(page.lines.filter((l, i, ls) => PDF_NUMBER.test(l.text)
+      && ls.slice(Math.max(0, i - 3), i + 4).some((m) => m !== l && PDF_NUMBER.test(m.text) && Math.abs(m.x0 - l.x0) < 3)));
+    // Lines starting at the same spot as two others are lined up on the left, even when they look centred.
+    const lefts = new Map();
+    for (const l of page.lines) { const k = Math.round(l.x0); lefts.set(k, (lefts.get(k) || 0) + 1); }
+    const sharedLeft = (l) => [-1, 0, 1].reduce((a, d) => a + (lefts.get(Math.round(l.x0) + d) || 0), 0) >= 3;
     for (const pic of [...page.pics].sort((a, b) => a.top - b.top)) {
       const i = things.findIndex((t) => t.line && t.line.top >= pic.top - 2 && (t.line.colL === undefined || (t.line.x0 < pic.x1 && t.line.x1 > pic.x0)));
       things.splice(i < 0 ? things.length : i, 0, { pic });
@@ -394,7 +445,7 @@ function pdfToDoc(pages) {
       const short = l.text.length < 90;
       let kind = r >= 1.6 ? "h1" : r >= 1.25 ? "h2" : (r >= 1.1 && short) || (l.bold && short && l.text.length > 1 && !/[.,;:]$/.test(l.text) && !PDF_BULLET.test(l.text)) ? "h3" : "p";
       let runs = l.runs, marker = null;
-      const bullet = kind === "p" && PDF_BULLET.exec(l.text), number = kind === "p" && !bullet && PDF_NUMBER.exec(l.text);
+      const bullet = kind === "p" && PDF_BULLET.exec(l.text), number = kind === "p" && !bullet && numbered.has(l) && PDF_NUMBER.exec(l.text);
       if (kind === "p" && l.item) {
         if (l.item === "start") { kind = "li"; marker = "ul"; }
         else if (cur && cur.kind === "li" && prev) {
@@ -410,7 +461,7 @@ function pdfToDoc(pages) {
       }
       const lineMid = (l.x0 + l.x1) / 2;
       const L = mL(l), R = mR(l), W = mW(l);
-      const align = l.x0 > L + W * 0.08 && Math.abs(lineMid - (L + R) / 2) < W * 0.05 ? "center"
+      const align = l.x0 > L + W * 0.08 && !sharedLeft(l) && Math.abs(lineMid - (L + R) / 2) < W * 0.05 ? "center"
         : l.x0 > L + W * 0.45 && l.x1 > R - W * 0.04 ? "right" : "";
       const gap = prev ? l.y - prev.y : Infinity;
       const html = pdfRunsHtml(runs, kind !== "p" && kind !== "li");
@@ -418,7 +469,10 @@ function pdfToDoc(pages) {
       const sameBox = cur && prev && gap > 0 && gap < Math.max(pitch, l.size * 1.15) * 1.45 && Math.abs(l.size - cur.size) < 1;
       let carry = false;
       if (sameBox && kind === cur.kind && kind !== "li" && cur.kind !== "li") {
-        const prevEnded = /[.!?:"”)]$/.test(prev.text) && prev.x1 < R - W * 0.15;
+        // (a line broken early on purpose ends its paragraph: the next line's first word would have fitted on it)
+        const brokeEarly = prev.x1 + (l.text.split(" ")[0].length + 2) * l.size * 0.55 < R && !align;
+        // (a line with a big gap in it, like a job title with its dates on the right, is a line of its own)
+        const prevEnded = (/[.!?:"”)]$/.test(prev.text) && prev.x1 < R - W * 0.15) || brokeEarly || !!prev.cells || !!l.cells;
         carry = (kind !== "p" || (!prevEnded && Math.abs(l.x0 - cur.x0) < l.size * 2.2)) && cur.align === align;
         if (kind === "p" && align) carry = carry && cur.align === align;
       } else if (sameBox && cur.kind === "li" && kind === "p" && l.x0 > cur.x0 + l.size * 0.5) {
@@ -574,9 +628,12 @@ function pdfDoneToast(r) {
   docToast(parts.join(" "));
 }
 
-// From the Docs home: the PDF becomes a new document.
+// From the Docs home: the PDF becomes a new document (kept as it looks, or made into normal text).
 async function importPdfAsDoc(file) {
   if (!file) return;
+  const mode = await pdfAskMode();
+  if (mode === "keep") return pdfeImportAsDoc(file);
+  if (mode !== "convert") return;
   const r = await pdfImport(file);
   if (!r) return;
   const where = docsWhere === "collab" && sfxUser() ? "collab" : "local";
@@ -589,9 +646,13 @@ async function importPdfAsDoc(file) {
 }
 
 // In a document: the PDF becomes a new page of it (with its own tab).
-async function importPdfAsPage(file) {
+async function importPdfAsPage(file, mode) {
   if (!file || !doc) return;
   const d = doc;
+  mode = mode || await pdfAskMode();
+  if (doc !== d) return;
+  if (mode === "keep") return pdfeImportAsPage(file);
+  if (mode !== "convert") return;
   const r = await pdfImport(file);
   if (!r || doc !== d) return;
   const id = Math.random().toString(36).slice(2, 8).padEnd(6, "0");
