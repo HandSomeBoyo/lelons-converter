@@ -1305,6 +1305,18 @@
   </div>
 </div>
 
+<div class="modal" id="docImportModal" hidden>
+  <div class="dialog doc-import-dialog" role="dialog" aria-labelledby="docImportTitle">
+    <h2 id="docImportTitle">Importing your PDF</h2>
+    <p class="sub" id="docImportText"></p>
+    <div class="doc-import-track"><i id="docImportBar"></i></div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docImportCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="docMoveModal" hidden>
   <div class="dialog doc-move-dialog" role="dialog" aria-labelledby="docMoveTitle">
     <h2 id="docMoveTitle">Move to a folder</h2>
@@ -1466,6 +1478,7 @@
 <script src="stats.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
+<script src="pdfimport.js"></script>
 <script src="boards.js"></script>
 <script src="fx.js"></script>
 <script src="games.js"></script>

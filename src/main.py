@@ -66,7 +66,7 @@ CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
     ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
     ".ico": "image/x-icon", ".woff2": "font/woff2", ".mp3": "audio/mpeg",
-    ".wasm": "application/wasm",
+    ".wasm": "application/wasm", ".mjs": "text/javascript; charset=utf-8",
 }
 
 # pythonw has no console, so there's nowhere for text output to go.
