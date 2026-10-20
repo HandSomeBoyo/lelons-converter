@@ -116,6 +116,12 @@ const DOC_ICONS = {
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   pdf: '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
+  pointer: '<path d="M5.5 4.5 18 10.2l-5.4 1.6L10.8 17z"/><path d="m12.8 12 4.7 6"/>',
+  textbox: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8.5 9h7M12 9v7"/>',
+  pen: '<path d="M15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/><path d="m13.5 6.5 3 3"/>',
+  marker: '<path d="m14.5 4.5 5 5-8 8H8.5v-3z"/><path d="M8.5 14.5 4 19h6.5"/><path d="M4 21h16"/>',
+  eraser: '<path d="m9 19.5-5-5a1.8 1.8 0 0 1 0-2.5l8.5-8.5a1.8 1.8 0 0 1 2.5 0l5 5a1.8 1.8 0 0 1 0 2.5L12.5 19.5z"/><path d="M8 9.5 14.5 16M12.5 19.5H20"/>',
+  move: '<path d="M12 3.5v17M3.5 12h17M9.5 6 12 3.5 14.5 6M9.5 18l2.5 2.5 2.5-2.5M6 9.5 3.5 12 6 14.5M18 9.5l2.5 2.5-2.5 2.5"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
 
@@ -253,6 +259,8 @@ const p = (text, cls) => `<p${cls ? ` class="${cls}"` : ""}>${text ? esc(text) :
 // (doc.settings.type remembers the kind, so the guide is there again next time).
 const DOC_TYPES = [
   { key: "blank", kind: "doc", icon: "doc", name: "Blank document", note: "An empty page, nothing else", title: "Untitled document" },
+  // (a PDF that keeps its look: made by importing one, not from this list. See pdfedit.js)
+  { key: "pdf", kind: "doc", icon: "pdf", name: "PDF", note: "A PDF, just as it looks", title: "PDF", hidden: true },
   { key: "script", kind: "script", icon: "script", name: "Movie script", note: "Formatted like a real screenplay", title: "Untitled script",
     hint: "Start with a scene heading, like INT. KITCHEN - NIGHT",
     guide: {
@@ -606,6 +614,14 @@ async function docCardRemove(d, collab) {
 
 // The little page picture: the first blocks, drawn small.
 function drawThumb(page, htmls, kind, settings) {
+  const pdfThumb = /^<!--pdfthumb (data:image\/jpeg;base64,[\w+/=]+)-->$/.exec(htmls[0] || "");
+  if (pdfThumb || (settings && settings.type === "pdf")) { // a PDF that keeps its look: a picture of its first page
+    page.dataset.paper = "white";
+    const img = Object.assign(document.createElement("img"), { className: "doc-thumb-pdf", alt: "" });
+    if (pdfThumb) img.src = pdfThumb[1];
+    page.replaceChildren(img);
+    return;
+  }
   const s = { ...docDefaults(kind), ...docCleanSettings(settings) };
   page.dataset.paper = s.paper;
   page.style.setProperty("--doc-font", docFontCss(s.font));
@@ -674,7 +690,7 @@ function openDocTypes(picked, page) {
   docTypePicked = picked || newDoc;
   const grid = $("docTypes");
   if (!grid.children.length) {
-    for (const t of DOC_TYPES) {
+    for (const t of DOC_TYPES.filter((x) => !x.hidden)) {
       const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-type" });
       b.innerHTML = `<span class="doc-type-icon">${docIcon(t.icon)}</span><span class="doc-type-text"><b></b><small></small></span>`;
       b.querySelector("b").textContent = t.name;
@@ -928,8 +944,9 @@ async function openDoc(where, id, opts = {}) {
   docApplying = true;
   docTab = ""; docStore.clear(); docTabsOpen.clear();
   const here = [];
+  const mainPdf = (d.blocks || []).some((b) => b.id === "pdf-src-0"); // (a PDF page keeps its blocks to itself: pdfedit.js)
   for (const b of d.blocks || []) {
-    if (docTabOf(b.id) === "") here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
+    if (docTabOf(b.id) === "" && !mainPdf) here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
   }
   docsText.replaceChildren(...here.map(blockFromHtml));
   docsText.classList.toggle("script", doc.kind === "script");
@@ -955,6 +972,7 @@ async function openDoc(where, id, opts = {}) {
   drawGuide();
   drawTabs();
   docNotesOpenDoc();
+  pdfeShow();
   docFit();
   docCount();
   drawOutline();
@@ -1524,10 +1542,11 @@ function docShowTab(id) {
   for (const el of docsText.children) docStore.set(el.dataset.id, { pos: el.dataset.pos, html: blockHtml(el) });
   docsText.replaceChildren();
   docTab = id;
-  const wasKind = doc.kind, wasType = doc.type;
+  const wasKind = doc.kind, wasType = doc.type, wasPdf = !!pdfe;
   docUsePage();
+  const isPdf = pdfeIsPage(id);
   const mine = [];
-  for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
+  if (!isPdf) for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
   mine.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
   for (const b of mine) docStore.delete(b.id);
   docsText.replaceChildren(...mine.map(blockFromHtml));
@@ -1536,7 +1555,8 @@ function docShowTab(id) {
   docApplying = false;
   docUndoReset();
   docHidePops();
-  if (doc.kind !== wasKind || doc.type !== wasType) { // another kind of page: its own tools, guide and look
+  pdfeShow();
+  if (doc.kind !== wasKind || doc.type !== wasType || isPdf !== wasPdf) { // another kind of page: its own tools, guide and look
     buildToolbar();
     drawMenubar();
     drawGuide();
@@ -1563,11 +1583,12 @@ function docAddTab(parent, t) {
   const pos = posBetween(last, null);
   const from = !t && parent && parent !== "0" ? docPageOwn(parent) : null;
   const meta = t ? { title: t.key === "blank" ? "Untitled page" : t.name, parent, type: t.key, settings: {} }
-    : from ? { title: "Untitled page", parent, type: from.type, settings: from.settings }
+    : from && from.type !== "pdf" ? { title: "Untitled page", parent, type: from.type, settings: from.settings }
+    : (from || docMainType().key === "pdf") ? { title: "Untitled page", parent, type: "blank", settings: {} } // (not more of a PDF)
     : { title: "Untitled page", parent };
   docStore.set("t~" + id, { pos, html: docTabHtml(meta) });
   docPending.add("t~" + id);
-  const kind = t ? t.kind : from ? docTypeByKey(from.type).kind : doc.baseKind;
+  const kind = t ? t.kind : from && from.type !== "pdf" ? docTypeByKey(from.type).kind : from || docMainType().key === "pdf" ? "doc" : doc.baseKind;
   const first = id + "~" + newBlockId();
   docStore.set(first, { pos: posBetween("", null), html: p("", kind === "script" ? "sp-scene" : "") });
   docPending.add(first);
@@ -1773,6 +1794,7 @@ async function closeDoc(quiet) {
   docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
   document.body.classList.remove("doc-focus");
   if (was.where === "collab") api("/api/docs-close", { id: was.id }).catch(() => null);
+  pdfeHide();
   doc = null;
   docNotesCloseDoc();
   docHidePops();
@@ -1842,6 +1864,7 @@ function docFixWordAlign() {
 }
 
 function docNormalize() {
+  if (pdfeIsPage(docTab)) return; // (a PDF page has no text of its own here)
   docFixWordAlign();
   const seen = new Set();
   let prev = null;
@@ -2161,9 +2184,14 @@ function docApplyRemote(blocks) {
   if (!blocks.length) return;
   const caret = docSaveCaret();
   docApplying = true;
-  let touched = false, pages = false;
+  let touched = false, pages = false, pdfTouched = false;
   for (const b of blocks) {
     if (docPending.has(b.id) || docDeleted.has(b.id)) continue;
+    if (pdfe && docTabOf(b.id) === docTab) { // (a PDF page: its changes are drawn by pdfedit.js)
+      if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
+      pdfTouched = true;
+      continue;
+    }
     if (docTabOf(b.id) !== docTab) { // a page's name, or what's on another page
       if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
       if (docTabOf(b.id) === null) pages = true;
@@ -2191,6 +2219,7 @@ function docApplyRemote(blocks) {
   }
   docObserver.takeRecords();
   docApplying = false;
+  if (pdfTouched) pdfeRemote();
   if (pages) {
     if (docTab && !docStore.has("t~" + docTab)) docShowTab(""); // the page you were on was deleted
     drawTabs();
@@ -2377,6 +2406,7 @@ function docUndoRemote(id, block) {
 
 function docUndoGo(step) {
   if (!doc) return;
+  if (pdfe) return pdfeUndoGo(step);
   docUndoCommit();
   const to = docUndoAt + step;
   if (to < 0 || to >= docUndo.length) return;
@@ -2436,6 +2466,7 @@ function tb(cmd, icon, title, extra = "") {
 }
 
 function buildToolbar() {
+  if (pdfeIsPage(docTab)) return pdfeToolbar();
   const script = doc.kind === "script";
   const sep = '<span class="doc-sep"></span>';
   const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), tb("print", "print", "Print or save as PDF (Ctrl+P)"), sep];
@@ -2553,7 +2584,7 @@ function docBlockHeld(key) {
 
 // Which buttons are "on" for where the caret is.
 function docToolState() {
-  if (!doc) return;
+  if (!doc || !$("docSize")) return; // PDF pages have their own toolbar
   const sel = getSelection();
   const inside = sel.rangeCount && docsText.contains(sel.anchorNode);
   const q = (cmd) => { try { return inside && document.queryCommandState(cmd); } catch (e) { return false; } };
@@ -2612,12 +2643,12 @@ document.addEventListener("selectionchange", () => {
 
 const DOC_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
 function docNextSize(up) {
-  const now = parseFloat($("docSize").value) || 11;
+  const now = parseFloat($("docSize")?.value) || 11;
   return up ? DOC_SIZES.find((s) => s > now) || now + 12 : [...DOC_SIZES].reverse().find((s) => s < now) || Math.max(1, now - 1);
 }
 
 function docSetSize(pt) {
-  if (!pt || pt < 1 || pt > 400) return;
+  if (!pt || pt < 1 || pt > 400 || !$("docSize")) return;
   docBackToRange();
   docUndoCommit();
   const sel = getSelection();
@@ -3472,6 +3503,7 @@ function docSuggestPick(i) {
 let docOutlineTimer = 0;
 function drawOutline() {
   if (!doc || $("docOutline").hidden) return;
+  if (pdfeIsPage(docTab)) return pdfeOutline();
   const script = doc.kind === "script";
   $("docOutlineTitle").textContent = script ? "Scenes" : "Outline";
   $("docOutline").classList.toggle("script", script);
@@ -3523,6 +3555,7 @@ function docCountSoon() {
 
 function docCount() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfeCount();
   docEmptyCheck();
   docDarkInk();
   docNotesMark();
@@ -3552,6 +3585,7 @@ function docCount() {
 // The page fits the window: smaller windows get a smaller page (like zooming out).
 function docFit() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfeFit();
   const width = (DOC_PAGES[docSettings().page] || DOC_PAGES.letter).w;
   const room = $("docCanvas").clientWidth - 24;
   const fit = Math.min(1, Math.max(0.45, room / width));
@@ -3879,6 +3913,7 @@ function docToast(text) {
 
 function docPrint() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfePrint();
   docHidePops();
   document.body.classList.add("doc-printing");
   document.title = $("docTitle").value; // the PDF's file name
@@ -4243,6 +4278,7 @@ function drawMenubar() {
 }
 
 function docMenuItems(name) {
+  if (pdfe && pdfeIsPage(docTab)) return pdfeMenuItems(name);
   const script = doc.kind === "script";
   const range = docKeepRange && !docKeepRange.collapsed;
   const isOn = (cmd) => { try { return document.queryCommandState(cmd); } catch (e) { return false; } };
