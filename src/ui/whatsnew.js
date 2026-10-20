@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.19.1", items: [
+    "Docs: centered (and right-side or indented) lines stay that way when you go to another page and come back, and when you save. Lines that already lost it need to be centered once more.",
+  ] },
   { version: "2.19.0", items: [
     "Docs: a PDF can now open just as it looks, like in Edge. When you import one, pick \"Keep how it looks\" and click any text to change it.",
     "You can also add new text, draw, highlight, erase and add pictures on top of the PDF, then click \"Download PDF\" or print it.",
