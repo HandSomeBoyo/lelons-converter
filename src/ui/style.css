@@ -4660,3 +4660,12 @@ html.side-small .tab-group { height: 1px; }
 .gm-yt-when { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
 @media (max-width: 860px) { .gm-yt-list { grid-template-columns: 1fr; } .gm-yt-sum { grid-template-columns: 1fr; } .gm-yt-stats { grid-column: 1; grid-row: auto; } .gm-yt-stats div { align-items: flex-start; } }
 .gm-by { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- 2.18.0: Docs, importing a PDF */
+.doc-pdf-badge { flex-direction: column; gap: 4px; }
+.doc-pdf-badge svg { width: 44px !important; height: 44px !important; }
+.doc-pdf-badge em { font: 700 11px var(--head); font-style: normal; letter-spacing: .08em; color: var(--muted); }
+.doc-import-dialog { width: min(420px, 100%); }
+.doc-import-track { height: 6px; border-radius: 3px; margin: 16px 0 6px; overflow: hidden; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.doc-import-track i { display: block; height: 100%; width: 4%; border-radius: 3px; background: var(--accent); transition: width .3s var(--ease); }
+#docsHome.pdf-over { outline: 2px dashed var(--accent); outline-offset: 8px; border-radius: 18px; }

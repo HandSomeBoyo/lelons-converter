@@ -114,6 +114,7 @@ const DOC_ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  pdf: '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
@@ -519,7 +520,12 @@ function drawDocsHome() {
     f.className = "doc-template";
     f.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus">${docIcon("folder")}</span></span><b class="doc-name-line">New folder</b><small class="doc-note-line">Keep a project together</small>`;
     f.addEventListener("click", () => newFolder());
-    $("docsTemplates").append(b, f);
+    const pdf = document.createElement("button");
+    pdf.type = "button";
+    pdf.className = "doc-template";
+    pdf.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus doc-pdf-badge">${docIcon("pdf")}<em>PDF</em></span></span><b class="doc-name-line">Import a PDF</b><small class="doc-note-line">Edit it like any doc</small>`;
+    pdf.addEventListener("click", () => pickPdf(importPdfAsDoc));
+    $("docsTemplates").append(b, f, pdf);
   }
   if (!docsF().folders.some((f) => f.id === docsFolderAt)) docsFolderAt = "";
   drawCrumbs();
@@ -4249,6 +4255,7 @@ function docMenuItems(name) {
     { label: "Save", icon: "save", key: "Ctrl+S", fn: docSave },
     { label: "Rename", icon: "rename", fn: () => { $("docTitle").focus(); $("docTitle").select(); } },
     "-",
+    { label: "Import a PDF as a page", icon: "pdf", fn: () => pickPdf(importPdfAsPage) },
     { label: "Page setup", icon: "page", fn: openPageSetup },
     { label: "Print or save as PDF", icon: "print", key: "Ctrl+P", fn: docPrint },
     { label: "Download for Word (.doc)", icon: "download", fn: () => docExport("doc") },
