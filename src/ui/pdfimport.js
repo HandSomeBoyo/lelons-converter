@@ -112,21 +112,35 @@ function pdfLines(bits, pageW) {
 }
 
 // The x where two columns are split, or null when the page is one column.
+// Columns don't have to be the same width (a CV with a sidebar) or have their lines at the same height.
 function pdfGutter(rows, pageW) {
-  const textRows = rows.filter((r) => r.bits.some((b) => b.str.trim()));
+  const textRows = rows.map((r) => r.bits.filter((b) => b.str.trim())).filter((bs) => bs.length);
   if (textRows.length < 8) return null;
-  let best = null, bestGaps = 0;
-  for (let x = pageW * 0.3; x <= pageW * 0.7; x += 3) {
-    let gaps = 0, across = 0;
-    for (const r of textRows) {
-      const bs = r.bits.filter((b) => b.str.trim());
-      if (!bs.length || bs[bs.length - 1].x1 < x || bs[0].x > x) continue; // all on one side
-      if (bs.some((b, i) => i && bs[i - 1].x1 < x - 6 && b.x > x + 6 && b.x - bs[i - 1].x1 > b.size * 1.2)) gaps++;
-      else across++;
+  const n = textRows.length, ok = [];
+  for (let x = pageW * 0.2; x <= pageW * 0.8; x += 2) {
+    let across = 0, leftOnly = 0, rightOnly = 0, both = 0;
+    for (const bs of textRows) {
+      if (bs[bs.length - 1].x1 < x) { leftOnly++; continue; }
+      if (bs[0].x > x) { rightOnly++; continue; }
+      // text crossing x, or words on both sides with only a normal space between them
+      if (bs.some((b, i) => (b.x < x - 3 && b.x1 > x + 3) || (i && bs[i - 1].x1 <= x && b.x >= x && b.x - bs[i - 1].x1 < b.size * 1.2))) across++;
+      else both++;
     }
-    if (gaps >= textRows.length * 0.35 && across <= textRows.length * 0.2 && gaps > bestGaps) { best = x; bestGaps = gaps; }
+    const sideBySide = (leftOnly + both >= n * 0.15 && rightOnly + both >= n * 0.15 && leftOnly >= n * 0.1 && rightOnly >= n * 0.1) || both >= n * 0.35;
+    if (sideBySide && across <= Math.max(1, n * 0.08)) ok.push({ x, across });
   }
-  return best;
+  if (!ok.length) return null;
+  // the middle of the widest clear stretch
+  const least = Math.min(...ok.map((o) => o.across));
+  let best = null, run = [];
+  for (const o of ok.filter((o) => o.across === least).concat([{ x: Infinity }])) {
+    if (run.length && o.x - run[run.length - 1].x > 2.5) {
+      if (!best || run.length > best.length) best = run;
+      run = [];
+    }
+    run.push(o);
+  }
+  return best[Math.floor(best.length / 2)].x;
 }
 
 function pdfLine(row) {
@@ -333,7 +347,9 @@ function pdfToDoc(pages) {
       const starts = [];
       // (a line that was broken early on purpose: its first word would still have fitted on the line before)
       const fits = (k) => ls[k - 1].x1 + (ls[k].text.split(" ")[0].length + 1) * ls[k].size * 0.5 < mR(ls[k]);
-      for (let k = i; k < j; k++) starts.push(k === i || (/^[A-Z0-9"“(]/.test(ls[k].text) && fits(k)));
+      // (or there's more space above it than between the lines of one item)
+      const apart = (k) => ls[k].y - ls[k - 1].y > Math.max(pitch, ls[k].size * 1.15) * 1.3;
+      for (let k = i; k < j; k++) starts.push(k === i || apart(k) || (/^[A-Z0-9"“(]/.test(ls[k].text) && fits(k)));
       if (starts.filter(Boolean).length >= 2) for (let k = i; k < j; k++) ls[k].item = starts[k - i] ? "start" : "more";
       i = j;
     }
@@ -418,7 +434,9 @@ function pdfToDoc(pages) {
       const sameBox = cur && prev && gap > 0 && gap < Math.max(pitch, l.size * 1.15) * 1.45 && Math.abs(l.size - cur.size) < 1;
       let carry = false;
       if (sameBox && kind === cur.kind && kind !== "li" && cur.kind !== "li") {
-        const prevEnded = /[.!?:"”)]$/.test(prev.text) && prev.x1 < R - W * 0.15;
+        // (a line broken early on purpose ends its paragraph: the next line's first word would have fitted on it)
+        const brokeEarly = prev.x1 + (l.text.split(" ")[0].length + 2) * l.size * 0.55 < R && !align;
+        const prevEnded = (/[.!?:"”)]$/.test(prev.text) && prev.x1 < R - W * 0.15) || brokeEarly;
         carry = (kind !== "p" || (!prevEnded && Math.abs(l.x0 - cur.x0) < l.size * 2.2)) && cur.align === align;
         if (kind === "p" && align) carry = carry && cur.align === align;
       } else if (sameBox && cur.kind === "li" && kind === "p" && l.x0 > cur.x0 + l.size * 0.5) {
