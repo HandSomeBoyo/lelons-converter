@@ -379,7 +379,14 @@ function pdfeDrawItems(n) {
     if (bar.querySelector(".pdfe-copy")) bar.querySelector(".pdfe-copy").addEventListener("click", () => pdfeCopy(n, it.id));
     els.push(bar);
   }
-  layer.replaceChildren(...els);
+  // The text being written stays where it is: taking it out of the page, even for a moment, takes the focus
+  // away from it (then clicking back into text you'd changed did nothing).
+  const keep = editing ? els.indexOf(editing) : -1;
+  if (keep >= 0) {
+    for (const c of [...layer.children]) if (c !== editing) c.remove();
+    editing.before(...els.slice(0, keep));
+    editing.after(...els.slice(keep + 1));
+  } else layer.replaceChildren(...els);
   if (editing && !editing.isConnected) editing.blur();
   // Drawings: one picture for the pen, one for the highlights (those mix with the page like a real marker).
   const path = (it) => `<path d="${pdfePath(it.points)}" stroke="${it.color}" stroke-width="${it.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" data-id="${it.id}"/>`;
