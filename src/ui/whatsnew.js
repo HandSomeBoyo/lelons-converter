@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.18.0", items: [
+    "Docs: you can import a PDF now. Click \"Import a PDF\" on the Docs page (or drag a PDF onto it) and it turns into a normal document you can change however you like: text, headings, lists, tables and pictures.",
+    "Movie scripts in a PDF come in as a real script, with scenes, characters and dialogue in the right places.",
+    "Inside a document, File > \"Import a PDF as a page\" adds a PDF as a new page.",
+    "It all happens on your computer, nothing gets uploaded. A scanned PDF (a photo of paper) comes in as a picture, since there's no text in it to edit.",
+  ] },
   { version: "2.17.4", items: [
     "Docs: changing the text size on an empty line (or with just the text cursor somewhere) works now. Before, the size jumped back, for example to 48 under a big title, and what you typed came out the wrong size.",
     "Docs: double-clicking the size box to pick the number no longer makes the new size go nowhere.",
