@@ -12,19 +12,21 @@
 //   {id, type: "text", x, y (the baseline), size, text, bold, italic, font: "sans"|"serif"|"mono", color, from?, cover?}
 //      from: the PDF's own text it replaces (cover: the box painted over it, in the paper's color)
 //   {id, type: "ink", color, width, alpha, points: [[x, y], ...]}   (a highlight is ink you can see through)
-//   {id, type: "image", x, y, w, h, src}
+//   {id, type: "image", x, y, w, h, src, art?, cover?, color?, gone?}
+//      art: a piece of the PDF's own drawing (an icon, a dot, a line) picked up from the page, so it can be moved,
+//      recolored or deleted (cover: the box painted over where it was; gone: deleted, only the cover is left)
 
 const PDFE_CHUNK = 450000;           // characters of the PDF in one block (Collab takes up to 600000)
 const PDFE_MAX_LOCAL = 20 * 1024 * 1024;
 const PDFE_MAX_COLLAB = 10 * 1024 * 1024;
-const PDFE_COLORS = ["#111111", "#ffffff", "#e03131", "#f08c00", "#ffd43b", "#2f9e44", "#1c7ed6", "#7048e8"];
+const PDFE_COLORS = ["#111111", "#868e96", "#ced4da", "#ffffff", "#e03131", "#f08c00", "#ffd43b", "#2f9e44", "#1c7ed6", "#7048e8"];
 const PDFE_FONTS = {
   sans: { css: "Arial, 'Liberation Sans', Helvetica, sans-serif", base: 0.9465 },
   serif: { css: "'Times New Roman', Times, 'Liberation Serif', serif", base: 0.9375 },
   mono: { css: "'Courier New', Courier, 'Liberation Mono', monospace", base: 0.8665 },
 };
 const PDFE_TOOLS = [
-  ["select", "pointer", "Change text: click any text on the page"],
+  ["select", "pointer", "Edit: click any text, icon or dot on the page to change it"],
   ["text", "textbox", "Add text: click where it goes"],
   ["draw", "pen", "Draw"],
   ["highlight", "marker", "Highlight"],
@@ -324,15 +326,17 @@ function pdfeDrawItems(n) {
   const layer = p.el.querySelector(".pdfe-items");
   const editing = layer.querySelector(".pdfe-text:focus");
   const els = [];
+  // What's covered over goes first (so something moved onto a covered spot still shows).
+  for (const it of items) {
+    if (!it.cover) continue;
+    const c = document.createElement("div");
+    c.className = "pdfe-cover";
+    Object.assign(c.style, { left: it.cover.x0 * s + "px", top: it.cover.top * s + "px", width: (it.cover.x1 - it.cover.x0) * s + "px",
+                             height: (it.cover.bottom - it.cover.top) * s + "px", background: it.cover.color || "#fff" });
+    els.push(c);
+  }
   for (const it of items) {
     if (it.type === "text") {
-      if (it.cover) {
-        const c = document.createElement("div");
-        c.className = "pdfe-cover";
-        Object.assign(c.style, { left: it.cover.x0 * s + "px", top: it.cover.top * s + "px", width: (it.cover.x1 - it.cover.x0) * s + "px",
-                                 height: (it.cover.bottom - it.cover.top) * s + "px", background: it.cover.color || "#fff" });
-        els.push(c);
-      }
       let t = editing && editing.dataset.id === it.id ? editing : null;
       if (!t) {
         t = document.createElement("div");
@@ -348,9 +352,9 @@ function pdfeDrawItems(n) {
                                fontWeight: it.bold ? "700" : "400", fontStyle: it.italic ? "italic" : "normal", color: it.color || "#111" });
       t.classList.toggle("sel", !!pdfe.sel && pdfe.sel.id === it.id);
       els.push(t);
-    } else if (it.type === "image") {
+    } else if (it.type === "image" && !it.gone) {
       const img = document.createElement("div");
-      img.className = "pdfe-image" + (pdfe.sel && pdfe.sel.id === it.id ? " sel" : "");
+      img.className = "pdfe-image" + (it.art ? " art" : "") + (pdfe.sel && pdfe.sel.id === it.id ? " sel" : "");
       img.dataset.id = it.id;
       Object.assign(img.style, { left: it.x * s + "px", top: it.y * s + "px", width: it.w * s + "px", height: it.h * s + "px" });
       img.innerHTML = `<img alt="" draggable="false"><i class="pdfe-resize"></i>`;
@@ -361,16 +365,18 @@ function pdfeDrawItems(n) {
   }
   // The little bar over what's picked: move it, take it away.
   const it = pdfe.sel && pdfe.sel.n === n && items.find((x) => x.id === pdfe.sel.id);
-  if (it && it.type !== "ink") {
+  if (it && it.type !== "ink" && !it.gone) {
     const bar = document.createElement("div");
     bar.className = "pdfe-bar";
     const x = it.type === "text" ? it.x : it.x, y = it.type === "text" ? it.y - it.size * (PDFE_FONTS[it.font] || PDFE_FONTS.sans).base : it.y;
     Object.assign(bar.style, { left: x * s + "px", top: y * s + "px" });
     bar.innerHTML = `<button type="button" class="pdfe-move" title="Drag to move">${docIcon("move")}</button>`
+      + (it.type === "image" ? `<button type="button" class="pdfe-copy" title="Make a copy">${docIcon("copy")}</button>` : "")
       + `<button type="button" class="pdfe-del" title="${it.from ? "Put the PDF's own text back" : "Delete"}">${docIcon(it.from ? "undo" : "trash")}</button>`;
     bar.addEventListener("mousedown", (e) => e.preventDefault()); // (the text keeps the focus)
     bar.querySelector(".pdfe-move").addEventListener("pointerdown", (e) => pdfeDrag(e, n, it.id, "move"));
     bar.querySelector(".pdfe-del").addEventListener("click", () => pdfeRemove(n, it.id));
+    if (bar.querySelector(".pdfe-copy")) bar.querySelector(".pdfe-copy").addEventListener("click", () => pdfeCopy(n, it.id));
     els.push(bar);
   }
   layer.replaceChildren(...els);
@@ -469,7 +475,10 @@ function pdfeRemove(n, id) {
   const items = pdfe.items[n - 1];
   if (!items.some((it) => it.id === id)) return;
   pdfeSnap();
-  pdfe.items[n - 1] = items.filter((it) => it.id !== id);
+  const it = items.find((x) => x.id === id);
+  // A piece of the PDF's drawing stays covered over (else it would just come back).
+  if (it.art && it.cover) it.gone = true;
+  else pdfe.items[n - 1] = items.filter((x) => x !== it);
   if (pdfe.sel && pdfe.sel.id === id) pdfe.sel = null;
   pdfeDrawItems(n);
   pdfeDrawSegs(pdfe.pages[n - 1]);
@@ -632,7 +641,11 @@ function pdfePageEvents(p) {
     const tool = pdfe.tool;
     if (e.target.closest(".pdfe-text, .pdfe-bar, .pdfe-image")) return;
     if (tool === "select") {
-      if (!e.target.closest(".pdfe-seg") && pdfe.sel) { if (document.activeElement && document.activeElement.classList.contains("pdfe-text")) document.activeElement.blur(); pdfeSelect(p.n, null); }
+      if (e.target.closest(".pdfe-seg")) return;
+      if (pdfe.sel) { if (document.activeElement && document.activeElement.classList.contains("pdfe-text")) document.activeElement.blur(); pdfeSelect(p.n, null); }
+      // An icon, a dot or a line of the PDF's own: picked up, ready to move (right away, with the same click).
+      const it = pdfePickArt(p, ...at(e));
+      if (it) pdfeDrag(e, p.n, it.id, "move");
       return;
     }
     if (tool === "text") {
@@ -689,6 +702,116 @@ function pdfePageEvents(p) {
     p.el.addEventListener("pointermove", move);
     p.el.addEventListener("pointerup", up);
   });
+}
+
+// Clicking a drawn thing on the page (an icon, a dot, a line): the shape under the mouse is cut out of the
+// page (the paper around it see-through) and becomes a picture lying right where it was, over a cover.
+function pdfePickArt(p, x, y) {
+  const canvas = p.el.querySelector("canvas.pdfe-canvas");
+  if (!canvas) return null;
+  const items = pdfe.items[p.n - 1];
+  if (items.some((it) => it.cover && x >= it.cover.x0 && x <= it.cover.x1 && y >= it.cover.top && y <= it.cover.bottom)) return null; // (changed already)
+  const k = canvas.width / p.w;
+  const R = Math.round(120 * k); // looks this far around (in canvas pixels)
+  const ox = Math.max(0, Math.round(x * k) - R), oy = Math.max(0, Math.round(y * k) - R);
+  const w = Math.min(canvas.width, Math.round(x * k) + R) - ox, h = Math.min(canvas.height, Math.round(y * k) + R) - oy;
+  if (w < 4 || h < 4) return null;
+  let data;
+  try { data = canvas.getContext("2d").getImageData(ox, oy, w, h).data; } catch (e) { return null; }
+  const cx = Math.round(x * k) - ox, cy = Math.round(y * k) - oy;
+  const rgbAt = (i) => [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
+  // the paper: the most common color near the click
+  const count = new Map();
+  const near = Math.round(14 * k);
+  for (let yy = Math.max(0, cy - near); yy < Math.min(h, cy + near); yy += 2) for (let xx = Math.max(0, cx - near); xx < Math.min(w, cx + near); xx += 2) {
+    const c = rgbAt(yy * w + xx), key = c.map((v) => v >> 3).join(",");
+    const sum = count.get(key) || [0, 0, 0, 0];
+    count.set(key, [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2], sum[3] + 1]);
+  }
+  const most = [...count.values()].sort((a, b) => b[3] - a[3])[0];
+  const top = [most[0] / most[3], most[1] / most[3], most[2] / most[3]].map(Math.round);
+  const dist = (i) => { const c = rgbAt(i); return Math.hypot(c[0] - top[0], c[1] - top[1], c[2] - top[2]); };
+  const INK = 40;
+  // where the shape starts: right under the mouse, or just next to it (dots are small)
+  let start = -1;
+  for (let r = 0; r <= Math.round(3 * k) && start < 0; r++) {
+    for (let dy = -r; dy <= r && start < 0; dy++) for (let dx = -r; dx <= r; dx++) {
+      const xx = cx + dx, yy = cy + dy;
+      if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+      if (dist(yy * w + xx) > INK) { start = yy * w + xx; break; }
+    }
+  }
+  if (start < 0) return null;
+  // the whole shape: everything touching that isn't paper
+  const mask = new Uint8Array(w * h), stack = [start];
+  mask[start] = 1;
+  let x0 = w, y0 = h, x1 = 0, y1 = 0, n = 0;
+  while (stack.length) {
+    const i = stack.pop(), xx = i % w, yy = (i - xx) / w;
+    if (xx === 0 || yy === 0 || xx === w - 1 || yy === h - 1) return null; // too big to be one thing (a box, a band of color)
+    n++;
+    if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const j = i + dy * w + dx;
+      if (!mask[j] && dist(j) > INK) { mask[j] = 1; stack.push(j); }
+    }
+  }
+  if (n < 4) return null;
+  // its soft edge too (a pixel each way)
+  x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(w - 1, x1 + 1); y1 = Math.min(h - 1, y1 + 1);
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+  const cut = Object.assign(document.createElement("canvas"), { width: cw, height: ch });
+  const ctx = cut.getContext("2d"), out = ctx.createImageData(cw, ch);
+  let ink = top, far = -1;
+  const edge = (i) => { const xx = i % w, yy = (i - xx) / w; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mask[(yy + dy) * w + xx + dx]) return true; return false; };
+  for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+    const i = yy * w + xx, o = ((yy - y0) * cw + xx - x0) * 4;
+    if (!mask[i] && !edge(i)) continue;
+    const c = rgbAt(i), d = dist(i);
+    if (d > far) { far = d; ink = c; }
+    out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2];
+    out.data[o + 3] = mask[i] ? 255 : Math.round(Math.min(1, d / INK) * 255);
+  }
+  ctx.putImageData(out, 0, 0);
+  const src = cut.toDataURL("image/png");
+  if (src.length > 380000) return null;
+  const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+  const X = (ox + x0) / k, Y = (oy + y0) / k, W = cw / k, H = ch / k;
+  pdfeSnap();
+  const it = { id: pdfeNewId(), type: "image", art: true, x: X, y: Y, w: W, h: H, w0: W, src, color: hex(ink),
+               cover: { x0: X - 0.3, top: Y - 0.3, x1: X + W + 0.3, bottom: Y + H + 0.3, color: hex(top) } };
+  items.push(it);
+  pdfe.sel = { n: p.n, id: it.id };
+  pdfeDrawItems(p.n);
+  pdfeChanged();
+  pdfeToolState();
+  return it;
+}
+
+// A picked-up shape in another color (its see-through edges stay as they were).
+async function pdfeTint(src, color) {
+  const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = src; });
+  const c = Object.assign(document.createElement("canvas"), { width: img.naturalWidth, height: img.naturalHeight });
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = "source-in";
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, c.width, c.height);
+  return c.toDataURL("image/png");
+}
+
+// A copy of a picture (or a picked-up shape), a little to the side.
+function pdfeCopy(n, id) {
+  const it = pdfeFind(n, id);
+  if (!it) return;
+  pdfeSnap();
+  const copy = { ...it, id: pdfeNewId(), x: it.x + it.w + 2 };
+  delete copy.cover;
+  pdfe.items[n - 1].push(copy);
+  pdfe.sel = { n, id: copy.id };
+  pdfeDrawItems(n);
+  pdfeChanged();
+  pdfeToolState();
 }
 
 // How far the point is from the line a-b.
@@ -774,6 +897,7 @@ function pdfeSetTool(tool) {
 function pdfeTarget() {
   const it = pdfe && pdfe.sel && pdfeFind(pdfe.sel.n, pdfe.sel.id);
   if (it && it.type === "text") return { it, kind: "text" };
+  if (it && it.art && !it.gone) return { it, kind: "art" };
   const kind = pdfe && (pdfe.tool === "draw" || pdfe.tool === "highlight") ? pdfe.tool : "text";
   return { it: null, kind };
 }
@@ -784,11 +908,11 @@ function pdfeToolState() {
   bar.querySelectorAll("[data-tool]").forEach((x) => x.classList.toggle("on", x.dataset.tool === pdfe.tool));
   $("pdfeView").dataset.tool = pdfe.tool;
   const { it, kind } = pdfeTarget();
-  const color = it ? it.color : pdfe.colors[kind];
+  const color = it ? it.color : pdfe.colors[kind] || pdfe.colors.text;
   const i = bar.querySelector(".pdfe-color i");
   if (i) i.style.background = color;
   const size = $("pdfeSize");
-  if (size) size.textContent = Math.round(it ? it.size : pdfe.sizes[kind]);
+  if (size) size.textContent = kind === "art" ? Math.round(it.w / it.w0 * 100) + "%" : Math.round(it ? it.size : pdfe.sizes[kind]);
   const bold = bar.querySelector('[data-pdfe="bold"]');
   if (bold) { bold.classList.toggle("on", !!(it && it.bold)); bold.disabled = kind !== "text"; }
   pdfeUndoButtons();
@@ -807,7 +931,11 @@ function pdfeCommand(cmd, button) {
   if (cmd === "image") pdfeAddImage();
   if (cmd === "download") pdfeDownload();
   if (cmd === "bold") edit((x) => { x.bold = !x.bold; });
-  if (cmd === "smaller" || cmd === "bigger") {
+  if ((cmd === "smaller" || cmd === "bigger") && kind === "art") {
+    const k = cmd === "bigger" ? 1.25 : 0.8;
+    if (it.w * k < 2 || it.w * k > 2000) return;
+    edit((x) => { x.x += x.w * (1 - k) / 2; x.y += x.h * (1 - k) / 2; x.w *= k; x.h *= k; });
+  } else if (cmd === "smaller" || cmd === "bigger") {
     const steps = kind === "text" ? [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72] : kind === "draw" ? [1, 2, 3, 4, 6, 8, 12] : [6, 8, 10, 12, 14, 18, 24, 32];
     const now = it ? it.size : pdfe.sizes[kind];
     const next = cmd === "bigger" ? steps.find((v) => v > now + 0.05) : [...steps].reverse().find((v) => v < now - 0.05);
@@ -825,8 +953,11 @@ function pdfeColorPop(button, kind, it) {
     const sw = Object.assign(document.createElement("button"), { type: "button", className: "pdfe-swatch", title: c });
     sw.style.background = c;
     sw.addEventListener("mousedown", (e) => e.preventDefault());
-    sw.addEventListener("click", () => {
-      if (it) { pdfeSnap(); it.color = c; pdfeDrawItems(pdfe.sel.n); pdfeChanged(); } else pdfe.colors[kind] = c;
+    sw.addEventListener("click", async () => {
+      if (it && kind === "art") {
+        const sel = pdfe.sel, src = await pdfeTint(it.src, c).catch(() => null);
+        if (src && pdfe && pdfeFind(sel.n, it.id)) { pdfeSnap(); it.src = src; it.color = c; pdfeDrawItems(sel.n); pdfeChanged(); }
+      } else if (it) { pdfeSnap(); it.color = c; pdfeDrawItems(pdfe.sel.n); pdfeChanged(); } else pdfe.colors[kind] = c;
       pop.remove();
       pdfeToolState();
     });
@@ -896,11 +1027,12 @@ async function pdfeBuild() {
     const page = pages[i], vp = pdfe.pages[i].vp;
     const P = (x, y) => vp.convertToPdfPoint(x, y);
     for (const it of items) {
+      if (!it.cover) continue;
+      const a = P(it.cover.x0, it.cover.top), b = P(it.cover.x1, it.cover.bottom);
+      page.drawRectangle({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), color: rgb(it.cover.color) });
+    }
+    for (const it of items) {
       if (it.type === "text") {
-        if (it.cover) {
-          const a = P(it.cover.x0, it.cover.top), b = P(it.cover.x1, it.cover.bottom);
-          page.drawRectangle({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), color: rgb(it.cover.color) });
-        }
         const font = await fontFor(it);
         it.text.split("\n").forEach((line, k) => {
           if (!line) return;
@@ -911,7 +1043,7 @@ async function pdfeBuild() {
         const d = it.points.map((q, k) => { const [x, y] = P(q[0], q[1]); return (k ? "L" : "M") + x.toFixed(2) + " " + (-y).toFixed(2); }).join("") + (it.points.length === 1 ? "l0.01 0" : "");
         page.drawSvgPath(d, { x: 0, y: 0, borderColor: rgb(it.color), borderWidth: it.width, borderOpacity: it.alpha < 1 ? it.alpha : 1,
                               borderLineCap: L.LineCapStyle.Round, ...(it.alpha < 1 ? { blendMode: L.BlendMode.Multiply } : {}) });
-      } else if (it.type === "image") {
+      } else if (it.type === "image" && !it.gone) {
         const bytes = pdfeFromBase64(it.src.slice(it.src.indexOf(",") + 1));
         const img = /^data:image\/png/.test(it.src) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
         const a = P(it.x, it.y + it.h), b = P(it.x + it.w, it.y);
