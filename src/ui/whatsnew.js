@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.20.0", items: [
+    "Docs: in a PDF you can now edit everything, not just the text. Click an icon, a dot (like the rating dots on a CV) or a picture to pick it up.",
+    "Then drag it somewhere else, give it a new color, make it bigger or smaller with - and +, copy it or delete it. Two new grays are in the colors, handy for \"empty\" rating dots.",
+  ] },
   { version: "2.19.2", items: [
     "Docs: in a PDF you opened \"just as it looks\", text you already changed can be clicked and changed again. Before, clicking back into it sometimes did nothing.",
   ] },
