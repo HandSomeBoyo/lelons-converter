@@ -32,7 +32,7 @@ const PV_ICONS = {
 };
 
 let pvSessions = [], pvTimers = [1, 6, 24, 72, 168, 0], pvSharing = 0, pvLoading = false, pvSig = "", pvUserId = null;
-let pvAfter = 0, pvCheckTimer = 0, pvListTimer = 0, pvTickTimer = 0, pvAwakeAt = 0, pvAddTo = null, pvAddHours = 24;
+let pvAfter = 0, pvCheckTimer = 0, pvListTimer = 0, pvTickTimer = 0, pvAwakeAt = 0, pvAddHours = 24;
 const pvGets = new Map(); // POV id -> a download: {file, pc, dc, transfer, status, have, got, size, buf, ...}
 const pvSends = new Map(); // transfer id -> a friend getting one of yours: {file, name, to, pc, dc, size, pos, acked, ...}
 const pvEl = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
@@ -123,42 +123,15 @@ function renderPovsPage() {
   if (inside) renderPovs();
 }
 
+// One list of videos, newest first. (A video is kept as its own "session" in the library; the few
+// from 2.21.0 that put several videos in one session show each one with that session's name.)
 function renderPovs() {
-  const box = $("pvSessions");
-  const sessions = pvSessions.map((s) => ({ ...s, files: s.files.filter(pvAlive) }));
-  $("pvEmpty").hidden = sessions.length > 0;
-  box.replaceChildren(...sessions.map(pvSessionEl));
+  const files = pvFiles().filter(pvAlive).sort((x, y) => y.created - x.created);
+  $("pvEmpty").hidden = files.length > 0;
+  $("pvGrid").hidden = !files.length;
+  $("pvGrid").replaceChildren(...files.map(pvCardEl));
   pvDrawBadge();
   pvDrawSends();
-}
-
-function pvSessionEl(s) {
-  const el = pvEl("section", "pv-session");
-  el.dataset.id = s.id;
-  const head = pvEl("div", "pv-session-head");
-  const words = pvEl("div", "pv-session-words");
-  const title = pvEl("h2", "", s.title);
-  const sub = pvEl("p", "pv-session-sub");
-  const people = [...new Set(s.files.map((f) => f.by))];
-  sub.textContent = [s.game, `${people.length || "No"} POV${people.length === 1 ? "" : "s"}`, s.by ? `Started by ${s.by} ${sfxAgo(s.created * 1000)}` : ""].filter(Boolean).join("  ·  ");
-  words.append(title, sub);
-  const faces = pvEl("div", "pv-faces");
-  for (const f of s.files.slice(0, 6)) faces.append(avatarEl(f.by_avatar, f.by));
-  const tools = pvEl("div", "pv-session-tools");
-  if (!s.files.some((f) => f.mine)) tools.append(pvButton("convert small-button pv-add", PV_ICONS.plus, "Add my POV", () => pvOpenAdd(s)));
-  else tools.append(pvButton("small-button pv-add ghost", PV_ICONS.plus, "Add another", () => pvOpenAdd(s)));
-  if (s.can_edit) {
-    tools.append(pvButton("icon-button", PV_ICONS.pencil, "", () => pvEditSession(s)));
-    tools.lastChild.title = "Rename";
-    tools.append(pvButton("icon-button", PV_ICONS.trash, "", () => pvDeleteSession(s)));
-    tools.lastChild.title = "Delete the session";
-  }
-  head.append(words, faces, tools);
-  const grid = pvEl("div", "pv-grid");
-  for (const f of s.files) grid.append(pvCardEl({ ...f, sessionTitle: s.title }));
-  if (!s.files.length) grid.append(pvEl("p", "pv-none", "No POVs yet. Everyone who recorded can add theirs."));
-  el.append(head, grid);
-  return el;
 }
 
 function pvCardEl(f) {
@@ -181,11 +154,11 @@ function pvCardEl(f) {
   timer.append(f.expires ? pvLeft(f.expires) : "No timer");
   pic.append(timer);
   const body = pvEl("div", "pv-body");
+  const title = pvEl("h3", "pv-title", f.sessionTitle);
+  title.title = f.sessionTitle;
   const who = pvEl("div", "pv-who");
-  who.append(avatarEl(f.by_avatar, f.by), pvEl("b", "", f.mine ? "Your POV" : `${f.by}'s POV`));
-  const meta = pvEl("p", "pv-meta", `${pvSize(f.size)}  ·  ${f.name}`);
-  meta.title = f.name;
-  body.append(who, meta);
+  who.append(avatarEl(f.by_avatar, f.by), pvEl("span", "", `${f.mine ? "You" : f.by}  ·  ${pvSize(f.size)}  ·  ${sfxAgo(f.created * 1000)}`));
+  body.append(title, who);
   const act = pvEl("div", "pv-act");
   card.append(pic, body, act);
   pvDrawAct(card, f);
@@ -546,7 +519,7 @@ function pvPause(id) {
 }
 
 async function pvCancel(f) {
-  if (!confirm(`Stop downloading ${f.by}'s POV? What came so far is deleted.`)) return;
+  if (!confirm(`Stop downloading "${f.sessionTitle}"? What came so far is deleted.`)) return;
   const g = pvGets.get(f.id);
   if (g) { pvClose(g); clearTimeout(g.retry); pvGets.delete(f.id); }
   await api("/api/pov-cancel", { id: f.id, delete: true }).catch(() => {});
@@ -665,73 +638,57 @@ function pvSendEnded(x, message, done) {
   if (done && pvTabOpen()) setTimeout(() => loadPovs(true), 1500);
 }
 
-// ---- sessions and your POVs
+// ---- "New video": a name, how long it stays up, the file, Save
 
-async function pvNewSession(e) {
-  e.preventDefault();
-  const title = $("pvSessionTitle").value.trim();
-  if (!title) return $("pvSessionTitle").focus();
-  const editing = $("pvSessionModal").dataset.id;
-  $("pvSessionSave").disabled = true;
-  const res = editing
-    ? await api("/api/pov-edit-session", { id: editing, title, game: $("pvSessionGame").value.trim() })
-    : await api("/api/pov-new-session", { title, game: $("pvSessionGame").value.trim() });
-  $("pvSessionSave").disabled = false;
-  if (!res.ok) { $("pvSessionNote").textContent = res.error; return; }
-  $("pvSessionModal").hidden = true;
-  await loadPovs();
-  if (!editing && res.session) {
-    const s = pvSessions.find((x) => x.id === res.session);
-    if (s) pvOpenAdd(s);
-  }
-}
+let pvPicked = null; // {path, file, name, size}
 
-function pvOpenSession(s) {
-  $("pvSessionModal").dataset.id = s ? s.id : "";
-  $("pvSessionHeading").textContent = s ? "Rename the session" : "New recording session";
-  $("pvSessionSave").textContent = s ? "Save" : "Make it";
-  $("pvSessionTitle").value = s ? s.title : "";
-  $("pvSessionGame").value = s ? s.game : "";
-  $("pvSessionNote").textContent = "";
-  $("pvSessionModal").hidden = false;
-  $("pvSessionTitle").focus();
-}
-const pvEditSession = (s) => pvOpenSession(s);
-
-async function pvDeleteSession(s) {
-  if (!confirm(`Delete "${s.title}"? Everyone's POVs in it leave the list (the videos stay on their PCs).`)) return;
-  const res = await api("/api/pov-delete-session", { id: s.id });
-  if (!res.ok) return alert(res.error);
-  loadPovs();
-}
-
-function pvOpenAdd(s) {
-  pvAddTo = s;
-  $("pvAddSession").textContent = s.title;
-  $("pvAddNote").textContent = "";
-  $("pvAddNote").className = "acct-note";
-  $("pvAddGo").disabled = false;
+function pvOpenNew() {
+  if (!pvLoggedIn()) return openLogin("login");
+  pvPicked = null;
+  $("pvVideoName").value = "";
+  $("pvVideoNote").textContent = "";
+  $("pvVideoNote").className = "acct-note";
   pvDrawTimerPills();
-  $("pvAddModal").hidden = false;
+  pvDrawPicked();
+  $("pvVideoModal").hidden = false;
+  $("pvVideoName").focus();
 }
 
 function pvDrawTimerPills() {
-  $("pvAddTimers").replaceChildren(...pvTimers.map((h) => {
-    const b = pvButton("gm-chip" + (h === pvAddHours ? " on" : ""), "", PV_TIMER_NAMES[h] || h + " hours", () => { pvAddHours = h; pvDrawTimerPills(); });
-    return b;
-  }));
+  $("pvVideoTimers").replaceChildren(...pvTimers.map((h) =>
+    pvButton("gm-chip" + (h === pvAddHours ? " on" : ""), "", PV_TIMER_NAMES[h] || h + " hours", () => { pvAddHours = h; pvDrawTimerPills(); })));
 }
 
-async function pvAdd(path) {
-  if (!pvAddTo) return;
-  $("pvAddGo").disabled = true;
-  $("pvAddNote").textContent = "Pick your recording. The app reads how long it is and takes a picture from it...";
-  const res = await api("/api/pov-add", { id: pvAddTo.id, hours: pvAddHours, path })
-    .catch(() => ({ ok: false, error: "Couldn't add it." }));
-  $("pvAddGo").disabled = false;
-  if (res.cancelled) { $("pvAddNote").textContent = ""; return; }
-  if (!res.ok) { $("pvAddNote").textContent = res.error; $("pvAddNote").className = "acct-note bad"; return; }
-  $("pvAddModal").hidden = true;
+function pvDrawPicked() {
+  $("pvVideoFile").textContent = pvPicked ? `${pvPicked.file}  ·  ${pvSize(pvPicked.size)}` : "No file chosen yet";
+  $("pvVideoFile").classList.toggle("on", !!pvPicked);
+  $("pvVideoPick").textContent = pvPicked ? "Choose another" : "Choose file";
+  $("pvVideoSave").disabled = !pvPicked;
+}
+
+async function pvPick(path) {
+  const res = await api("/api/pov-pick", { path }).catch(() => ({ ok: false, error: "Couldn't open that file." }));
+  if (res.cancelled) return;
+  if (!res.ok) { $("pvVideoNote").textContent = res.error; $("pvVideoNote").className = "acct-note bad"; return; }
+  pvPicked = res;
+  if (!$("pvVideoName").value.trim()) $("pvVideoName").value = res.name;
+  $("pvVideoNote").textContent = "";
+  pvDrawPicked();
+}
+
+async function pvSave(e) {
+  e.preventDefault();
+  if (!pvPicked) return pvPick();
+  const name = $("pvVideoName").value.trim();
+  if (!name) return $("pvVideoName").focus();
+  $("pvVideoSave").disabled = true;
+  $("pvVideoNote").className = "acct-note";
+  $("pvVideoNote").textContent = "Saving... (the app reads how long the video is and takes a picture from it)";
+  const res = await api("/api/pov-new-video", { name, hours: pvAddHours, path: pvPicked.path })
+    .catch(() => ({ ok: false, error: "Couldn't save it." }));
+  $("pvVideoSave").disabled = false;
+  if (!res.ok) { $("pvVideoNote").textContent = res.error; $("pvVideoNote").className = "acct-note bad"; return; }
+  $("pvVideoModal").hidden = true;
   await loadPovs();
   pvCheckSoon(100);
 }
@@ -750,25 +707,24 @@ async function pvSetTimer(f, hours) {
 }
 
 async function pvRemove(f) {
-  if (!confirm("Stop sharing this POV? It leaves the list. The video stays on your PC.")) return;
+  if (!confirm("Stop sharing this video? It leaves the list. The video stays on your PC.")) return;
   const res = await api("/api/pov-remove", { id: f.id });
   if (!res.ok) return alert(res.error);
   for (const x of pvSends.values()) if (x.file === f.id) pvSendEnded(x, "You stopped sharing it.");
+  const s = pvSessions.find((x) => x.id === f.session);
+  if (s && s.can_edit && s.files.every((x) => x.id === f.id)) await api("/api/pov-delete-session", { id: s.id }).catch(() => {});
   loadPovs();
 }
 
 $("pvLogin").addEventListener("click", () => openLogin("login"));
-$("pvNew").addEventListener("click", () => pvOpenSession(null));
-$("pvSessionForm").addEventListener("submit", pvNewSession);
-$("pvSessionCancel").addEventListener("click", () => { $("pvSessionModal").hidden = true; });
-$("pvSessionModal").addEventListener("click", (e) => { if (e.target === $("pvSessionModal")) $("pvSessionModal").hidden = true; });
-$("pvAddGo").addEventListener("click", () => pvAdd());
-$("pvAddCancel").addEventListener("click", () => { $("pvAddModal").hidden = true; });
-$("pvAddModal").addEventListener("click", (e) => { if (e.target === $("pvAddModal")) $("pvAddModal").hidden = true; });
+$("pvNew").addEventListener("click", pvOpenNew);
+$("pvVideoForm").addEventListener("submit", pvSave);
+$("pvVideoPick").addEventListener("click", () => pvPick());
+$("pvVideoCancel").addEventListener("click", () => { $("pvVideoModal").hidden = true; });
+$("pvVideoModal").addEventListener("click", (e) => { if (e.target === $("pvVideoModal")) $("pvVideoModal").hidden = true; });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  $("pvSessionModal").hidden = true;
-  $("pvAddModal").hidden = true;
+  $("pvVideoModal").hidden = true;
 });
 
 // ---- opening the tab, and logging in or out

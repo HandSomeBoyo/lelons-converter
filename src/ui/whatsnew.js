@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.21.1", items: [
+    "POVs is simpler: click \"New video\", give it a name, pick how long it stays up, choose the file and click Save. No sessions to make first.",
+    "All the videos are in one list, newest first. A download is saved with the name it has in the list.",
+  ] },
   { version: "2.21.0", items: [
     "New POVs tab: recorded a game together? Make a session, and everyone adds their own recording so the others can download their POV.",
     "Nothing gets uploaded, so it's free and any size works: the video goes straight from your friend's PC to yours. They need VaultHub open while you download (a green dot shows when they're ready).",

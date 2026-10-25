@@ -867,6 +867,22 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "delete-session":
                 p.delete_session(item)
                 result = {}
+            elif action == "pick":  # choose the video for "New video" (Windows' Open window); saved with "new-video"
+                path = ""
+                if os.environ.get("VAULTHUB_TEST_PICK"):  # (tests: no Windows window to pick in)
+                    path = str(data.get("path") or "")
+                elif os.name == "nt":
+                    import folder_picker
+                    try:
+                        paths = folder_picker.pick_files("Pick your video", povs.PICK_KINDS)
+                    except OSError:
+                        paths = []
+                    path = paths[0] if paths else ""
+                if not path or not os.path.isfile(path):
+                    return self.send_json({"ok": False, "cancelled": True})
+                result = p.picked(path)
+            elif action == "new-video":
+                result = {"file": p.new_video(data.get("name"), data.get("path"), data.get("hours"))}
             elif action in ("add", "relink"):  # pick your recording (Windows' Open window)
                 path = ""
                 if os.environ.get("VAULTHUB_TEST_PICK"):  # (tests: no Windows window to pick in)

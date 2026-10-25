@@ -102,6 +102,7 @@ class Povs:
         self.shared = {}  # POV id -> the file's path on this PC
         self.downloads = {}  # POV id -> {part, folder, name, size, session, by, path (when done)}
         self.loaded = False
+        self.picks = set()  # videos picked in this run (only those can be shared)
         self.awake_event = threading.Event()
         self.awake_at = 0
         self.awake_thread = None
@@ -197,6 +198,31 @@ class Povs:
             self._save()
         return res["file"]
 
+    def picked(self, path):
+        """A video was picked for "New video": remember it (only picked files can be shared) and say what it is."""
+        path = os.path.abspath(path)
+        self.picks.add(path)
+        stem = os.path.splitext(os.path.basename(path))[0]
+        return {"path": path, "file": os.path.basename(path), "name": stem[:120], "size": os.path.getsize(path)}
+
+    def new_video(self, name, path, hours):
+        """Share a video: its own entry in the list, named by you."""
+        path = os.path.abspath(str(path or ""))
+        if path not in self.picks:
+            raise Error("Pick the video first.")
+        name = str(name or "").strip()[:120] or os.path.splitext(os.path.basename(path))[0][:120]
+        session = self.new_session(name, "")["session"]
+        try:
+            f = self.add(session, path, hours)
+        except Exception:
+            try:
+                self.delete_session(session)
+            except (Error, sfx.Error):
+                pass
+            raise
+        self.picks.discard(path)
+        return f
+
     def relink(self, file_id, path):
         """Your file moved: point the POV at where it is now."""
         with self.lock:
@@ -266,7 +292,7 @@ class Povs:
                 if not folder or not os.path.isdir(folder):
                     raise Error("Pick a folder to save it in.")
                 stem, ext = os.path.splitext(os.path.basename(str(name or "video.mp4")))
-                nice = names.safe_stem(f"{session} ({by}'s POV)" if session else stem, "POV", 110)
+                nice = names.safe_stem(session or stem, "POV", 110)  # (named like it is in the list)
                 d = {"folder": folder, "nice": nice, "ext": ext[:10] or ".mp4", "size": size,
                      "part": os.path.join(folder, nice + PART_EXT), "session": str(session or "")[:120], "by": str(by or "")[:40]}
                 n = 2
