@@ -4721,3 +4721,92 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
   body.pdfe-printing #pdfePrintBox { display: block; }
   #pdfePrintBox img { display: block; width: 100%; break-after: page; }
 }
+
+/* ================================================================ 2.21.0: POVs (povs.js). Everyone's recording of the
+   same game, sent PC to PC. A session is a row of cards: the video's picture on top, who and how big, then the download. */
+.pv-top { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; padding: 14px 16px 14px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.pv-how { flex: 1; margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.pv-how b { color: var(--text); font-weight: 600; }
+.pv-top .convert { flex: none; height: 42px; padding: 0 18px; }
+.pv-session { margin-bottom: 30px; }
+.pv-session-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.pv-session-words { flex: 1; min-width: 0; }
+.pv-session-head h2 { margin: 0; font: 700 21px/1.2 var(--head); letter-spacing: -.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-session-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-faces { display: flex; flex: none; }
+.pv-faces .avatar { width: 28px; height: 28px; font-size: 12px; border: 2px solid var(--bg); margin-left: -8px; }
+.pv-session-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.pv-session-tools .icon-button svg { width: 17px; height: 17px; }
+.pv-add { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; margin-right: 4px; }
+.pv-add svg { width: 15px; height: 15px; }
+.pv-add.ghost { background: var(--panel2); color: var(--text); }
+.pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.pv-none { margin: 0; padding: 26px; border-radius: 12px; border: 1px dashed var(--line2); text-align: center; color: var(--muted); font-size: 13.5px; }
+.pv-card { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--panel); border: 1px solid var(--line);
+  transition: border-color .2s, transform .35s var(--ease), box-shadow .35s var(--ease); }
+.pv-card:hover { border-color: var(--line2); transform: translateY(-2px); box-shadow: 0 14px 30px rgba(0,0,0,.25); }
+.pv-card.mine { border-color: rgba(var(--accent-rgb), .35); }
+.pv-pic { position: relative; aspect-ratio: 16 / 9; background: #0c0c0c; overflow: hidden; }
+.pv-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv-pic.none { display: grid; place-items: center; color: #555; }
+.pv-pic.none svg { width: 42px; height: 42px; }
+.pv-tag, .pv-length, .pv-timer { position: absolute; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(0,0,0,.68); color: #fff; font: 600 11.5px var(--head); backdrop-filter: blur(8px); }
+.pv-tag { top: 10px; left: 10px; }
+.pv-length { right: 10px; bottom: 10px; font-variant-numeric: tabular-nums; }
+.pv-timer { top: 10px; right: 10px; }
+.pv-timer svg { width: 13px; height: 13px; }
+.pv-timer.soon { background: rgba(214, 69, 58, .85); }
+.pv-body { padding: 12px 14px 2px; }
+.pv-who { display: flex; align-items: center; gap: 9px; }
+.pv-who .avatar { width: 26px; height: 26px; font-size: 11px; }
+.pv-who b { font: 650 15.5px var(--head); letter-spacing: -.2px; }
+.pv-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-act { display: flex; flex-direction: column; gap: 9px; padding: 10px 14px 14px; margin-top: auto; }
+.pv-ready { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.pv-ready i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pv-ready.on { color: var(--text); }
+.pv-ready.on i { background: var(--green); box-shadow: 0 0 0 3px rgba(63, 154, 47, .22); }
+.pv-ready.bad { color: var(--red); }
+.pv-ready.bad i { background: var(--red); }
+.pv-ready svg { width: 16px; height: 16px; color: var(--green); }
+.pv-sending, .pv-got { margin: -3px 0 0; font-size: 12px; color: var(--muted); }
+.pv-sending { color: var(--accent); }
+.pv-row { display: flex; align-items: center; gap: 8px; }
+.pv-row .small-button, .pv-row .convert { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 14px; }
+.pv-row svg { width: 15px; height: 15px; }
+.pv-get { flex: 1; }
+.pv-row .ghost-button { height: 38px; }
+.pv-timer-pick { flex: 1; height: 38px; }
+.pv-timer-pick select { width: 100%; font-size: 12.5px; }
+.pv-remove { margin-left: auto; }
+.pv-remove svg { width: 17px; height: 17px; }
+.pv-bar { height: 6px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
+.pv-bar span { display: block; height: 100%; border-radius: 6px; background: var(--accent); transition: width .5s linear; }
+.pv-bar.live span { background-image: linear-gradient(90deg, transparent 0, rgba(255,255,255,.35) 50%, transparent 100%); background-size: 60px 100%;
+  background-repeat: no-repeat; animation: pv-shine 1.4s linear infinite; background-color: var(--accent); }
+@keyframes pv-shine { from { background-position: -60px 0; } to { background-position: calc(100% + 60px) 0; } }
+.pv-bar.small { height: 4px; margin-top: 6px; }
+.pv-progress { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.pv-progress b { color: var(--text); font-weight: 600; }
+.pv-empty { padding: 26px 28px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.pv-empty h2 { margin: 0 0 12px; font: 700 20px var(--head); }
+.pv-empty ol { margin: 0; padding-left: 20px; display: grid; gap: 9px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.pv-empty b { color: var(--text); }
+.pv-timers { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-timer-help { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.pv-add-dialog .sub b { color: var(--text); }
+.pv-sends { width: 360px; }
+.pv-sends-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; font: 600 13.5px var(--head); }
+.pv-sends-head small { font: 500 11.5px Inter, sans-serif; color: var(--muted); }
+.pv-send { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); }
+.pv-send-icon { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(var(--accent-rgb), .14); color: var(--accent); }
+.pv-send-icon svg { width: 14px; height: 14px; }
+.pv-send.done .pv-send-icon { background: rgba(63, 154, 47, .16); color: var(--green); }
+.pv-send.error .pv-send-icon { background: rgba(214, 69, 58, .14); color: var(--red); }
+.pv-send-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pv-send-text b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-send-text small { font-size: 12px; color: var(--muted); white-space: pre; }
+.pv-send.done .pv-bar, .pv-send.error .pv-bar { display: none; }
+@media (max-width: 760px) { .pv-top { flex-direction: column; align-items: stretch; } .pv-session-head { flex-wrap: wrap; } }
+.pv-add-dialog .gm-label { margin-top: 20px; }

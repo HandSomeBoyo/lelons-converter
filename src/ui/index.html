@@ -86,6 +86,7 @@
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
       <button data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
       <button data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
+      <button data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
       <div class="tab-group">Tools</div>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
@@ -704,6 +705,31 @@
     </div>
   </section>
 
+  <section class="tab-page" id="povsTab" hidden>
+    <h1 class="headline">Everyone's POV.<br><em>Straight from their PC.</em></h1>
+    <p class="fx-status" id="pvStatus" hidden></p>
+    <div class="fx-out" id="pvOut" hidden>
+      <p>Log in to see your friends' recordings.</p>
+      <button type="button" class="small-button" id="pvLogin">Log in</button>
+    </div>
+    <div class="pv-main" id="pvMain" hidden>
+      <div class="pv-top">
+        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they need VaultHub open while you download.</p>
+        <button type="button" class="convert small-button" id="pvNew">+ New session</button>
+      </div>
+      <div id="pvSessions"></div>
+      <div class="pv-empty" id="pvEmpty" hidden>
+        <h2>Recorded a game together?</h2>
+        <ol>
+          <li><b>Make a session</b> for the game you played, like "Lethal Company, Friday night".</li>
+          <li>Everyone who recorded clicks <b>Add my POV</b> and picks their video. It stays on their PC.</li>
+          <li>Friends click <b>Download</b>. It comes straight from that person's VaultHub, and goes on from where it was if it stops.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+  <div class="fx-jobs pv-sends" id="pvSends" hidden></div>
+
   <section class="tab-page" id="copyrightTab" hidden>
     <h1 class="headline">Is it copyrighted?<br><em>Check before you post.</em></h1>
     <label class="dropzone" id="copyDrop">
@@ -992,6 +1018,39 @@
         <button type="submit" class="small-button" id="fxPackSave">Make the pack</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="pvSessionModal" hidden>
+  <div class="dialog fx-pack-dialog" role="dialog" aria-labelledby="pvSessionHeading">
+    <h2 id="pvSessionHeading">New recording session</h2>
+    <p class="sub">One session for one time you played together. Everyone adds their own POV to it.</p>
+    <form id="pvSessionForm" autocomplete="off">
+      <label class="fx-field"><span>Name</span><span class="input"><input id="pvSessionTitle" maxlength="120" placeholder="Friday night run"></span></label>
+      <label class="fx-field"><span>Game (optional)</span><span class="input"><input id="pvSessionGame" maxlength="80" placeholder="Lethal Company"></span></label>
+      <p class="acct-note" id="pvSessionNote"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="pvSessionCancel">Cancel</button>
+        <button type="submit" class="small-button" id="pvSessionSave">Make it</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="pvAddModal" hidden>
+  <div class="dialog fx-pack-dialog pv-add-dialog" role="dialog" aria-labelledby="pvAddHeading">
+    <h2 id="pvAddHeading">Add my POV</h2>
+    <p class="sub">To <b id="pvAddSession"></b>. Your video isn't uploaded: friends get it straight from your PC while VaultHub is open.</p>
+    <span class="gm-label">How long should it stay in the list?</span>
+    <div class="pv-timers" id="pvAddTimers"></div>
+    <p class="pv-timer-help">After that it's gone from the POVs tab by itself (the video stays on your PC). You can change it later.</p>
+    <p class="acct-note" id="pvAddNote"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="pvAddCancel">Cancel</button>
+      <button type="button" class="small-button" id="pvAddGo">Pick the video</button>
+    </div>
   </div>
 </div>
 
@@ -1484,6 +1543,7 @@
 <script src="boards.js"></script>
 <script src="fx.js"></script>
 <script src="games.js"></script>
+<script src="povs.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>
