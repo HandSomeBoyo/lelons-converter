@@ -2614,7 +2614,12 @@ create or replace function lelons.pov_file_json(f lelons.pov_files, me lelons.ac
                                               and s.seen_at > now() - interval '25 seconds'),
                              'got', coalesce((select json_agg(ga.username order by g.created_at)
                                               from lelons.pov_gets g join lelons.accounts ga on ga.id = g.account_id
-                                              where g.file_id = f.id), '[]'::json))
+                                              where g.file_id = f.id), '[]'::json),
+                             -- (2.22.0) friends who downloaded it and can send it on, with their app open now
+                             'holders', coalesce((select json_agg(ga.username order by g.created_at)
+                                              from lelons.pov_gets g join lelons.accounts ga on ga.id = g.account_id
+                                              join lelons.pov_seen s on s.account_id = g.account_id
+                                              where g.file_id = f.id and s.seen_at > now() - interval '25 seconds'), '[]'::json))
      from lelons.accounts a where a.id = f.owner_id $$;
 
 -- How long a POV stays: 'hours' 1 to 720 (30 days), or null/0 for until it's removed.
@@ -2718,9 +2723,13 @@ begin
       raise exception 'bad signal' using hint = 'bad_input';
     end if;
     select a.id into target from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'to', '')));
-    -- Offers go to the POV's owner; answers (or "no") come from the owner.
-    if target is null or target = me.id or (data->>'kind' = 'offer' and target <> f.owner_id)
-       or (data->>'kind' <> 'offer' and me.id <> f.owner_id) then
+    -- Offers go to the POV's owner or a friend who downloaded it (2.22.0: they send it on);
+    -- answers (or "no") come from them.
+    if target is null or target = me.id
+       or (data->>'kind' = 'offer' and target <> f.owner_id
+           and not exists (select 1 from lelons.pov_gets g where g.file_id = f.id and g.account_id = target))
+       or (data->>'kind' <> 'offer' and me.id <> f.owner_id
+           and not exists (select 1 from lelons.pov_gets g where g.file_id = f.id and g.account_id = me.id)) then
       raise exception 'bad signal' using hint = 'bad_input';
     end if;
     if (select count(*) from lelons.pov_signals g where g.from_id = me.id and g.created_at > now() - interval '1 minute') >= 40 then

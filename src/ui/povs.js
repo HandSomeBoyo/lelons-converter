@@ -81,6 +81,9 @@ function pvQuality(f) {
 const pvFiles = () => pvSessions.flatMap((s) => s.files.map((f) => ({ ...f, sessionTitle: s.title })));
 const pvFile = (id) => pvFiles().find((f) => f.id === id);
 const pvAlive = (f) => !f.expires || f.expires > Date.now() / 1000;
+// Who to get a POV from: the one who recorded it if their app is open, else a friend who downloaded it
+// and has VaultHub open now (they send it on), else the one who recorded it (to try anyway).
+const pvSource = (f) => (f.ready ? f.by : (f.holders || []).find((h) => h.toLowerCase() !== pvMe().toLowerCase()) || f.by);
 
 // ---- loading the list
 
@@ -226,12 +229,18 @@ function pvDrawAct(card, f) {
     const line = pvEl("p", "pv-ready on");
     line.innerHTML = PV_ICONS.check;
     line.append("Downloaded");
+    const sending = [...pvSends.values()].filter((s) => s.file === f.id && s.status === "sending");
+    const more = pvEl("p", sending.length ? "pv-sending" : "pv-got",
+      sending.length ? `Sending it on to ${sending.map((s) => s.to).join(", ")}` : "Friends can get it from you too while VaultHub is open");
     const row = pvEl("div", "pv-row");
     row.append(pvButton("small-button", PV_ICONS.folder, "Show in folder", () => api("/api/pov-show", { id: f.id })));
-    return act.replaceChildren(line, row);
+    return act.replaceChildren(line, more, row);
   }
-  const line = pvEl("p", "pv-ready " + (f.ready ? "on" : "off"));
-  line.append(pvEl("i"), f.ready ? `${f.by} is online: ready to send` : `${f.by} is offline. They need VaultHub open.`);
+  const from = pvSource(f);
+  const line = pvEl("p", "pv-ready " + (f.ready || from !== f.by ? "on" : "off"));
+  line.append(pvEl("i"), f.ready ? `${f.by} is online: ready to send`
+    : from !== f.by ? `${f.by} is offline, but ${from} has it: ready to send`
+    : `${f.by} is offline. They (or a friend who has it) need VaultHub open.`);
   const row = pvEl("div", "pv-row");
   const partly = d && d.state === "part" && d.have > 0;
   row.append(pvButton("convert small-button pv-get", PV_ICONS.down,
@@ -332,7 +341,7 @@ async function pvCheck() {
     }
   } else if (res && typeof sfxLoggedOut === "function") sfxLoggedOut(res);
   for (const g of pvGets.values()) { // nobody answered: they're probably not there
-    if (g.status === "connecting" && Date.now() > g.deadline) pvLost(g, `Couldn't reach ${g.file.by}. They need VaultHub open.`, 30);
+    if (g.status === "connecting" && Date.now() > g.deadline) pvLost(g, `Couldn't reach ${g.from}. They need VaultHub open.`, 30);
   }
   // Fast while waiting for an answer; every few seconds while you share something (that's how friends reach you).
   if (connecting) pvCheckSoon(1000);
@@ -349,7 +358,7 @@ function pvSignal(s) {
   const g = [...pvGets.values()].find((x) => x.transfer === s.transfer);
   if (!g || g.status !== "connecting") return;
   if (s.kind === "no") {
-    if (s.sdp === "busy") return pvLost(g, `${g.file.by} is sending to others right now.`, 30);
+    if (s.sdp === "busy") return pvLost(g, `${g.from} is sending to others right now.`, 30);
     return pvLost(g, s.sdp || "They can't send it right now.", 0, true);
   }
   g.pc.setRemoteDescription({ type: "answer", sdp: s.sdp }).catch(() => pvLost(g, "The connection broke.", 10));
@@ -383,7 +392,8 @@ async function pvConnect(g) {
   pvClose(g);
   clearTimeout(g.retry);
   g.status = "connecting";
-  g.message = `Connecting to ${g.file.by}...`;
+  g.from = pvSource(pvFile(g.file.id) || g.file);
+  g.message = `Connecting to ${g.from}...`;
   g.transfer = crypto.randomUUID();
   g.buf = [];
   g.bufBytes = 0;
@@ -419,7 +429,7 @@ async function pvConnect(g) {
     return pvLost(g, "Couldn't start the connection.", 10);
   }
   if (g.transfer !== mine) return;
-  const res = await pvSay(g.file.id, g.file.by, mine, "offer", pc.localDescription.sdp);
+  const res = await pvSay(g.file.id, g.from, mine, "offer", pc.localDescription.sdp);
   if (g.transfer !== mine) return;
   if (!res.ok) return pvLost(g, res.error || "Couldn't reach the library.", res.error && /isn't shared/.test(res.error) ? 0 : 20, !!(res.error && /isn't shared/.test(res.error)));
   g.deadline = Date.now() + 30000;
