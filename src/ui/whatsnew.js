@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.22.0", items: [
+    "POVs: friends pass videos on. Once you've downloaded a video, you can send it to others too, while VaultHub is open and its timer runs.",
+    "So when the one who recorded it has their PC off, you can still get it from a friend who already has it. The card says who is ready to send.",
+  ] },
   { version: "2.21.1", items: [
     "POVs is simpler: click \"New video\", give it a name, pick how long it stays up, choose the file and click Save. No sessions to make first.",
     "All the videos are in one list, newest first. A download is saved with the name it has in the list.",
