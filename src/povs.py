@@ -342,6 +342,7 @@ class Povs:
         os.replace(d["part"], target)
         with self.lock:
             d["path"] = target
+            self.shared[file_id] = target  # (2.22.0) now you can send it on to friends too, while its timer runs
             self._save()
         try:
             _rpc("got", file_id)
@@ -354,6 +355,8 @@ class Povs:
         with self.lock:
             self._load()
             d = self.downloads.pop(file_id, None)
+            if d and d.get("path") and self.shared.get(file_id) == d["path"]:
+                del self.shared[file_id]
             self._save()
         if d and delete and not d.get("path"):
             try:
