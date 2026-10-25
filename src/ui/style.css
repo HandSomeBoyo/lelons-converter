@@ -4810,3 +4810,14 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 .pv-send.done .pv-bar, .pv-send.error .pv-bar { display: none; }
 @media (max-width: 760px) { .pv-top { flex-direction: column; align-items: stretch; } .pv-session-head { flex-wrap: wrap; } }
 .pv-add-dialog .gm-label { margin-top: 20px; }
+/* 2.21.1: one list of videos (no sessions) */
+#pvGrid { margin-bottom: 30px; }
+.pv-title { margin: 0; font: 650 16px/1.3 var(--head); letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-body .pv-who { margin-top: 7px; font-size: 12.5px; color: var(--muted); }
+.pv-body .pv-who .avatar { width: 22px; height: 22px; font-size: 10px; }
+.pv-body .pv-who span:not(.avatar) { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-file-row { display: flex; align-items: center; gap: 12px; }
+.pv-file-row .small-button { flex: none; height: 38px; padding: 0 14px; }
+.pv-file { min-width: 0; font-size: 13px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-file.on { color: var(--text); font-weight: 500; }
+.pv-add-dialog .fx-field { margin-top: 10px; }

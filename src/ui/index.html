@@ -715,15 +715,15 @@
     <div class="pv-main" id="pvMain" hidden>
       <div class="pv-top">
         <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they need VaultHub open while you download.</p>
-        <button type="button" class="convert small-button" id="pvNew">+ New session</button>
+        <button type="button" class="convert small-button" id="pvNew">+ New video</button>
       </div>
-      <div id="pvSessions"></div>
+      <div class="pv-grid" id="pvGrid"></div>
       <div class="pv-empty" id="pvEmpty" hidden>
         <h2>Recorded a game together?</h2>
         <ol>
-          <li><b>Make a session</b> for the game you played, like "Lethal Company, Friday night".</li>
-          <li>Everyone who recorded clicks <b>Add my POV</b> and picks their video. It stays on their PC.</li>
-          <li>Friends click <b>Download</b>. It comes straight from that person's VaultHub, and goes on from where it was if it stops.</li>
+          <li>Click <b>New video</b>, give it a name, pick how long it stays up and choose the file.</li>
+          <li>It stays on your PC. Friends click <b>Download</b> and get it straight from your VaultHub.</li>
+          <li>When the time is up, it's gone from here by itself.</li>
         </ol>
       </div>
     </div>
@@ -1021,36 +1021,26 @@
   </div>
 </div>
 
-<div class="modal" id="pvSessionModal" hidden>
-  <div class="dialog fx-pack-dialog" role="dialog" aria-labelledby="pvSessionHeading">
-    <h2 id="pvSessionHeading">New recording session</h2>
-    <p class="sub">One session for one time you played together. Everyone adds their own POV to it.</p>
-    <form id="pvSessionForm" autocomplete="off">
-      <label class="fx-field"><span>Name</span><span class="input"><input id="pvSessionTitle" maxlength="120" placeholder="Friday night run"></span></label>
-      <label class="fx-field"><span>Game (optional)</span><span class="input"><input id="pvSessionGame" maxlength="80" placeholder="Lethal Company"></span></label>
-      <p class="acct-note" id="pvSessionNote"></p>
+<div class="modal" id="pvVideoModal" hidden>
+  <div class="dialog fx-pack-dialog pv-add-dialog" role="dialog" aria-labelledby="pvVideoHeading">
+    <h2 id="pvVideoHeading">New video</h2>
+    <form id="pvVideoForm" autocomplete="off">
+      <label class="fx-field"><span>Name</span><span class="input"><input id="pvVideoName" maxlength="120" placeholder="Lethal Company, Friday night (my POV)"></span></label>
+      <span class="gm-label">How long should it stay up?</span>
+      <div class="pv-timers" id="pvVideoTimers"></div>
+      <span class="gm-label">Video</span>
+      <div class="pv-file-row">
+        <button type="button" class="small-button ghost-button" id="pvVideoPick">Choose file</button>
+        <span class="pv-file" id="pvVideoFile">No file chosen yet</span>
+      </div>
+      <p class="pv-timer-help">It isn't uploaded: friends get it straight from your PC while VaultHub is open.</p>
+      <p class="acct-note" id="pvVideoNote"></p>
       <div class="dialog-actions">
         <span class="spacer"></span>
-        <button type="button" class="ghost-button" id="pvSessionCancel">Cancel</button>
-        <button type="submit" class="small-button" id="pvSessionSave">Make it</button>
+        <button type="button" class="ghost-button" id="pvVideoCancel">Cancel</button>
+        <button type="submit" class="small-button" id="pvVideoSave" disabled>Save</button>
       </div>
     </form>
-  </div>
-</div>
-
-<div class="modal" id="pvAddModal" hidden>
-  <div class="dialog fx-pack-dialog pv-add-dialog" role="dialog" aria-labelledby="pvAddHeading">
-    <h2 id="pvAddHeading">Add my POV</h2>
-    <p class="sub">To <b id="pvAddSession"></b>. Your video isn't uploaded: friends get it straight from your PC while VaultHub is open.</p>
-    <span class="gm-label">How long should it stay in the list?</span>
-    <div class="pv-timers" id="pvAddTimers"></div>
-    <p class="pv-timer-help">After that it's gone from the POVs tab by itself (the video stays on your PC). You can change it later.</p>
-    <p class="acct-note" id="pvAddNote"></p>
-    <div class="dialog-actions">
-      <span class="spacer"></span>
-      <button type="button" class="ghost-button" id="pvAddCancel">Cancel</button>
-      <button type="button" class="small-button" id="pvAddGo">Pick the video</button>
-    </div>
   </div>
 </div>
 
