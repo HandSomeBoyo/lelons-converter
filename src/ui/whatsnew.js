@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.21.0", items: [
+    "New POVs tab: recorded a game together? Make a session, and everyone adds their own recording so the others can download their POV.",
+    "Nothing gets uploaded, so it's free and any size works: the video goes straight from your friend's PC to yours. They need VaultHub open while you download (a green dot shows when they're ready).",
+    "When you add your POV you pick how long it stays: 1 hour, 6 hours, 1 day, 3 days, 1 week, or until you remove it. Then it's gone from the tab by itself (the video stays on your PC).",
+    "A download that stops (internet gone, app closed, or you clicked Pause) goes on from where it was.",
+  ] },
   { version: "2.20.0", items: [
     "Docs: in a PDF you can now edit everything, not just the text. Click an icon, a dot (like the rating dots on a CV) or a picture to pick it up.",
     "Then drag it somewhere else, give it a new color, make it bigger or smaller with - and +, copy it or delete it. Two new grays are in the colors, handy for \"empty\" rating dots.",
