@@ -37,6 +37,7 @@ import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
+import povs  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -512,6 +513,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/image/"):
             path = images.thumbnail_path(self.path[len("/image/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/pov-read/"):  # a piece of a POV you share, for the page to send to a friend
+            url = urllib.parse.urlsplit(self.path)
+            query = urllib.parse.parse_qs(url.query)
+            try:
+                body = povs.povs.read(url.path[len("/pov-read/"):], int(query.get("at", ["0"])[0]), int(query.get("n", ["0"])[0]))
+            except (povs.Error, OSError, ValueError):
+                return self.send_error(404)
+            return self.send_body(body, "application/octet-stream")
         if self.path == "/icon.png":
             icon = next((p for p in ICON_CANDIDATES if os.path.isfile(p)), None)
             return self.send_file(icon) if icon else self.send_error(404)
@@ -843,6 +852,79 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_povs(self, action, data):
+        """The POVs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        p = povs.povs
+        item = str(data.get("id") or "") or None
+        try:
+            if action == "list":
+                result = p.list()
+            elif action == "new-session":
+                result = p.new_session(data.get("title"), data.get("game"))
+            elif action == "edit-session":
+                p.edit_session(item, data.get("title"), data.get("game"))
+                result = {}
+            elif action == "delete-session":
+                p.delete_session(item)
+                result = {}
+            elif action in ("add", "relink"):  # pick your recording (Windows' Open window)
+                path = ""
+                if os.environ.get("VAULTHUB_TEST_PICK"):  # (tests: no Windows window to pick in)
+                    path = str(data.get("path") or "")
+                elif os.name == "nt":
+                    import folder_picker
+                    try:
+                        paths = folder_picker.pick_files("Pick your recording", povs.PICK_KINDS)
+                    except OSError:
+                        paths = []
+                    path = paths[0] if paths else ""
+                if not path:
+                    return self.send_json({"ok": False, "cancelled": True})
+                if action == "add":
+                    result = {"file": p.add(item, path, data.get("hours"))}
+                else:
+                    p.relink(item, path)
+                    result = {}
+            elif action == "timer":
+                result = {"file": p.timer(item, data.get("hours"))}
+            elif action == "remove":
+                p.remove(item)
+                result = {}
+            elif action == "check":
+                result = p.check(data.get("after"), bool(data.get("busy")))
+            elif action == "signal":
+                p.signal(item, data.get("to"), data.get("transfer"), data.get("kind"), data.get("sdp"))
+                result = {}
+            elif action == "can-send":
+                result = p.can_send(item)
+            elif action == "start":
+                result = p.start(item, save_folder(data) if data.get("folder") else "",
+                                 data.get("name"), data.get("size"), data.get("session"), data.get("by"))
+            elif action == "cancel":
+                p.cancel(item, bool(data.get("delete")))
+                result = {}
+            elif action == "show":
+                path = p.path_of(item)
+                if path and os.path.isfile(path):
+                    show_in_folder(path)
+                elif path and os.path.isdir(path):
+                    open_folder(path)
+                result = {}
+            elif action == "awake":
+                p.keep_awake(bool(data.get("on")))
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (povs.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
+        except (TypeError, ValueError):
+            return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_docs(self, action, data):
         """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         doc_id = data.get("id")
@@ -924,6 +1006,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/pov-write":  # the body is a piece of a POV a friend is sending
+            try:
+                return self.send_json({"ok": True, **povs.povs.write(self.headers.get("X-Pov") or "", int(self.headers.get("X-At") or 0), self.rfile, length)})
+            except povs.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save the download. Is the drive full or gone?"})
         if self.path == "/api/fx-add":  # the body is a clip for a Film assets pack
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "clip")
             try:
@@ -1130,6 +1219,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/games-"):
             self.handle_games(self.path[len("/api/games-"):], data)
+        elif self.path.startswith("/api/pov-"):
+            self.handle_povs(self.path[len("/api/pov-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

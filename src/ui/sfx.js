@@ -104,6 +104,7 @@ function setSfxAccount(account) {
   if (typeof homeAccountChanged === "function") homeAccountChanged(!sfxUser() || sfxUser().id !== was);
   if (typeof fxAccountChanged === "function") fxAccountChanged();
   if (typeof gamesAccountChanged === "function") gamesAccountChanged();
+  if (typeof povsAccountChanged === "function") povsAccountChanged();
 }
 
 // Something said the login ran out: back to the log in screen.

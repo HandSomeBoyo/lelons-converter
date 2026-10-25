@@ -2549,6 +2549,202 @@ begin
   raise exception 'what?' using hint = 'bad_input';
 end $$;
 
+-- ---- POVs (2.21.0): everyone's own recording of the same game, shared PC to PC.
+-- Only the list lives here (names, sizes, a small picture). The videos stay on the PC of whoever
+-- recorded them and go straight from their app to a friend's app (WebRTC, like the calls), so any
+-- size works for free. The two apps find each other through offers and answers left here.
+-- Whoever shares a POV picks how long it stays in the list (or until they remove it).
+create table if not exists lelons.pov_sessions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null check (length(title) between 1 and 120),
+  game text not null default '' check (length(game) <= 80),
+  created_by uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.pov_files (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references lelons.pov_sessions (id) on delete cascade,
+  owner_id uuid not null references lelons.accounts (id) on delete cascade,
+  name text not null check (length(name) between 1 and 200),
+  size bigint not null check (size > 0),
+  seconds real not null default 0,
+  width int not null default 0,
+  height int not null default 0,
+  thumb text not null default '' check (length(thumb) <= 120000),  -- a small jpeg (data: address)
+  created_at timestamptz not null default now(),
+  expires_at timestamptz  -- gone from the list after this (null: until the owner removes it)
+);
+create table if not exists lelons.pov_gets (  -- who downloaded a POV all the way
+  file_id uuid not null references lelons.pov_files (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (file_id, account_id)
+);
+create table if not exists lelons.pov_signals (
+  id bigint generated always as identity primary key,
+  file_id uuid not null references lelons.pov_files (id) on delete cascade,
+  transfer uuid not null,
+  from_id uuid not null references lelons.accounts (id) on delete cascade,
+  to_id uuid not null references lelons.accounts (id) on delete cascade,
+  kind text not null check (kind in ('offer', 'answer', 'no')),
+  sdp text not null default '' check (length(sdp) <= 30000),
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.pov_seen (  -- when each app last looked for friends asking for its POVs
+  account_id uuid primary key references lelons.accounts (id) on delete cascade,
+  seen_at timestamptz not null default now()
+);
+create index if not exists pov_files_session on lelons.pov_files (session_id);
+create index if not exists pov_signals_to on lelons.pov_signals (to_id, id);
+alter table lelons.pov_sessions enable row level security;
+alter table lelons.pov_files enable row level security;
+alter table lelons.pov_gets enable row level security;
+alter table lelons.pov_signals enable row level security;
+alter table lelons.pov_seen enable row level security;
+revoke all on lelons.pov_sessions, lelons.pov_files, lelons.pov_gets, lelons.pov_signals, lelons.pov_seen from anon, authenticated;
+
+create or replace function lelons.pov_file_json(f lelons.pov_files, me lelons.accounts) returns json
+  language sql stable security definer set search_path = '' as
+  $$ select json_build_object('id', f.id, 'session', f.session_id, 'name', f.name, 'size', f.size, 'seconds', f.seconds,
+                             'width', f.width, 'height', f.height, 'thumb', f.thumb,
+                             'created', extract(epoch from f.created_at), 'expires', extract(epoch from f.expires_at),
+                             'by', a.username, 'by_avatar', a.avatar, 'mine', f.owner_id = me.id,
+                             'can_edit', f.owner_id = me.id or me.role in ('owner', 'admin'),
+                             'ready', exists (select 1 from lelons.pov_seen s where s.account_id = f.owner_id
+                                              and s.seen_at > now() - interval '25 seconds'),
+                             'got', coalesce((select json_agg(ga.username order by g.created_at)
+                                              from lelons.pov_gets g join lelons.accounts ga on ga.id = g.account_id
+                                              where g.file_id = f.id), '[]'::json))
+     from lelons.accounts a where a.id = f.owner_id $$;
+
+-- How long a POV stays: 'hours' 1 to 720 (30 days), or null/0 for until it's removed.
+create or replace function lelons.pov_until(data jsonb) returns timestamptz
+  language sql stable set search_path = '' as
+  $$ select case when coalesce((data->>'hours')::numeric, 0) <= 0 then null
+                 else now() + make_interval(mins => (least(720, (data->>'hours')::numeric) * 60)::int) end $$;
+
+-- what:
+--   'list'                         the sessions and their POVs
+--   'new_session'  data {title, game}
+--   'edit_session' id, data {title, game}      (who made it, or admins)
+--   'delete_session' id                        (who made it, or admins)
+--   'add'          id = session, data {name, size, seconds, width, height, thumb, hours}
+--   'timer'        id = POV, data {hours}      (its owner, or admins)
+--   'remove'       id = POV                    (its owner, or admins)
+--   'got'          id = POV: you downloaded it all
+--   'check'        after: say your app is there to send; get the offers and answers for you
+--   'signal'       id = POV, data {to, transfer, kind, sdp}
+create or replace function public.lelons_pov(token text, what text, id uuid default null, data jsonb default null, after bigint default 0)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  s lelons.pov_sessions;
+  f lelons.pov_files;
+  target uuid;
+begin
+  if what = 'check' then
+    insert into lelons.pov_seen as x (account_id, seen_at) values (me.id, now())
+    on conflict on constraint pov_seen_pkey do update set seen_at = now() where x.seen_at < now() - interval '5 seconds';
+    return json_build_object('signals', coalesce((
+      select json_agg(json_build_object('id', g.id, 'file', g.file_id, 'transfer', g.transfer, 'from', a.username,
+                                        'kind', g.kind, 'sdp', g.sdp, 'age', extract(epoch from now() - g.created_at)) order by g.id)
+      from lelons.pov_signals g join lelons.accounts a on a.id = g.from_id
+      where g.to_id = me.id and g.id > coalesce(after, 0)), '[]'::json),
+      'last', (select max(g.id) from lelons.pov_signals g));
+  elsif what = 'list' then
+    delete from lelons.pov_files x where x.expires_at < now();
+    delete from lelons.pov_sessions x where x.created_at < now() - interval '1 day'
+      and not exists (select 1 from lelons.pov_files y where y.session_id = x.id);
+    return json_build_object('sessions', coalesce((
+      select json_agg(json_build_object('id', x.id, 'title', x.title, 'game', x.game, 'created', extract(epoch from x.created_at),
+               'by', (select a.username from lelons.accounts a where a.id = x.created_by),
+               'can_edit', x.created_by is not distinct from me.id or me.role in ('owner', 'admin'),
+               'files', coalesce((select json_agg(lelons.pov_file_json(y, me) order by y.created_at)
+                                  from lelons.pov_files y where y.session_id = x.id), '[]'::json))
+             order by greatest(x.created_at, (select max(y.created_at) from lelons.pov_files y where y.session_id = x.id)) desc)
+      from lelons.pov_sessions x), '[]'::json));
+  elsif what = 'new_session' then
+    if length(btrim(coalesce(data->>'title', ''))) = 0 then
+      raise exception 'no title' using hint = 'bad_input';
+    end if;
+    if (select count(*) from lelons.pov_sessions x where x.created_by = me.id and x.created_at > now() - interval '1 hour') >= 20 then
+      raise exception 'slow down' using hint = 'pov_slow';
+    end if;
+    insert into lelons.pov_sessions (title, game, created_by)
+    values (left(btrim(data->>'title'), 120), left(btrim(coalesce(data->>'game', '')), 80), me.id) returning * into s;
+    return json_build_object('session', s.id);
+  elsif what in ('edit_session', 'delete_session', 'add') then
+    select x.* into s from lelons.pov_sessions x where x.id = lelons_pov.id;
+    if s.id is null then
+      raise exception 'no session' using hint = 'pov_gone';
+    end if;
+    if what = 'add' then
+      if coalesce((data->>'size')::bigint, 0) <= 0 or length(btrim(coalesce(data->>'name', ''))) = 0 then
+        raise exception 'bad pov' using hint = 'bad_input';
+      end if;
+      if (select count(*) from lelons.pov_files y where y.session_id = s.id) >= 24 then
+        raise exception 'session full' using hint = 'pov_full';
+      end if;
+      insert into lelons.pov_files (session_id, owner_id, name, size, seconds, width, height, thumb, expires_at)
+      values (s.id, me.id, left(btrim(data->>'name'), 200), (data->>'size')::bigint, coalesce((data->>'seconds')::real, 0),
+              coalesce((data->>'width')::int, 0), coalesce((data->>'height')::int, 0),
+              case when left(coalesce(data->>'thumb', ''), 23) = 'data:image/jpeg;base64,' then left(data->>'thumb', 120000) else '' end,
+              lelons.pov_until(data))
+      returning * into f;
+      return json_build_object('file', lelons.pov_file_json(f, me));
+    end if;
+    if s.created_by is distinct from me.id and me.role not in ('owner', 'admin') then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    if what = 'edit_session' then
+      update lelons.pov_sessions x set title = coalesce(nullif(left(btrim(coalesce(data->>'title', '')), 120), ''), x.title),
+        game = left(btrim(coalesce(data->>'game', x.game)), 80) where x.id = s.id;
+    else
+      delete from lelons.pov_sessions x where x.id = s.id;
+    end if;
+    return '{}'::json;
+  end if;
+
+  select x.* into f from lelons.pov_files x where x.id = lelons_pov.id and (x.expires_at is null or x.expires_at > now());
+  if f.id is null then
+    raise exception 'no pov' using hint = 'pov_gone';
+  end if;
+  if what = 'got' then
+    insert into lelons.pov_gets (file_id, account_id) values (f.id, me.id) on conflict do nothing;
+    return '{}'::json;
+  elsif what = 'signal' then
+    if data->>'kind' not in ('offer', 'answer', 'no') or length(coalesce(data->>'sdp', '')) > 30000
+       or (data->>'kind' <> 'no' and length(coalesce(data->>'sdp', '')) < 10) then
+      raise exception 'bad signal' using hint = 'bad_input';
+    end if;
+    select a.id into target from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'to', '')));
+    -- Offers go to the POV's owner; answers (or "no") come from the owner.
+    if target is null or target = me.id or (data->>'kind' = 'offer' and target <> f.owner_id)
+       or (data->>'kind' <> 'offer' and me.id <> f.owner_id) then
+      raise exception 'bad signal' using hint = 'bad_input';
+    end if;
+    if (select count(*) from lelons.pov_signals g where g.from_id = me.id and g.created_at > now() - interval '1 minute') >= 40 then
+      raise exception 'slow down' using hint = 'pov_slow';
+    end if;
+    insert into lelons.pov_signals (file_id, transfer, from_id, to_id, kind, sdp)
+    values (f.id, (data->>'transfer')::uuid, me.id, target, data->>'kind', coalesce(data->>'sdp', ''));
+    delete from lelons.pov_signals g where g.created_at < now() - interval '3 minutes';
+    return '{}'::json;
+  end if;
+
+  if f.owner_id <> me.id and me.role not in ('owner', 'admin') then
+    raise exception 'not yours' using hint = 'denied';
+  end if;
+  if what = 'timer' then
+    update lelons.pov_files x set expires_at = lelons.pov_until(data) where x.id = f.id returning * into f;
+    return json_build_object('file', lelons.pov_file_json(f, me));
+  elsif what = 'remove' then
+    delete from lelons.pov_files x where x.id = f.id;
+    return '{}'::json;
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -2575,7 +2771,7 @@ begin
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
-    'lelons_games(text, text, uuid, jsonb)'] loop
+    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
