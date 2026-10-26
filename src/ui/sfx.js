@@ -240,12 +240,13 @@ function mergeSounds(list) {
 
 let sfxSongTimer = 0;
 let sfxReloadPending = false;
-async function loadSfx() {
+let sfxSongDelay = 10000, sfxSongSig = "";
+async function loadSfx(opts = {}) {
   if (sfxLoading) { sfxReloadPending = true; return; } // after this one: something changed meanwhile
   sfxLoading = true;
   sfxReloadPending = false;
   sfxLastLoad = Date.now();
-  if (typeof loadPlaylists === "function") loadPlaylists();
+  if (!opts.quiet && typeof loadPlaylists === "function") loadPlaylists();
   if (!sfxSounds.length) {
     sfxError = "";
     $("sfxEmpty").hidden = false;
@@ -259,7 +260,13 @@ async function loadSfx() {
     mergeSounds(res.sounds);
     sfxError = "";
     // Sounds still being checked for songs: look again in a bit (only while the Library is open).
-    if (res.songsChecking) sfxSongTimer = setTimeout(() => { if (!$("sfxTab").hidden && !document.hidden) loadSfx(); }, 10000);
+    // (more and more slowly while nothing new comes: a long check went on asking every 10 seconds)
+    if (res.songsChecking) {
+      const sig = res.sounds.map((x) => x.copyright ? 1 : 0).join("");
+      sfxSongDelay = sig !== sfxSongSig ? 10000 : Math.min(sfxSongDelay * 2, 60000);
+      sfxSongSig = sig;
+      sfxSongTimer = setTimeout(() => { if (!$("sfxTab").hidden && !document.hidden) loadSfx({ quiet: true }); }, sfxSongDelay);
+    }
   } else if (sfxLoggedOut(res)) {
     return;
   } else {
@@ -453,11 +460,11 @@ const sfxDownloading = new Set(); // ids being downloaded (a second click does n
 
 function rowFor(sound) {
   const note = sfxNotes.get(sound.id);
-  const sig = [sound.name, sound.category, sound.genre, sound.favorite, plInAny(sound.id), sound.uploader, sound.uploaderAvatar, sound.peaks ? 1 : 0,
+  const sig = [sound.name, sound.category, sound.genre, sound.favorite, plInAny(sound.id), sound.uploader, sound.uploaderAvatar,
     note && note.text, sfxSure.has(sound.id), sfxUser() && sfxUser().canUpload,
     sfxSongMatch(sound) ? sfxSongMatch(sound).title + "/" + sfxSongMatch(sound).artist : ""].join("|");
   const kept = sfxRows.get(sound.id);
-  if (kept && kept.sig === sig && kept.sound === sound) return kept.el;
+  if (kept && kept.sig === sig && kept.sound === sound) { sfxWantPeaks(sound); return kept.el; }
   // A row being dragged right now keeps its node (a new one would lose the drag and the animation).
   if (kept && kept.el.classList.contains("drag-lift")) return kept.el;
   const el = sfxRow(sound);
@@ -789,7 +796,13 @@ sfxAudio.addEventListener("loadedmetadata", () => {
   if (want && want.id === sfxPlaying && sfxAudio.duration) sfxAudio.currentTime = want.from * sfxAudio.duration;
 });
 // Paused from the player bar (or Space): the row's button follows.
-for (const type of ["play", "pause"]) sfxAudio.addEventListener(type, () => { if (sfxPlaying) drawSfx(); });
+// (only that row changes: the whole list was sorted and gone through again on every play and pause)
+for (const type of ["play", "pause"]) sfxAudio.addEventListener(type, () => {
+  if (!sfxPlaying) return;
+  const kept = sfxRows.get(sfxPlaying);
+  if (kept) markSfxPlaying(kept.el, kept.sound);
+  playerRefresh();
+});
 registerPlayer(sfxAudio, stopSfx);
 sfxAudio.addEventListener("timeupdate", () => {
   const row = sfxPlaying && $("sfxList").querySelector(`[data-id="${sfxPlaying}"]`);
@@ -818,15 +831,22 @@ function drawSoundWave(wave, sound) {
     bars.append(bar);
   }
   wave.classList.toggle("loading", !peaks);
-  if (!peaks && !sfxPeaksWanted.includes(sound.path) && !sfxPeaksBeingMade.has(sound.path) && !sfxPeaksFailed.has(sound.path)) {
-    sfxPeaksWanted.push(sound.path);
-    fetchPeaks();
-  }
+  if (!peaks) sfxWantPeaks(sound);
+}
+
+// A row without its wave asks for it (again, if it was skipped while the row wasn't shown).
+function sfxWantPeaks(sound) {
+  if (sound.peaks || !sound.path || sfxPeaks.has(sound.path) || sfxPeaksWanted.includes(sound.path) || sfxPeaksBeingMade.has(sound.path) || sfxPeaksFailed.has(sound.path)) return;
+  sfxPeaksWanted.push(sound.path);
+  setTimeout(fetchPeaks, 0); // (after the row is on the page: it's only made if the row is shown)
 }
 
 async function fetchPeaks() {
   while (sfxPeaksBusy < 2 && sfxPeaksWanted.length) {
     const path = sfxPeaksWanted.shift();
+    // A row that's gone (another search, another category, the Library closed): its wave isn't made now.
+    // (It's asked for again when the row is shown again.)
+    if ($("sfxTab").hidden || !sfxSounds.some((x) => x.path === path && $("sfxList").querySelector(`[data-id="${CSS.escape(String(x.id))}"]`))) continue;
     sfxPeaksBusy++;
     sfxPeaksBeingMade.add(path);
     api("/api/sfx-peaks", { path }).catch(() => ({ ok: false })).then((res) => {
@@ -836,8 +856,9 @@ async function fetchPeaks() {
       if (res.ok) {
         sfxPeaks.set(path, res.peaks);
         for (const sound of sfxSounds) if (sound.path === path) sound.peaks = res.peaks;
+        // (drawn on the kept row, on screen or not: the row isn't made again because its wave came)
         for (const sound of sfxSounds.filter((s) => s.path === path)) {
-          const row = $("sfxList").querySelector(`[data-id="${sound.id}"]`);
+          const kept = sfxRows.get(sound.id), row = kept && kept.el;
           if (!row) continue;
           const wave = row.querySelector(".sound-wave");
           wave.querySelector(".bars").replaceChildren();

@@ -16,7 +16,7 @@ async function pdfLoadLib() {
 }
 
 const PDF_MAX_PAGES = 400;
-let pdfCancelled = false;
+let pdfRun = 0; // each import has its number: Cancel (or a new import) makes the one going stop
 
 // ---------------------------------------------------------------- reading the pages
 
@@ -67,12 +67,12 @@ function pdfPageBits(page, vp, tc) {
 }
 
 // [{w, h, lines: [{top, y, x0, x1, size, text, runs, bold, mono}], pics: [{top, bottom, x0, x1, url}], scan}]
-async function pdfReadPages(pdf, progress) {
+async function pdfReadPages(pdf, progress, run = pdfRun) {
   const lib = pdfLib;
   const pages = [];
   const count = Math.min(pdf.numPages, PDF_MAX_PAGES);
   for (let n = 1; n <= count; n++) {
-    if (pdfCancelled) throw new Error("cancelled");
+    if (run !== pdfRun) throw new Error("cancelled");
     progress(n, count);
     const page = await pdf.getPage(n);
     const vp = page.getViewport({ scale: 1 });
@@ -577,11 +577,11 @@ function pdfShowProgress(text, done, total) {
   $("docImportText").textContent = text;
   $("docImportBar").style.width = total ? Math.round(done / total * 100) + "%" : "4%";
 }
-$("docImportCancel").addEventListener("click", () => { pdfCancelled = true; $("docImportModal").hidden = true; });
+$("docImportCancel").addEventListener("click", () => { pdfRun++; $("docImportModal").hidden = true; });
 
 // Reads the PDF. Says {title, kind, blocks (html), pages, scans} or null (cancelled or couldn't be read; it said why).
 async function pdfImport(file) {
-  pdfCancelled = false;
+  const run = ++pdfRun;
   pdfShowProgress("Opening the PDF...", 0, 0);
   let pdf = null;
   try {
@@ -594,12 +594,12 @@ async function pdfImport(file) {
       const input = document.querySelector("#docAskModal .doc-ask-input input");
       if (input) input.type = "password";
       const pw = await asked;
-      if (pw === null) { pdfCancelled = true; task.destroy(); return; }
+      if (pw === null) { if (run === pdfRun) pdfRun++; task.destroy(); return; }
       pdfShowProgress("Opening the PDF...", 0, 0);
       give(pw);
     };
     pdf = await task.promise;
-    const pages = await pdfReadPages(pdf, (n, count) => pdfShowProgress(`Reading page ${n} of ${count}...`, n - 1, count));
+    const pages = await pdfReadPages(pdf, (n, count) => pdfShowProgress(`Reading page ${n} of ${count}...`, n - 1, count), run);
     pdfDropRepeats(pages);
     const script = pdfIsScript(pages);
     let title = "";
@@ -608,10 +608,10 @@ async function pdfImport(file) {
     return { title: title || "Imported PDF", kind: script ? "script" : "doc", blocks: script ? pdfToScript(pages) : pdfToDoc(pages),
              pages: pdf.numPages, scans: pages.filter((p) => p.scan).length, cut: pdf.numPages > PDF_MAX_PAGES };
   } catch (err) {
-    if (!pdfCancelled) docToast(err && err.name === "PasswordException" ? "Couldn't open it: the password wasn't right." : "Couldn't read that PDF. Is it really a PDF?");
+    if (run === pdfRun) docToast(err && err.name === "PasswordException" ? "Couldn't open it: the password wasn't right." : "Couldn't read that PDF. Is it really a PDF?");
     return null;
   } finally {
-    $("docImportModal").hidden = true;
+    if (run === pdfRun) $("docImportModal").hidden = true;
     if (pdf) pdf.destroy();
   }
 }

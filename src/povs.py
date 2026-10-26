@@ -28,6 +28,7 @@ import sfx
 
 STORE = os.path.join(settings.DATA_DIR, "povs.json")
 PART_EXT = ".vaulthub-part"
+VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".ts", ".wmv"}
 MAX_READ = 16 * 1024 * 1024  # biggest piece the page reads at once
 TIMERS = (1, 6, 24, 72, 168, 0)  # hours a POV can stay in the list (0: until it's removed)
 PICK_KINDS = [
@@ -103,6 +104,7 @@ class Povs:
         self.downloads = {}  # POV id -> {part, folder, name, size, session, by, path (when done)}
         self.loaded = False
         self.picks = set()  # videos picked in this run (only those can be shared)
+        self.wlocks = {}  # POV id -> a lock: one piece written at a time, and Cancel waits for the piece being written
         self.awake_event = threading.Event()
         self.awake_at = 0
         self.awake_thread = None
@@ -142,9 +144,11 @@ class Povs:
     # ---- the list
 
     def list(self):
-        res = _rpc("list")
         with self.lock:
             self._load()
+            before = set(self.shared)  # (a POV shared while the list was on its way isn't in it yet: keep that one)
+        res = _rpc("list")
+        with self.lock:
             alive = set()
             for session in res.get("sessions") or []:
                 for f in session.get("files") or []:
@@ -155,11 +159,15 @@ class Povs:
                         f["path_name"] = os.path.basename(path) if path else ""
                     f["download"] = self._download_state(f["id"])
             # A POV of yours that ran out of time (or was removed) isn't sent any more.
-            gone = [k for k in self.shared if k not in alive]
+            gone = [k for k in before if k not in alive and k in self.shared]
             for k in gone:
                 del self.shared[k]
-            if gone:
+            # A friend's POV that ran out of time halfway through getting it: its half-done file goes.
+            ended = [(k, self.downloads.pop(k)["part"]) for k, d in list(self.downloads.items()) if k not in alive and not d.get("path")]
+            if gone or ended:
                 self._save()
+        for k, part in ended:
+            self.cancel_file(k, part)
         res["sharing"] = len(self.shared)
         res["timers"] = list(TIMERS)
         return res
@@ -223,8 +231,10 @@ class Povs:
         self.picks.discard(path)
         return f
 
-    def relink(self, file_id, path):
+    def relink(self, file_id, path, size=None):
         """Your file moved: point the POV at where it is now."""
+        if size and os.path.isfile(path) and os.path.getsize(path) != int(size):
+            raise Error("That's not the same video (it's a different size). Pick the one you shared.")
         with self.lock:
             self._load()
             if file_id not in self.shared:
@@ -292,8 +302,9 @@ class Povs:
                 if not folder or not os.path.isdir(folder):
                     raise Error("Pick a folder to save it in.")
                 stem, ext = os.path.splitext(os.path.basename(str(name or "video.mp4")))
+                ext = ext.lower() if ext.lower() in VIDEO_EXTS else ".mp4"  # (the name comes from a friend: never a program)
                 nice = names.safe_stem(session or stem, "POV", 110)  # (named like it is in the list)
-                d = {"folder": folder, "nice": nice, "ext": ext[:10] or ".mp4", "size": size,
+                d = {"folder": folder, "nice": nice, "ext": ext, "size": size,
                      "part": os.path.join(folder, nice + PART_EXT), "session": str(session or "")[:120], "by": str(by or "")[:40]}
                 n = 2
                 while os.path.exists(d["part"]):
@@ -313,29 +324,35 @@ class Povs:
             self._save()
             return {"at": have}
 
+    def _wlock(self, file_id):
+        with self.lock:
+            return self.wlocks.setdefault(file_id, threading.Lock())
+
     def write(self, file_id, at, stream, length):
         """Add a piece to the download. Pieces must come in order: returns {"at"} (how much is here)."""
-        with self.lock:
-            self._load()
-            d = self.downloads.get(file_id)
-        if not d or d.get("path"):
-            raise Error("That download was stopped.")
-        with open(d["part"], "ab") as f:
-            have = f.tell()
-            if int(at) != have:
+        with self._wlock(file_id):
+            with self.lock:
+                self._load()
+                d = self.downloads.get(file_id)
+            if not d or d.get("path"):
                 stream.read(length)
-                return {"at": have}
-            left = length
-            while left > 0:
-                chunk = stream.read(min(1024 * 1024, left))
-                if not chunk:
-                    break
-                f.write(chunk)
-                left -= len(chunk)
-            have = f.tell()
-        if have >= int(d["size"]):
-            return {"at": have, **self._finish(file_id, d)}
-        return {"at": have}
+                raise Error("That download was stopped.")
+            with open(d["part"], "ab") as f:
+                have = f.tell()
+                if int(at) != have:
+                    stream.read(length)
+                    return {"at": have}
+                left = length
+                while left > 0:
+                    chunk = stream.read(min(1024 * 1024, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+                have = f.tell()
+            if have >= int(d["size"]):
+                return {"at": have, **self._finish(file_id, d)}
+            return {"at": have}
 
     def _finish(self, file_id, d):
         target = names.free_path(d["folder"], d["nice"], d["ext"])
@@ -352,15 +369,24 @@ class Povs:
 
     def cancel(self, file_id, delete):
         """Stop a download for good (the half-done file is deleted), or forget a finished one."""
-        with self.lock:
-            self._load()
-            d = self.downloads.pop(file_id, None)
-            if d and d.get("path") and self.shared.get(file_id) == d["path"]:
-                del self.shared[file_id]
-            self._save()
-        if d and delete and not d.get("path"):
+        with self._wlock(file_id):  # (a piece being written finishes first: then the file can go)
+            with self.lock:
+                self._load()
+                d = self.downloads.pop(file_id, None)
+                if d and d.get("path") and self.shared.get(file_id) == d["path"]:
+                    del self.shared[file_id]
+                self._save()
+            if d and delete and not d.get("path"):
+                try:
+                    os.remove(d["part"])
+                except OSError:
+                    pass
+
+    def cancel_file(self, file_id, part):
+        """(list) A download that was dropped: delete its half-done file once no piece is being written."""
+        with self._wlock(file_id):
             try:
-                os.remove(d["part"])
+                os.remove(part)
             except OSError:
                 pass
 

@@ -400,9 +400,25 @@ class Film:
                 return self.writer
         found = _rpc("upload_key")
         with self.lock:
+            if self.writer:
+                return self.writer
             self.writer = B2(found["key_id"], found["key"])
             self.bucket, self.bucket_id = found["bucket"], found["bucket_id"]
+            threading.Thread(target=self._drop_unfinished, args=(self.writer, self.bucket_id), daemon=True).start()
             return self.writer
+
+    @staticmethod
+    def _drop_unfinished(writer, bucket_id):
+        """Big clips go up in parts. If the app was closed halfway, the parts stay in Backblaze and take up the
+        free space. Once a run: parts of uploads that started over a day ago (so never someone's upload going on now) go."""
+        try:
+            files = writer.call("b2_list_unfinished_large_files", {"bucketId": bucket_id, "maxFileCount": 100}).get("files") or []
+            old = time.time() * 1000 - 24 * 3600 * 1000
+            for f in files:
+                if (f.get("uploadTimestamp") or 0) < old:
+                    writer.call("b2_cancel_large_file", {"fileId": f["fileId"]})
+        except Exception:
+            pass
 
     def _delete_files(self, files):
         def run():
@@ -545,6 +561,8 @@ class Film:
             for item in self.uploads + self.downloads:
                 if item["id"] == item_id and item["status"] == "waiting":
                     item.update(status="error", message="Stopped.")
+                    if item.get("copied"):  # (a dropped clip's copy in the temp folder: it never got to be uploaded)
+                        shutil.rmtree(os.path.dirname(item["path"]), ignore_errors=True)
 
     def clear_done(self):
         with self.lock:

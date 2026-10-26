@@ -1006,12 +1006,14 @@ function render(s) {
 let failedChecks = 0;
 let lastState = "";
 let lastRenderAt = 0;
+let lastChangeAt = 0;
 async function refresh() {
   try {
     const text = await (await fetch("/api/state")).text();
     // Nothing changed (most of the time): skip redrawing the whole list. Still redrawn now and then.
     const key = format + "\n" + text;
-    if (key !== lastState || Date.now() - lastRenderAt > 5000) {
+    if (key !== lastState) lastChangeAt = Date.now();
+    if (key !== lastState || (!document.hidden && Date.now() - lastRenderAt > 5000)) {
       render(JSON.parse(text));
       lastState = key;
       lastRenderAt = Date.now();
@@ -1028,10 +1030,12 @@ async function refresh() {
 showFormatExtras();
 // Ask again only after the last answer came back (so a busy moment can't stack up requests),
 // and less often while the window is minimized.
+// Quick while something is going on (the answer keeps changing), calmer when it's all quiet.
 async function keepRefreshing() {
   await refresh();
-  setTimeout(keepRefreshing, document.hidden ? 2000 : 500);
+  setTimeout(keepRefreshing, document.hidden ? 5000 : Date.now() - lastChangeAt < 4000 ? 500 : 1000);
 }
 keepRefreshing();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 // (The token from the address: a goodbye message can't carry the window's cookie when it closes.)
 window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye?t=" + encodeURIComponent(new URLSearchParams(location.search).get("t") || "")));

@@ -2580,6 +2580,11 @@ create table if not exists lelons.pov_gets (  -- who downloaded a POV all the wa
   created_at timestamptz not null default now(),
   primary key (file_id, account_id)
 );
+create table if not exists lelons.pov_grants (  -- (2.22.1) who the owner (or a friend who has it) agreed to send a POV to
+  file_id uuid not null references lelons.pov_files (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  primary key (file_id, account_id)
+);
 create table if not exists lelons.pov_signals (
   id bigint generated always as identity primary key,
   file_id uuid not null references lelons.pov_files (id) on delete cascade,
@@ -2600,8 +2605,9 @@ alter table lelons.pov_sessions enable row level security;
 alter table lelons.pov_files enable row level security;
 alter table lelons.pov_gets enable row level security;
 alter table lelons.pov_signals enable row level security;
+alter table lelons.pov_grants enable row level security;
 alter table lelons.pov_seen enable row level security;
-revoke all on lelons.pov_sessions, lelons.pov_files, lelons.pov_gets, lelons.pov_signals, lelons.pov_seen from anon, authenticated;
+revoke all on lelons.pov_sessions, lelons.pov_files, lelons.pov_gets, lelons.pov_signals, lelons.pov_seen, lelons.pov_grants from anon, authenticated;
 
 create or replace function lelons.pov_file_json(f lelons.pov_files, me lelons.accounts) returns json
   language sql stable security definer set search_path = '' as
@@ -2701,6 +2707,11 @@ begin
     if s.created_by is distinct from me.id and me.role not in ('owner', 'admin') then
       raise exception 'not yours' using hint = 'denied';
     end if;
+    -- (2.22.1) Deleting a session doesn't take a friend's POV in it along.
+    if what = 'delete_session' and me.role not in ('owner', 'admin')
+       and exists (select 1 from lelons.pov_files y where y.session_id = s.id and y.owner_id <> me.id) then
+      raise exception 'not empty' using hint = 'denied';
+    end if;
     if what = 'edit_session' then
       update lelons.pov_sessions x set title = coalesce(nullif(left(btrim(coalesce(data->>'title', '')), 120), ''), x.title),
         game = left(btrim(coalesce(data->>'game', x.game)), 80) where x.id = s.id;
@@ -2715,6 +2726,10 @@ begin
     raise exception 'no pov' using hint = 'pov_gone';
   end if;
   if what = 'got' then
+    -- (2.22.1) Only someone who was really sent it (the owner or a friend who has it said yes) counts as having it.
+    if not exists (select 1 from lelons.pov_grants g where g.file_id = f.id and g.account_id = me.id) then
+      raise exception 'not sent' using hint = 'denied';
+    end if;
     insert into lelons.pov_gets (file_id, account_id) values (f.id, me.id) on conflict do nothing;
     return '{}'::json;
   elsif what = 'signal' then
@@ -2737,6 +2752,9 @@ begin
     end if;
     insert into lelons.pov_signals (file_id, transfer, from_id, to_id, kind, sdp)
     values (f.id, (data->>'transfer')::uuid, me.id, target, data->>'kind', coalesce(data->>'sdp', ''));
+    if data->>'kind' = 'answer' then
+      insert into lelons.pov_grants (file_id, account_id) values (f.id, target) on conflict do nothing;
+    end if;
     delete from lelons.pov_signals g where g.created_at < now() - interval '3 minutes';
     return '{}'::json;
   end if;

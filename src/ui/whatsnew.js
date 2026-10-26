@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.22.1", items: [
+    "Faster and smoother all over: the Film assets tab uses far less power while it sits there, and the app checks for news less often when it's minimized.",
+    "The app reuses its own files instead of loading them again, and Docs, PDF editing and the Library do less work while you type, drag or play.",
+    "Boards: dragging cards no longer drops the wrong one, and a friend's edit no longer throws away what you're typing.",
+    "POVs: only friends you sent a video to can download it, and cancelled or expired downloads clean up after themselves.",
+    "Lots of smaller fixes in Docs, Games, Film uploads and calls.",
+  ] },
   { version: "2.22.0", items: [
     "POVs: friends pass videos on. Once you've downloaded a video, you can send it to others too, while VaultHub is open and its timer runs.",
     "So when the one who recorded it has their PC off, you can still get it from a friend who already has it. The card says who is ready to send.",
