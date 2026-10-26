@@ -899,7 +899,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action == "add":
                     result = {"file": p.add(item, path, data.get("hours"))}
                 else:
-                    p.relink(item, path)
+                    p.relink(item, path, data.get("size"))
                     result = {}
             elif action == "timer":
                 result = {"file": p.timer(item, data.get("hours"))}

@@ -312,9 +312,11 @@ function pdfeFit() {
     for (const svg of p.el.querySelectorAll(".pdfe-ink")) svg.setAttribute("viewBox", `0 0 ${p.w} ${p.h}`);
     pdfeDrawItems(p.n);
     pdfeDrawSegs(p);
-    const r = p.el.getBoundingClientRect();
-    if (r.bottom > -800 && r.top < innerHeight + 800) pdfeRender(p);
   }
+  // (all the sizes first, then one look at where the pages are: looking after each page made the browser
+  // lay out the whole document again for every page)
+  const near = pdfe.pages.map((p) => { const r = p.el.getBoundingClientRect(); return r.bottom > -800 && r.top < innerHeight + 800; });
+  pdfe.pages.forEach((p, i) => { if (near[i]) pdfeRender(p); else p.drawn = 0; });
 }
 
 // ---------------------------------------------------------------- drawing the changes
@@ -402,8 +404,11 @@ const pdfePath = (pts) => pts.length ? "M" + pts.map((q) => q[0].toFixed(1) + " 
 // Before every change: what it was, for Undo.
 function pdfeSnap() {
   if (!pdfe) return;
-  pdfe.undo.push(JSON.stringify(pdfe.items));
-  if (pdfe.undo.length > 80) pdfe.undo.shift();
+  const snap = JSON.stringify(pdfe.items);
+  pdfe.undo.push(snap);
+  // (each step is a whole copy, pictures and all: with big pictures, fewer steps are kept)
+  const most = snap.length > 2e6 ? 15 : snap.length > 5e5 ? 40 : 80;
+  while (pdfe.undo.length > most) pdfe.undo.shift();
   pdfe.redo = [];
   pdfeUndoButtons();
 }
@@ -619,7 +624,7 @@ function pdfeDrag(e, n, id, how) {
   e.preventDefault();
   e.stopPropagation();
   const s = pdfe.zoom * 96 / 72, start = { x: e.clientX, y: e.clientY, ix: it.x, iy: it.y, w: it.w, h: it.h };
-  let moved = false;
+  let moved = false, frame = 0;
   const move = (ev) => {
     const dx = (ev.clientX - start.x) / s, dy = (ev.clientY - start.y) / s;
     if (!moved && Math.hypot(dx, dy) * s < 3) return;
@@ -630,11 +635,13 @@ function pdfeDrag(e, n, id, how) {
     } else {
       it.x = start.ix + dx; it.y = start.iy + dy;
     }
-    pdfeDrawItems(n);
+    // (drawn once a frame: the mouse moves far more often, and the page's pictures were made again each time)
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; pdfeDrawItems(n); });
   };
   const up = () => {
     removeEventListener("pointermove", move);
     removeEventListener("pointerup", up);
+    if (frame) { cancelAnimationFrame(frame); frame = 0; pdfeDrawItems(n); }
     if (moved) pdfeChanged();
   };
   addEventListener("pointermove", move);

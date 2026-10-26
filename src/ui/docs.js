@@ -1956,7 +1956,7 @@ function docBlockOf(node) {
   return node && node.nodeType === 1 ? node : null;
 }
 
-const docObserver = new MutationObserver((records) => {
+function docHandleRecords(records) {
   if (!doc || docApplying) return;
   const gone = [];
   // (the editing box's own look changing isn't a change to the document)
@@ -1980,7 +1980,8 @@ const docObserver = new MutationObserver((records) => {
     }
   }
   docChanged();
-});
+}
+const docObserver = new MutationObserver(docHandleRecords);
 docObserver.observe(docsText, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "class", "href", "src", "colspan", "rowspan"] });
 
 function docChanged() {
@@ -2002,6 +2003,7 @@ let docSaving = null; // the local save on its way
 async function docSave() {
   if (!doc) return false;
   const d = doc;
+  if (typeof pdfeStore === "function") pdfeStore(); // (a PDF's last changes wait a moment before they're kept)
   docUndoCommit();
   let ok;
   if (d.where === "local") {
@@ -2098,6 +2100,7 @@ function docGone(text) {
 }
 
 async function docSyncOnce() {
+  if (typeof pdfeStore === "function") pdfeStore();
   docSyncBusy = true;
   const d = doc;
   const asked = docSaveWanted; // Save (Ctrl+S) or leaving; otherwise changes go out on their own
@@ -2147,7 +2150,10 @@ async function docSyncOnce() {
     return false;
   }
   docFailed = 0;
-  if (send && changes.length) d.fresh = false; // something was written: it's a real document now
+  // Something was written (a name, settings, words, or the others wrote in it): it's a real document now.
+  // (Before, only words of your own counted: leaving a new Collab doc you'd only named and invited people to
+  // deleted it, with what they'd written.)
+  if (send || (res.blocks || []).length) d.fresh = false;
   docApplyRemote(res.blocks || []);
   d.rev = Math.max(d.rev, res.rev || 0);
   if (send && title !== null) d.title = title;
@@ -2373,6 +2379,10 @@ function docUndoSoon() {
 }
 
 function docUndoCommit() {
+  // Changes the browser hasn't reported yet (Bold, a paste a moment ago) belong to this step, not to the
+  // typing after it (Undo used to take both away).
+  const waiting = docObserver.takeRecords();
+  if (waiting.length) docHandleRecords(waiting);
   clearTimeout(docUndoTimer);
   if (!doc || !docUndoDirty.size) return;
   const before = docUndo[docUndoAt].blocks;
@@ -2633,12 +2643,18 @@ function docToolState() {
     }
   }
 }
+// (once a frame at most: the browser says the cursor moved on every key, and this asks a lot of the page)
+let docSelFrame = 0;
 document.addEventListener("selectionchange", () => {
-  if (!doc) return;
-  docToolState();
-  docFloatTools();
-  if (doc.kind === "script") docSuggestUpdate();
-  docOutlineActive();
+  if (!doc || docSelFrame) return;
+  docSelFrame = requestAnimationFrame(() => {
+    docSelFrame = 0;
+    if (!doc) return;
+    docToolState();
+    docFloatTools();
+    if (doc.kind === "script") docSuggestUpdate();
+    docOutlineActive();
+  });
 });
 
 const DOC_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
@@ -3595,7 +3611,10 @@ function docFit() {
   $("docZoom").textContent = Math.round(zoom * 100) + "%";
   $("docZoom").title = want === "fit" ? "Zoom (fits the window)" : "Zoom";
 }
-window.addEventListener("resize", () => { if (doc) docFit(); });
+let docFitFrame = 0; // (once a frame while the window is being resized)
+window.addEventListener("resize", () => {
+  if (doc && !docFitFrame) docFitFrame = requestAnimationFrame(() => { docFitFrame = 0; if (doc) docFit(); });
+});
 
 // ---------------------------------------------------------------- find and replace
 
@@ -3854,6 +3873,7 @@ $("docInviteSend").addEventListener("click", async () => {
   }
   const n = docInvitePicked.size;
   doc.people = res.people;
+  doc.fresh = false; // (people are invited: it stays, even if you leave before writing in it)
   docInvitePicked = new Set();
   drawInvitePeople(); drawInvitePick(); drawShare();
   $("docInviteNote").textContent = n === 1 ? "Invitation sent." : `${n} invitations sent.`;

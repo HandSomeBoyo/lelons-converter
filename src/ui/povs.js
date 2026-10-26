@@ -32,6 +32,7 @@ const PV_ICONS = {
 };
 
 let pvSessions = [], pvTimers = [1, 6, 24, 72, 168, 0], pvSharing = 0, pvLoading = false, pvSig = "", pvUserId = null;
+const pvSeenSignals = new Set();
 let pvAfter = 0, pvCheckTimer = 0, pvListTimer = 0, pvTickTimer = 0, pvAwakeAt = 0, pvAddHours = 24;
 const pvGets = new Map(); // POV id -> a download: {file, pc, dc, transfer, status, have, got, size, buf, ...}
 const pvSends = new Map(); // transfer id -> a friend getting one of yours: {file, name, to, pc, dc, size, pos, acked, ...}
@@ -207,11 +208,16 @@ function pvDrawAct(card, f) {
   const d = f.download;
   if (g && g.status !== "done") {
     const pct = g.size ? Math.min(100, (g.got / g.size) * 100) : 0;
-    const bar = pvEl("div", "pv-bar" + (g.status === "getting" ? " live" : ""));
-    const fill = pvEl("span");
+    // Twice a second only the bar and the numbers change: the buttons stay (a button made new between
+    // pressing and letting go doesn't get the click, so Pause and Cancel often did nothing).
+    const was = act._getting;
+    const same = was && was.status === g.status && was.message === g.message && was.line.isConnected;
+    const bar = same ? null : pvEl("div", "pv-bar" + (g.status === "getting" ? " live" : ""));
+    const fill = same ? was.fill : pvEl("span");
     fill.style.width = pct.toFixed(2) + "%";
-    bar.append(fill);
-    const line = pvEl("p", "pv-progress");
+    if (bar) bar.append(fill);
+    const line = same ? was.line : pvEl("p", "pv-progress");
+    line.replaceChildren();
     if (g.status === "getting") {
       const speed = pvSpeed(g);
       line.append(pvEl("b", "", `${pvSize(g.got)} of ${pvSize(g.size)}`),
@@ -219,12 +225,15 @@ function pvDrawAct(card, f) {
     } else {
       line.append(pvEl("b", "", `${Math.floor(pct)}%`), " · " + (g.message || "Connecting to " + f.by + "..."));
     }
+    if (same) return;
     const row = pvEl("div", "pv-row");
     if (g.status === "paused") row.append(pvButton("convert small-button", PV_ICONS.play, "Go on", () => pvDownload(f)));
     else row.append(pvButton("small-button", PV_ICONS.pause, "Pause", () => pvPause(f.id)));
     row.append(pvButton("ghost-button", "", "Cancel", () => pvCancel(f)));
+    act._getting = { status: g.status, message: g.message, fill, line };
     return act.replaceChildren(bar, line, row);
   }
+  act._getting = null;
   if ((g && g.status === "done") || (d && d.state === "done" && d.there)) {
     const line = pvEl("p", "pv-ready on");
     line.innerHTML = PV_ICONS.check;
@@ -305,7 +314,9 @@ function pvSpeed(x) {
 // While something is going: the cards' progress and the panel, twice a second.
 function pvTick() {
   clearTimeout(pvTickTimer);
-  const busy = [...pvGets.values()].some((g) => g.status !== "done") || [...pvSends.values()].some((s) => s.status === "sending");
+  // (a paused or failed download isn't going: Windows may sleep, and the ticking stops)
+  const going = (g) => g.status === "connecting" || g.status === "getting" || g.status === "waiting";
+  const busy = [...pvGets.values()].some(going) || [...pvSends.values()].some((s) => s.status === "sending");
   if (pvTabOpen()) {
     for (const id of pvGets.keys()) pvRedrawCard(id);
     pvDrawSends();
@@ -332,11 +343,15 @@ async function pvCheck() {
   if (!pvLoggedIn()) return;
   const connecting = [...pvGets.values()].some((g) => g.status === "connecting");
   const busy = connecting || [...pvGets.values()].some((g) => g.status === "getting");
-  const res = await api("/api/pov-check", { after: pvAfter, busy }).catch(() => null);
+  // (asks a little further back each time: two friends asking at once can get their numbers in the other order)
+  const res = await api("/api/pov-check", { after: Math.max(0, pvAfter - 50), busy }).catch(() => null);
   if (res && res.ok) {
     pvSharing = res.sharing || 0;
     for (const s of res.signals || []) {
       pvAfter = Math.max(pvAfter, s.id);
+      if (pvSeenSignals.has(s.id)) continue;
+      pvSeenSignals.add(s.id);
+      if (pvSeenSignals.size > 500) pvSeenSignals.delete(pvSeenSignals.values().next().value);
       pvSignal(s);
     }
   } else if (res && typeof sfxLoggedOut === "function") sfxLoggedOut(res);
@@ -704,7 +719,7 @@ async function pvSave(e) {
 }
 
 async function pvRelink(f) {
-  const res = await api("/api/pov-relink", { id: f.id });
+  const res = await api("/api/pov-relink", { id: f.id, size: f.size });
   if (res.cancelled) return;
   if (!res.ok) return alert(res.error);
   loadPovs();
