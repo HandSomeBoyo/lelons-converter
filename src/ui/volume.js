@@ -21,6 +21,8 @@ const appPlayers = new Map(); // audio -> stop()
 function registerPlayer(audio, stop) { appPlayers.set(audio, stop); }
 const realPlay = HTMLMediaElement.prototype.play;
 HTMLMediaElement.prototype.play = function (...args) {
+  // A call's voices and videos aren't the app's sounds: they don't stop the Library, and aren't kept in the list.
+  if (this.dataset.call) return realPlay.apply(this, args);
   this.volume = volumeLevel();
   playedMedia.add(this);
   for (const [audio, stop] of appPlayers) if (audio !== this && !audio.paused) stop();

@@ -512,9 +512,15 @@ async function fxSendFiles(packId, files) {
 let fxJobs = { uploads: [], downloads: [] }, fxJobsTimer = 0, fxDoneUploads = 0;
 function fxShowJobs() { $("fxJobs").hidden = false; }
 
+let fxJobsGen = 0, fxJobsPressed = false;
+// (a button pressed in the corner isn't made again before it's let go: that lost the click)
+document.addEventListener("pointerdown", (e) => { fxJobsPressed = !!e.target.closest("#fxJobs"); }, true);
+document.addEventListener("pointerup", () => { if (fxJobsPressed) { fxJobsPressed = false; setTimeout(drawFxJobs, 0); } }, true);
 async function fxPollJobs() {
   clearTimeout(fxJobsTimer);
+  const gen = ++fxJobsGen; // (one look at a time: a newer one makes an older one stop)
   const res = await api("/api/fx-jobs", {}).catch(() => null);
+  if (gen !== fxJobsGen) return;
   if (res && res.ok) {
     fxJobs = res;
     drawFxJobs();
@@ -526,10 +532,11 @@ async function fxPollJobs() {
     }
   }
   const busy = [...fxJobs.uploads, ...fxJobs.downloads].some((j) => j.status === "waiting" || j.status === "working");
-  if (busy) fxJobsTimer = setTimeout(fxPollJobs, 700);
+  if (busy) fxJobsTimer = setTimeout(fxPollJobs, document.hidden || $("fxTab").hidden ? 3000 : 700);
 }
 
 function drawFxJobs() {
+  if (fxJobsPressed) return;
   const all = [...fxJobs.uploads.map((j) => ({ ...j, up: true })), ...fxJobs.downloads];
   const box = $("fxJobs");
   box.hidden = !all.length;

@@ -177,7 +177,13 @@ async function bdSave() {
     const { id, ...sent } = bdCopy(bd);
     res = await api("/api/boards-team-save", { id, board: sent, rev: team.rev }).catch(() => ({ ok: false, error: "Couldn't save the board. Check your internet connection." }));
     if (res.ok && bdTeam === team) {
-      if (res.conflict) { bdSaving = false; bdTakeTheirs(res.board, res.rev); return; }  // (saves again if your changes are still needed)
+      if (res.conflict) {
+        bdSaving = false;
+        // Busy dragging or writing: the board isn't drawn again under you; the check takes theirs once you're done.
+        if (bdBusy()) { clearTimeout(bdPollTimer); bdPollTimer = setTimeout(bdPoll, 600); return; }
+        bdTakeTheirs(res.board, res.rev); // (saves again if your changes are still needed)
+        return;
+      }
       team.rev = res.rev;
       team.base = sent;
     }
@@ -268,12 +274,14 @@ function bdBusy() {
   return !!(a && a.matches("input, textarea, select") && a.closest("#bdBoard, #bdCardModal") && !a.matches(".bd-compose, .bd-add-list input, .bd-comment-new, .bd-desc-edit"));
 }
 
+let bdPollGen = 0; // (one check at a time: a newer start makes an older one stop)
 async function bdPoll() {
   clearTimeout(bdPollTimer);
   if (!bd || !bdTeam || $("boardsTab").hidden) return;
+  const gen = ++bdPollGen;
   const team = bdTeam;
   const res = await api("/api/boards-team-check", { id: bd.id, rev: team.rev }).catch(() => null);
-  if (bdTeam !== team) return;
+  if (bdTeam !== team || gen !== bdPollGen) return;
   if (res && res.ok) {
     const peopleChanged = !bdSame(team.people, res.people) || team.mine !== res.mine;
     team.people = res.people;
@@ -286,7 +294,7 @@ async function bdPoll() {
     bd = null;
     return bdClose();
   }
-  bdPollTimer = setTimeout(bdPoll, document.hidden ? 8000 : 2500);
+  bdPollTimer = setTimeout(bdPoll, document.hidden ? 30000 : 2500);
 }
 
 const bdPerson = (name) => (bdTeam && bdTeam.people.find((p) => p.username === name)) || null;
@@ -567,6 +575,7 @@ function bdDraw() {
   root.querySelectorAll(".bd-cards").forEach((c) => { scrollY[c.dataset.list] = c.scrollTop; });
   const menuScroll = root.querySelector(".bd-menu-body") ? root.querySelector(".bd-menu-body").scrollTop : 0;
   const focused = document.activeElement && root.contains(document.activeElement) ? document.activeElement.dataset.focus : "";
+  const caret = bdCaret();
 
   root.style.background = BD_BGS[bd.bg] || BD_BGS.blue;
   root.classList.toggle("labels-wide", !!bd.labelsWide);
@@ -579,7 +588,7 @@ function bdDraw() {
   const again = (focused && root.querySelector(`[data-focus="${CSS.escape(focused)}"]`)) || root.querySelector(".bd-compose, .bd-add-list.open input");
   if (again && (!document.activeElement || !document.activeElement.closest(".bd-pop, .bd-quick, #bdCardModal"))) {
     again.focus();
-    if (again.setSelectionRange && again.value !== undefined) again.setSelectionRange(again.value.length, again.value.length);
+    bdPutCaret(again, focused, caret);
   }
 }
 
@@ -837,14 +846,14 @@ function bdCardDragStart(e, card, el) {
     if (before) { if (before.previousElementSibling !== drag.ph) box.insertBefore(drag.ph, before); }
     else if (box.lastElementChild !== drag.ph) box.append(drag.ph);
   }, (drag) => {
-    const box = drag.ph.parentElement;
+    const box = drag.ph.isConnected && drag.ph.parentElement; // (the board drawn again during the drag: nothing moves)
     const from = bdFind(card.id);
     const to = box && bdList(box.dataset.list);
     if (!from || !to) return bdDraw();
     const next = drag.ph.nextElementSibling && drag.ph.nextElementSibling.closest(".bd-card");
-    from.list.cards.splice(from.index, 1);
+    const [moved] = from.list.cards.splice(from.index, 1); // (the card as it is now, with any teammate's changes)
     const at = next ? to.cards.findIndex((c) => c.id === next.dataset.id) : -1;
-    to.cards.splice(at < 0 ? to.cards.length : at, 0, card);
+    to.cards.splice(at < 0 ? to.cards.length : at, 0, moved);
     if (from.list !== to) bdLog(`moved "${card.title}" from ${from.list.title} to ${to.title}`, card);
     bdChanged();
   });
@@ -862,10 +871,14 @@ function bdListDragStart(e, list) {
     if (before) { if (before.previousElementSibling !== drag.ph) canvas.insertBefore(drag.ph, before); }
     else { const add = canvas.querySelector(".bd-add-list"); if (drag.ph.nextElementSibling !== add) canvas.insertBefore(drag.ph, add); }
   }, (drag) => {
+    // (by id: if the board was drawn again during the drag, `list` is an old copy, and indexOf gave -1,
+    // which took away the board's last list)
+    const i = bd.lists.findIndex((l) => l.id === list.id);
+    if (i < 0 || !drag.ph.isConnected) return bdDraw();
     const next = drag.ph.nextElementSibling;
-    bd.lists.splice(bd.lists.indexOf(list), 1);
+    const [moved] = bd.lists.splice(i, 1);
     const at = next && next.classList.contains("bd-list") ? bd.lists.findIndex((l) => l.id === next.dataset.id) : -1;
-    bd.lists.splice(at < 0 ? bd.lists.length : at, 0, list);
+    bd.lists.splice(at < 0 ? bd.lists.length : at, 0, moved);
     bdChanged();
   });
 }
@@ -1261,7 +1274,8 @@ function bdFilterPop(anchor) {
   bdPop(anchor, "Filter", (box) => {
     box = bdSafe(box);
     const text = bdEl("input", { class: "bd-input", placeholder: "Enter a word...", value: bdFilter.text, spellcheck: "false" });
-    text.addEventListener("input", () => { bdFilter.text = text.value; bdDraw(); });
+    let wait = 0; // (the board is drawn once you stop typing for a moment, not on every letter)
+    text.addEventListener("input", () => { bdFilter.text = text.value; clearTimeout(wait); wait = setTimeout(bdDraw, 120); });
     const check = (set, key, label) => {
       const input = bdEl("input", { type: "checkbox", checked: set.has(key) });
       input.addEventListener("change", () => { input.checked ? set.add(key) : set.delete(key); bdDraw(); });
@@ -1490,6 +1504,7 @@ function bdDrawCard() {
   const dialog = $("bdCardDialog");
   const scroll = dialog.scrollTop;
   const focused = document.activeElement && dialog.contains(document.activeElement) ? document.activeElement.dataset.focus : "";
+  const caret = bdCaret();
 
   // the top: cover, title, which list
   const cover = card.cover ? bdEl("div", { class: "bd-cd-cover", style: { background: bdColor(card.cover) } },
@@ -1673,7 +1688,21 @@ function bdDrawCard() {
   dialog.scrollTop = scroll;
   const again = (focused && dialog.querySelector(`[data-focus="${CSS.escape(focused)}"]`)) ||
     (!document.activeElement || !document.activeElement.closest(".bd-pop") ? dialog.querySelector('.bd-desc-edit, .bd-item-add textarea, [data-focus^="edit-"]') : null);
-  if (again) { again.focus(); if (again.setSelectionRange) again.setSelectionRange(again.value.length, again.value.length); }
+  if (again) { again.focus(); bdPutCaret(again, focused, caret); }
+}
+
+// Where the text cursor is in the box you're writing in, so it's still there after a teammate's change
+// draws the board again (it used to jump to the end, in the middle of a word).
+function bdCaret() {
+  const a = document.activeElement;
+  try { return a && a.selectionStart != null ? [a.selectionStart, a.selectionEnd] : null; } catch (e) { return null; }
+}
+function bdPutCaret(el, focused, caret) {
+  if (!el.setSelectionRange || el.value === undefined) return;
+  try {
+    if (caret && focused && el.dataset.focus === focused) el.setSelectionRange(Math.min(caret[0], el.value.length), Math.min(caret[1], el.value.length));
+    else el.setSelectionRange(el.value.length, el.value.length);
+  } catch (e) { /* (some inputs, like numbers, have no text cursor) */ }
 }
 
 $("bdCardModal").addEventListener("pointerdown", (e) => { if (e.target === $("bdCardModal")) $("bdCardModal")._down = true; });
@@ -1830,10 +1859,12 @@ if (!$("boardsTab").hidden) boardsTabChanged("boards");
 
 // Invitations show as a number on the Boards tab, even before you open it.
 async function bdCheckInvites() {
-  if (typeof sfxUser !== "function" || !sfxUser() || !$("boardsTab").hidden) return;
+  if (typeof sfxUser !== "function" || !sfxUser() || !$("boardsTab").hidden || document.hidden) return;
   const res = await api("/api/boards-team-list", {}).catch(() => null);
   const badge = $("boardsTabBadge");
   if (res && res.ok && badge) { badge.hidden = !res.invites.length; badge.textContent = res.invites.length; }
 }
 setTimeout(bdCheckInvites, 5000);
 setInterval(bdCheckInvites, 120000);
+// (minimized, a shared board is checked only now and then: back again, it's checked right away)
+document.addEventListener("visibilitychange", () => { if (!document.hidden && bd && bdTeam && !$("boardsTab").hidden) bdPoll(); });

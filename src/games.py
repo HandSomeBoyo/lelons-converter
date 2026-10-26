@@ -184,19 +184,18 @@ class Games:
         with self.lock:
             old = [g for g in games if (now - (g.get("refreshed") or 0) > REFRESH_AFTER
                    or ((g.get("info") or {}).get("price") or {}).get("currency", CURRENCY) != CURRENCY)
-                   and now - self.tried.get(g["id"], 0) > RETRY_AFTER]
+                   and now - self.tried.get(g["id"], 0) > RETRY_AFTER and g["id"] not in self.refreshing][:REFRESH_AT_ONCE]
+            # (taken right away: a list asked for while these wait their turn doesn't ask Steam for them again)
+            for g in old:
+                self.tried[g["id"]] = now
+                self.refreshing.add(g["id"])
         if old:
-            threading.Thread(target=self._refresh_old, args=(old[:REFRESH_AT_ONCE],), daemon=True).start()
+            threading.Thread(target=self._refresh_old, args=(old,), daemon=True).start()
         return {"games": games}
 
     def _refresh_old(self, games):
         """Newer prices for games read from Steam a while ago (the page shows them on its next look)."""
         for game in games:
-            with self.lock:
-                if game["id"] in self.refreshing:
-                    continue
-                self.refreshing.add(game["id"])
-                self.tried[game["id"]] = time.time()
             try:
                 _rpc("refresh", game["id"], {"info": steam_info(game["app_id"])})
             except (Error, sfx.Error):

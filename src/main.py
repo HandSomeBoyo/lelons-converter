@@ -62,6 +62,7 @@ NO_WINDOW = downloader.NO_WINDOW
 # A secret only the app's own window knows, so web pages open in a browser
 # can't use the app (they could otherwise reach it at 127.0.0.1).
 TOKEN = secrets.token_urlsafe(24)
+_static_files = {}  # app files read once: (path, tag) -> bytes
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
@@ -427,14 +428,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_body(self, body, content_type, cookie=False):
+    def send_body(self, body, content_type, cookie=False, tag=None):
         self.send_response(200)
         if cookie:
             port = self.server.server_port
             self.send_header("Set-Cookie", f"lelons{port}={TOKEN}; Path=/; HttpOnly; SameSite=Strict")
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if tag:  # (a file of the app: the page may keep it, and asks each time if it changed)
+            self.send_header("ETag", tag)
+            self.send_header("Cache-Control", "no-cache")
+        else:
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -442,6 +447,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_body(json.dumps(data).encode(), "application/json")
 
     def send_file(self, path, cookie=False):
+        tag = None
+        if os.path.basename(path) != "index.html":
+            # The app's own files: kept in memory once read, and not sent again when the page already has them.
+            st = os.stat(path)
+            tag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+            if self.headers.get("If-None-Match") == tag:
+                self.send_response(304)
+                self.send_header("ETag", tag)
+                self.end_headers()
+                return
+            body = _static_files.get((path, tag))
+            if body is None:
+                with open(path, "rb") as f:
+                    body = f.read()
+                if path.startswith(UI_DIR + os.sep) and len(body) <= 4 * 1024 * 1024:
+                    _static_files[(path, tag)] = body
+            content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
+            return self.send_body(body, content_type, cookie, tag)
         with open(path, "rb") as f:
             body = f.read()
         if os.path.basename(path) == "index.html":

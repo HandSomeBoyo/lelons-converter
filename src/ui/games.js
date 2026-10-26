@@ -65,7 +65,8 @@ async function loadGames(quiet) {
   renderGamesPage();
   if (gmOpen) {
     const fresh = gmGames.find((g) => g.id === gmOpen.id);
-    if (fresh) { gmOpen = fresh; drawGameSide(); } else closeGame();
+    // (not while you're writing in it: the box was made again and what you'd typed was gone)
+    if (fresh) { gmOpen = fresh; const side = $("gmSide"); if (!side || !side.contains(document.activeElement)) drawGameSide(); } else closeGame();
   }
 }
 
