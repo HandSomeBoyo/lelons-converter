@@ -2430,7 +2430,7 @@ body.doc-open .footer { display: none; }
 .doc-toolbar {
   position: sticky; top: 70px; z-index: 14; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1px;
   align-self: center; max-width: 100%; box-sizing: border-box; padding: 5px 8px; border-radius: 22px; margin-bottom: 8px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  background: var(--panel); /* (solid: the page scrolling under it showed through) */
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 0 0 1px var(--line), 0 8px 24px rgba(0, 0, 0, .22);
 }
