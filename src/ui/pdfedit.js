@@ -249,6 +249,11 @@ async function pdfeRender(p) {
   p.task = null;
   if (pdfe !== me || p.drawn !== zoom) return;
   canvas.className = "pdfe-canvas";
+  // Each of the canvas's pixels on a whole screen pixel (not stretched to the page's exact width), so what's
+  // cut out of it later lines up with it exactly. (in percent: it still follows the page when zooming)
+  canvas._k = s * dpr; // canvas pixels in a point
+  canvas.style.width = canvas.width / (canvas._k * p.w) * 100 + "%";
+  canvas.style.height = canvas.height / (canvas._k * p.h) * 100 + "%";
   p.el.querySelector("canvas").replaceWith(canvas);
   if (!p.segs) await pdfeFindText(p);
 }
@@ -258,8 +263,9 @@ async function pdfeFindText(p) {
   const me = pdfe;
   let bits;
   try {
-    await p.page.getOperatorList(); // (the fonts, for their names)
+    const ops = await p.page.getOperatorList(); // (also the fonts, for their names)
     bits = pdfPageBits(p.page, p.vp, await p.page.getTextContent());
+    p.drawings = pdfeDrawings(ops, p.vp);
   } catch (e) { return; }
   if (pdfe !== me) return;
   const all = bits.slice();
@@ -267,14 +273,95 @@ async function pdfeFindText(p) {
   for (const l of pdfLines(bits, p.vp.width)) {
     const parts = l.cells ? l.cells.map((c) => ({ x0: c.x0, x1: c.x1, text: c.text })) : [{ x0: l.x0, x1: l.x1, text: l.text }];
     for (const part of parts) {
-      const mine = all.filter((b) => b.x >= part.x0 - 0.5 && b.x1 <= part.x1 + 0.5 && Math.abs(b.y - l.y) < l.size * 0.5 && b.str.trim());
-      const most = (fn) => mine.filter(fn).length > mine.length / 2;
-      segs.push({ ...part, y: mine.length ? pdfMode(mine.map((b) => [b.y, b.str.length])) : l.y, size: Math.max(...mine.map((b) => b.size), l.size), bold: most((b) => b.bold), italic: most((b) => b.italic),
-                  font: most((b) => b.mono) ? "mono" : most((b) => b.serif) ? "serif" : "sans" });
+      const mine = all.filter((b) => b.x >= part.x0 - 0.5 && b.x1 <= part.x1 + 0.5 && Math.abs(b.y - l.y) < l.size * 0.5 && b.str.trim()).sort((a, b) => a.x - b.x);
+      const most = (list, fn) => list.filter(fn).length > list.length / 2;
+      const seg = (list, piece) => ({ ...piece, y: list.length ? pdfMode(list.map((b) => [b.y, b.str.length])) : l.y, size: Math.max(...list.map((b) => b.size), l.size),
+                                      bold: most(list, (b) => b.bold), italic: most(list, (b) => b.italic),
+                                      font: most(list, (b) => b.mono) ? "mono" : most(list, (b) => b.serif) ? "serif" : "sans" });
+      // A line with a bold (or slanted) word in it: each look is its own piece, so changing one keeps the other's look.
+      const runs = [];
+      for (const b of mine) {
+        const last = runs[runs.length - 1], look = (b.bold ? "b" : "") + (b.italic ? "i" : "");
+        if (last && last.look === look) last.bits.push(b); else runs.push({ look, bits: [b] });
+      }
+      if (runs.length < 2 || runs.length > 12) { segs.push(seg(mine, part)); continue; }
+      for (const r of runs) {
+        let text = "";
+        r.bits.forEach((b, i) => { if (i && b.x - r.bits[i - 1].x1 > b.size * 0.15 && !/\s$/.test(text)) text += " "; text += b.str; });
+        segs.push(seg(r.bits, { x0: r.bits[0].x, x1: Math.max(...r.bits.map((b) => b.x1)), text: text.trim() }));
+      }
     }
   }
   p.segs = segs;
   pdfeDrawSegs(p);
+}
+
+// Where the PDF draws its shapes and pictures: one box for each drawing, in page points. A drawing is what the
+// PDF fills or strokes in one go, so an icon made of parts (a head and shoulders) is one drawing.
+function pdfeDrawings(ops, vp) {
+  const { OPS, Util } = pdfLib;
+  const FILL = new Set([OPS.fill, OPS.eoFill, OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  const IMAGE = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintImageXObjectRepeat, OPS.paintSolidColorImageMask]);
+  const out = [], stack = [];
+  let ctm = vp.transform.slice(), clip = null, path = null, clipNext = false;
+  const box = (m, x0, y0, x1, y1) => {
+    const pts = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map((q) => Util.applyTransform(q, m));
+    return { x0: Math.min(...pts.map((q) => q[0])), y0: Math.min(...pts.map((q) => q[1])), x1: Math.max(...pts.map((q) => q[0])), y1: Math.max(...pts.map((q) => q[1])) };
+  };
+  const join = (a, b) => (a ? { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) } : b);
+  const cut = (a, c) => (c ? { x0: Math.max(a.x0, c.x0), y0: Math.max(a.y0, c.y0), x1: Math.min(a.x1, c.x1), y1: Math.min(a.y1, c.y1) } : a);
+  const add = (b, kind) => {
+    b = cut(b, clip);
+    if (b.x1 - b.x0 > 0.3 || b.y1 - b.y0 > 0.3) if (b.x1 > b.x0 - 1 && b.y1 > b.y0 - 1) out.push({ ...b, kind });
+  };
+  const endPath = () => { if (clipNext && path) clip = cut(path, clip); clipNext = false; path = null; };
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i], a = ops.argsArray[i];
+    if (fn === OPS.save) stack.push([ctm, clip]);
+    else if (fn === OPS.restore) { if (stack.length) [ctm, clip] = stack.pop(); }
+    else if (fn === OPS.transform) ctm = Util.transform(ctm, a);
+    else if (fn === OPS.paintFormXObjectBegin) { stack.push([ctm, clip]); if (a[0]) ctm = Util.transform(ctm, a[0]); }
+    else if (fn === OPS.paintFormXObjectEnd) { if (stack.length) [ctm, clip] = stack.pop(); }
+    else if (fn === OPS.constructPath) { const mm = pdfePathBox(OPS, a[0], a[1]); if (mm) path = join(path, box(ctm, ...mm)); }
+    else if (fn === OPS.clip || fn === OPS.eoClip) clipNext = true;
+    else if (fn === OPS.endPath) endPath();
+    else if (FILL.has(fn)) {
+      // (a line's own width: half of it on each side, at least a little)
+      if (path) { const w = fn === OPS.fill || fn === OPS.eoFill ? 0 : 1; add({ x0: path.x0 - w, y0: path.y0 - w, x1: path.x1 + w, y1: path.y1 + w }, "shape"); }
+      endPath();
+    } else if (IMAGE.has(fn)) add(box(ctm, 0, 0, 1, 1), "picture");
+  }
+  // Small drawings that touch or nearly touch belong together (an icon drawn in parts, a photo and its ring),
+  // but never ones of the same size side by side: those are a row of marks (rating dots), each its own.
+  const small = out.filter((d) => d.x1 - d.x0 < 160 && d.y1 - d.y0 < 160).sort((a, b) => a.x0 - b.x0);
+  const alike = (a, b) => { const r = (u, v) => Math.max(u, v) <= Math.min(u, v) * 1.15 + 0.5; return r(a.x1 - a.x0, b.x1 - b.x0) && r(a.y1 - a.y0, b.y1 - b.y0); };
+  const gap = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1, a.y0 - b.y1, b.y0 - a.y1);
+  const top = small.map((d, i) => i);
+  const root = (i) => (top[i] === i ? i : (top[i] = root(top[i])));
+  for (let i = 0; i < small.length; i++) for (let j = i + 1; j < small.length && small[j].x0 < small[i].x1 + 1.5; j++) {
+    const a = small[i], b = small[j];
+    if (gap(a, b) < 1.5 && !(alike(a, b) && gap(a, b) > -0.5)) top[root(i)] = root(j);
+  }
+  const groups = new Map();
+  small.forEach((d, i) => groups.set(root(i), join(groups.get(root(i)), d)));
+  small.forEach((d, i) => { const g = groups.get(root(i)); if (g.x1 - g.x0 < 200 && g.y1 - g.y0 < 200) d.group = g; });
+  return out;
+}
+
+// A path's own box (from all its points, curves' handles too: pdf.js's own box leaves curves out).
+function pdfePathBox(OPS, ops, args) {
+  if (!ops || !args) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, j = 0;
+  const pt = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; };
+  const take = { [OPS.moveTo]: 2, [OPS.lineTo]: 2, [OPS.curveTo]: 6, [OPS.curveTo2]: 4, [OPS.curveTo3]: 4, [OPS.closePath]: 0 };
+  for (const op of ops) {
+    if (op === OPS.rectangle) { const [x, y, w, h] = [args[j], args[j + 1], args[j + 2], args[j + 3]]; pt(x, y); pt(x + w, y + h); j += 4; continue; }
+    const n = take[op];
+    if (n === undefined) return null;
+    for (let q = 0; q < n; q += 2) pt(args[j + q], args[j + q + 1]);
+    j += n;
+  }
+  return isFinite(x0) ? [x0, y0, x1, y1] : null;
 }
 
 const pdfeSegKey = (seg) => Math.round(seg.x0 * 10) + ":" + Math.round(seg.y * 10);
@@ -351,7 +438,8 @@ function pdfeDrawItems(n) {
       }
       const f = PDFE_FONTS[it.font] || PDFE_FONTS.sans;
       Object.assign(t.style, { left: it.x * s + "px", top: (it.y - it.size * f.base) * s + "px", fontSize: it.size * s + "px", fontFamily: f.css,
-                               fontWeight: it.bold ? "700" : "400", fontStyle: it.italic ? "italic" : "normal", color: it.color || "#111" });
+                               fontWeight: it.bold ? "700" : "400", fontStyle: it.italic ? "italic" : "normal", color: it.color || "#111",
+                               transform: it.fit ? `scaleX(${it.fit})` : "", transformOrigin: "0 0" });
       t.classList.toggle("sel", !!pdfe.sel && pdfe.sel.id === it.id);
       els.push(t);
     } else if (it.type === "image" && !it.gone) {
@@ -367,18 +455,17 @@ function pdfeDrawItems(n) {
   }
   // The little bar over what's picked: move it, take it away.
   const it = pdfe.sel && pdfe.sel.n === n && items.find((x) => x.id === pdfe.sel.id);
-  if (it && it.type !== "ink" && !it.gone) {
+  // (a picture or a picked-up shape has none: drag it to move it, Copy and Delete are at the top; a bar beside
+  // a small thing always hid something, the row above or its own label)
+  if (it && it.type === "text") {
     const bar = document.createElement("div");
     bar.className = "pdfe-bar";
-    const x = it.type === "text" ? it.x : it.x, y = it.type === "text" ? it.y - it.size * (PDFE_FONTS[it.font] || PDFE_FONTS.sans).base : it.y;
-    Object.assign(bar.style, { left: x * s + "px", top: y * s + "px" });
+    Object.assign(bar.style, { left: it.x * s + "px", top: (it.y - it.size * (PDFE_FONTS[it.font] || PDFE_FONTS.sans).base) * s + "px" });
     bar.innerHTML = `<button type="button" class="pdfe-move" title="Drag to move">${docIcon("move")}</button>`
-      + (it.type === "image" ? `<button type="button" class="pdfe-copy" title="Make a copy">${docIcon("copy")}</button>` : "")
       + `<button type="button" class="pdfe-del" title="${it.from ? "Put the PDF's own text back" : "Delete"}">${docIcon(it.from ? "undo" : "trash")}</button>`;
     bar.addEventListener("mousedown", (e) => e.preventDefault()); // (the text keeps the focus)
     bar.querySelector(".pdfe-move").addEventListener("pointerdown", (e) => pdfeDrag(e, n, it.id, "move"));
     bar.querySelector(".pdfe-del").addEventListener("click", () => pdfeRemove(n, it.id));
-    if (bar.querySelector(".pdfe-copy")) bar.querySelector(".pdfe-copy").addEventListener("click", () => pdfeCopy(n, it.id));
     els.push(bar);
   }
   // The text being written stays where it is: taking it out of the page, even for a moment, takes the focus
@@ -502,7 +589,7 @@ function pdfeRemove(n, id) {
 function pdfeColors(p, seg) {
   const canvas = p.el.querySelector("canvas.pdfe-canvas");
   if (!canvas) return { bg: "#ffffff", ink: "#111111" };
-  const k = canvas.width / p.w;
+  const k = canvas._k || canvas.width / p.w;
   const x0 = Math.max(0, Math.floor((seg.x0 - 2) * k)), x1 = Math.min(canvas.width, Math.ceil((seg.x1 + 2) * k));
   const y0 = Math.max(0, Math.floor((seg.y - seg.size * 1.05) * k)), y1 = Math.min(canvas.height, Math.ceil((seg.y + seg.size * 0.35) * k));
   if (x1 <= x0 || y1 <= y0) return { bg: "#ffffff", ink: "#111111" };
@@ -545,6 +632,14 @@ function pdfeEditSeg(p, seg, e) {
   pdfeToolState();
   const el = p.el.querySelector(`.pdfe-text[data-id="${it.id}"]`);
   if (!el) return;
+  // The PDF's own font is often a bit wider or narrower than ours: the words are squeezed or stretched to take
+  // the same room, so they fit right where the old ones were (and the rest of the line doesn't move).
+  const natural = el.getBoundingClientRect().width / (pdfe.zoom * 96 / 72);
+  if (natural > 2 && seg.text.trim()) {
+    const fit = Math.round(Math.max(0.75, Math.min(1.25, (seg.x1 - seg.x0) / natural)) * 1000) / 1000;
+    if (Math.abs(fit - 1) > 0.01) { it.fit = fit; el.style.transform = `scaleX(${fit})`; }
+    it.span = Math.round((seg.x1 - seg.x0) * 100) / 100; it.orig = seg.text; // (the PDF file gets its own fit: its fonts aren't ours)
+  }
   el.focus({ preventScroll: true });
   el._snapped = true; // (Undo already knows)
   // the text cursor goes where you clicked
@@ -718,45 +813,146 @@ function pdfePageEvents(p) {
   });
 }
 
-// Clicking a drawn thing on the page (an icon, a dot, a line): the shape under the mouse is cut out of the
-// page (the paper around it see-through) and becomes a picture lying right where it was, over a cover.
+// Clicking a drawn thing on the page (an icon, a dot, a line, a picture): it's cut out of the page (the paper
+// around it see-through) and becomes a picture lying right where it was, over a cover in the paper's color.
 function pdfePickArt(p, x, y) {
   const canvas = p.el.querySelector("canvas.pdfe-canvas");
   if (!canvas) return null;
   const items = pdfe.items[p.n - 1];
   if (items.some((it) => it.cover && x >= it.cover.x0 && x <= it.cover.x1 && y >= it.cover.top && y <= it.cover.bottom)) return null; // (changed already)
-  const k = canvas.width / p.w;
-  const R = Math.round(120 * k); // looks this far around (in canvas pixels)
-  const ox = Math.max(0, Math.round(x * k) - R), oy = Math.max(0, Math.round(y * k) - R);
-  const w = Math.min(canvas.width, Math.round(x * k) + R) - ox, h = Math.min(canvas.height, Math.round(y * k) + R) - oy;
-  if (w < 4 || h < 4) return null;
+  const k = canvas._k || canvas.width / p.w;
+  // The drawing under the mouse (the smallest one: an icon, not the colored band behind it).
+  const size = (d) => (d.x1 - d.x0) * (d.y1 - d.y0);
+  // (a box with text inside is what's behind the text, a colored band or a panel: not for picking up)
+  const holds = (d) => (p.segs || []).some((q) => q.x0 >= d.x0 - 1 && q.x1 <= d.x1 + 1 && q.y - q.size * 0.8 >= d.y0 - 1 && q.y <= d.y1 + 1);
+  const hit = (p.drawings || []).map((d) => d.group || d).filter((d) => !holds(d) && x >= d.x0 - 1.5 && x <= d.x1 + 1.5 && y >= d.y0 - 1.5 && y <= d.y1 + 1.5
+    && size(d) < p.w * p.h * 0.2 && d.x1 - d.x0 < p.w * 0.7 && d.y1 - d.y0 < p.h * 0.7).sort((a, b) => size(a) - size(b))[0];
+  const got = hit ? pdfeCutBox(canvas, k, hit, x, y) : pdfeCutBlob(canvas, k, x, y);
+  if (!got) return null;
+  const hex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  const { X, Y, W, H, src, ink, paper } = got;
+  pdfeSnap();
+  const it = { id: pdfeNewId(), type: "image", art: true, x: X, y: Y, w: W, h: H, w0: W, src, color: hex(ink),
+               cover: { x0: X - 0.3, top: Y - 0.3, x1: X + W + 0.3, bottom: Y + H + 0.3, color: hex(paper) } };
+  items.push(it);
+  pdfe.sel = { n: p.n, id: it.id };
+  pdfeDrawItems(p.n);
+  pdfeChanged();
+  pdfeToolState();
+  return it;
+}
+
+// The page's pixels in a box (canvas pixels), with a helper for how far each is from a color.
+function pdfePixels(canvas, x0, y0, x1, y1) {
+  x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
+  x1 = Math.min(canvas.width, Math.ceil(x1)); y1 = Math.min(canvas.height, Math.ceil(y1));
+  if (x1 - x0 < 1 || y1 - y0 < 1) return null;
   let data;
-  try { data = canvas.getContext("2d").getImageData(ox, oy, w, h).data; } catch (e) { return null; }
-  const cx = Math.round(x * k) - ox, cy = Math.round(y * k) - oy;
-  const rgbAt = (i) => [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
-  // the paper: the most common color near the click
+  try { data = canvas.getContext("2d").getImageData(x0, y0, x1 - x0, y1 - y0).data; } catch (e) { return null; }
+  return { x0, y0, w: x1 - x0, h: y1 - y0, data, rgb: (i) => [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]] };
+}
+
+// The most common color among some pixels (the paper).
+function pdfePaper(px, list) {
   const count = new Map();
-  const near = Math.round(14 * k);
-  for (let yy = Math.max(0, cy - near); yy < Math.min(h, cy + near); yy += 2) for (let xx = Math.max(0, cx - near); xx < Math.min(w, cx + near); xx += 2) {
-    const c = rgbAt(yy * w + xx), key = c.map((v) => v >> 3).join(",");
+  for (const i of list) {
+    const c = px.rgb(i), key = c.map((v) => v >> 3).join(",");
     const sum = count.get(key) || [0, 0, 0, 0];
     count.set(key, [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2], sum[3] + 1]);
   }
+  if (!count.size) return [255, 255, 255];
   const most = [...count.values()].sort((a, b) => b[3] - a[3])[0];
-  const top = [most[0] / most[3], most[1] / most[3], most[2] / most[3]].map(Math.round);
-  const dist = (i) => { const c = rgbAt(i); return Math.hypot(c[0] - top[0], c[1] - top[1], c[2] - top[2]); };
-  const INK = 40;
-  // where the shape starts: right under the mouse, or just next to it (dots are small)
+  return [most[0] / most[3], most[1] / most[3], most[2] / most[3]];
+}
+
+const PDFE_INK = 40; // how far from the paper's color a pixel is part of the drawing
+
+// One drawing's box cut out: the paper that reaches its edge goes see-through (holes inside stay, like a
+// car's windows). Rows of the same mark in one drawing (rating dots) give just the one clicked.
+function pdfeCutBox(canvas, k, d, x, y) {
+  const pad = 4;
+  const px = pdfePixels(canvas, d.x0 * k - pad, d.y0 * k - pad, d.x1 * k + pad, d.y1 * k + pad);
+  if (!px) return null;
+  const { w, h } = px;
+  // the box itself, inside the pad
+  const bx0 = Math.max(0, Math.floor(d.x0 * k) - 1 - px.x0), by0 = Math.max(0, Math.floor(d.y0 * k) - 1 - px.y0);
+  const bx1 = Math.min(w - 1, Math.ceil(d.x1 * k) + 1 - px.x0), by1 = Math.min(h - 1, Math.ceil(d.y1 * k) + 1 - px.y0);
+  if (bx1 < bx0 || by1 < by0) return null;
+  const ring = [];
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) if (xx < bx0 || xx > bx1 || yy < by0 || yy > by1) ring.push(yy * w + xx);
+  const paper = pdfePaper(px, ring.length ? ring : [by0 * w + bx0, by0 * w + bx1, by1 * w + bx0, by1 * w + bx1]);
+  const dist = (i) => { const c = px.rgb(i); return Math.hypot(c[0] - paper[0], c[1] - paper[1], c[2] - paper[2]); };
+  const inBox = (xx, yy) => xx >= bx0 && xx <= bx1 && yy >= by0 && yy <= by1;
+  // the paper reaching in from the edge
+  const clear = new Uint8Array(w * h), stack = [];
+  for (let xx = bx0; xx <= bx1; xx++) stack.push(by0 * w + xx, by1 * w + xx);
+  for (let yy = by0; yy <= by1; yy++) stack.push(yy * w + bx0, yy * w + bx1);
+  while (stack.length) {
+    const i = stack.pop();
+    if (clear[i] || dist(i) > PDFE_INK) continue;
+    clear[i] = 1;
+    const xx = i % w, yy = (i - xx) / w;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (inBox(xx + dx, yy + dy)) stack.push(i + dy * w + dx);
+  }
+  // the parts left, each on its own
+  const part = new Int32Array(w * h).fill(-1), parts = [];
+  for (let yy = by0; yy <= by1; yy++) for (let xx = bx0; xx <= bx1; xx++) {
+    const s0 = yy * w + xx;
+    if (clear[s0] || part[s0] >= 0) continue;
+    const q = { x0: xx, y0: yy, x1: xx, y1: yy, n: 0 }, todo = [s0];
+    part[s0] = parts.length;
+    while (todo.length) {
+      const i = todo.pop(), cx = i % w, cy = (i - cx) / w;
+      q.n++; if (cx < q.x0) q.x0 = cx; if (cx > q.x1) q.x1 = cx; if (cy < q.y0) q.y0 = cy; if (cy > q.y1) q.y1 = cy;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const j = i + dy * w + dx;
+        if (inBox(cx + dx, cy + dy) && !clear[j] && part[j] < 0) { part[j] = parts.length; todo.push(j); }
+      }
+    }
+    parts.push(q);
+  }
+  const big = parts.filter((q) => q.n > 3);
+  if (!big.length) return null;
+  let keep = null; // (all of them)
+  if (big.length >= 3) {
+    const ws = big.map((q) => q.x1 - q.x0), hs = big.map((q) => q.y1 - q.y0);
+    const alike = (v) => Math.max(...v) <= Math.min(...v) * 1.3 + 2;
+    if (alike(ws) && alike(hs)) {
+      const cx = x * k - px.x0, cy = y * k - px.y0, r = 3 * k;
+      keep = big.find((q) => cx >= q.x0 - r && cx <= q.x1 + r && cy >= q.y0 - r && cy <= q.y1 + r);
+      if (!keep) return null;
+    }
+  }
+  const kept = keep ? [keep] : big;
+  const lo = { x: Math.min(...kept.map((q) => q.x0)), y: Math.min(...kept.map((q) => q.y0)) };
+  const hi = { x: Math.max(...kept.map((q) => q.x1)), y: Math.max(...kept.map((q) => q.y1)) };
+  const ids = new Set(kept.map((q) => parts.indexOf(q)));
+  const x0 = Math.max(bx0, lo.x - 1), y0 = Math.max(by0, lo.y - 1), x1 = Math.min(bx1, hi.x + 1), y1 = Math.min(by1, hi.y + 1);
+  const mine = (i) => ids.has(part[i]);
+  const near = (i) => { const xx = i % w, yy = (i - xx) / w; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inBox(xx + dx, yy + dy) && mine((yy + dy) * w + xx + dx)) return true; return false; };
+  return pdfeMakeArt(px, k, x0, y0, x1, y1, paper, (i) => (mine(i) ? 255 : clear[i] && near(i) ? Math.round(Math.min(1, dist(i) / PDFE_INK) * 255) : 0), dist);
+}
+
+// When the PDF doesn't say where its drawings are: the shape under the mouse, everything touching that isn't paper.
+function pdfeCutBlob(canvas, k, x, y) {
+  const R = 120 * k;
+  const px = pdfePixels(canvas, x * k - R, y * k - R, x * k + R, y * k + R);
+  if (!px || px.w < 4 || px.h < 4) return null;
+  const { w, h } = px;
+  const cx = Math.round(x * k) - px.x0, cy = Math.round(y * k) - px.y0, near = Math.round(14 * k);
+  const around = [];
+  for (let yy = Math.max(0, cy - near); yy < Math.min(h, cy + near); yy += 2) for (let xx = Math.max(0, cx - near); xx < Math.min(w, cx + near); xx += 2) around.push(yy * w + xx);
+  const paper = pdfePaper(px, around);
+  const dist = (i) => { const c = px.rgb(i); return Math.hypot(c[0] - paper[0], c[1] - paper[1], c[2] - paper[2]); };
   let start = -1;
   for (let r = 0; r <= Math.round(3 * k) && start < 0; r++) {
     for (let dy = -r; dy <= r && start < 0; dy++) for (let dx = -r; dx <= r; dx++) {
       const xx = cx + dx, yy = cy + dy;
       if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-      if (dist(yy * w + xx) > INK) { start = yy * w + xx; break; }
+      if (dist(yy * w + xx) > PDFE_INK) { start = yy * w + xx; break; }
     }
   }
   if (start < 0) return null;
-  // the whole shape: everything touching that isn't paper
   const mask = new Uint8Array(w * h), stack = [start];
   mask[start] = 1;
   let x0 = w, y0 = h, x1 = 0, y1 = 0, n = 0;
@@ -767,39 +963,39 @@ function pdfePickArt(p, x, y) {
     if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const j = i + dy * w + dx;
-      if (!mask[j] && dist(j) > INK) { mask[j] = 1; stack.push(j); }
+      if (!mask[j] && dist(j) > PDFE_INK) { mask[j] = 1; stack.push(j); }
     }
   }
   if (n < 4) return null;
-  // its soft edge too (a pixel each way)
-  x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(w - 1, x1 + 1); y1 = Math.min(h - 1, y1 + 1);
+  const edge = (i) => { const xx = i % w, yy = (i - xx) / w; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mask[(yy + dy) * w + xx + dx]) return true; return false; };
+  return pdfeMakeArt(px, k, Math.max(0, x0 - 1), Math.max(0, y0 - 1), Math.min(w - 1, x1 + 1), Math.min(h - 1, y1 + 1), paper,
+                     (i) => (mask[i] ? 255 : edge(i) ? Math.round(Math.min(1, dist(i) / PDFE_INK) * 255) : 0), dist);
+}
+
+// The cut-out picture (see-through where alpha says so), and where it goes on the page.
+function pdfeMakeArt(px, k, x0, y0, x1, y1, paper, alpha, dist) {
   const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
   const cut = Object.assign(document.createElement("canvas"), { width: cw, height: ch });
   const ctx = cut.getContext("2d"), out = ctx.createImageData(cw, ch);
-  let ink = top, far = -1;
-  const edge = (i) => { const xx = i % w, yy = (i - xx) / w; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mask[(yy + dy) * w + xx + dx]) return true; return false; };
+  let ink = paper, far = -1;
   for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
-    const i = yy * w + xx, o = ((yy - y0) * cw + xx - x0) * 4;
-    if (!mask[i] && !edge(i)) continue;
-    const c = rgbAt(i), d = dist(i);
-    if (d > far) { far = d; ink = c; }
-    out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2];
-    out.data[o + 3] = mask[i] ? 255 : Math.round(Math.min(1, d / INK) * 255);
+    const i = yy * px.w + xx, o = ((yy - y0) * cw + xx - x0) * 4, a = alpha(i);
+    if (!a) continue;
+    const c = px.rgb(i);
+    if (a === 255) { const d = dist(i); if (d > far) { far = d; ink = c; } }
+    out.data[o] = c[0]; out.data[o + 1] = c[1]; out.data[o + 2] = c[2]; out.data[o + 3] = a;
   }
   ctx.putImageData(out, 0, 0);
-  const src = cut.toDataURL("image/png");
-  if (src.length > 380000) return null;
-  const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
-  const X = (ox + x0) / k, Y = (oy + y0) / k, W = cw / k, H = ch / k;
-  pdfeSnap();
-  const it = { id: pdfeNewId(), type: "image", art: true, x: X, y: Y, w: W, h: H, w0: W, src, color: hex(ink),
-               cover: { x0: X - 0.3, top: Y - 0.3, x1: X + W + 0.3, bottom: Y + H + 0.3, color: hex(top) } };
-  items.push(it);
-  pdfe.sel = { n: p.n, id: it.id };
-  pdfeDrawItems(p.n);
-  pdfeChanged();
-  pdfeToolState();
-  return it;
+  let src = cut.toDataURL("image/png");
+  if (src.length > 380000) {
+    // (a big picture: made smaller to keep, it's still sharp enough at its size on the page)
+    const f = Math.sqrt(360000 / src.length);
+    const small = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(cw * f)), height: Math.max(1, Math.round(ch * f)) });
+    small.getContext("2d").drawImage(cut, 0, 0, small.width, small.height);
+    src = small.toDataURL("image/png");
+    if (src.length > 380000) return null;
+  }
+  return { X: (px.x0 + x0) / k, Y: (px.y0 + y0) / k, W: cw / k, H: ch / k, src, ink, paper };
 }
 
 // A picked-up shape in another color (its see-through edges stay as they were).
@@ -886,7 +1082,7 @@ function pdfeToolbar() {
   $("docToolbar").innerHTML = [
     b("undo", "undo", "Undo (Ctrl+Z)"), b("redo", "redo", "Redo (Ctrl+Y)"), b("print", "print", "Print (Ctrl+P)"), sep,
     ...PDFE_TOOLS.map(([key, icon, title]) => `<button type="button" class="doc-tool pdfe-tool" data-tool="${key}" title="${esc(title)}">${docIcon(icon)}<span>${esc(title.split(":")[0])}</span></button>`),
-    b("image", "image", "Add a picture"), sep,
+    b("image", "image", "Add a picture"), b("copy", "copy", "Make a copy of what's picked"), b("delete", "trash", "Delete what's picked (Delete)"), sep,
     `<button type="button" class="doc-tool doc-color pdfe-color" data-pdfe="color" title="Color">${docIcon("color")}<i></i></button>`,
     b("smaller", "minus", "Smaller"), `<span class="pdfe-size" id="pdfeSize"></span>`, b("bigger", "plus", "Bigger"),
     b("bold", "bold", "Bold"), sep,
@@ -929,6 +1125,10 @@ function pdfeToolState() {
   if (size) size.textContent = kind === "art" ? Math.round(it.w / it.w0 * 100) + "%" : Math.round(it ? it.size : pdfe.sizes[kind]);
   const bold = bar.querySelector('[data-pdfe="bold"]');
   if (bold) { bold.classList.toggle("on", !!(it && it.bold)); bold.disabled = kind !== "text"; }
+  const picked = pdfe.sel && pdfeFind(pdfe.sel.n, pdfe.sel.id);
+  const copy = bar.querySelector('[data-pdfe="copy"]'), del = bar.querySelector('[data-pdfe="delete"]');
+  if (copy) copy.disabled = !(picked && picked.type === "image" && !picked.gone);
+  if (del) { del.disabled = !picked; del.title = picked && picked.from ? "Put the PDF's own text back" : "Delete what's picked (Delete)"; }
   pdfeUndoButtons();
 }
 
@@ -943,6 +1143,8 @@ function pdfeCommand(cmd, button) {
   if (cmd === "redo") pdfeUndoGo(1);
   if (cmd === "print") pdfePrint();
   if (cmd === "image") pdfeAddImage();
+  if (cmd === "copy" && pdfe.sel) pdfeCopy(pdfe.sel.n, pdfe.sel.id);
+  if (cmd === "delete" && pdfe.sel) pdfeRemove(pdfe.sel.n, pdfe.sel.id);
   if (cmd === "download") pdfeDownload();
   if (cmd === "bold") edit((x) => { x.bold = !x.bold; });
   if ((cmd === "smaller" || cmd === "bigger") && kind === "art") {
@@ -1048,10 +1250,15 @@ async function pdfeBuild() {
     for (const it of items) {
       if (it.type === "text") {
         const font = await fontFor(it);
+        let fit = it.fit;
+        if (it.span && it.orig) { const w = font.widthOfTextAtSize(safe(font, it.orig), it.size); if (w > 2) fit = Math.max(0.75, Math.min(1.25, it.span / w)); }
+        if (fit && Math.abs(fit - 1) < 0.01) fit = 0;
         it.text.split("\n").forEach((line, k) => {
           if (!line) return;
           const [x, y] = P(it.x, it.y + k * it.size * 1.2);
+          if (fit) page.pushOperators(L.pushGraphicsState(), L.setCharacterSqueeze(fit * 100));
           page.drawText(safe(font, line), { x, y, size: it.size, font, color: rgb(it.color) });
+          if (fit) page.pushOperators(L.popGraphicsState());
         });
       } else if (it.type === "ink" && it.points.length) {
         const d = it.points.map((q, k) => { const [x, y] = P(q[0], q[1]); return (k ? "L" : "M") + x.toFixed(2) + " " + (-y).toFixed(2); }).join("") + (it.points.length === 1 ? "l0.01 0" : "");

@@ -2430,7 +2430,7 @@ body.doc-open .footer { display: none; }
 .doc-toolbar {
   position: sticky; top: 70px; z-index: 14; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1px;
   align-self: center; max-width: 100%; box-sizing: border-box; padding: 5px 8px; border-radius: 22px; margin-bottom: 8px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  background: var(--panel); /* (solid: the page scrolling under it showed through) */
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 0 0 1px var(--line), 0 8px 24px rgba(0, 0, 0, .22);
 }
@@ -4705,8 +4705,10 @@ html.side-small .tab-group { height: 1px; }
 .pdfe-view[data-tool="draw"] .pdfe-page { cursor: crosshair; }
 .pdfe-view[data-tool="highlight"] .pdfe-page { cursor: cell; }
 .pdfe-view[data-tool="erase"] .pdfe-page { cursor: pointer; }
-.doc-tool.pdfe-tool, .doc-tool.pdfe-download { width: auto; gap: 6px; padding: 0 9px; }
-.doc-tool.pdfe-tool span, .doc-tool.pdfe-download span { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.doc-tool.pdfe-tool, .doc-tool.pdfe-download { width: auto; height: 42px; grid-template-rows: auto auto; align-content: center; gap: 4px; padding: 0 10px; border-radius: 11px; }
+.doc-tool.pdfe-tool span, .doc-tool.pdfe-download span { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.doc-tool.pdfe-tool svg, .doc-tool.pdfe-download svg { width: 16px; height: 16px; }
+.doc-parts.under { visibility: hidden; } /* (scrolled up behind the toolbar: it peeked out above it) */
 .pdfe-size { min-width: 26px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
 .doc-tool[disabled] { opacity: .35; pointer-events: none; }
 .pdfe-pop { position: fixed; z-index: 60; display: grid; grid-template-columns: repeat(4, 26px); gap: 6px; padding: 10px; border-radius: 12px; background: var(--panel, #1c1c21); box-shadow: 0 0 0 1px rgba(127, 127, 127, .2), 0 12px 30px rgba(0, 0, 0, .3); }

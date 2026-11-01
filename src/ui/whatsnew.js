@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.23.0", items: [
+    "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",
+    "Text you change takes the same room as the old text, so the line doesn't shift, and bold words in a line stay bold.",
+    "The PDF toolbar got a cleaner look: it's solid, the labels have room, and Copy and Delete for pictures are up there now.",
+  ] },
   { version: "2.22.1", items: [
     "Faster and smoother all over: the Film assets tab uses far less power while it sits there, and the app checks for news less often when it's minimized.",
     "The app reuses its own files instead of loading them again, and Docs, PDF editing and the Library do less work while you type, drag or play.",
