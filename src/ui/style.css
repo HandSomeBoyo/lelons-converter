@@ -4705,8 +4705,10 @@ html.side-small .tab-group { height: 1px; }
 .pdfe-view[data-tool="draw"] .pdfe-page { cursor: crosshair; }
 .pdfe-view[data-tool="highlight"] .pdfe-page { cursor: cell; }
 .pdfe-view[data-tool="erase"] .pdfe-page { cursor: pointer; }
-.doc-tool.pdfe-tool, .doc-tool.pdfe-download { width: auto; gap: 6px; padding: 0 9px; }
-.doc-tool.pdfe-tool span, .doc-tool.pdfe-download span { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.doc-tool.pdfe-tool, .doc-tool.pdfe-download { width: auto; height: 42px; grid-template-rows: auto auto; align-content: center; gap: 4px; padding: 0 10px; border-radius: 11px; }
+.doc-tool.pdfe-tool span, .doc-tool.pdfe-download span { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.doc-tool.pdfe-tool svg, .doc-tool.pdfe-download svg { width: 16px; height: 16px; }
+.doc-parts.under { visibility: hidden; } /* (scrolled up behind the toolbar: it peeked out above it) */
 .pdfe-size { min-width: 26px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
 .doc-tool[disabled] { opacity: .35; pointer-events: none; }
 .pdfe-pop { position: fixed; z-index: 60; display: grid; grid-template-columns: repeat(4, 26px); gap: 6px; padding: 10px; border-radius: 12px; background: var(--panel, #1c1c21); box-shadow: 0 0 0 1px rgba(127, 127, 127, .2), 0 12px 30px rgba(0, 0, 0, .3); }
