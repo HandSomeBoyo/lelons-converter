@@ -151,11 +151,17 @@
 
     <div class="home-section">
       <div class="home-head"><h2>The crew</h2></div>
-      <div class="home-card home-out" id="homeCrewOut" hidden>
-        <p>Log in to see who's online, the newest sounds and what people are saying.</p>
-        <div class="lib-out-buttons">
-          <button type="button" class="convert" id="homeLogin">Log in</button>
-          <button type="button" class="small-button" id="homeSignup">Create account</button>
+      <div class="home-out welcome" id="homeCrewOut" data-chip="sfx" hidden>
+        <div class="wl-text">
+          <span class="wl-badge">Free for the crew</span>
+          <h2>Hang out with the crew, right here.</h2>
+          <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>See who's online right now</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Hear the newest sounds first</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Chat, call and share your screen</li></ul>
+          <div class="wl-buttons"><button type="button" class="convert" id="homeSignup">Create a free account</button><button type="button" class="wl-login" id="homeLogin">I have an account</button></div>
+        </div>
+        <div class="wl-art" aria-hidden="true">
+          <div class="wa-msg"><span class="wa-av" style="--c:#1f9d61">P</span><span><em>Pete</em><small>who's recording tonight?</small></span></div>
+          <div class="wa-msg me"><span><em>Leon</em><small>me! starting at 8 🎮</small></span><span class="wa-av" style="--c:#7c5cf2">L</span></div>
+          <div class="wa-msg"><span class="wa-av" style="--c:#ea580c">M</span><span class="wa-typing"><i></i><i></i><i></i></span></div>
         </div>
       </div>
       <div class="home-grid" id="homeCrewGrid" hidden>
@@ -1143,8 +1149,10 @@
     </div>
     <div class="chat-private-head" id="chatPrivateHead" hidden></div>
     <div class="chat-out" id="chatOut" hidden>
-      <p>Log in to chat with everyone.</p>
-      <button type="button" class="small-button" id="chatLogin">Log in</button>
+      <div class="chat-out-art" aria-hidden="true"><span style="--c:#1f9d61">P</span><span style="--c:#7c5cf2">L</span><span style="--c:#ea580c">M</span><span style="--c:#0284c7">T</span></div>
+      <h3>Talk with the whole crew.</h3>
+      <p>Messages, voice calls and screen sharing, all inside VaultHub.</p>
+      <div class="wl-buttons"><button type="button" class="convert wl-signup">Create a free account</button><button type="button" class="wl-login" id="chatLogin">I have an account</button></div>
     </div>
     <div class="chat-list" id="chatList"></div>
     <p class="chat-typing" id="chatTyping" hidden><span class="typing-dots"><i></i><i></i><i></i></span><span id="chatTypingText"></span></p>

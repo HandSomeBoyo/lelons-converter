@@ -5363,3 +5363,29 @@ html.side-small .side-search span, html.side-small .side-search kbd { display: n
 /* the sidebar: the icon nudges up a little when you point at a page */
 .sidebar .tabs button:hover svg { transform: translateY(-1px); }
 @media (prefers-reduced-motion: reduce) { .tab-page:not([hidden]) > * { animation: none; } }
+
+/* ---- Home, logged out: a peek at the crew chat */
+.home-out.welcome { margin-top: 0; }
+.wa-msg { display: flex; align-items: flex-end; gap: 10px; }
+.wa-msg.me { justify-content: flex-end; }
+.wa-msg > span:not(.wa-av) { padding: 10px 14px; border-radius: 16px 16px 16px 5px; background: #fff; box-shadow: 0 1px 2px rgba(24, 24, 27, .05), 0 8px 22px rgba(24, 24, 27, .07); }
+.wa-msg.me > span:not(.wa-av) { border-radius: 16px 16px 5px 16px; background: #18181b; }
+.wa-msg.me em { color: #fff; } .wa-msg.me small { color: #a1a1aa; }
+.wa-msg small { font-size: 13px; color: #3f3f46; }
+.wa-av { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font: 700 13px var(--head); }
+.wa-typing { display: flex; gap: 4px; padding: 14px 16px !important; }
+.wa-typing i { width: 7px; height: 7px; border-radius: 50%; background: #a1a1aa; animation: wa-dot 1.2s ease-in-out infinite; }
+.wa-typing i:nth-child(2) { animation-delay: .15s; } .wa-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes wa-dot { 30% { transform: translateY(-4px); opacity: .5; } }
+
+/* ---- the chat, logged out */
+.chat-out { padding: 56px 24px; display: grid; justify-items: center; gap: 6px; animation: rise-in .35s var(--ease) both; }
+.chat-out h3 { margin: 18px 0 0; font: 700 22px/1.2 var(--head); letter-spacing: -.02em; color: var(--text); }
+.chat-out p { margin: 0 0 16px; max-width: 340px; font-size: 14px; line-height: 1.5; }
+.chat-out-art { display: flex; }
+.chat-out-art span { width: 46px; height: 46px; margin-left: -10px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: #fff; font: 700 17px var(--head); box-shadow: 0 0 0 4px var(--panel); animation: rise-in .4s var(--ease) both; }
+.chat-out-art span:nth-child(2) { animation-delay: .05s; } .chat-out-art span:nth-child(3) { animation-delay: .1s; } .chat-out-art span:nth-child(4) { animation-delay: .15s; }
+.chat-out .wl-buttons { justify-content: center; }
+
+/* the chat covers the page fully (nothing shows through behind it) */
+:root[data-theme] body .chat-panel { background: var(--bg); }
