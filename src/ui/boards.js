@@ -531,7 +531,8 @@ function bdShow(board, team) {
   if (team) bdPollTimer = setTimeout(bdPoll, 2500);
   $("bdHome").hidden = true;
   $("bdBoard").hidden = false;
-  document.body.classList.add("board-open");
+  // (only while Boards is the open page: the board can finish loading after you've gone elsewhere)
+  if (!$("boardsTab").hidden) document.body.classList.add("board-open");
   bdDraw();
 }
 

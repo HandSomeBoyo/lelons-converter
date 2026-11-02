@@ -10,6 +10,7 @@
 <script src="theme.js"></script>
 </head>
 <body>
+<div class="ambient" aria-hidden="true"><video id="ambientVideo" src="bg/ambient.webm" muted loop playsinline preload="auto"></video></div>
 <main>
   <header class="top">
     <div class="top-right">
@@ -1497,6 +1498,10 @@
 
       <section class="set-page" data-set="look" hidden>
         <h3 class="set-title">Display</h3>
+        <div class="set-label">Background</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Moving background</b><small>Soft light that slowly drifts behind the app. Turn it off for a plain black background.</small></span><input type="checkbox" id="setAmbient"></label>
+        </div>
         <div class="set-label">Size</div>
         <div class="set-group set-pad">
             <div class="size-row">

@@ -17,19 +17,20 @@ function savePref(key, value) {
                             body: JSON.stringify({ key, value }) }).catch(() => {});
 }
 
-// The side bar: small (icons only) when it was folded in, or when the window is narrow. Set before drawing.
-function sideSmallNow() { return loadPref("sideSmall") === true || innerWidth <= 900; }
+// The side bar: since 5.0 it's a slim rail that opens when you point at it, so it's never "folded".
+function sideSmallNow() { return false; }
 document.documentElement.classList.toggle("side-small", sideSmallNow());
 
-// One look for everyone (4.0, "light and friendly"): the old dark/black/light themes and accent
-// colors are gone. applyTheme() stays so older calls keep working; it always sets the same look.
-const ACCENT = "#6d5dfc";
+// One look for everyone (5.0, "Midnight": dark, quiet, with soft moving light behind it). The old
+// themes and accent colors are gone. applyTheme() stays so older calls keep working; it always sets the same look.
+const ACCENT = "#8b7cff";
 function applyTheme() {
   const root = document.documentElement;
-  root.dataset.theme = "light";
+  root.dataset.theme = "midnight";
   root.dataset.accent = "violet";
   root.style.setProperty("--accent", ACCENT);
-  root.style.setProperty("--accent-rgb", "109, 93, 252");
+  root.style.setProperty("--accent-rgb", "139, 124, 255");
+  root.classList.toggle("no-ambient", loadPref("ambient") === false);
 }
 
 applyTheme(pageSaved.theme, pageSaved.accent);

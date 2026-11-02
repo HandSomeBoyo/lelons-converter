@@ -68,7 +68,7 @@ CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
     ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
     ".ico": "image/x-icon", ".woff2": "font/woff2", ".mp3": "audio/mpeg",
-    ".wasm": "application/wasm", ".mjs": "text/javascript; charset=utf-8",
+    ".wasm": "application/wasm", ".webm": "video/webm", ".mjs": "text/javascript; charset=utf-8",
 }
 
 # pythonw has no console, so there's nowhere for text output to go.
@@ -1618,7 +1618,7 @@ def main():
         browser_args.append("--disable-gpu")
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(browser_args)
     appwindow.set_zoom(state.zoom)
-    appwindow.set_dark(False)  # one light look since 4.0
+    appwindow.set_dark(True)  # one dark look since 5.0
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     sfx.presence.start()
     home.on_update = sfx.library.log_channel

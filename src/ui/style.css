@@ -5389,3 +5389,261 @@ html.side-small .side-search span, html.side-small .side-search kbd { display: n
 
 /* the chat covers the page fully (nothing shows through behind it) */
 :root[data-theme] body .chat-panel { background: var(--bg); }
+
+/* ================================================================ 5.0: "Midnight". Dark, quiet and clean.
+   Near-black with soft moving light behind everything (bg/ambient.webm, a tiny video loop; Settings > Display
+   can turn it off), a slim floating rail instead of the side bar (it opens when you point at it), thin hairline
+   borders instead of shadows, white main buttons, big calm headings. Built on top of 4.0: its layout rules stay,
+   this section changes the colors, the side bar and the details. New restyles should build on this section. */
+:root, :root[data-theme] {
+  --bg: #060608; --side-bg: rgba(12, 12, 15, .82); --panel: #101013; --panel2: #18181c; --panel3: #222228;
+  --line: rgba(255, 255, 255, .07); --line2: rgba(255, 255, 255, .12); --text: #ededef; --muted: #8e8e97; --faint: #5d5d66; --ink: #0a0a0c;
+  --red: #ff5f63; --green: #3ddc97; --switch-on: #ededef;
+  --bars: #3a3a42; --bars-hover: #6b6b75; --wave: #d4d4d8; --shade: rgba(6, 6, 8, .8); --overlay: rgba(0, 0, 0, .6);
+  --check-a: #1a1a1f; --check-b: #121216;
+  --card: rgba(18, 18, 22, .66); --card-hover: rgba(26, 26, 32, .78);
+  --card-shadow: none; --lift-shadow: 0 18px 40px -12px rgba(0, 0, 0, .6);
+  --pop-shadow: 0 0 0 1px rgba(255, 255, 255, .09), 0 24px 70px rgba(0, 0, 0, .65);
+  --hair: inset 0 0 0 1px var(--line); --hair2: inset 0 0 0 1px var(--line2);
+  --ease: cubic-bezier(.22, 1, .36, 1); --fast: .16s; --mid: .28s;
+  --side-w: 84px; --rail: 64px; --rail-open: 228px;
+  --gl-line: var(--line); --gl-rim: 0 0 0 1px var(--line); --gl-lens: var(--panel2); --gl-card: var(--panel); --g-edge: var(--line);
+  color-scheme: dark;
+}
+html.side-small, html.side-small[data-theme] { --side-w: 84px; }
+html { background: var(--bg); }
+body, html body { background: transparent; color: var(--text); }
+::selection { background: rgba(139, 124, 255, .35); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .1); border: 3px solid transparent; background-clip: padding-box; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, .2); }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---- the moving background: a soft light loop, with the edges kept dark so text always reads well */
+.ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; background: var(--bg); }
+.ambient video { position: absolute; inset: -4%; width: 108%; height: 108%; object-fit: cover; opacity: 0; transition: opacity 1.6s ease; }
+.ambient video.ready { opacity: .9; }
+.ambient::after {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(120% 90% at 60% 0%, transparent 30%, rgba(6, 6, 8, .55) 75%, rgba(6, 6, 8, .85)),
+              linear-gradient(rgba(6, 6, 8, .25), rgba(6, 6, 8, .55));
+}
+html.no-ambient .ambient video { display: none; }
+
+/* ---- the rail: a slim floating bar of icons. Point at it and it opens with the names. */
+.sidebar, :root[data-theme] .sidebar, html.side-small .sidebar {
+  position: fixed; top: 10px; bottom: 10px; left: 10px; width: var(--rail); padding: 12px 8px 108px; box-sizing: border-box;
+  border-radius: 20px; background: var(--side-bg); box-shadow: inset 0 0 0 1px var(--line), 0 20px 50px rgba(0, 0, 0, .45);
+  overflow: hidden; z-index: calc(var(--z-tabs) + 2); transition: width .32s var(--ease), box-shadow .32s var(--ease), background-color .32s;
+}
+.sidebar:hover, .sidebar:has(:focus-visible) {
+  width: var(--rail-open); background: rgba(12, 12, 15, .96); box-shadow: inset 0 0 0 1px var(--line2), 0 30px 80px rgba(0, 0, 0, .7);
+}
+body { padding-left: var(--side-w); transition: none; }
+.side-fold { display: none !important; }
+.side-brand, html.side-small .side-brand { display: flex; flex-direction: row; align-items: center; gap: 12px; height: 40px; padding: 0 0 0 8px; margin-bottom: 10px; }
+.side-brand .mark { width: 32px; height: 32px; flex: none; border-radius: 10px; background: #ededef; box-shadow: none; }
+.side-brand .mark svg { fill: #0a0a0c; }
+.side-name, html.side-small .side-name { display: flex; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+.side-brand .word, .side-brand .word span { color: var(--text); font: 600 16px var(--head); letter-spacing: -.02em; }
+.sidebar:hover .side-name, .sidebar:has(:focus-visible) .side-name { opacity: 1; transition-delay: .08s; }
+
+.side-search, html.side-small .side-search {
+  width: auto; height: 40px; margin: 0 0 6px; padding: 0 0 0 14px; gap: 14px; justify-content: flex-start; border-radius: 12px;
+  background: rgba(255, 255, 255, .04); box-shadow: var(--hair); color: var(--muted);
+}
+.side-search:hover { background: rgba(255, 255, 255, .08); color: var(--text); }
+.side-search svg { width: 18px; height: 18px; }
+.side-search span, .side-search kbd, html.side-small .side-search span, html.side-small .side-search kbd { display: inline; opacity: 0; transition: opacity .2s; white-space: nowrap; }
+.side-search kbd { display: inline-block; margin-right: 8px; background: rgba(255, 255, 255, .06); box-shadow: none; color: var(--faint); }
+.sidebar:hover .side-search :is(span, kbd), .sidebar:has(:focus-visible) .side-search :is(span, kbd) { opacity: 1; transition-delay: .08s; }
+
+.sidebar .tabs { gap: 2px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; flex: 1; min-height: 0; }
+.sidebar .tabs::-webkit-scrollbar { display: none; }
+.tab-group, html.side-small .tab-group { height: 1px; margin: 7px 10px; padding: 0; overflow: hidden; color: transparent; background: var(--line); flex: none; }
+.sidebar .tabs button, .side-link, html.side-small .sidebar .tabs button, html.side-small .side-link {
+  height: 38px; min-height: 38px; padding: 0 0 0 14px; gap: 16px; justify-content: flex-start; border-radius: 11px;
+  font: 500 14px/1 var(--head); color: var(--muted); white-space: nowrap; background: none;
+  transition: color var(--fast) var(--ease), background-color var(--fast) var(--ease);
+}
+.sidebar .tabs button > span, .side-link > span, html.side-small .sidebar .tabs button > span, html.side-small .side-link > span {
+  display: inline; opacity: 0; transform: translateX(-6px); transition: opacity .18s var(--ease), transform .28s var(--ease);
+}
+.sidebar:hover :is(.tabs button, .side-link) > span, .sidebar:has(:focus-visible) :is(.tabs button, .side-link) > span { opacity: 1; transform: none; transition-delay: .06s; }
+.sidebar .tabs button:hover, .side-link:hover { color: var(--text); background: rgba(255, 255, 255, .05); }
+.sidebar .tabs button.active { color: var(--text); font-weight: 500; }
+.sidebar .tabs button svg, .side-link svg, :root[data-theme] .sidebar .tabs button.active svg, html.side-small .sidebar .tabs button svg {
+  width: 20px; height: 20px; padding: 0; border-radius: 0; background: none; color: currentColor; flex: none;
+}
+.sidebar .tabs button.active svg { color: var(--chip-ink, var(--text)); }
+.sidebar .tabs .tab-line, :root[data-theme] .sidebar .tabs .tab-line {
+  left: 0; width: 100% !important; border-radius: 11px; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+.side-foot { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.side-link.open { background: rgba(255, 255, 255, .08); color: var(--text); box-shadow: none; }
+.tab-badge, .chat-badge, html.side-small .side-link .chat-badge, html.side-small .sidebar .tabs .tab-badge { position: absolute; top: 4px; left: 30px; right: auto; min-width: 16px; height: 16px; font-size: 10px; }
+.sidebar .tabs button, .side-link { position: relative; }
+
+/* your account (bottom of the rail) and the ? above it */
+.top, html.side-small .top {
+  left: 18px; bottom: 18px; width: 48px; height: 48px; padding: 0; border: 0; box-shadow: none; background: none;
+  z-index: calc(var(--z-tabs) + 3);
+}
+.account-button, :root[data-theme] .account-button, html.side-small .account-button { width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 14px; }
+.account-button:hover, .account-button[aria-expanded="true"] { background: rgba(255, 255, 255, .06); }
+.me-text, html.side-small .me-text { display: none; }
+.avatar.account-empty { background: var(--panel3); color: var(--muted); }
+.top .help-menu, html.side-small .top .help-menu { top: -44px; right: auto; left: 8px; }
+.head-button, :root[data-theme] .head-button { width: 32px; height: 32px; border-radius: 10px; color: var(--faint); }
+.head-button:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.help-pop, html.side-small .help-pop { left: -2px; right: auto; transform-origin: bottom left; }
+.account-panel { left: calc(var(--side-w) + 6px); }
+
+/* ---- pages: lots of air, big calm headings */
+main { max-width: 1040px; padding: 64px 64px 96px; }
+.headline { font: 600 44px/1.05 var(--head); letter-spacing: -.045em; margin: 0 0 36px; color: #f4f4f5;
+  background: linear-gradient(180deg, #ffffff 30%, #a1a1aa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.headline em { display: block; margin-top: 12px; font: 400 16px/1.5 var(--head); letter-spacing: -.005em; color: var(--muted); -webkit-text-fill-color: var(--muted); }
+h2, .home-head h2 { font-weight: 600; letter-spacing: -.025em; color: var(--text); }
+.home-head h2 { font-size: 15px; letter-spacing: 0; color: var(--muted); font-weight: 500; }
+.tab-group, .qk-group, .pc-head, .docs-label { letter-spacing: .06em; }
+@media (max-width: 900px) { main { padding: 40px 28px 64px; } .headline { font-size: 34px; } }
+
+/* ---- cards: see-through dark glass with a hairline edge (no shadows) */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list, .fx-out, .fx-wait, .lib-genres, .gm-card, .bd-tile, .fx-card,
+.home-go button, .resume-card, .ve-step, .history-empty.big, .welcome, .lib-out.welcome, .fx-out.welcome,
+:root[data-theme] :is(.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .copy-card, .preview, .playlist, .sound-list, .welcome) {
+  background: var(--card); border: 0; border-radius: 18px; box-shadow: var(--hair);
+}
+:is(.channel-card, .home-card, .gm-card, .fx-card, .upload-card, .home-go button, .resume-card):hover,
+:root[data-theme] :is(.channel-card, .home-card):hover { background: var(--card-hover); transform: translateY(-2px); box-shadow: var(--hair2), var(--lift-shadow); }
+.bd-tile:hover { transform: translateY(-2px); }
+.dropzone, :root[data-theme] .dropzone { background: rgba(18, 18, 22, .5); border: 1px dashed var(--line2); }
+.dropzone:hover, .dragging .dropzone { border-color: rgba(255, 255, 255, .35); background: rgba(26, 26, 32, .7); }
+.dropzone .link, :root[data-theme] .dropzone .link { color: var(--text); }
+.bd-tile-new { background: transparent; box-shadow: none; border: 1px dashed var(--line2); color: var(--muted); }
+
+/* ---- the link box: one dark bar, a soft light ring when you type */
+.input, :root[data-theme] .input { background: rgba(255, 255, 255, .04); box-shadow: var(--hair2); border-radius: 12px; }
+.input:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2); }
+.input:focus-within, :root[data-theme] .input:focus-within { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35), 0 0 0 4px rgba(139, 124, 255, .16); }
+.input input, .input textarea { color: var(--text); caret-color: #fff; }
+.input input::placeholder { color: var(--faint); }
+.row:has(> .convert) { padding: 7px; border-radius: 18px; background: rgba(16, 16, 20, .78); box-shadow: inset 0 0 0 1px var(--line2), 0 30px 60px -20px rgba(0, 0, 0, .7); transition: box-shadow var(--mid) var(--ease); }
+.row:has(> .convert):focus-within { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28), 0 0 0 5px rgba(139, 124, 255, .14), 0 30px 60px -20px rgba(0, 0, 0, .7); }
+.row:has(> .convert) > .input, :root[data-theme] .row:has(> .convert) > .input { background: none; box-shadow: none; }
+
+/* ---- buttons: white for the main thing, quiet glass for the rest */
+.convert, .small-button:not(.ghost-button):not(.outline-button), :root[data-theme] .convert {
+  background: #ededef; color: #0a0a0c; box-shadow: none; font-weight: 600;
+}
+.convert:hover:not(:disabled), .small-button:not(.ghost-button):not(.outline-button):hover { background: #ffffff; box-shadow: 0 0 24px rgba(255, 255, 255, .12); }
+.convert:disabled { background: #2a2a30; color: var(--faint); }
+.ghost-button, .outline-button, :root[data-theme] .ghost-button, .lib-out-buttons .small-button:not(.ghost-button):not(.outline-button) {
+  background: rgba(255, 255, 255, .05); color: var(--text); box-shadow: var(--hair2);
+}
+.ghost-button:hover, .outline-button:hover, .lib-out-buttons .small-button:not(.ghost-button):not(.outline-button):hover { background: rgba(255, 255, 255, .1); }
+.toggle button, .quality, .chips button, .lib-tools .find-open, .side-item.lib-cat, .lib-people-button,
+:root[data-theme] :is(.toggle button, .quality, .chips button, .lib-tools .find-open, .side-item.lib-cat) {
+  background: rgba(255, 255, 255, .04); box-shadow: var(--hair); color: var(--muted);
+}
+.toggle button:hover, .quality:hover, .chips button:hover, .side-item.lib-cat:hover { background: rgba(255, 255, 255, .08); color: var(--text); }
+.toggle button.active, .chips button.active, .side-item.lib-cat.active,
+:root[data-theme] :is(.toggle button.active, .chips button.active, .side-item.lib-cat.active) { background: #ededef; color: #0a0a0c; box-shadow: none; }
+.quality select, select { color: var(--text); background-color: transparent; }
+option { background: #16161a; color: var(--text); }
+.link, .link-button, :root[data-theme] .link { color: #c4bbff; }
+.link:hover { color: #fff; }
+.bar { background: rgba(255, 255, 255, .08); }
+.bar div { background: linear-gradient(90deg, #8b7cff, #5ed3f3); }
+.wl-login:hover, .pc-more:hover { background: rgba(255, 255, 255, .06); }
+
+/* ---- page colors, dimmed for the dark */
+.sidebar .tabs button[data-tab="home"], [data-chip="home"] { --chip: rgba(255, 255, 255, .1); --chip-ink: #fff; }
+.sidebar .tabs button[data-tab="video"], [data-chip="video"], .home-go [data-go="video"] { --chip: rgba(255, 95, 99, .14); --chip-ink: #ff8a8d; }
+.sidebar .tabs button[data-tab="files"], [data-chip="files"], .home-go [data-go="files"] { --chip: rgba(96, 165, 250, .14); --chip-ink: #8cbcff; }
+.sidebar .tabs button[data-tab="images"], [data-chip="images"], .home-go [data-go="images"] { --chip: rgba(61, 220, 151, .13); --chip-ink: #6ee7b7; }
+.sidebar .tabs button[data-tab="sfx"], [data-chip="sfx"], .home-go [data-go="sfx"] { --chip: rgba(139, 124, 255, .16); --chip-ink: #b4a9ff; }
+.sidebar .tabs button[data-tab="docs"], [data-chip="docs"], .home-go [data-go="docs"] { --chip: rgba(251, 191, 36, .13); --chip-ink: #fcd34d; }
+.sidebar .tabs button[data-tab="boards"], [data-chip="boards"], .home-go [data-go="boards"] { --chip: rgba(45, 212, 191, .13); --chip-ink: #5eead4; }
+.sidebar .tabs button[data-tab="fx"], [data-chip="fx"] { --chip: rgba(251, 146, 60, .14); --chip-ink: #fdba74; }
+.sidebar .tabs button[data-tab="games"], [data-chip="games"] { --chip: rgba(244, 114, 182, .14); --chip-ink: #f9a8d4; }
+.sidebar .tabs button[data-tab="povs"], [data-chip="povs"] { --chip: rgba(56, 189, 248, .14); --chip-ink: #7dd3fc; }
+.sidebar .tabs button[data-tab="copyright"], .sidebar .tabs button[data-tab="history"], .side-link { --chip: rgba(255, 255, 255, .08); --chip-ink: #d4d4d8; }
+
+/* ---- popups and menus: solid dark, a hairline edge, a deep soft shadow */
+.modal, :root[data-theme] .modal, .quick-modal, :root[data-theme] .quick-modal { background: rgba(0, 0, 0, .55); }
+.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar, .chat-msg .msg-tools, .quick-box, .paste-card,
+:root[data-theme] :is(.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar), :root[data-theme] .modal > .dialog {
+  background: #111114; box-shadow: var(--pop-shadow); color: var(--text);
+}
+.account-panel .lib-menu, :root[data-theme] .account-panel .lib-menu { background: none; box-shadow: none; }
+.lib-menu button:hover, .help-pop button:hover, .people-pop button:hover, :root[data-theme] .lib-menu button:hover { background: rgba(255, 255, 255, .06); }
+.help-pop kbd { background: rgba(255, 255, 255, .06); }
+.lib-field input { background: rgba(255, 255, 255, .04); border-color: var(--line2); color: var(--text); }
+.settings-dialog .set-nav, :root[data-theme] .settings-dialog .set-nav { background: #0c0c0f; }
+.settings-dialog .set-group, :root[data-theme] .settings-dialog .set-group { background: rgba(255, 255, 255, .03); box-shadow: var(--hair); }
+#setNav button.active, :root[data-theme] #setNav button.active { background: rgba(255, 255, 255, .08); box-shadow: none; }
+
+/* quick search and the paste card, dark */
+.quick-field { border-bottom-color: var(--line); }
+.quick-foot { background: #0c0c0f; border-top-color: var(--line); }
+.qk-item.on { background: rgba(255, 255, 255, .06); }
+.side-search kbd, .quick-modal kbd { background: rgba(255, 255, 255, .06); box-shadow: inset 0 0 0 1px var(--line2); color: var(--muted); }
+.quick-link { background: rgba(255, 255, 255, .04); box-shadow: var(--hair); }
+.quick-link.loading .ql-thumb { background-image: linear-gradient(100deg, #1a1a1f 30%, #26262c 50%, #1a1a1f 70%) !important; }
+.pc-buttons #pasteMp4 { background: rgba(255, 255, 255, .06); color: var(--text); box-shadow: var(--hair2); }
+.pc-buttons #pasteMp4:hover { background: rgba(255, 255, 255, .12); }
+.pc-close:hover { background: rgba(255, 255, 255, .06); }
+
+/* sign-up pages, dark: the glow behind the picture is the page's color */
+.welcome::before { opacity: .55; }
+.wl-points li { color: #c4c4cc; }
+.wa-sound, .wa-game, .wa-dl, .wa-msg > span:not(.wa-av) { background: rgba(28, 28, 34, .92); box-shadow: inset 0 0 0 1px var(--line2), 0 12px 30px rgba(0, 0, 0, .45); }
+.wa-play { background: rgba(255, 255, 255, .08); }
+.wa-play::after { border-left-color: var(--text); }
+.wa-wave i { background: rgba(255, 255, 255, .14); }
+.wa-page { background: #f4f4f5; }
+.wa-msg small { color: #c4c4cc; }
+.wa-msg.me > span:not(.wa-av) { background: #ededef; }
+.wa-msg.me em { color: #0a0a0c; } .wa-msg.me small { color: #52525b; }
+.wa-people span, .chat-out-art span { box-shadow: 0 0 0 3px #111114; }
+.wa-dl b { background: rgba(255, 255, 255, .08); }
+
+/* little things */
+.ve-tip { background: rgba(139, 124, 255, .1); color: #cfc8ff; box-shadow: inset 0 0 0 1px rgba(139, 124, 255, .2); }
+.ve-tip svg { color: #b4a9ff; }
+.ve-tip kbd { background: rgba(255, 255, 255, .08); box-shadow: none; color: #e4e0ff; }
+:root[data-theme] .doc-thumb { background: rgba(255, 255, 255, .05); box-shadow: var(--hair); }
+:root[data-theme] .doc-template .doc-thumb-folder { background: rgba(255, 255, 255, .04); }
+:root[data-theme] .doc-template .doc-plus { color: #fcd34d; } :root[data-theme] .doc-template:nth-child(2) .doc-plus { color: #8cbcff; } :root[data-theme] .doc-template:nth-child(3) .doc-plus { color: #ff8a8d; }
+.dropzone:not(.compact) > svg { background: rgba(96, 165, 250, .14); color: #8cbcff; }
+#dropzone > svg { background: rgba(61, 220, 151, .13); color: #6ee7b7; }
+#copyDrop > svg { background: rgba(255, 255, 255, .08); color: #d4d4d8; }
+:root[data-theme] body .chat-panel { background: rgba(8, 8, 10, .97); }
+body.chat-page::after { background: rgba(6, 6, 8, .92); }
+.player-bar { border-radius: 16px; }
+.history-empty.big b, .chat-out h3 { color: var(--text); }
+
+/* ---- motion: everything glides on one smooth curve */
+@keyframes page-rise { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } }
+.tab-page:not([hidden]) > * { animation-duration: .55s; }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+@keyframes quick-in { from { opacity: 0; transform: translateY(-10px) scale(.97); filter: blur(6px); } }
+@media (prefers-reduced-motion: reduce) { .ambient video { display: none; } .sidebar { transition: none; } }
+/* rail fit: every page fits in a normal window; names stay fully hidden until the rail opens */
+.sidebar, :root[data-theme] .sidebar, html.side-small .sidebar { padding-bottom: 100px; }
+.sidebar .tabs button, .side-link, html.side-small .sidebar .tabs button, html.side-small .side-link { height: 36px; min-height: 36px; }
+.tab-group, html.side-small .tab-group { margin: 5px 10px; }
+.side-search, html.side-small .side-search { height: 38px; }
+.side-foot { padding-top: 6px; margin-top: 6px; }
+.sidebar .tabs button > span, .side-link > span, html.side-small .sidebar .tabs button > span, html.side-small .side-link > span,
+.side-search span, .side-search kbd, .side-name { visibility: hidden; transition: opacity .16s var(--ease), transform .28s var(--ease), visibility 0s .16s; }
+.sidebar:hover :is(.tabs button, .side-link) > span, .sidebar:has(:focus-visible) :is(.tabs button, .side-link) > span,
+.sidebar:hover .side-search :is(span, kbd), .sidebar:hover .side-name { visibility: visible; transition: opacity .2s var(--ease) .06s, transform .3s var(--ease) .06s, visibility 0s; }
+/* document thumbnails: dark paper (the pages themselves stay white while you write) */
+.doc-thumb .doc-thumb-page { filter: invert(.9) hue-rotate(180deg); }
+.doc-template .doc-thumb-page { filter: none; background: rgba(255, 255, 255, .06) !important; box-shadow: inset 0 0 0 1px var(--line2) !important; }
+.sidebar:hover, :root[data-theme] .sidebar:hover, html.side-small .sidebar:hover,
+:root[data-theme] .sidebar:has(:focus-visible) { width: var(--rail-open); background: rgba(12, 12, 15, .96); box-shadow: inset 0 0 0 1px var(--line2), 0 30px 80px rgba(0, 0, 0, .7); }

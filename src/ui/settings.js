@@ -12,6 +12,7 @@ function drawSettings() {
   $("setHardware").checked = appSettings.hardware;
   drawSize();
   $("setChatSound").checked = loadPref("chatSound") !== false;
+  $("setAmbient").checked = loadPref("ambient") !== false;
 }
 
 // From the app's state, every refresh. Only redraws when something changed.
@@ -73,6 +74,11 @@ $("setFolderChange").addEventListener("click", async () => {
 $("settingsClose").addEventListener("click", closeSettings);
 $("settingsModal").addEventListener("click", (e) => { if (e.target === $("settingsModal")) closeSettings(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSettings(); });
+$("setAmbient").addEventListener("change", () => {
+  savePref("ambient", $("setAmbient").checked);
+  applyTheme();
+  playAmbient();
+});
 $("setChatSound").addEventListener("change", () => {
   savePref("chatSound", $("setChatSound").checked);
   if ($("setChatSound").checked && typeof chatDing === "function") chatDing();  // what it sounds like
