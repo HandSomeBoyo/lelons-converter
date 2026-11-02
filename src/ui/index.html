@@ -75,6 +75,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/><path d="M15.5 10l-2 2 2 2"/></svg>
       </button>
     </div>
+    <button type="button" class="side-search" id="quickOpen" title="Search everything (Ctrl+K)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><span>Search</span><kbd>Ctrl K</kbd>
+    </button>
     <nav class="tabs" id="tabs">
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
       <div class="tab-group">Convert</div>
@@ -104,7 +107,7 @@
   </aside>
 
   <section class="tab-page" id="homeTab">
-    <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
+    <h1 class="headline"><span id="homeHello">Hey there.</span><br><em id="homeSub">Here's what's up.</em></h1>
 
     <form class="row home-paste" id="homeForm">
       <label class="input">
@@ -122,6 +125,11 @@
       <button type="button" data-go="sfx"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></i><b>Find a sound</b><small>The crew's shared Library</small></button>
       <button type="button" data-go="docs"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg></i><b>Write a script</b><small>Docs, notes and plans</small></button>
       <button type="button" data-go="boards"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg></i><b>Plan a video</b><small>Boards with to-do cards</small></button>
+    </div>
+
+    <div class="home-section home-resume" id="homeResume" hidden>
+      <div class="home-head"><h2>Pick up where you left off</h2></div>
+      <div class="resume-grid" id="homeResumeList"></div>
     </div>
 
     <div class="home-section">
@@ -288,6 +296,13 @@
     </div>
     <div class="jobs" id="jobs"></div>
   </section>
+  <div class="video-empty" id="videoEmpty">
+    <div class="ve-step" data-chip="video"><i>1</i><b>Copy a link</b><small>From YouTube, TikTok, Instagram, SoundCloud and lots more.</small></div>
+    <div class="ve-step" data-chip="sfx"><i>2</i><b>Pick MP3 or MP4</b><small>A song, or the whole video. Trim it first if you only want a part.</small></div>
+    <div class="ve-step" data-chip="boards"><i>3</i><b>Drag it into your edit</b><small>Finished files drag straight into Resolve, Premiere or a folder.</small></div>
+    <p class="ve-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.2 5.3 5.3 2.2-5.3 2.2-2.2 5.3-2.2-5.3-5.3-2.2 5.3-2.2z"/></svg>
+      <span><b>Quick tip:</b> paste a link anywhere in VaultHub, on any page, and it offers to convert it. Or press <kbd>Ctrl</kbd> <kbd>K</kbd>.</span></p>
+  </div>
   </section>
 
   <section class="tab-page" id="filesTab" hidden>
@@ -354,13 +369,16 @@
       <h1 class="headline">Sounds from the crew.<br><em>Play it. Grab it.</em></h1>
     </div>
 
-    <div class="lib-out" id="libLoggedOut" hidden>
-      <p>Log in to hear, download and share everyone's sounds.</p>
-      <div class="lib-out-buttons">
-        <button type="button" class="convert" id="libOutLogin">Log in</button>
-        <button type="button" class="small-button" id="libOutSignup">Create account</button>
+    <div class="lib-out welcome" id="libLoggedOut" data-chip="sfx" hidden>
+      <div class="wl-text">
+        <span class="wl-badge">Free for the crew</span>
+        <h2>Every sound the crew uses, in one place.</h2>
+        <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Hear and download everyone's sounds</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Share your own with a click</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Drag any sound straight into your edit</li></ul>
+        <div class="wl-buttons"><button type="button" class="convert" id="libOutSignup">Create a free account</button><button type="button" class="wl-login" id="libOutLogin">I have an account</button></div>
       </div>
-      <p class="lib-out-hint">You can also use the account button at the bottom left.</p>
+      <div class="wl-art" aria-hidden="true"><div class="wa-sound"><b class="wa-play"></b><span><em>Bruh</em><small>Meme · 0:02</small></span><span class="wa-wave"><i style="height:30%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:60%"></i><i style="height:35%"></i><i style="height:70%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:40%"></i><i style="height:65%"></i><i style="height:30%"></i><i style="height:75%"></i><i style="height:55%"></i></span></div>
+        <div class="wa-sound on"><b class="wa-play"></b><span><em>Vine boom</em><small>Meme · 0:01</small></span><span class="wa-wave"><i style="height:30%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:60%"></i><i style="height:35%"></i><i style="height:70%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:40%"></i><i style="height:65%"></i><i style="height:30%"></i><i style="height:75%"></i><i style="height:55%"></i></span></div>
+        <div class="wa-sound"><b class="wa-play"></b><span><em>Whoosh, fast</em><small>Transition · 0:01</small></span><span class="wa-wave"><i style="height:30%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:45%"></i><i style="height:95%"></i><i style="height:60%"></i><i style="height:35%"></i><i style="height:70%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:40%"></i><i style="height:65%"></i><i style="height:30%"></i><i style="height:75%"></i><i style="height:55%"></i></span></div></div>
     </div>
 
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
@@ -500,12 +518,15 @@
       </div>
       <p class="docs-where" id="docsWhere"></p>
       <div class="docs-invites" id="docsInvites" hidden></div>
-      <div class="lib-out docs-out" id="docsLoggedOut" hidden>
-        <p>Log in to write documents together with your friends.</p>
-        <div class="lib-out-buttons">
-          <button type="button" class="convert" id="docsOutLogin">Log in</button>
-          <button type="button" class="small-button" id="docsOutSignup">Create account</button>
-        </div>
+      <div class="lib-out docs-out welcome" id="docsLoggedOut" data-chip="docs" hidden>
+      <div class="wl-text">
+        <span class="wl-badge">Free for the crew</span>
+        <h2>Write scripts together, live.</h2>
+        <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Everyone types in the same document</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Comments and notes on any line</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Your local docs stay private</li></ul>
+        <div class="wl-buttons"><button type="button" class="convert" id="docsOutSignup">Create a free account</button><button type="button" class="wl-login" id="docsOutLogin">I have an account</button></div>
+      </div>
+      <div class="wl-art" aria-hidden="true"><div class="wa-page"><b class="wa-scene">INT. GAMING ROOM - NIGHT</b><i style="width:92%"></i><i style="width:78%"></i><b class="wa-char">PETE</b><i class="wa-dia" style="width:58%"></i><i class="wa-dia" style="width:46%"></i><span class="wa-cursor"><em>Leon</em></span></div>
+        <div class="wa-people"><span style="--c:#7c5cf2">L</span><span style="--c:#1f9d61">P</span><span style="--c:#ea580c">M</span></div></div>
       </div>
       <div id="docsMain">
         <nav class="docs-crumbs" id="docsCrumbs" hidden></nav>
@@ -631,9 +652,14 @@
         </div>
       </div>
       <p class="fx-status" id="fxStatus" hidden></p>
-      <div class="fx-out" id="fxOut" hidden>
-        <p>Log in to see the packs your friends shared.</p>
-        <button type="button" class="small-button" id="fxLogin">Log in</button>
+      <div class="fx-out welcome" id="fxOut" data-chip="fx" hidden>
+      <div class="wl-text">
+        <span class="wl-badge">Free for the crew</span>
+        <h2>Explosions, smoke and flashes for your edits.</h2>
+        <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Packs of clips the crew shares</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Preview by just pointing at them</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Download only what you need</li></ul>
+        <div class="wl-buttons"><button type="button" class="convert wl-signup">Create a free account</button><button type="button" class="wl-login" id="fxLogin">I have an account</button></div>
+      </div>
+      <div class="wl-art" aria-hidden="true"><div class="wa-grid"><span class="wa-fx a"><small>Explosions</small></span><span class="wa-fx b"><small>Smoke</small></span><span class="wa-fx c"><small>Muzzle flash</small></span><span class="wa-fx d"><small>Sparks</small></span></div></div>
       </div>
       <div class="fx-setup" id="fxSetup" hidden>
         <h2>Set up the storage (once)</h2>
@@ -676,9 +702,16 @@
   <section class="tab-page" id="gamesTab" hidden>
     <h1 class="headline">Games to record.<br><em>Pick the next video.</em></h1>
     <p class="fx-status" id="gmStatus" hidden></p>
-    <div class="fx-out" id="gmOut" hidden>
-      <p>Log in to see the games your friends posted.</p>
-      <button type="button" class="small-button" id="gmLogin">Log in</button>
+    <div class="fx-out welcome" id="gmOut" data-chip="games" hidden>
+      <div class="wl-text">
+        <span class="wl-badge">Free for the crew</span>
+        <h2>Pick the next game to record, together.</h2>
+        <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Post any Steam game with its link</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Vote on what to play next</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Get told when a game goes on sale</li></ul>
+        <div class="wl-buttons"><button type="button" class="convert wl-signup">Create a free account</button><button type="button" class="wl-login" id="gmLogin">I have an account</button></div>
+      </div>
+      <div class="wl-art" aria-hidden="true"><div class="wa-game a"><span class="wa-cover"></span><span><em>Lethal Company</em><small>Co-op · 92% positive</small></span><b class="wa-votes">4 want it</b></div>
+        <div class="wa-game b"><span class="wa-cover"></span><span><em>Content Warning</em><small>Co-op · 88% positive</small></span><b class="wa-votes">3 want it</b></div>
+        <div class="wa-game c"><span class="wa-cover"></span><span><em>R.E.P.O.</em><small>On sale now</small></span><b class="wa-votes">2 want it</b></div></div>
     </div>
     <div class="gm-main" id="gmMain" hidden>
       <form class="gm-add" id="gmAdd" autocomplete="off">
@@ -717,9 +750,15 @@
   <section class="tab-page" id="povsTab" hidden>
     <h1 class="headline">Everyone's POV.<br><em>Straight from their PC.</em></h1>
     <p class="fx-status" id="pvStatus" hidden></p>
-    <div class="fx-out" id="pvOut" hidden>
-      <p>Log in to see your friends' recordings.</p>
-      <button type="button" class="small-button" id="pvLogin">Log in</button>
+    <div class="fx-out welcome" id="pvOut" data-chip="povs" hidden>
+      <div class="wl-text">
+        <span class="wl-badge">Free for the crew</span>
+        <h2>Grab everyone's POV after a session.</h2>
+        <ul class="wl-points"><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Recordings go straight from PC to PC</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>No upload limit and nothing to pay</li><li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></i>Friends pass videos on to each other</li></ul>
+        <div class="wl-buttons"><button type="button" class="convert wl-signup">Create a free account</button><button type="button" class="wl-login" id="pvLogin">I have an account</button></div>
+      </div>
+      <div class="wl-art" aria-hidden="true"><div class="wa-pov a"><span class="wa-shot"><small>Pete's POV</small></span></div><div class="wa-pov b"><span class="wa-shot"><small>Miknel's POV</small></span></div>
+        <div class="wa-dl"><span><em>Getting Pete's POV</em><small>14.2 GB of 22 GB</small></span><b><i></i></b></div></div>
     </div>
     <div class="pv-main" id="pvMain" hidden>
       <div class="pv-top">
@@ -1508,6 +1547,29 @@
   </div>
 </div>
 
+<div class="modal quick-modal" id="quickModal" hidden>
+  <div class="quick-box" role="dialog" aria-label="Search">
+    <label class="quick-field">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+      <input id="quickInput" placeholder="Search pages, documents, boards... or paste a link" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </label>
+    <div class="quick-link" id="quickLink" hidden><span class="ql-thumb"></span><span class="ql-body"><b class="ql-title"></b><small class="ql-meta"></small></span></div>
+    <div class="quick-list" id="quickList"></div>
+    <div class="quick-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to open</span><span class="quick-tip">Tip: paste a link anywhere in VaultHub to convert it</span></div>
+  </div>
+</div>
+
+<div class="paste-card" id="pasteCard" hidden role="dialog" aria-label="Convert the pasted link">
+  <div class="pc-top"><span class="pc-head">Link pasted</span><button type="button" class="pc-close" id="pasteClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="quick-link"><span class="ql-thumb"></span><span class="ql-body"><b class="ql-title"></b><small class="ql-meta"></small></span></div>
+  <div class="pc-buttons">
+    <button type="button" class="convert" id="pasteMp3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>MP3</span></button>
+    <button type="button" class="convert" id="pasteMp4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>MP4</span></button>
+    <button type="button" class="pc-more" id="pasteMore">More options</button>
+  </div>
+</div>
+
 <script src="motion.js"></script>
 <script src="volume.js"></script>
 <script src="player.js"></script>
@@ -1537,5 +1599,6 @@
 <script src="povs.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
+<script src="quick.js"></script>
 </body>
 </html>
