@@ -9,6 +9,7 @@ A document is a list of blocks (a paragraph, a heading, a list...): {"id", "pos"
 text that sorts the blocks, so people can add blocks at the same time without mixing them up.
 """
 
+import base64
 import json
 import os
 import re
@@ -23,7 +24,7 @@ import sfx
 FOLDER = os.path.join(settings.DATA_DIR, "Docs")
 KINDS = ("doc", "script")
 MAX_BYTES = 30 * 1024 * 1024  # one local doc (pictures are inside it)
-EXPORTS = {"txt": "text/plain", "doc": "application/msword", "fountain": "text/plain", "html": "text/html"}
+EXPORTS = {"txt": "text/plain", "doc": "application/msword", "fountain": "text/plain", "html": "text/html", "pdf": "application/pdf"}
 
 _lock = threading.Lock()
 _ID = re.compile(r"[0-9a-f]{32}$")
@@ -328,7 +329,7 @@ def collab_comment(doc_id, what, comment_id=None, block=None, quote=None, body=N
 # ---------------------------------------------------------------- saving a copy as a file
 
 def export(folder, title, ext, text):
-    """Writes what the page made (Word, text or Fountain) into the folder. Returns the path."""
+    """Writes what the page made (Word, text, Fountain or a PDF) into the folder. Returns the path."""
     if ext not in EXPORTS or not isinstance(text, str):
         raise Error("Can't save it like that.")
     if not folder or not os.path.isdir(folder):
@@ -336,6 +337,11 @@ def export(folder, title, ext, text):
     with names._lock:
         path = names.free_path(folder, names.safe_stem(title, "Document"), "." + ext)
         data = text.encode("utf-8")
+        if ext == "pdf":  # (a PDF comes as base64)
+            try:
+                data = base64.b64decode(text, validate=True)
+            except ValueError:
+                raise Error("Couldn't save the PDF.") from None
         if ext in ("txt", "fountain"):
             data = text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8-sig")
         with open(path, "wb") as f:

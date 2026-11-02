@@ -2,6 +2,58 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.23.0", items: [
+    "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",
+    "Text you change takes the same room as the old text, so the line doesn't shift, and bold words in a line stay bold.",
+    "The PDF toolbar got a cleaner look: it's solid, the labels have room, and Copy and Delete for pictures are up there now.",
+  ] },
+  { version: "2.22.1", items: [
+    "Faster and smoother all over: the Film assets tab uses far less power while it sits there, and the app checks for news less often when it's minimized.",
+    "The app reuses its own files instead of loading them again, and Docs, PDF editing and the Library do less work while you type, drag or play.",
+    "Boards: dragging cards no longer drops the wrong one, and a friend's edit no longer throws away what you're typing.",
+    "POVs: only friends you sent a video to can download it, and cancelled or expired downloads clean up after themselves.",
+    "Lots of smaller fixes in Docs, Games, Film uploads and calls.",
+  ] },
+  { version: "2.22.0", items: [
+    "POVs: friends pass videos on. Once you've downloaded a video, you can send it to others too, while VaultHub is open and its timer runs.",
+    "So when the one who recorded it has their PC off, you can still get it from a friend who already has it. The card says who is ready to send.",
+  ] },
+  { version: "2.21.1", items: [
+    "POVs is simpler: click \"New video\", give it a name, pick how long it stays up, choose the file and click Save. No sessions to make first.",
+    "All the videos are in one list, newest first. A download is saved with the name it has in the list.",
+  ] },
+  { version: "2.21.0", items: [
+    "New POVs tab: recorded a game together? Make a session, and everyone adds their own recording so the others can download their POV.",
+    "Nothing gets uploaded, so it's free and any size works: the video goes straight from your friend's PC to yours. They need VaultHub open while you download (a green dot shows when they're ready).",
+    "When you add your POV you pick how long it stays: 1 hour, 6 hours, 1 day, 3 days, 1 week, or until you remove it. Then it's gone from the tab by itself (the video stays on your PC).",
+    "A download that stops (internet gone, app closed, or you clicked Pause) goes on from where it was.",
+  ] },
+  { version: "2.20.0", items: [
+    "Docs: in a PDF you can now edit everything, not just the text. Click an icon, a dot (like the rating dots on a CV) or a picture to pick it up.",
+    "Then drag it somewhere else, give it a new color, make it bigger or smaller with - and +, copy it or delete it. Two new grays are in the colors, handy for \"empty\" rating dots.",
+  ] },
+  { version: "2.19.2", items: [
+    "Docs: in a PDF you opened \"just as it looks\", text you already changed can be clicked and changed again. Before, clicking back into it sometimes did nothing.",
+  ] },
+  { version: "2.19.1", items: [
+    "Docs: centered (and right-side or indented) lines stay that way when you go to another page and come back, and when you save. Lines that already lost it need to be centered once more.",
+  ] },
+  { version: "2.19.0", items: [
+    "Docs: a PDF can now open just as it looks, like in Edge. When you import one, pick \"Keep how it looks\" and click any text to change it.",
+    "You can also add new text, draw, highlight, erase and add pictures on top of the PDF, then click \"Download PDF\" or print it.",
+    "Want normal text you can restyle freely instead? Pick \"Turn into a document\" when you import, or use Tools > \"Turn it into a normal document\" later.",
+    "PDF imports that turn into a document got better too: two-column pages (like a CV with a sidebar), bold text, numbers and centered lines come out right more often.",
+  ] },
+  { version: "2.18.0", items: [
+    "Docs: you can import a PDF now. Click \"Import a PDF\" on the Docs page (or drag a PDF onto it) and it turns into a normal document you can change however you like: text, headings, lists, tables and pictures.",
+    "Movie scripts in a PDF come in as a real script, with scenes, characters and dialogue in the right places.",
+    "Inside a document, File > \"Import a PDF as a page\" adds a PDF as a new page.",
+    "It all happens on your computer, nothing gets uploaded. A scanned PDF (a photo of paper) comes in as a picture, since there's no text in it to edit.",
+  ] },
+  { version: "2.17.4", items: [
+    "Docs: changing the text size on an empty line (or with just the text cursor somewhere) works now. Before, the size jumped back, for example to 48 under a big title, and what you typed came out the wrong size.",
+    "Docs: double-clicking the size box to pick the number no longer makes the new size go nowhere.",
+  ] },
   { version: "2.17.3", items: [
     "Docs: copying a centered (or right-side) line and pasting it on another page keeps it centered. Before, it showed up on the left while the buttons said it was centered, and you couldn't change it. Lines that already got stuck like that fix themselves when you open the document.",
     "Docs: copied text no longer brings the page's colors and font along, so it matches the rest of your document.",

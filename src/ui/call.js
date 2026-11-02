@@ -270,9 +270,10 @@ async function callOpenMic() {
   const raw = await navigator.mediaDevices.getUserMedia(callMicConstraints());
   const level = callNoise();
   if (level !== "strong" && level !== "max") return { stream: raw, parts: { raw } };
+  let ctx = null;
   try {
     const kind = level === "max" ? "gtcrn" : "rnnoise";
-    const ctx = new AudioContext({ sampleRate: 48000 }); // (both AIs work on 48 kHz sound)
+    ctx = new AudioContext({ sampleRate: 48000 }); // (both AIs work on 48 kHz sound)
     const [wasmBinary] = await Promise.all([callNoiseWasm(kind), ctx.audioWorklet.addModule(`noise/${kind}.js`)]);
     const node = new AudioWorkletNode(ctx, "@sapphi-red/web-noise-suppressor/" + kind, {
       processorOptions: { maxChannels: 1, wasmBinary }, channelCount: 1, channelCountMode: "explicit",
@@ -283,7 +284,8 @@ async function callOpenMic() {
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
     return { stream: out.stream, parts: { raw, ctx, node } };
   } catch (e) {
-    // The AI couldn't start here: use the built-in one instead.
+    // The AI couldn't start here: use the built-in one instead (and let go of its sound engine).
+    if (ctx) ctx.close().catch(() => {});
     raw.getAudioTracks().forEach((t) => t.applyConstraints({ ...callMicConstraints().audio, noiseSuppression: true }).catch(() => {}));
     return { stream: raw, parts: { raw } };
   }
@@ -410,6 +412,7 @@ function callPeer(name) {
   const key = lower(name);
   const pc = new RTCPeerConnection({ iceServers: CALL_SERVERS });
   const audio = new Audio();
+  audio.dataset.call = "1"; // (see volume.js: a call's sound doesn't stop the Library)
   audio.autoplay = true;
   audio.muted = callDeafened;
   callSetSpeaker(audio);
@@ -606,6 +609,7 @@ function callWatchSpeaking(key, stream) {
     source.connect(analyser);
     callStopWatching(key);
     callSpeaking.set(key, { source, analyser, data: new Uint8Array(analyser.fftSize), on: false, quietSince: 0 });
+    callMeterOn();
   } catch (e) { /* no rings, no problem */ }
 }
 // Stop listening for someone's voice (they left, or your microphone changed): unplug it, or it keeps working.
@@ -615,7 +619,11 @@ function callStopWatching(key) {
   callSpeaking.delete(key);
   try { s.source.disconnect(); } catch (e) { /* already */ }
 }
-setInterval(() => {
+// (only runs while someone's voice is being listened to: it used to wake the page 8 times a second all day)
+let callMeter = 0;
+function callMeterOn() { if (!callMeter) callMeter = setInterval(callMeterTick, 120); }
+function callMeterTick() {
+  if (!callSpeaking.size) { clearInterval(callMeter); callMeter = 0; return; }
   if (!callIsLive() || call.phase !== "in") return;
   let changed = false;
   for (const [key, s] of callSpeaking) {
@@ -629,7 +637,7 @@ setInterval(() => {
     if (on !== s.on) { s.on = on; changed = true; }
   }
   if (changed) { drawCallPeople(); drawCallTalking(); }
-}, 120);
+}
 
 // ---- sharing your screen
 
@@ -985,6 +993,7 @@ function drawCallTiles(tiles, strip) {
       el = document.createElement("div");
       el.className = "call-tile";
       const video = Object.assign(document.createElement("video"), { autoplay: true, muted: true, playsInline: true });
+      video.dataset.call = "1";
       el.append(video, Object.assign(document.createElement("span"), { className: "call-tile-face" }),
         Object.assign(document.createElement("b"), { className: "call-tile-name" }));
       callTileEls.set(t.key, el);

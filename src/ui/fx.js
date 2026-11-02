@@ -89,17 +89,33 @@ function fxArt(canvas, kind, seed) {
       } else if (def.chunk) {
         ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot); ctx.fillStyle = `rgba(${cr},${cg},${cb},${Math.min(1, a * 2)})`;
         ctx.fillRect(-s / 2, -s / 3, s, s * .66); ctx.restore();
-      } else {
-        const g = ctx.createRadialGradient(x, y, 0, x, y, s);
-        g.addColorStop(0, `rgba(${cr},${cg},${cb},${a})`); g.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
-        ctx.fillStyle = g; ctx.fillRect(x - s, y - s, s * 2, s * 2);
+      } else if (a > 0) {
+        ctx.globalAlpha = Math.min(1, a);
+        ctx.drawImage(fxGlow(cr, cg, cb), x - s, y - s, s * 2, s * 2);
       }
     }
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
   };
   // Run a bit ahead so a still preview already shows the effect at its best.
   art.warm = () => { for (let i = 0; i < (def.warm || (def.every ? 18 : 90)); i++) art.step(); art.draw(); };
   return art;
+}
+
+// A soft round glow in one color, drawn once and reused (a new gradient for every particle, every frame, was slow).
+const fxGlows = new Map();
+function fxGlow(r, g, b) {
+  const key = r + "," + g + "," + b;
+  let c = fxGlows.get(key);
+  if (!c) {
+    c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const x = c.getContext("2d"), grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, `rgba(${key},1)`); grad.addColorStop(1, `rgba(${key},0)`);
+    x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
+    fxGlows.set(key, c);
+  }
+  return c;
 }
 
 function fxBolt(r) {
@@ -140,10 +156,24 @@ function fxPlay(art) {
   if (!fxLoop) fxLoop = requestAnimationFrame(fxTick);
 }
 function fxStop(art) { fxPlaying.delete(art); }
-function fxTick() {
+// The effects move at 60 steps a second but are drawn 30 times a second, and only while they can be seen.
+let fxLast = 0, fxDrawn = 0;
+const fxSeen = new WeakMap();
+const fxSight = new IntersectionObserver((entries) => { for (const e of entries) fxSeen.set(e.target, e.isIntersecting); });
+function fxTick(now) {
   fxLoop = 0;
-  if ($("fxTab").hidden || document.hidden) return;
-  for (const art of fxPlaying) { if (!art.canvas.isConnected) { fxPlaying.delete(art); continue; } art.step(); art.draw(); }
+  if ($("fxTab").hidden || document.hidden) { fxLast = 0; return; }
+  const steps = fxLast ? Math.min(3, Math.round((now - fxLast) / 16.7)) : 1;
+  if (steps) fxLast = now;
+  const draw = now - fxDrawn > 30;
+  if (draw) fxDrawn = now;
+  for (const art of fxPlaying) {
+    if (!art.canvas.isConnected) { fxPlaying.delete(art); continue; }
+    if (!fxSeen.has(art.canvas)) { fxSeen.set(art.canvas, true); fxSight.observe(art.canvas); }
+    if (!fxSeen.get(art.canvas)) continue;
+    for (let i = 0; i < steps; i++) art.step();
+    if (draw) art.draw();
+  }
   if (fxPlaying.size) fxLoop = requestAnimationFrame(fxTick);
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && fxPlaying.size && !fxLoop) fxLoop = requestAnimationFrame(fxTick); });
@@ -482,9 +512,15 @@ async function fxSendFiles(packId, files) {
 let fxJobs = { uploads: [], downloads: [] }, fxJobsTimer = 0, fxDoneUploads = 0;
 function fxShowJobs() { $("fxJobs").hidden = false; }
 
+let fxJobsGen = 0, fxJobsPressed = false;
+// (a button pressed in the corner isn't made again before it's let go: that lost the click)
+document.addEventListener("pointerdown", (e) => { fxJobsPressed = !!e.target.closest("#fxJobs"); }, true);
+document.addEventListener("pointerup", () => { if (fxJobsPressed) { fxJobsPressed = false; setTimeout(drawFxJobs, 0); } }, true);
 async function fxPollJobs() {
   clearTimeout(fxJobsTimer);
+  const gen = ++fxJobsGen; // (one look at a time: a newer one makes an older one stop)
   const res = await api("/api/fx-jobs", {}).catch(() => null);
+  if (gen !== fxJobsGen) return;
   if (res && res.ok) {
     fxJobs = res;
     drawFxJobs();
@@ -496,10 +532,11 @@ async function fxPollJobs() {
     }
   }
   const busy = [...fxJobs.uploads, ...fxJobs.downloads].some((j) => j.status === "waiting" || j.status === "working");
-  if (busy) fxJobsTimer = setTimeout(fxPollJobs, 700);
+  if (busy) fxJobsTimer = setTimeout(fxPollJobs, document.hidden || $("fxTab").hidden ? 3000 : 700);
 }
 
 function drawFxJobs() {
+  if (fxJobsPressed) return;
   const all = [...fxJobs.uploads.map((j) => ({ ...j, up: true })), ...fxJobs.downloads];
   const box = $("fxJobs");
   box.hidden = !all.length;

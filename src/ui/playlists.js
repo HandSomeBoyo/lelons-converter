@@ -22,17 +22,20 @@ let plSeq = 0; // the newest change sent (an older answer arriving late mustn't 
 
 const plCurrent = () => plLists.find((p) => p.id === sfxPlaylist) || plLists[0] || null;
 const plHasSound = (id) => { const p = plCurrent(); return !!p && p.sounds.includes(id); };
-const plInAny = (id) => plLists.some((p) => p.sounds.includes(id));
+let plAnyCache = null; // every sound in any playlist (made again after a change; each row asks)
+const plInAny = (id) => (plAnyCache ||= new Set(plLists.flatMap((p) => p.sounds))).has(id);
 const plCount = (p) => { const ids = new Set(sfxSounds.map((s) => s.id)); return p.sounds.filter((id) => ids.has(id)).length; };
 
 function playlistsForget() {
   plLists = [];
+  plAnyCache = null;
   plPeople = [];
   plSeq++;
 }
 
 function plTake(res) {
   plLists = res.playlists || [];
+  plAnyCache = null;
   plPeople = res.people || [];
 }
 
@@ -171,6 +174,7 @@ function drawPlaylistPop() {
 function togglePlaylistSound(p, sound) {
   const on = !p.sounds.includes(sound.id);
   p.sounds = on ? [sound.id, ...p.sounds] : p.sounds.filter((id) => id !== sound.id); // show it right away
+  plAnyCache = null;
   drawPlaylistPop();
   drawSfx();
   playlistAction({ what: on ? "add" : "take_out", playlist: p.id, sound: sound.id }).then((res) => {

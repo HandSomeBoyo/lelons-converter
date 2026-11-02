@@ -114,7 +114,14 @@ const DOC_ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
   more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  pdf: '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
   open: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
+  pointer: '<path d="M5.5 4.5 18 10.2l-5.4 1.6L10.8 17z"/><path d="m12.8 12 4.7 6"/>',
+  textbox: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8.5 9h7M12 9v7"/>',
+  pen: '<path d="M15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/><path d="m13.5 6.5 3 3"/>',
+  marker: '<path d="m14.5 4.5 5 5-8 8H8.5v-3z"/><path d="M8.5 14.5 4 19h6.5"/><path d="M4 21h16"/>',
+  eraser: '<path d="m9 19.5-5-5a1.8 1.8 0 0 1 0-2.5l8.5-8.5a1.8 1.8 0 0 1 2.5 0l5 5a1.8 1.8 0 0 1 0 2.5L12.5 19.5z"/><path d="M8 9.5 14.5 16M12.5 19.5H20"/>',
+  move: '<path d="M12 3.5v17M3.5 12h17M9.5 6 12 3.5 14.5 6M9.5 18l2.5 2.5 2.5-2.5M6 9.5 3.5 12 6 14.5M18 9.5l2.5 2.5-2.5 2.5"/>',
 };
 const docIcon = (name, cls = "") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOC_ICONS[name]}</svg>`;
 
@@ -234,7 +241,7 @@ function blockFromHtml(block) {
 function blockHtml(el) {
   const copy = el.cloneNode(true);
   for (const a of ["data-id", "data-pos", "contenteditable", "data-who", "style"]) {
-    if (a === "style" && copy.getAttribute("style")) { const keep = document.createElement("x"); cleanStyle(copy, keep); copy.setAttribute("style", keep.getAttribute("style") || ""); if (!copy.getAttribute("style")) copy.removeAttribute("style"); continue; }
+    if (a === "style" && copy.getAttribute("style")) { const keep = document.createElement(copy.tagName); cleanStyle(copy, keep); copy.setAttribute("style", keep.getAttribute("style") || ""); if (!copy.getAttribute("style")) copy.removeAttribute("style"); continue; }
     copy.removeAttribute(a);
   }
   copy.classList.remove("doc-held", "doc-other", "doc-find-hit");
@@ -252,6 +259,8 @@ const p = (text, cls) => `<p${cls ? ` class="${cls}"` : ""}>${text ? esc(text) :
 // (doc.settings.type remembers the kind, so the guide is there again next time).
 const DOC_TYPES = [
   { key: "blank", kind: "doc", icon: "doc", name: "Blank document", note: "An empty page, nothing else", title: "Untitled document" },
+  // (a PDF that keeps its look: made by importing one, not from this list. See pdfedit.js)
+  { key: "pdf", kind: "doc", icon: "pdf", name: "PDF", note: "A PDF, just as it looks", title: "PDF", hidden: true },
   { key: "script", kind: "script", icon: "script", name: "Movie script", note: "Formatted like a real screenplay", title: "Untitled script",
     hint: "Start with a scene heading, like INT. KITCHEN - NIGHT",
     guide: {
@@ -519,7 +528,12 @@ function drawDocsHome() {
     f.className = "doc-template";
     f.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus">${docIcon("folder")}</span></span><b class="doc-name-line">New folder</b><small class="doc-note-line">Keep a project together</small>`;
     f.addEventListener("click", () => newFolder());
-    $("docsTemplates").append(b, f);
+    const pdf = document.createElement("button");
+    pdf.type = "button";
+    pdf.className = "doc-template";
+    pdf.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus doc-pdf-badge">${docIcon("pdf")}<em>PDF</em></span></span><b class="doc-name-line">Import a PDF</b><small class="doc-note-line">Edit it like any doc</small>`;
+    pdf.addEventListener("click", () => pickPdf(importPdfAsDoc));
+    $("docsTemplates").append(b, f, pdf);
   }
   if (!docsF().folders.some((f) => f.id === docsFolderAt)) docsFolderAt = "";
   drawCrumbs();
@@ -600,6 +614,14 @@ async function docCardRemove(d, collab) {
 
 // The little page picture: the first blocks, drawn small.
 function drawThumb(page, htmls, kind, settings) {
+  const pdfThumb = /^<!--pdfthumb (data:image\/jpeg;base64,[\w+/=]+)-->$/.exec(htmls[0] || "");
+  if (pdfThumb || (settings && settings.type === "pdf")) { // a PDF that keeps its look: a picture of its first page
+    page.dataset.paper = "white";
+    const img = Object.assign(document.createElement("img"), { className: "doc-thumb-pdf", alt: "" });
+    if (pdfThumb) img.src = pdfThumb[1];
+    page.replaceChildren(img);
+    return;
+  }
   const s = { ...docDefaults(kind), ...docCleanSettings(settings) };
   page.dataset.paper = s.paper;
   page.style.setProperty("--doc-font", docFontCss(s.font));
@@ -668,7 +690,7 @@ function openDocTypes(picked, page) {
   docTypePicked = picked || newDoc;
   const grid = $("docTypes");
   if (!grid.children.length) {
-    for (const t of DOC_TYPES) {
+    for (const t of DOC_TYPES.filter((x) => !x.hidden)) {
       const b = Object.assign(document.createElement("button"), { type: "button", className: "doc-type" });
       b.innerHTML = `<span class="doc-type-icon">${docIcon(t.icon)}</span><span class="doc-type-text"><b></b><small></small></span>`;
       b.querySelector("b").textContent = t.name;
@@ -922,8 +944,9 @@ async function openDoc(where, id, opts = {}) {
   docApplying = true;
   docTab = ""; docStore.clear(); docTabsOpen.clear();
   const here = [];
+  const mainPdf = (d.blocks || []).some((b) => b.id === "pdf-src-0"); // (a PDF page keeps its blocks to itself: pdfedit.js)
   for (const b of d.blocks || []) {
-    if (docTabOf(b.id) === "") here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
+    if (docTabOf(b.id) === "" && !mainPdf) here.push(b); else docStore.set(b.id, { pos: b.pos, html: b.html });
   }
   docsText.replaceChildren(...here.map(blockFromHtml));
   docsText.classList.toggle("script", doc.kind === "script");
@@ -949,6 +972,7 @@ async function openDoc(where, id, opts = {}) {
   drawGuide();
   drawTabs();
   docNotesOpenDoc();
+  pdfeShow();
   docFit();
   docCount();
   drawOutline();
@@ -1518,10 +1542,11 @@ function docShowTab(id) {
   for (const el of docsText.children) docStore.set(el.dataset.id, { pos: el.dataset.pos, html: blockHtml(el) });
   docsText.replaceChildren();
   docTab = id;
-  const wasKind = doc.kind, wasType = doc.type;
+  const wasKind = doc.kind, wasType = doc.type, wasPdf = !!pdfe;
   docUsePage();
+  const isPdf = pdfeIsPage(id);
   const mine = [];
-  for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
+  if (!isPdf) for (const [bid, b] of docStore) if (docTabOf(bid) === id) mine.push({ id: bid, ...b });
   mine.sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : a.id < b.id ? -1 : 1));
   for (const b of mine) docStore.delete(b.id);
   docsText.replaceChildren(...mine.map(blockFromHtml));
@@ -1530,7 +1555,8 @@ function docShowTab(id) {
   docApplying = false;
   docUndoReset();
   docHidePops();
-  if (doc.kind !== wasKind || doc.type !== wasType) { // another kind of page: its own tools, guide and look
+  pdfeShow();
+  if (doc.kind !== wasKind || doc.type !== wasType || isPdf !== wasPdf) { // another kind of page: its own tools, guide and look
     buildToolbar();
     drawMenubar();
     drawGuide();
@@ -1557,11 +1583,12 @@ function docAddTab(parent, t) {
   const pos = posBetween(last, null);
   const from = !t && parent && parent !== "0" ? docPageOwn(parent) : null;
   const meta = t ? { title: t.key === "blank" ? "Untitled page" : t.name, parent, type: t.key, settings: {} }
-    : from ? { title: "Untitled page", parent, type: from.type, settings: from.settings }
+    : from && from.type !== "pdf" ? { title: "Untitled page", parent, type: from.type, settings: from.settings }
+    : (from || docMainType().key === "pdf") ? { title: "Untitled page", parent, type: "blank", settings: {} } // (not more of a PDF)
     : { title: "Untitled page", parent };
   docStore.set("t~" + id, { pos, html: docTabHtml(meta) });
   docPending.add("t~" + id);
-  const kind = t ? t.kind : from ? docTypeByKey(from.type).kind : doc.baseKind;
+  const kind = t ? t.kind : from && from.type !== "pdf" ? docTypeByKey(from.type).kind : from || docMainType().key === "pdf" ? "doc" : doc.baseKind;
   const first = id + "~" + newBlockId();
   docStore.set(first, { pos: posBetween("", null), html: p("", kind === "script" ? "sp-scene" : "") });
   docPending.add(first);
@@ -1767,6 +1794,7 @@ async function closeDoc(quiet) {
   docPending.clear(); docDeleted.clear(); docTitleDirty = false; docSettingsDirty = false; docDirty = false;
   document.body.classList.remove("doc-focus");
   if (was.where === "collab") api("/api/docs-close", { id: was.id }).catch(() => null);
+  pdfeHide();
   doc = null;
   docNotesCloseDoc();
   docHidePops();
@@ -1836,6 +1864,7 @@ function docFixWordAlign() {
 }
 
 function docNormalize() {
+  if (pdfeIsPage(docTab)) return; // (a PDF page has no text of its own here)
   docFixWordAlign();
   const seen = new Set();
   let prev = null;
@@ -1927,7 +1956,7 @@ function docBlockOf(node) {
   return node && node.nodeType === 1 ? node : null;
 }
 
-const docObserver = new MutationObserver((records) => {
+function docHandleRecords(records) {
   if (!doc || docApplying) return;
   const gone = [];
   // (the editing box's own look changing isn't a change to the document)
@@ -1951,7 +1980,8 @@ const docObserver = new MutationObserver((records) => {
     }
   }
   docChanged();
-});
+}
+const docObserver = new MutationObserver(docHandleRecords);
 docObserver.observe(docsText, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "class", "href", "src", "colspan", "rowspan"] });
 
 function docChanged() {
@@ -1973,6 +2003,7 @@ let docSaving = null; // the local save on its way
 async function docSave() {
   if (!doc) return false;
   const d = doc;
+  if (typeof pdfeStore === "function") pdfeStore(); // (a PDF's last changes wait a moment before they're kept)
   docUndoCommit();
   let ok;
   if (d.where === "local") {
@@ -2069,6 +2100,7 @@ function docGone(text) {
 }
 
 async function docSyncOnce() {
+  if (typeof pdfeStore === "function") pdfeStore();
   docSyncBusy = true;
   const d = doc;
   const asked = docSaveWanted; // Save (Ctrl+S) or leaving; otherwise changes go out on their own
@@ -2118,7 +2150,10 @@ async function docSyncOnce() {
     return false;
   }
   docFailed = 0;
-  if (send && changes.length) d.fresh = false; // something was written: it's a real document now
+  // Something was written (a name, settings, words, or the others wrote in it): it's a real document now.
+  // (Before, only words of your own counted: leaving a new Collab doc you'd only named and invited people to
+  // deleted it, with what they'd written.)
+  if (send || (res.blocks || []).length) d.fresh = false;
   docApplyRemote(res.blocks || []);
   d.rev = Math.max(d.rev, res.rev || 0);
   if (send && title !== null) d.title = title;
@@ -2155,9 +2190,14 @@ function docApplyRemote(blocks) {
   if (!blocks.length) return;
   const caret = docSaveCaret();
   docApplying = true;
-  let touched = false, pages = false;
+  let touched = false, pages = false, pdfTouched = false;
   for (const b of blocks) {
     if (docPending.has(b.id) || docDeleted.has(b.id)) continue;
+    if (pdfe && docTabOf(b.id) === docTab) { // (a PDF page: its changes are drawn by pdfedit.js)
+      if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
+      pdfTouched = true;
+      continue;
+    }
     if (docTabOf(b.id) !== docTab) { // a page's name, or what's on another page
       if (b.deleted) docStore.delete(b.id); else docStore.set(b.id, { pos: b.pos, html: b.html });
       if (docTabOf(b.id) === null) pages = true;
@@ -2185,6 +2225,7 @@ function docApplyRemote(blocks) {
   }
   docObserver.takeRecords();
   docApplying = false;
+  if (pdfTouched) pdfeRemote();
   if (pages) {
     if (docTab && !docStore.has("t~" + docTab)) docShowTab(""); // the page you were on was deleted
     drawTabs();
@@ -2338,6 +2379,10 @@ function docUndoSoon() {
 }
 
 function docUndoCommit() {
+  // Changes the browser hasn't reported yet (Bold, a paste a moment ago) belong to this step, not to the
+  // typing after it (Undo used to take both away).
+  const waiting = docObserver.takeRecords();
+  if (waiting.length) docHandleRecords(waiting);
   clearTimeout(docUndoTimer);
   if (!doc || !docUndoDirty.size) return;
   const before = docUndo[docUndoAt].blocks;
@@ -2371,6 +2416,7 @@ function docUndoRemote(id, block) {
 
 function docUndoGo(step) {
   if (!doc) return;
+  if (pdfe) return pdfeUndoGo(step);
   docUndoCommit();
   const to = docUndoAt + step;
   if (to < 0 || to >= docUndo.length) return;
@@ -2430,6 +2476,7 @@ function tb(cmd, icon, title, extra = "") {
 }
 
 function buildToolbar() {
+  if (pdfeIsPage(docTab)) return pdfeToolbar();
   const script = doc.kind === "script";
   const sep = '<span class="doc-sep"></span>';
   const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), tb("print", "print", "Print or save as PDF (Ctrl+P)"), sep];
@@ -2459,7 +2506,9 @@ function buildToolbar() {
   $("docToolbar").querySelectorAll("[data-pop]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); docOpenPop(b.dataset.pop, b); }));
   const size = $("docSize");
   if (size) {
-    size.addEventListener("mousedown", () => { docKeepRange = docRange(); });
+    // Only the first click: a double or triple click (to pick the number) happens with the focus already
+    // in the box, and would forget where the text cursor was.
+    size.addEventListener("mousedown", () => { if (document.activeElement !== size) docKeepRange = docRange(); });
     size.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); docSetSize(parseFloat(size.value)); docsText.focus(); }
       if (e.key === "Escape") docsText.focus();
@@ -2545,7 +2594,7 @@ function docBlockHeld(key) {
 
 // Which buttons are "on" for where the caret is.
 function docToolState() {
-  if (!doc) return;
+  if (!doc || !$("docSize")) return; // PDF pages have their own toolbar
   const sel = getSelection();
   const inside = sel.rangeCount && docsText.contains(sel.anchorNode);
   const q = (cmd) => { try { return inside && document.queryCommandState(cmd); } catch (e) { return false; } };
@@ -2594,24 +2643,38 @@ function docToolState() {
     }
   }
 }
+// (once a frame at most: the browser says the cursor moved on every key, and this asks a lot of the page)
+let docSelFrame = 0;
 document.addEventListener("selectionchange", () => {
-  if (!doc) return;
-  docToolState();
-  docFloatTools();
-  if (doc.kind === "script") docSuggestUpdate();
-  docOutlineActive();
+  if (!doc || docSelFrame) return;
+  docSelFrame = requestAnimationFrame(() => {
+    docSelFrame = 0;
+    if (!doc) return;
+    docToolState();
+    docFloatTools();
+    if (doc.kind === "script") docSuggestUpdate();
+    docOutlineActive();
+  });
 });
 
 const DOC_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
 function docNextSize(up) {
-  const now = parseFloat($("docSize").value) || 11;
+  const now = parseFloat($("docSize")?.value) || 11;
   return up ? DOC_SIZES.find((s) => s > now) || now + 12 : [...DOC_SIZES].reverse().find((s) => s < now) || Math.max(1, now - 1);
 }
 
 function docSetSize(pt) {
-  if (!pt || pt < 1 || pt > 400) return;
+  if (!pt || pt < 1 || pt > 400 || !$("docSize")) return;
   docBackToRange();
   docUndoCommit();
+  const sel = getSelection();
+  if (sel.rangeCount && sel.isCollapsed && docsText.contains(sel.anchorNode)) {
+    // Just a text cursor: the browser has nothing to resize, so make a spot with the new size to type into.
+    docSizeAt(sel.getRangeAt(0), pt);
+    $("docSize").value = pt;
+    docUndoCommit();
+    return;
+  }
   document.execCommand("styleWithCSS", false, true);
   document.execCommand("fontSize", false, "7");
   for (const el of docsText.querySelectorAll('span[style*="xxx-large"], font[size="7"]')) {
@@ -2627,6 +2690,56 @@ function docSetSize(pt) {
   $("docSize").value = pt;
   docUndoCommit();
 }
+
+let docSizeSpot = null; // an empty spot made by docSizeAt, waiting for typing
+function docSizeAt(range, pt) {
+  docSizeTidy(true);
+  let node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentNode;
+  const block = node.closest("p, h1, h2, h3, li, blockquote, td, th, pre");
+  if (block && docsText.contains(block) && !block.textContent.replace(/\u200b/g, "")) {
+    // An empty line: give the size to what holds its line break, so typing there uses it.
+    const br = block.querySelector("br");
+    let holder = br ? br.parentNode : block;
+    if (holder === block) {
+      holder = document.createElement("span");
+      if (br) br.before(holder), holder.append(br);
+      else block.append(holder);
+    }
+    holder.style.fontSize = pt + "pt";
+    range.setStart(holder, 0);
+  } else {
+    const span = document.createElement("span");
+    span.style.fontSize = pt + "pt";
+    span.textContent = "\u200b";
+    range.insertNode(span);
+    range.setStart(span.firstChild, 1);
+    docSizeSpot = span;
+  }
+  range.collapse(true);
+  const sel = getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+// Drop the invisible space once something is typed there, or the whole spot if the cursor left it empty.
+function docSizeTidy(force) {
+  const span = docSizeSpot;
+  if (!span) return;
+  const sel = getSelection();
+  const inside = sel.rangeCount && span.contains(sel.anchorNode);
+  if (!span.isConnected) { docSizeSpot = null; return; }
+  if (span.textContent === "\u200b") {
+    if (force || !inside) { span.remove(); docSizeSpot = null; }
+    return;
+  }
+  for (const t of [...span.childNodes].filter((n) => n.nodeType === 3 && n.data.includes("\u200b"))) {
+    const at = inside && sel.anchorNode === t ? sel.anchorOffset - (t.data.slice(0, sel.anchorOffset).split("\u200b").length - 1) : -1;
+    t.data = t.data.replace(/\u200b/g, "");
+    if (at >= 0) sel.collapse(t, at);
+  }
+  docSizeSpot = null;
+}
+docsText.addEventListener("input", () => docSizeTidy(false));
+document.addEventListener("selectionchange", () => { if (docSizeSpot && document.activeElement === docsText) docSizeTidy(false); });
 
 // ---------------------------------------------------------------- menus under the toolbar buttons
 
@@ -3070,6 +3183,12 @@ docsText.addEventListener("mousedown", (e) => {
   }
 });
 window.addEventListener("scroll", () => { if (doc && !$("docFloat").hidden) docFloatTools(); }, { passive: true });
+// The page tabs scrolled up behind the toolbar are hidden (else their top peeked out above it).
+window.addEventListener("scroll", () => {
+  if (!doc) return;
+  const parts = $("docParts"), bar = $("docToolbar");
+  parts.classList.toggle("under", parts.getBoundingClientRect().top < bar.getBoundingClientRect().bottom);
+}, { passive: true });
 
 // ---------------------------------------------------------------- typing
 
@@ -3406,6 +3525,7 @@ function docSuggestPick(i) {
 let docOutlineTimer = 0;
 function drawOutline() {
   if (!doc || $("docOutline").hidden) return;
+  if (pdfeIsPage(docTab)) return pdfeOutline();
   const script = doc.kind === "script";
   $("docOutlineTitle").textContent = script ? "Scenes" : "Outline";
   $("docOutline").classList.toggle("script", script);
@@ -3457,6 +3577,7 @@ function docCountSoon() {
 
 function docCount() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfeCount();
   docEmptyCheck();
   docDarkInk();
   docNotesMark();
@@ -3486,6 +3607,7 @@ function docCount() {
 // The page fits the window: smaller windows get a smaller page (like zooming out).
 function docFit() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfeFit();
   const width = (DOC_PAGES[docSettings().page] || DOC_PAGES.letter).w;
   const room = $("docCanvas").clientWidth - 24;
   const fit = Math.min(1, Math.max(0.45, room / width));
@@ -3495,7 +3617,10 @@ function docFit() {
   $("docZoom").textContent = Math.round(zoom * 100) + "%";
   $("docZoom").title = want === "fit" ? "Zoom (fits the window)" : "Zoom";
 }
-window.addEventListener("resize", () => { if (doc) docFit(); });
+let docFitFrame = 0; // (once a frame while the window is being resized)
+window.addEventListener("resize", () => {
+  if (doc && !docFitFrame) docFitFrame = requestAnimationFrame(() => { docFitFrame = 0; if (doc) docFit(); });
+});
 
 // ---------------------------------------------------------------- find and replace
 
@@ -3754,6 +3879,7 @@ $("docInviteSend").addEventListener("click", async () => {
   }
   const n = docInvitePicked.size;
   doc.people = res.people;
+  doc.fresh = false; // (people are invited: it stays, even if you leave before writing in it)
   docInvitePicked = new Set();
   drawInvitePeople(); drawInvitePick(); drawShare();
   $("docInviteNote").textContent = n === 1 ? "Invitation sent." : `${n} invitations sent.`;
@@ -3813,6 +3939,7 @@ function docToast(text) {
 
 function docPrint() {
   if (!doc) return;
+  if (pdfeIsPage(docTab)) return pdfePrint();
   docHidePops();
   document.body.classList.add("doc-printing");
   document.title = $("docTitle").value; // the PDF's file name
@@ -4177,6 +4304,7 @@ function drawMenubar() {
 }
 
 function docMenuItems(name) {
+  if (pdfe && pdfeIsPage(docTab)) return pdfeMenuItems(name);
   const script = doc.kind === "script";
   const range = docKeepRange && !docKeepRange.collapsed;
   const isOn = (cmd) => { try { return document.queryCommandState(cmd); } catch (e) { return false; } };
@@ -4189,6 +4317,7 @@ function docMenuItems(name) {
     { label: "Save", icon: "save", key: "Ctrl+S", fn: docSave },
     { label: "Rename", icon: "rename", fn: () => { $("docTitle").focus(); $("docTitle").select(); } },
     "-",
+    { label: "Import a PDF as a page", icon: "pdf", fn: () => pickPdf(importPdfAsPage) },
     { label: "Page setup", icon: "page", fn: openPageSetup },
     { label: "Print or save as PDF", icon: "print", key: "Ctrl+P", fn: docPrint },
     { label: "Download for Word (.doc)", icon: "download", fn: () => docExport("doc") },

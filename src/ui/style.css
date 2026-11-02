@@ -2430,7 +2430,7 @@ body.doc-open .footer { display: none; }
 .doc-toolbar {
   position: sticky; top: 70px; z-index: 14; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1px;
   align-self: center; max-width: 100%; box-sizing: border-box; padding: 5px 8px; border-radius: 22px; margin-bottom: 8px;
-  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  background: var(--panel); /* (solid: the page scrolling under it showed through) */
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 0 0 1px var(--line), 0 8px 24px rgba(0, 0, 0, .22);
 }
@@ -4660,6 +4660,169 @@ html.side-small .tab-group { height: 1px; }
 .gm-yt-when { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); }
 @media (max-width: 860px) { .gm-yt-list { grid-template-columns: 1fr; } .gm-yt-sum { grid-template-columns: 1fr; } .gm-yt-stats { grid-column: 1; grid-row: auto; } .gm-yt-stats div { align-items: flex-start; } }
 .gm-by { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- 2.18.0: Docs, importing a PDF */
+.doc-pdf-badge { flex-direction: column; gap: 4px; }
+.doc-pdf-badge svg { width: 44px !important; height: 44px !important; }
+.doc-pdf-badge em { font: 700 11px var(--head); font-style: normal; letter-spacing: .08em; color: var(--muted); }
+.doc-import-dialog { width: min(420px, 100%); }
+.doc-import-track { height: 6px; border-radius: 3px; margin: 16px 0 6px; overflow: hidden; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.doc-import-track i { display: block; height: 100%; width: 4%; border-radius: 3px; background: var(--accent); transition: width .3s var(--ease); }
+#docsHome.pdf-over { outline: 2px dashed var(--accent); outline-offset: 8px; border-radius: 18px; }
+
+/* ---------------------------------------------------------------- Docs: PDFs that keep their look (pdfedit.js) */
+.pdfe-view { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.pdfe-view[hidden] { display: none; }
+.pdfe-page { position: relative; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25), 0 10px 30px rgba(0, 0, 0, .28); border-radius: 2px; overflow: hidden; touch-action: none; flex: none; }
+:root[data-theme="light"] .pdfe-page { box-shadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .08), 0 10px 30px rgba(0, 0, 0, .08); }
+.pdfe-page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pdfe-page > canvas:not(.pdfe-canvas) { background: #fff; }
+.pdfe-ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.pdfe-ink.hl { mix-blend-mode: multiply; }
+.pdfe-segs, .pdfe-items { position: absolute; inset: 0; }
+.pdfe-segs { pointer-events: none; }
+.pdfe-items { pointer-events: none; }
+.pdfe-seg { position: absolute; border-radius: 3px; cursor: text; pointer-events: auto; transition: box-shadow .12s, background .12s; }
+.pdfe-view[data-tool="select"] .pdfe-seg:hover { box-shadow: 0 0 0 1.5px rgba(var(--accent-rgb), .9); background: rgba(var(--accent-rgb), .08); }
+.pdfe-view:not([data-tool="select"]) .pdfe-seg { pointer-events: none; }
+.pdfe-cover { position: absolute; }
+.pdfe-text { position: absolute; white-space: pre; line-height: 1.2; outline: none; pointer-events: auto; cursor: text; min-width: 4px; border-radius: 2px; caret-color: currentColor; }
+.pdfe-text:hover, .pdfe-text.sel { box-shadow: 0 0 0 1.5px rgba(var(--accent-rgb), .9); }
+.pdfe-text:empty::before { content: "Type here"; color: #9a9aa0; font-weight: 400; font-style: normal; }
+.pdfe-view[data-tool="draw"] .pdfe-text, .pdfe-view[data-tool="highlight"] .pdfe-text, .pdfe-view[data-tool="erase"] .pdfe-text,
+.pdfe-view[data-tool="draw"] .pdfe-image, .pdfe-view[data-tool="highlight"] .pdfe-image, .pdfe-view[data-tool="erase"] .pdfe-image { pointer-events: none; }
+.pdfe-image { position: absolute; pointer-events: auto; cursor: move; }
+.pdfe-image img { width: 100%; height: 100%; display: block; user-select: none; }
+.pdfe-image.sel { box-shadow: 0 0 0 1.5px rgba(var(--accent-rgb), .9); }
+.pdfe-resize { display: none; position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgb(var(--accent-rgb)); cursor: nwse-resize; }
+.pdfe-image.sel .pdfe-resize { display: block; }
+.pdfe-bar { position: absolute; transform: translate(-2px, calc(-100% - 6px)); display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: #1c1c21; box-shadow: 0 4px 14px rgba(0, 0, 0, .3); pointer-events: auto; z-index: 2; }
+.pdfe-bar button, :root[data-theme="light"] .pdfe-bar button { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: #f2f2f5; background: none; border: 0; padding: 0; box-shadow: none; }
+.pdfe-bar button:hover { background: rgba(255, 255, 255, .12); }
+.pdfe-bar svg { width: 15px; height: 15px; }
+.pdfe-move { cursor: move; touch-action: none; }
+.pdfe-view[data-tool="text"] .pdfe-page { cursor: text; }
+.pdfe-view[data-tool="draw"] .pdfe-page { cursor: crosshair; }
+.pdfe-view[data-tool="highlight"] .pdfe-page { cursor: cell; }
+.pdfe-view[data-tool="erase"] .pdfe-page { cursor: pointer; }
+.doc-tool.pdfe-tool, .doc-tool.pdfe-download { width: auto; height: 42px; grid-template-rows: auto auto; align-content: center; gap: 4px; padding: 0 10px; border-radius: 11px; }
+.doc-tool.pdfe-tool span, .doc-tool.pdfe-download span { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.doc-tool.pdfe-tool svg, .doc-tool.pdfe-download svg { width: 16px; height: 16px; }
+.doc-parts.under { visibility: hidden; } /* (scrolled up behind the toolbar: it peeked out above it) */
+.pdfe-size { min-width: 26px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.doc-tool[disabled] { opacity: .35; pointer-events: none; }
+.pdfe-pop { position: fixed; z-index: 60; display: grid; grid-template-columns: repeat(4, 26px); gap: 6px; padding: 10px; border-radius: 12px; background: var(--panel, #1c1c21); box-shadow: 0 0 0 1px rgba(127, 127, 127, .2), 0 12px 30px rgba(0, 0, 0, .3); }
+.pdfe-swatch { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .45); }
+.pdfe-swatch:hover { transform: scale(1.12); }
+body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuide { display: none !important; }
+.doc-thumb-pdf { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; background: #fff; }
+#pdfePrintBox { display: none; }
+@media print {
+  body.pdfe-printing { background: #fff !important; }
+  body.pdfe-printing > *:not(#pdfePrintBox) { display: none !important; }
+  body.pdfe-printing #pdfePrintBox { display: block; }
+  #pdfePrintBox img { display: block; width: 100%; break-after: page; }
+}
+
+/* ================================================================ 2.21.0: POVs (povs.js). Everyone's recording of the
+   same game, sent PC to PC. A session is a row of cards: the video's picture on top, who and how big, then the download. */
+.pv-top { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; padding: 14px 16px 14px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.pv-how { flex: 1; margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.pv-how b { color: var(--text); font-weight: 600; }
+.pv-top .convert { flex: none; height: 42px; padding: 0 18px; }
+.pv-session { margin-bottom: 30px; }
+.pv-session-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.pv-session-words { flex: 1; min-width: 0; }
+.pv-session-head h2 { margin: 0; font: 700 21px/1.2 var(--head); letter-spacing: -.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-session-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-faces { display: flex; flex: none; }
+.pv-faces .avatar { width: 28px; height: 28px; font-size: 12px; border: 2px solid var(--bg); margin-left: -8px; }
+.pv-session-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.pv-session-tools .icon-button svg { width: 17px; height: 17px; }
+.pv-add { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; margin-right: 4px; }
+.pv-add svg { width: 15px; height: 15px; }
+.pv-add.ghost { background: var(--panel2); color: var(--text); }
+.pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.pv-none { margin: 0; padding: 26px; border-radius: 12px; border: 1px dashed var(--line2); text-align: center; color: var(--muted); font-size: 13.5px; }
+.pv-card { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--panel); border: 1px solid var(--line);
+  transition: border-color .2s, transform .35s var(--ease), box-shadow .35s var(--ease); }
+.pv-card:hover { border-color: var(--line2); transform: translateY(-2px); box-shadow: 0 14px 30px rgba(0,0,0,.25); }
+.pv-card.mine { border-color: rgba(var(--accent-rgb), .35); }
+.pv-pic { position: relative; aspect-ratio: 16 / 9; background: #0c0c0c; overflow: hidden; }
+.pv-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv-pic.none { display: grid; place-items: center; color: #555; }
+.pv-pic.none svg { width: 42px; height: 42px; }
+.pv-tag, .pv-length, .pv-timer { position: absolute; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(0,0,0,.68); color: #fff; font: 600 11.5px var(--head); backdrop-filter: blur(8px); }
+.pv-tag { top: 10px; left: 10px; }
+.pv-length { right: 10px; bottom: 10px; font-variant-numeric: tabular-nums; }
+.pv-timer { top: 10px; right: 10px; }
+.pv-timer svg { width: 13px; height: 13px; }
+.pv-timer.soon { background: rgba(214, 69, 58, .85); }
+.pv-body { padding: 12px 14px 2px; }
+.pv-who { display: flex; align-items: center; gap: 9px; }
+.pv-who .avatar { width: 26px; height: 26px; font-size: 11px; }
+.pv-who b { font: 650 15.5px var(--head); letter-spacing: -.2px; }
+.pv-meta { margin: 6px 0 0; font-size: 12px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-act { display: flex; flex-direction: column; gap: 9px; padding: 10px 14px 14px; margin-top: auto; }
+.pv-ready { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.pv-ready i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pv-ready.on { color: var(--text); }
+.pv-ready.on i { background: var(--green); box-shadow: 0 0 0 3px rgba(63, 154, 47, .22); }
+.pv-ready.bad { color: var(--red); }
+.pv-ready.bad i { background: var(--red); }
+.pv-ready svg { width: 16px; height: 16px; color: var(--green); }
+.pv-sending, .pv-got { margin: -3px 0 0; font-size: 12px; color: var(--muted); }
+.pv-sending { color: var(--accent); }
+.pv-row { display: flex; align-items: center; gap: 8px; }
+.pv-row .small-button, .pv-row .convert { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; padding: 0 14px; }
+.pv-row svg { width: 15px; height: 15px; }
+.pv-get { flex: 1; }
+.pv-row .ghost-button { height: 38px; }
+.pv-timer-pick { flex: 1; height: 38px; }
+.pv-timer-pick select { width: 100%; font-size: 12.5px; }
+.pv-remove { margin-left: auto; }
+.pv-remove svg { width: 17px; height: 17px; }
+.pv-bar { height: 6px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
+.pv-bar span { display: block; height: 100%; border-radius: 6px; background: var(--accent); transition: width .5s linear; }
+.pv-bar.live span { background-image: linear-gradient(90deg, transparent 0, rgba(255,255,255,.35) 50%, transparent 100%); background-size: 60px 100%;
+  background-repeat: no-repeat; animation: pv-shine 1.4s linear infinite; background-color: var(--accent); }
+@keyframes pv-shine { from { background-position: -60px 0; } to { background-position: calc(100% + 60px) 0; } }
+.pv-bar.small { height: 4px; margin-top: 6px; }
+.pv-progress { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.pv-progress b { color: var(--text); font-weight: 600; }
+.pv-empty { padding: 26px 28px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.pv-empty h2 { margin: 0 0 12px; font: 700 20px var(--head); }
+.pv-empty ol { margin: 0; padding-left: 20px; display: grid; gap: 9px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.pv-empty b { color: var(--text); }
+.pv-timers { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-timer-help { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.pv-add-dialog .sub b { color: var(--text); }
+.pv-sends { width: 360px; }
+.pv-sends-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; font: 600 13.5px var(--head); }
+.pv-sends-head small { font: 500 11.5px Inter, sans-serif; color: var(--muted); }
+.pv-send { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); }
+.pv-send-icon { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(var(--accent-rgb), .14); color: var(--accent); }
+.pv-send-icon svg { width: 14px; height: 14px; }
+.pv-send.done .pv-send-icon { background: rgba(63, 154, 47, .16); color: var(--green); }
+.pv-send.error .pv-send-icon { background: rgba(214, 69, 58, .14); color: var(--red); }
+.pv-send-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pv-send-text b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-send-text small { font-size: 12px; color: var(--muted); white-space: pre; }
+.pv-send.done .pv-bar, .pv-send.error .pv-bar { display: none; }
+@media (max-width: 760px) { .pv-top { flex-direction: column; align-items: stretch; } .pv-session-head { flex-wrap: wrap; } }
+.pv-add-dialog .gm-label { margin-top: 20px; }
+/* 2.21.1: one list of videos (no sessions) */
+#pvGrid { margin-bottom: 30px; }
+.pv-title { margin: 0; font: 650 16px/1.3 var(--head); letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-body .pv-who { margin-top: 7px; font-size: 12.5px; color: var(--muted); }
+.pv-body .pv-who .avatar { width: 22px; height: 22px; font-size: 10px; }
+.pv-body .pv-who span:not(.avatar) { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-file-row { display: flex; align-items: center; gap: 12px; }
+.pv-file-row .small-button { flex: none; height: 38px; padding: 0 14px; }
+.pv-file { min-width: 0; font-size: 13px; color: var(--muted); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.pv-file.on { color: var(--text); font-weight: 500; }
+.pv-add-dialog .fx-field { margin-top: 10px; }
 
 /* ================================================================ 4.0: "Light and friendly", one look for everyone.
    The themes and colors are gone (theme.js always sets data-theme="light" and a violet accent).

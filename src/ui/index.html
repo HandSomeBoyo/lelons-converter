@@ -87,6 +87,7 @@
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
       <button data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
       <button data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
+      <button data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
       <div class="tab-group">Tools</div>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
@@ -567,6 +568,7 @@
             <div class="doc-page" id="docPage">
               <div class="doc-text" id="docText" contenteditable="true" spellcheck="true"></div>
             </div>
+            <div class="pdfe-view" id="pdfeView" hidden></div>
           </div>
         </div>
         <aside class="doc-guide" id="docGuide" hidden>
@@ -711,6 +713,31 @@
       <p class="fx-empty gm-empty" id="gmEmpty" hidden></p>
     </div>
   </section>
+
+  <section class="tab-page" id="povsTab" hidden>
+    <h1 class="headline">Everyone's POV.<br><em>Straight from their PC.</em></h1>
+    <p class="fx-status" id="pvStatus" hidden></p>
+    <div class="fx-out" id="pvOut" hidden>
+      <p>Log in to see your friends' recordings.</p>
+      <button type="button" class="small-button" id="pvLogin">Log in</button>
+    </div>
+    <div class="pv-main" id="pvMain" hidden>
+      <div class="pv-top">
+        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they (or a friend who already got it) need VaultHub open while you download.</p>
+        <button type="button" class="convert small-button" id="pvNew">+ New video</button>
+      </div>
+      <div class="pv-grid" id="pvGrid"></div>
+      <div class="pv-empty" id="pvEmpty" hidden>
+        <h2>Recorded a game together?</h2>
+        <ol>
+          <li>Click <b>New video</b>, give it a name, pick how long it stays up and choose the file.</li>
+          <li>It stays on your PC. Friends click <b>Download</b> and get it straight from your VaultHub.</li>
+          <li>When the time is up, it's gone from here by itself.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+  <div class="fx-jobs pv-sends" id="pvSends" hidden></div>
 
   <section class="tab-page" id="copyrightTab" hidden>
     <h1 class="headline">Is it copyrighted?<br><em>Check before you post.</em></h1>
@@ -1003,6 +1030,29 @@
   </div>
 </div>
 
+<div class="modal" id="pvVideoModal" hidden>
+  <div class="dialog fx-pack-dialog pv-add-dialog" role="dialog" aria-labelledby="pvVideoHeading">
+    <h2 id="pvVideoHeading">New video</h2>
+    <form id="pvVideoForm" autocomplete="off">
+      <label class="fx-field"><span>Name</span><span class="input"><input id="pvVideoName" maxlength="120" placeholder="Lethal Company, Friday night (my POV)"></span></label>
+      <span class="gm-label">How long should it stay up?</span>
+      <div class="pv-timers" id="pvVideoTimers"></div>
+      <span class="gm-label">Video</span>
+      <div class="pv-file-row">
+        <button type="button" class="small-button ghost-button" id="pvVideoPick">Choose file</button>
+        <span class="pv-file" id="pvVideoFile">No file chosen yet</span>
+      </div>
+      <p class="pv-timer-help">It isn't uploaded: friends get it straight from your PC while VaultHub is open.</p>
+      <p class="acct-note" id="pvVideoNote"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="pvVideoCancel">Cancel</button>
+        <button type="submit" class="small-button" id="pvVideoSave" disabled>Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="modal gm-modal" id="gmModal" hidden>
   <div class="dialog gm-dialog" role="dialog" aria-label="Game" id="gmDialog"></div>
 </div>
@@ -1086,7 +1136,7 @@
   </div>
 </div>
 <div class="call-stage" id="callStage" hidden>
-  <video id="callVideo" autoplay playsinline muted></video>
+  <video id="callVideo" data-call="1" autoplay playsinline muted></video>
   <div class="call-tiles" id="callTiles" hidden></div>
   <div class="call-stage-bar">
     <span id="callStageLabel"></span>
@@ -1314,6 +1364,18 @@
   </div>
 </div>
 
+<div class="modal" id="docImportModal" hidden>
+  <div class="dialog doc-import-dialog" role="dialog" aria-labelledby="docImportTitle">
+    <h2 id="docImportTitle">Importing your PDF</h2>
+    <p class="sub" id="docImportText"></p>
+    <div class="doc-import-track"><i id="docImportBar"></i></div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="small-button" id="docImportCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="docMoveModal" hidden>
   <div class="dialog doc-move-dialog" role="dialog" aria-labelledby="docMoveTitle">
     <h2 id="docMoveTitle">Move to a folder</h2>
@@ -1467,9 +1529,12 @@
 <script src="stats.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
+<script src="pdfimport.js"></script>
+  <script src="pdfedit.js"></script>
 <script src="boards.js"></script>
 <script src="fx.js"></script>
 <script src="games.js"></script>
+<script src="povs.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>
