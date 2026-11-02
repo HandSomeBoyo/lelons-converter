@@ -5647,3 +5647,91 @@ body.chat-page::after { background: rgba(6, 6, 8, .92); }
 .doc-template .doc-thumb-page { filter: none; background: rgba(255, 255, 255, .06) !important; box-shadow: inset 0 0 0 1px var(--line2) !important; }
 .sidebar:hover, :root[data-theme] .sidebar:hover, html.side-small .sidebar:hover,
 :root[data-theme] .sidebar:has(:focus-visible) { width: var(--rail-open); background: rgba(12, 12, 15, .96); box-shadow: inset 0 0 0 1px var(--line2), 0 30px 80px rgba(0, 0, 0, .7); }
+
+/* ---- 5.0 glow: light like Raycast and Reflect. A violet eclipse glows at the top of the window (in the video),
+   headings shine pink to violet, cards are tinted glass with a lit top edge, and the main buttons glow. */
+:root, :root[data-theme] {
+  --glow: 139, 92, 246; --bg: #05040a; --side-bg: rgba(13, 10, 24, .74);
+  --card: rgba(22, 18, 40, .5); --card-hover: rgba(30, 24, 56, .62);
+  --glass: linear-gradient(180deg, rgba(28, 22, 52, .55), rgba(12, 10, 22, .55));
+  --glass-edge: linear-gradient(180deg, rgba(196, 178, 255, .30), rgba(255, 255, 255, .06) 45%, rgba(255, 255, 255, .03));
+  --shine: linear-gradient(92deg, #ff5a7a 0%, #e04bf5 36%, #9b6bff 68%, #d6ccff 100%);
+  --pop-shadow: 0 0 0 1px rgba(180, 160, 255, .16), 0 30px 80px rgba(0, 0, 0, .7), 0 0 80px -20px rgba(139, 92, 246, .35);
+}
+/* the light also shows (standing still) when the moving background is off */
+.ambient, html.no-ambient .ambient {
+  background: radial-gradient(60% 34% at 60% -6%, rgba(160, 120, 255, .55), rgba(110, 60, 230, .18) 55%, transparent 75%),
+              radial-gradient(38% 34% at 22% 100%, rgba(200, 30, 90, .28), transparent 75%),
+              radial-gradient(30% 40% at 90% 55%, rgba(80, 40, 200, .22), transparent 75%), var(--bg);
+}
+.ambient video.ready { opacity: 1; }
+.ambient::after { background: linear-gradient(90deg, rgba(5, 4, 10, .5), transparent 22%), linear-gradient(180deg, transparent 45%, rgba(5, 4, 10, .45)); }
+
+/* headings shine */
+.headline { background: var(--shine); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 28px rgba(190, 90, 255, .28)); }
+.headline em { -webkit-text-fill-color: #b9b4cc; color: #b9b4cc; }
+
+/* cards: tinted glass with a lit top edge */
+.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
+.image-options, .playlist, .upload-strip, .preview, .sound-list, .fx-out, .fx-wait, .lib-genres, .gm-card, .bd-tile, .fx-card,
+.home-go button, .resume-card, .ve-step, .history-empty.big, .welcome, .lib-out.welcome, .fx-out.welcome,
+:root[data-theme] :is(.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .copy-card, .preview, .playlist, .sound-list, .welcome) {
+  background: var(--glass) padding-box, var(--glass-edge) border-box; border: 1px solid transparent; box-shadow: 0 20px 50px -24px rgba(0, 0, 0, .8);
+}
+:is(.channel-card, .home-card, .gm-card, .fx-card, .upload-card, .home-go button, .resume-card, .bd-tile):hover,
+:root[data-theme] :is(.channel-card, .home-card):hover {
+  background: linear-gradient(180deg, rgba(40, 30, 76, .62), rgba(16, 12, 30, .62)) padding-box,
+              linear-gradient(180deg, rgba(200, 170, 255, .55), rgba(139, 92, 246, .14) 60%, rgba(255, 255, 255, .05)) border-box;
+  box-shadow: 0 0 40px -12px rgba(var(--glow), .55), 0 24px 50px -24px rgba(0, 0, 0, .8);
+}
+
+/* the link box: Raycast-style, a colored edge and violet light under it */
+.row:has(> .convert) {
+  background: linear-gradient(rgba(14, 11, 28, .86), rgba(14, 11, 28, .86)) padding-box,
+              linear-gradient(110deg, rgba(255, 90, 122, .55), rgba(155, 107, 255, .6) 45%, rgba(255, 255, 255, .1) 80%) border-box;
+  border: 1px solid transparent; box-shadow: 0 0 70px -18px rgba(var(--glow), .5), 0 30px 60px -20px rgba(0, 0, 0, .7);
+}
+.row:has(> .convert):focus-within { box-shadow: 0 0 0 4px rgba(var(--glow), .18), 0 0 90px -14px rgba(var(--glow), .7), 0 30px 60px -20px rgba(0, 0, 0, .7); }
+.input:focus-within, :root[data-theme] .input:focus-within { box-shadow: inset 0 0 0 1px rgba(180, 150, 255, .6), 0 0 0 4px rgba(var(--glow), .18); }
+
+/* main buttons glow violet */
+.convert, .small-button:not(.ghost-button):not(.outline-button), :root[data-theme] .convert,
+.toggle button.active, .chips button.active, .side-item.lib-cat.active,
+:root[data-theme] :is(.toggle button.active, .chips button.active, .side-item.lib-cat.active) {
+  background: linear-gradient(180deg, #a184ff, #6f45ee); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 1px rgba(170, 140, 255, .55), 0 8px 26px -8px rgba(var(--glow), .8);
+}
+.convert:hover:not(:disabled), .small-button:not(.ghost-button):not(.outline-button):hover {
+  background: linear-gradient(180deg, #b29aff, #7d55f5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 0 0 1px rgba(190, 165, 255, .7), 0 10px 36px -6px rgba(var(--glow), .95);
+}
+.convert:disabled { background: rgba(255, 255, 255, .06); color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); }
+.ghost-button, .outline-button, :root[data-theme] .ghost-button { background: rgba(139, 92, 246, .08); box-shadow: inset 0 0 0 1px rgba(180, 160, 255, .22); }
+.ghost-button:hover, .outline-button:hover { background: rgba(139, 92, 246, .16); box-shadow: inset 0 0 0 1px rgba(190, 170, 255, .4); }
+.bar div { background: linear-gradient(90deg, #ff5a7a, #9b6bff); box-shadow: 0 0 12px rgba(var(--glow), .7); }
+
+/* the rail: violet-tinted glass, the page you're on glows */
+.sidebar, :root[data-theme] .sidebar, html.side-small .sidebar { background: var(--side-bg); box-shadow: inset 0 0 0 1px rgba(180, 160, 255, .12), 0 20px 50px rgba(0, 0, 0, .5); }
+.sidebar:hover, :root[data-theme] .sidebar:hover, html.side-small .sidebar:hover, :root[data-theme] .sidebar:has(:focus-visible) {
+  background: rgba(13, 10, 24, .96); box-shadow: inset 0 0 0 1px rgba(180, 160, 255, .2), 0 30px 80px rgba(0, 0, 0, .7), 0 0 60px -20px rgba(var(--glow), .4);
+}
+.sidebar .tabs .tab-line, :root[data-theme] .sidebar .tabs .tab-line {
+  background: linear-gradient(90deg, rgba(139, 92, 246, .38), rgba(139, 92, 246, .1));
+  box-shadow: inset 0 0 0 1px rgba(180, 150, 255, .32), 0 0 22px -6px rgba(var(--glow), .8);
+}
+.sidebar .tabs button.active, .sidebar .tabs button.active svg { color: #fff; }
+.side-brand .mark { background: linear-gradient(135deg, #ff5a7a, #9b6bff); box-shadow: 0 0 22px rgba(var(--glow), .55), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.side-brand .mark svg { fill: #fff; }
+.side-search, html.side-small .side-search { background: rgba(139, 92, 246, .07); box-shadow: inset 0 0 0 1px rgba(180, 160, 255, .16); }
+
+/* popups and quick search: deep violet glass with a soft glow */
+.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar, .quick-box, .paste-card,
+:root[data-theme] :is(.dialog, .account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar), :root[data-theme] .modal > .dialog { background: #0e0b1a; }
+.account-panel .lib-menu, :root[data-theme] .account-panel .lib-menu { background: none; box-shadow: none; }
+.quick-box { box-shadow: 0 0 0 1px rgba(190, 170, 255, .25), 0 30px 90px rgba(0, 0, 0, .75), 0 0 120px -20px rgba(var(--glow), .55); }
+.quick-foot, .settings-dialog .set-nav, :root[data-theme] .settings-dialog .set-nav { background: #0a0814; }
+.qk-item.on { background: rgba(139, 92, 246, .16); box-shadow: inset 0 0 0 1px rgba(180, 150, 255, .2); }
+.modal, :root[data-theme] .modal, .quick-modal, :root[data-theme] .quick-modal { background: rgba(4, 2, 12, .6); }
+::selection { background: rgba(var(--glow), .45); }
+.headline { width: fit-content; max-width: 100%; padding-right: 4px; }
+:root, :root[data-theme] { --switch-on: #8b5cf6; }
