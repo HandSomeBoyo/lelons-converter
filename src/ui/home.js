@@ -45,54 +45,7 @@ async function loadHome() {
   homeTimer = setTimeout(() => { if (homeVisible()) loadHome(); }, waiting ? 2500 : 30000);
 }
 
-function openHome() { loadHome(); loadResume(); }
-
-// "Good evening, Leon." (or just "Good evening." when logged out)
-function homeGreeting(user) {
-  const h = new Date().getHours();
-  const part = h < 5 ? "Up late" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  return user ? `${part}, ${user.username}.` : `${part}.`;
-}
-
-// ---- pick up where you left off: your newest documents and boards, one click back in
-
-const RESUME_ICONS = {
-  docs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg>',
-  boards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg>',
-};
-let resumeSig = "";
-async function loadResume() {
-  const [d, b] = await Promise.all([api("/api/docs-list", { collab: false }).catch(() => null), api("/api/boards-list", {}).catch(() => null)]);
-  const items = [];
-  for (const doc of (d && d.ok ? d.local : [])) {
-    items.push({ kind: "docs", title: doc.title || "Untitled document", when: doc.updated_at, what: "Document",
-      open: () => { showTab("docs"); openDoc("local", doc.id); } });
-  }
-  for (const board of (b && b.ok ? b.boards : [])) {
-    if (!board.opened) continue;
-    items.push({ kind: "boards", title: board.title || "Untitled board", when: board.opened, what: "Board",
-      open: () => { showTab("boards"); bdOpen(board.id); } });
-  }
-  items.sort((x, y) => y.when - x.when);
-  const top = items.slice(0, 4);
-  const sig = JSON.stringify(top.map((i) => [i.kind, i.title, Math.round(i.when / 60)]));
-  $("homeResume").hidden = !top.length;
-  if (sig === resumeSig) return;
-  resumeSig = sig;
-  $("homeResumeList").replaceChildren(...top.map((item, n) => {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = "resume-card";
-    el.dataset.chip = item.kind;
-    el.style.animationDelay = n * 50 + "ms";
-    el.innerHTML = `<i>${RESUME_ICONS[item.kind]}</i><span><b></b><small></small></span>
-      <svg class="resume-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
-    el.querySelector("b").textContent = item.title;
-    el.querySelector("small").textContent = `${item.what} · ${sfxAgo(item.when * 1000)}`;
-    el.addEventListener("click", item.open);
-    return el;
-  }));
-}
+function openHome() { loadHome(); }
 // Logged in or out (or the account changed): the crew part changes.
 function homeAccountChanged(someoneElse) {
   if (someoneElse && homeVisible()) loadHome();
@@ -141,7 +94,7 @@ function drawHome() {
   if (!d) return;
   if (homeEls.size > 200) homeEls.clear();
   const user = sfxUser();
-  $("homeHello").textContent = homeGreeting(user);
+  $("homeHello").textContent = user ? `Hey ${user.username}.` : "Hey there.";
   drawChannels();
   drawUploads();
   drawCrew();
@@ -159,13 +112,10 @@ function drawChannels() {
   $("homeTotal").classList.toggle("waiting", !known.length); // a quiet grey dash until there's a number
   $("homeTotalNote").textContent = !d.channels.length ? "No channels picked yet."
     : d.channels.every((c) => c.loading) ? "Looking at the channels..."
-    : d.channels.every((c) => !c.info && !c.loading) ? "Couldn't reach YouTube right now. It tries again by itself."
     : `subscribers across ${d.channels.length === 1 ? "1 channel" : d.channels.length + " channels"}`;
   $("homeEditChannels").hidden = !d.canEditChannels;
 
   const list = $("homeChannels");
-  list.classList.toggle("all-failed", !!d.channels.length && d.channels.every((c) => !c.info && !c.loading));
-  $("homeTotal").hidden = list.classList.contains("all-failed");
   const shown = new Set();
   d.channels.forEach((c, i) => {
     shown.add(c.url);
@@ -483,9 +433,4 @@ if (pageCache.home && pageCache.home.channels && (!pageCache.home.loggedIn || sf
   homeData = pageCache.home;
   drawHome();
 }
-if (!$("homeTab").hidden) { loadHome(); loadResume(); }
-
-// The shortcuts under the link box: each one opens its page.
-for (const b of $("homeGo").querySelectorAll("button[data-go]")) {
-  b.addEventListener("click", () => document.querySelector(`#tabs button[data-tab="${b.dataset.go}"]`)?.click());
-}
+if (!$("homeTab").hidden) loadHome();

@@ -2,7 +2,7 @@
 // - Things the page remembers (the open tab, sort, options). The app writes what was saved
 //   into the page as LELONS_SAVED, because the browser's own storage is lost every time
 //   the app starts (it gets a new address each time).
-// - The look (one for everyone), set before anything is drawn.
+// - Themes: dark, black or light, with an accent color, set before anything is drawn.
 
 const pageSaved = (typeof LELONS_SAVED === "object" && LELONS_SAVED) || {};
 // What the page showed last time (account, Home, the Library list): drawn straight away when the
@@ -17,20 +17,31 @@ function savePref(key, value) {
                             body: JSON.stringify({ key, value }) }).catch(() => {});
 }
 
-// The side bar: since 5.0 it's a slim rail that opens when you point at it, so it's never "folded".
-function sideSmallNow() { return false; }
+// The side bar: small (icons only) when it was folded in, or when the window is narrow. Set before drawing.
+function sideSmallNow() { return loadPref("sideSmall") === true || innerWidth <= 900; }
 document.documentElement.classList.toggle("side-small", sideSmallNow());
 
-// One look for everyone (5.0, "Midnight": dark, quiet, with soft moving light behind it). The old
-// themes and accent colors are gone. applyTheme() stays so older calls keep working; it always sets the same look.
-const ACCENT = "#8b7cff";
-function applyTheme() {
+// accent -> [color on dark themes, darker color for the light theme]
+const ACCENT_COLORS = {
+  yellow: ["#ffcf3f", "#e9ab00"],
+  orange: ["#ff9a4d", "#f07a1a"],
+  red: ["#ff6b5e", "#e5483f"],
+  pink: ["#ff7ab8", "#e4559c"],
+  purple: ["#b495ff", "#8a6cf0"],
+  blue: ["#62adff", "#2f86ea"],
+  teal: ["#45dccb", "#14ad9d"],
+  green: ["#8fdc6a", "#4cb337"],
+};
+
+function applyTheme(theme, accent) {
+  if (!["dark", "black", "light"].includes(theme)) theme = "dark";
+  if (!ACCENT_COLORS[accent]) accent = "yellow";
   const root = document.documentElement;
-  root.dataset.theme = "midnight";
-  root.dataset.accent = "violet";
-  root.style.setProperty("--accent", ACCENT);
-  root.style.setProperty("--accent-rgb", "139, 124, 255");
-  root.classList.toggle("no-ambient", loadPref("ambient") === false);
+  root.dataset.theme = theme;
+  root.dataset.accent = accent;
+  const color = ACCENT_COLORS[accent][theme === "light" ? 1 : 0];
+  root.style.setProperty("--accent", color);
+  root.style.setProperty("--accent-rgb", [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)).join(", "));
 }
 
 applyTheme(pageSaved.theme, pageSaved.accent);

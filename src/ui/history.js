@@ -104,14 +104,9 @@ function drawHistory() {
   forgetNodes(historyEls, historyItems.map((item) => item.id));
   $("historyClear").hidden = !historyItems.length;
   $("historyEmpty").hidden = shown.length > 0;
-  const empty = $("historyEmpty");
-  empty.classList.toggle("big", !historyItems.length);
-  if (historyItems.length) empty.textContent = "Nothing matches that search.";
-  else if (!empty.querySelector("button")) {
-    empty.innerHTML = `<b>Nothing here yet</b><span>Everything you download shows up here, so you can find it or get it again.</span>
-      <button type="button" class="convert">Get your first song</button>`;
-    empty.querySelector("button").addEventListener("click", () => { showTab("video"); $("url").focus(); });
-  }
+  $("historyEmpty").textContent = historyItems.length
+    ? "Nothing matches that search."
+    : "Nothing here yet. Everything you download in the Video tab shows up here.";
 }
 
 $("historySearch").addEventListener("input", drawHistory);

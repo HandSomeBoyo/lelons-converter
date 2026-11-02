@@ -111,8 +111,8 @@ const TOUR = [
   {
     key: "yours", seconds: 7.5,
     title: "Make it yours",
-    text: "In Settings: where to save, the size and the volume.",
-    say: "And make it yours! In Settings, you can pick where things are saved, change the size, and set the volume.",
+    text: "In Settings: themes, colors, size and volume. The speaker at the top changes the volume too.",
+    say: "And make it yours! In Settings, you can pick a theme and a color, change the size, and set the volume.",
     html: `<div class="t-yours">
       <div class="t-window"><div class="t-win-top"><span class="t-dot"></span><b>VaultHub</b></div>
         <div class="t-win-line w1"></div><div class="t-win-line w2"></div><div class="t-win-button"></div></div>
@@ -126,8 +126,8 @@ const TOUR = [
   {
     key: "done", seconds: 5,
     title: "You're all set!",
-    text: "You can watch this again any time: click the question mark at the bottom left, then \"How to use\".",
-    say: "That's it, you're all set! Want to watch this again? Just click the question mark at the bottom left.",
+    text: "You can watch this again any time: click the question mark at the top, then \"How to use\".",
+    say: "That's it, you're all set! Want to watch this again? Just click the question mark at the top.",
     html: `<div class="t-center">
       <svg class="t-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
       <div class="t-words"><span>Have fun!</span></div>

@@ -151,15 +151,3 @@ document.getElementById("sidebar").addEventListener("transitionend", (e) => {
   if (e.target.id === "sidebar" && e.propertyName === "width") { following = false; window.dispatchEvent(new Event("resize")); }
 });
 drawSideFold();
-
-// ---- the moving background (5.0): plays only while it can be seen and is wanted
-const ambientVideo = document.getElementById("ambientVideo");
-function playAmbient() {
-  const want = loadPref("ambient") !== false && !reduceMotion.matches && !document.hidden;
-  if (want) ambientVideo.play().catch(() => {});
-  else ambientVideo.pause();
-}
-ambientVideo.addEventListener("canplay", () => ambientVideo.classList.add("ready"), { once: true });
-document.addEventListener("visibilitychange", playAmbient);
-reduceMotion.addEventListener?.("change", playAmbient);
-playAmbient();
