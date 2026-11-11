@@ -606,3 +606,19 @@ function drawSubsMarks() {
 }
 
 drawResolve();
+
+// Puts the newest buttons into Resolve's Scripts menu right now (VaultHub also does this when it starts).
+$("rtInstall").addEventListener("click", async () => {
+  const note = $("rtInstallNote");
+  $("rtInstall").disabled = true;
+  note.classList.remove("error");
+  note.textContent = "Updating...";
+  const res = await api("/api/resolve-install", {});
+  $("rtInstall").disabled = false;
+  note.classList.toggle("error", !res.ok);
+  note.textContent = res.ok ? res.message : res.error || "That didn't work.";
+  if (res.ok) {
+    rtResolveFound = true;
+    $("rtResolveOn").hidden = false;
+  }
+});

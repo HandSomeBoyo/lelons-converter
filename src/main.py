@@ -656,6 +656,12 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/resolve-cues":
                 item = tools.cues(data.get("id"))
                 return self.send_body(tools.cue_text(item).encode("utf-8"), "text/plain; charset=utf-8")
+            elif path == "/api/resolve-install":
+                if not resolve.scripts_folder():
+                    raise ValueError("Can't find DaVinci Resolve on this PC. Open Resolve once, then try again.")
+                if not resolve.install(always=True):
+                    raise ValueError("Couldn't update the buttons. Close Resolve and try again.")
+                return self.send_json({"ok": True, "message": "Updated! Restart Resolve to use the newest buttons."})
             elif path == "/api/resolve-fcpxml":
                 item = tools.cues(data.get("id"))
                 name = re.sub(r'[<>:"/\\|?*]+', " ", str(data.get("name") or "Subtitles")).strip()[:80] or "Subtitles"

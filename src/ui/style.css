@@ -4914,3 +4914,5 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 .subs-saved { font-size: 12.5px; color: var(--muted); }
 .subs-saved b { color: var(--text); }
 @media (max-width: 900px) { .subs-body { grid-template-columns: minmax(0, 1fr); } }
+.rt-install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+#rtInstallNote.error { color: #ff6b6b; }

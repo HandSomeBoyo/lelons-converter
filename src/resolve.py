@@ -65,8 +65,9 @@ def build(name):
             "end\n")
 
 
-def install():
-    """Put the buttons into Resolve (or update them). Quietly does nothing without Resolve."""
+def install(always=False):
+    """Put the buttons into Resolve (or update them). Quietly does nothing without Resolve.
+    always: write them even when they're already the newest (the "Update Resolve buttons" button)."""
     folder = scripts_folder()
     if not folder:
         return False
@@ -77,7 +78,7 @@ def install():
             target = os.path.join(folder, name)
             try:
                 with open(target, encoding="utf-8") as f:
-                    if f.read() == script:
+                    if f.read() == script and not always:
                         continue
             except OSError:
                 pass
