@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.24.0", items: [
+    "Files: new \"For Resolve\" button. Drop in a video from OBS, a game or your phone and get a .MOV that DaVinci Resolve edits smoothly, with the sound staying in sync.",
+    "Every sound track stays separate (like game, mic and Discord from OBS), so you can change each one in Resolve.",
+    "Pick \"Smoothest editing\" if Resolve still lags on your PC. The files get much bigger, but they play back smoothly. When it's done, drag it straight into Resolve.",
+  ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",
     "Text you change takes the same room as the old text, so the line doesn't shift, and bold words in a line stay bold.",

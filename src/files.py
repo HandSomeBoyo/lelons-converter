@@ -18,14 +18,14 @@ import names
 import waveform
 
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter", "files")
-FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif")
+FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif", "resolve")
 # The Open window's list of file types.
 PICK_KINDS = [
     ("Videos and songs", ";".join("*." + e for e in (
         "mp4 mkv mov avi wmv flv webm m4v mpg mpeg 3gp ts mts mp3 m4a wav flac ogg opus wma aac aiff aif amr".split()))),
     ("All files", "*.*"),
 ]
-PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "thumb",
+PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "fps", "audioTracks", "thumb",
           "status", "progress", "message", "trimLabel", "run", "cancel")
 
 
@@ -87,7 +87,8 @@ class Files:
         item = {
             "id": file_id, "name": name, "path": path, "copied": copied, "bytes": os.path.getsize(path),
             "seconds": found["duration"], "video": found["video"], "audio": found["audio"],
-            "width": found["width"], "height": found["height"],
+            "width": found["width"], "height": found["height"], "fps": found["fps"],
+            "audioTracks": found["audioTracks"],
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
             "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
         }
@@ -148,7 +149,7 @@ class Files:
             "format": fmt,
             "quality": str(options.get("quality") or ""),
             "targetMb": None,
-            "normalize": bool(options.get("normalize")) and fmt != "gif",
+            "normalize": bool(options.get("normalize")) and fmt not in ("gif", "resolve"),
             "folder": folder,
         }
         if fmt == "mp4" and options.get("targetMb"):
@@ -191,6 +192,8 @@ class Files:
             try:
                 path = self._run(item)
                 message = f"Saved as {os.path.basename(path)} · {os.path.getsize(path) / 1e6:.1f} MB"
+                if item["job"]["format"] == "resolve":
+                    message += " · Drag it into Resolve"
             except Exception as e:
                 if item.get("cancel"):
                     message = "Stopped."
@@ -200,14 +203,14 @@ class Files:
             else:
                 self._update(item, status="done", progress=100, out=path, message=message)
                 trim = item["job"]["trim"]
-                history.count(item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                history.count("mov" if item["job"]["format"] == "resolve" else item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
 
     def _run(self, item):
         job = item["job"]
         fmt, quality, trim = job["format"], job["quality"], job["trim"]
         if fmt in media.AUDIO_FORMATS and not item["audio"]:
             raise ValueError("This file has no sound in it.")
-        if fmt in ("mp4", "gif") and not item["video"]:
+        if fmt in ("mp4", "gif", "resolve") and not item["video"]:
             raise ValueError("This file has no video in it. Pick MP3 or another sound format.")
         length = (trim[1] - trim[0]) if trim else item["seconds"]
 
@@ -216,10 +219,12 @@ class Files:
             stem += " ({}-{})".format(*(f"{int(t) // 60}m{int(t) % 60:02d}s" for t in trim))
         if fmt == "mp4" and job["targetMb"]:
             stem += f" ({job['targetMb']:g} MB)"
+        if fmt == "resolve":
+            stem += " (for Resolve)"
         os.makedirs(job["folder"], exist_ok=True)
-        temp = names.temp_path(job["folder"], stem, "." + fmt)
+        temp = names.temp_path(job["folder"], stem, ".mov" if fmt == "resolve" else "." + fmt)
 
-        verb = {"gif": "Making the GIF", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
+        verb = {"gif": "Making the GIF", "resolve": "Making it ready for Resolve", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
 
         def progress(percent):
             if item.get("cancel"):
@@ -237,7 +242,9 @@ class Files:
 
     def _convert(self, item, fmt, quality, trim, length, temp, progress):
         job = item["job"]
-        if fmt == "gif":
+        if fmt == "resolve":
+            media.convert_for_resolve(item["path"], temp, quality == "smooth", trim, length, progress)
+        elif fmt == "gif":
             width = int(quality) if quality.isdigit() else 480
             media.make_gif(item["path"], temp, width, trim, length, progress)
         elif fmt == "mp4":

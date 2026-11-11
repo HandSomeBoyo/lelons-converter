@@ -7,8 +7,10 @@ const FILE_QUALITIES = {
   m4a: [["256", "256 kbps"], ["192", "192 kbps"], ["128", "128 kbps"]],
   mp4: [["", "Same as now"], ["1080", "1080p"], ["720", "720p"], ["480", "480p"]],
   gif: [["320", "320 px"], ["480", "480 px"], ["640", "640 px"], ["800", "800 px"]],
+  resolve: [["", "Normal size"], ["smooth", "Smoothest editing (big files)"]],
 };
-const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480" };
+const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480", resolve: "" };
+const VIDEO_FORMATS = ["mp4", "gif", "resolve"];
 
 let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false };
 try {
@@ -124,7 +126,7 @@ function trimFile(file) {
   const saved = fileTrims.get(file.id);
   openTrim({
     key: "file:" + file.id, request: { file: file.id },
-    video: file.video && (["mp4", "gif"].includes(fileOptions.format) || !file.audio),
+    video: file.video && (VIDEO_FORMATS.includes(fileOptions.format) || !file.audio),
     title: file.name, duration: file.seconds,
     start: saved ? saved.start : 0,
     end: saved ? saved.end : gif ? Math.min(10, file.seconds) : file.seconds,
@@ -142,7 +144,7 @@ function trimFile(file) {
 
 // Files that can become the picked format (a song can't become an MP4).
 function fits(file, fmt) {
-  return ["mp4", "gif"].includes(fmt) ? file.video : file.audio;
+  return VIDEO_FORMATS.includes(fmt) ? file.video : file.audio;
 }
 
 function readyFiles() {
@@ -187,6 +189,12 @@ const FILE_ICONS = {
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
 };
 
+// "60 fps", "29.97 fps": what the video has now (it's made steady for Resolve).
+function fpsText(fps) {
+  if (!fps) return "";
+  return `${Math.abs(fps - Math.round(fps)) < 0.01 ? Math.round(fps) : fps.toFixed(2)} fps`;
+}
+
 function fileRow(el, file) {
   if (!el) {
     el = document.createElement("div");
@@ -218,13 +226,17 @@ function fileRow(el, file) {
   const ext = (file.name.split(".").pop() || "").toUpperCase().slice(0, 5);
   const badge = el.querySelector(".badge");
   badge.hidden = !file.id;
-  badge.textContent = `${ext} → ${fmt.toUpperCase()}`;
+  badge.textContent = fmt === "resolve" ? `${ext} → MOV for Resolve` : `${ext} → ${fmt.toUpperCase()}`;
 
   const idle = file.id && !["queued", "active"].includes(file.status);
   let message = file.message;
   if (idle && !fits(file, fmt)) {
     const an = fmt.startsWith("m") ? "an" : "a"; // "an MP4", "a GIF"
-    message = `This has no ${["mp4", "gif"].includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
+    message = fmt === "resolve" ? "This has no video. Pick WAV to use the sound in Resolve."
+      : `This has no ${VIDEO_FORMATS.includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
+  } else if (!message && file.id && fmt === "resolve") {
+    const tracks = file.audioTracks > 1 ? `${file.audioTracks} sound tracks (kept separate)` : file.audio ? "" : "No sound";
+    message = [`${file.width} × ${file.height}`, fpsText(file.fps), tracks, clock(file.seconds, false), sizeText(file.bytes)].filter(Boolean).join(" · ");
   } else if (!message && file.id) {
     message = [file.video ? `${file.width} × ${file.height}` : "Sound only", clock(file.seconds, false), sizeText(file.bytes)].join(" · ");
   }
@@ -320,7 +332,7 @@ function drawFiles() {
   const choices = FILE_QUALITIES[fmt];
   $("fileQualityRow").hidden = !choices;
   if (choices) {
-    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" ? "Size" : "Quality";
+    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" || fmt === "resolve" ? "Size" : "Quality";
     const box = $("fileQuality");
     if (box.dataset.format !== fmt) {
       box.dataset.format = fmt;
@@ -339,13 +351,16 @@ function drawFiles() {
   $("fileFit").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === o.fit));
   $("fileFitCustomBox").hidden = o.fit !== "custom";
   if ($("fileFitCustom").value !== o.fitCustom) $("fileFitCustom").value = o.fitCustom;
-  $("fileVolumeRow").hidden = fmt === "gif";
+  $("fileVolumeRow").hidden = fmt === "gif" || fmt === "resolve";
   $("fileNormalize").classList.toggle("active", !!o.normalize);
 
   const notes = {
     wav: "WAV is the original sound with nothing taken away, so the files are big.",
     flac: "FLAC keeps the sound perfect like WAV, at about half the size.",
     gif: "GIFs have no sound and can be up to 60 seconds.",
+    resolve: o.quality.resolve === "smooth"
+      ? "Makes an editing file (DNxHR) that plays smoothly in Resolve even on a slow PC. Files get about 10 times bigger, so keep space free."
+      : "Fixes laggy or out-of-sync videos from OBS, games and phones: a steady frame rate, sound Resolve always reads, and every sound track kept separate.",
   };
   $("fileNote").classList.toggle("error", !!fileError);
   $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
