@@ -109,7 +109,7 @@ else
     return
   end
   print("VaultHub: listening to the timeline. Check the words in VaultHub, then click \"Put in Resolve\".")
-  if not wait_for(cue_id, { queued = true, active = true, checking = true }) then return end
+  if not wait_for(cue_id, { queued = true, active = true, checking = true }, "VaultHub Subtitles") then return end
   place_at = function(t) return first + math.floor(t * fps + 0.5) end
 end
 

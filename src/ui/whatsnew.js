@@ -9,7 +9,7 @@ const CHANGES = [
     "In Resolve the subtitles come in as Text+ titles on their own track, so you can style them however you like.",
     "Cut the silence: finds the quiet parts and cuts them out, either as a new video or as a new timeline in Resolve where you can still change every cut.",
     "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place, and one click in Resolve brings them all in.",
-    "In Resolve, open Workspace › Scripts to find VaultHub Subtitles, VaultHub Cut Silence and VaultHub Import Project. (Restart Resolve once if you don't see them.)",
+    "In Resolve, open Workspace › Scripts to find VaultHub Subtitles, VaultHub Cut Silence and VaultHub Import Project. While they work, a small window shows how far along it is, with a Cancel button. (Restart Resolve once if you don't see them.)",
   ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",

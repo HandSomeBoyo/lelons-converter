@@ -85,8 +85,22 @@ local function connect()
   return false
 end
 
+local PROGRESS = [==[{{PROGRESS}}]==]
+
+-- A small window with a progress bar and a Cancel button, on top of Resolve while VaultHub works.
+local function show_progress(id, title)
+  local file = TEMP .. SEP .. "vaulthub-progress.ps1"
+  local f = io.open(file, "wb")
+  if not f then return end
+  f:write(PROGRESS)
+  f:close()
+  run('start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. file .. '" -Port '
+    .. PORT .. " -Token " .. TOKEN .. " -Id " .. id .. ' -Title "' .. title .. '"')
+end
+
 -- Waits for a job VaultHub is doing. Returns its last status answer, or nil if it failed (and says why).
-local function wait_for(id, keep_waiting)
+local function wait_for(id, keep_waiting, title)
+  if title then show_progress(id, title) end
   local last = ""
   while true do
     sleep(1)
@@ -102,6 +116,9 @@ local function wait_for(id, keep_waiting)
       return nil
     elseif status == "done" then
       return state
+    elseif status == "gone" or message == "Stopped." then
+      print("VaultHub: stopped.")
+      return nil
     elseif not keep_waiting[status] then
       tell("That didn't work: " .. message)
       return nil

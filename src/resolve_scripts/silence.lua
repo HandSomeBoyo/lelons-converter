@@ -34,7 +34,7 @@ if not id then
   return
 end
 print("VaultHub: finding the quiet parts...")
-if not wait_for(id, { queued = true, active = true }) then return end
+if not wait_for(id, { queued = true, active = true }, "VaultHub Cut Silence") then return end
 
 local infos = {}
 for _, line in ipairs(lines(ask("/api/resolve-keep", '{"id":' .. json_text(id) .. "}"))) do

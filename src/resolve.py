@@ -49,6 +49,8 @@ def build(name):
     folder = os.path.join(HERE, "resolve_scripts")
     with open(os.path.join(folder, "common.lua"), encoding="utf-8") as f:
         common = f.read().replace("{{LAUNCH}}", launch_command())
+    with open(os.path.join(folder, "progress.ps1"), encoding="utf-8") as f:
+        common = common.replace("{{PROGRESS}}", f.read())
     with open(os.path.join(folder, name), encoding="utf-8") as f:
         return f.read().replace("{{COMMON}}", common)
 
