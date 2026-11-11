@@ -33,10 +33,16 @@ SPEECH_DIR = os.path.join(settings.DATA_DIR, "Speech")
 ENGINE_VERSION = "1"
 ENGINE_DIR = os.path.join(SPEECH_DIR, "engine-" + ENGINE_VERSION)
 MODEL_DIR = os.path.join(SPEECH_DIR, "models")
+GPU_DIR = os.path.join(SPEECH_DIR, "gpu-1")  # NVIDIA's tools, for listening on the graphics card
 
 # Known-good versions. If one has no wheel for this Python, the newest version is used instead.
 PACKAGES = (("numpy", "2.5.4"), ("ctranslate2", "4.9.0"), ("onnxruntime", "1.31.1"), ("tokenizers", "0.23.3"),
             ("faster-whisper", "1.2.1"), ("msvc-runtime", "14.51.36231"))
+
+# NVIDIA's own tools for the graphics card (CUDA 12, cuDNN 9: what the speech engine is built for,
+# new enough for RTX 50 cards). Only their .dll files are kept. About 1.3 GB to download.
+GPU_PACKAGES = (("nvidia-cuda-runtime-cu12", "12.9.79"), ("nvidia-cublas-cu12", "12.9.1.4"),
+                ("nvidia-cudnn-cu12", "9.9.0.52"))
 
 # "quick": good and fairly fast. "best": noticeably better, mostly for other languages than English.
 MODELS = {
@@ -58,6 +64,7 @@ class Stopped(Exception):
 
 _ready_lock = threading.Lock()
 _model_cache = {}  # model name -> loaded WhisperModel
+_gpu_failed = False  # the graphics card didn't work once: don't keep trying
 
 
 def _wheel_tags():
@@ -163,6 +170,60 @@ def _get_model(model, progress):
     os.replace(temp, folder)
 
 
+def has_nvidia():
+    """An NVIDIA graphics card with its driver (the driver brings nvcuda.dll)."""
+    if os.name != "nt":
+        return False
+    try:
+        ctypes.WinDLL("nvcuda.dll")
+        return True
+    except OSError:
+        return False
+
+
+def gpu_ready():
+    return os.path.isfile(os.path.join(GPU_DIR, "ready"))
+
+
+def _get_gpu(progress):
+    if gpu_ready():
+        return
+    wheels = [_pick_wheel(name, version) for name, version in GPU_PACKAGES]
+    total = sum(w["size"] for w in wheels) or 1
+    done = 0
+    temp = GPU_DIR + ".part"
+    shutil.rmtree(temp, ignore_errors=True)
+    os.makedirs(temp)
+    for wheel in wheels:
+        def on_bytes(n):
+            nonlocal done
+            done += n
+            progress("Getting the graphics card tools (only the first time, about 1.3 GB)", done * 100 / total)
+        data = _download(wheel["url"], wheel["size"], on_bytes, timeout=120)
+        if hashlib.sha256(data).hexdigest() != wheel["digests"]["sha256"]:
+            raise OSError("A graphics card tools download was damaged. Try again.")
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for name in z.namelist():
+                if name.lower().endswith(".dll"):
+                    with z.open(name) as src, open(os.path.join(temp, os.path.basename(name)), "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+        del data
+    open(os.path.join(temp, "ready"), "w").close()
+    shutil.rmtree(GPU_DIR, ignore_errors=True)
+    os.replace(temp, GPU_DIR)
+
+
+def _use_gpu_files():
+    os.add_dll_directory(GPU_DIR)
+    os.environ["PATH"] = GPU_DIR + os.pathsep + os.environ.get("PATH", "")
+    for name in sorted(os.listdir(GPU_DIR)):
+        if name.lower().startswith(("cudart64", "cublaslt64", "cublas64")):
+            try:
+                ctypes.WinDLL(os.path.join(GPU_DIR, name))
+            except OSError:
+                pass
+
+
 def _stub_modules():
     """faster-whisper imports a few big packages it only needs for things the app doesn't use
     (reading files itself, downloading models, progress bars). Small stand-ins keep the download small."""
@@ -216,17 +277,23 @@ def _load_engine():
     return WhisperModel
 
 
-def get_ready(model, progress):
-    """Download what's missing and load the model. progress(text, percent)."""
+def get_ready(model, progress, gpu=True):
+    """Download what's missing and load the model. progress(text, percent). gpu: use an NVIDIA
+    graphics card when there is one (much faster); otherwise, or if it doesn't work, the processor."""
     if model not in MODELS:
         model = "quick"
+    global _gpu_failed
+    gpu = gpu and not _gpu_failed and has_nvidia()
     with _ready_lock:
-        if model in _model_cache:
-            return _model_cache[model]
+        cached = _model_cache.get(model)
+        if cached and (cached.on_gpu or not gpu):
+            return cached
         os.makedirs(SPEECH_DIR, exist_ok=True)
         try:
             _get_engine(progress)
             _get_model(model, progress)
+            if gpu:
+                _get_gpu(progress)
         except (OSError, ValueError, KeyError) as e:
             if isinstance(e, Stopped) or getattr(e, "friendly", False):
                 raise
@@ -234,14 +301,27 @@ def get_ready(model, progress):
         progress("Starting the speech model", 0)
         try:
             WhisperModel = _load_engine()
-            # Half the processor, so DaVinci Resolve and the rest of the PC stay smooth meanwhile.
-            threads = max(1, min(6, (os.cpu_count() or 4) // 2))
-            loaded = WhisperModel(os.path.join(MODEL_DIR, model), device="cpu", compute_type="int8", cpu_threads=threads)
         except Exception as e:
-            # A broken download: start over next time.
-            shutil.rmtree(ENGINE_DIR, ignore_errors=True)
-            shutil.rmtree(os.path.join(MODEL_DIR, model), ignore_errors=True)
+            shutil.rmtree(ENGINE_DIR, ignore_errors=True)  # a broken download: start over next time
             raise OSError(f"The speech tools didn't start ({type(e).__name__}). Try again; they'll be downloaded fresh.") from e
+        loaded = None
+        if gpu:
+            try:
+                _use_gpu_files()
+                loaded = WhisperModel(os.path.join(MODEL_DIR, model), device="cuda", compute_type="float16")
+                loaded.on_gpu = True
+            except Exception:
+                loaded = None  # an older card or driver: the processor still works
+                _gpu_failed = True
+        if loaded is None:
+            try:
+                # Most of the processor; Windows still puts Resolve and the rest first (see _gentle).
+                threads = max(1, min(16, (os.cpu_count() or 4) - 1))
+                loaded = WhisperModel(os.path.join(MODEL_DIR, model), device="cpu", compute_type="int8", cpu_threads=threads)
+                loaded.on_gpu = False
+            except Exception as e:
+                shutil.rmtree(os.path.join(MODEL_DIR, model), ignore_errors=True)
+                raise OSError(f"The speech tools didn't start ({type(e).__name__}). Try again; they'll be downloaded fresh.") from e
         _model_cache.clear()  # only one model in memory at a time
         _model_cache[model] = loaded
         return loaded
@@ -276,11 +356,14 @@ def read_audio(path, start=0.0, length=None, stream=0, on_progress=None):
 
 
 def listen(model, audio, language, on_progress):
-    """Words with times: [(start, end, word)]."""
+    """Words with times: [(start, end, word)]. Listens to several pieces at once (much faster)."""
+    from faster_whisper import BatchedInferencePipeline
+
     seconds = len(audio) / SAMPLE_RATE
-    segments, _info = model.transcribe(
+    batched = BatchedInferencePipeline(model=model)
+    segments, _info = batched.transcribe(
         audio, language=language or None, word_timestamps=True, vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500}, condition_on_previous_text=False)
+        vad_parameters={"min_silence_duration_ms": 500}, batch_size=16 if getattr(model, "on_gpu", False) else 8)
     words = []
     on_progress(0)
     with _gentle():
@@ -290,6 +373,7 @@ def listen(model, audio, language, on_progress):
                     words.append((w.start, w.end, w.word))
             if seconds:
                 on_progress(min(99.0, segment.end * 100 / seconds))
+    words.sort()
     return words
 
 
@@ -381,12 +465,12 @@ def write_srt(cues, target):
 
 # ---------------------------------------------------------------- the whole thing
 
-def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None):
+def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
     report = on_progress or (lambda text, percent: None)
-    whisper = get_ready(model, report)
+    whisper = get_ready(model, report, gpu)
     import numpy as np
 
     pieces, total = [], 0.0
@@ -407,7 +491,8 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     np.clip(mix, -1.0, 1.0, out=mix)
     if sound_copy:
         _save_wav(mix, sound_copy)  # for the subtitle editor, when there's no single file to play
-    words = listen(whisper, mix, language, lambda percent: report("Listening", percent))
+    where = " on the graphics card" if getattr(whisper, "on_gpu", False) else ""
+    words = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent))
     if not words:
         raise ValueError("Couldn't hear any speech in this.")
     cues = make_cues(words, style)

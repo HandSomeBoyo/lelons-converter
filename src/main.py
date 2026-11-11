@@ -40,6 +40,7 @@ import games  # noqa: E402
 import povs  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
+import subtitles  # noqa: E402
 import resolve  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
@@ -608,7 +609,7 @@ class Handler(BaseHTTPRequestHandler):
                 tools.convert(data.get("items") or [], data.get("options") or {}, save_folder(data, kind))
                 return self.send_json({"ok": True})
             if path == "/api/rt-options":
-                return self.send_json({"ok": True, "options": resolvetools.load_options()})
+                return self.send_json({"ok": True, "options": resolvetools.load_options(), "nvidia": subtitles.has_nvidia()})
             if path == "/api/rt-remove":
                 tools.remove(data.get("id"))
             elif path == "/api/rt-cancel":

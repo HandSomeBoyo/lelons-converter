@@ -30,7 +30,7 @@ import subtitles
 TOOLS = ("fix", "subtitles", "silence")
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
-DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "quick", "level": "normal", "pause": "0.5", "cutAs": "timeline"}
+DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "quick", "level": "normal", "pause": "0.5", "cutAs": "timeline", "device": "gpu"}
 
 
 def load_options():
@@ -52,6 +52,8 @@ def load_options():
         o["level"] = saved["level"]
     if saved.get("pause") in silence.PAUSES:
         o["pause"] = saved["pause"]
+    if saved.get("device") in ("gpu", "cpu"):
+        o["device"] = saved["device"]
     if saved.get("cutAs") in ("timeline", "video"):
         o["cutAs"] = saved["cutAs"]
     return o
@@ -216,7 +218,8 @@ class Tools(files.Files):
             temp = names.temp_path(folder, stem, ".srt")
             parts = item.get("parts") or [(item["path"], trim[0] if trim else 0, length if trim else None, 0)]
             try:
-                cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report)
+                cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
+                                                gpu=job.get("device") != "cpu")
                 path = names.finish(temp)
             except BaseException:
                 if os.path.exists(temp):
