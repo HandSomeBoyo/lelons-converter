@@ -3,12 +3,13 @@
 
 const CHANGES = [
   { version: "2.24.0", items: [
-    "Files: new \"For Resolve\" button. Drop in a video from OBS, a game or your phone and get a .MOV that DaVinci Resolve edits smoothly, with the sound staying in sync.",
-    "Every sound track stays separate (like game, mic and Discord from OBS), so you can change each one in Resolve.",
-    "Pick \"Smoothest editing\" if Resolve still lags on your PC. The files get much bigger, but they play back smoothly. When it's done, drag it straight into Resolve.",
-    "New: auto subtitles. Pick \"Subtitles\" in Files and VaultHub listens to the speech and makes an .srt file to drag onto your timeline. It all happens on your PC, nothing is uploaded.",
-    "Normal lines or short lines (like on Shorts and TikTok), and it understands English, Norwegian and lots of other languages. The first time it downloads the speech model (about 480 MB).",
-    "And right inside DaVinci Resolve: Workspace › Scripts › VaultHub Subtitles makes subtitles for the whole timeline and puts them on it. (Restart Resolve once if you don't see it.)",
+    "New Resolve tab: tools that make editing in DaVinci Resolve easier, all in one place.",
+    "Fix for Resolve: drop in a video from OBS, a game or your phone and get a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
+    "Subtitles: VaultHub listens to the speech and makes subtitles, all on your PC. Then you can check them next to the video, fix words and move a line a little earlier or later before they go into Resolve.",
+    "In Resolve the subtitles come in as Text+ titles on their own track, so you can style them however you like.",
+    "Cut the silence: finds the quiet parts and cuts them out, either as a new video or as a new timeline in Resolve where you can still change every cut.",
+    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place, and one click in Resolve brings them all in.",
+    "In Resolve, open Workspace › Scripts to find VaultHub Subtitles, VaultHub Cut Silence and VaultHub Import Project. (Restart Resolve once if you don't see them.)",
   ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",

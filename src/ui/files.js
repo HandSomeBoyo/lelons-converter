@@ -7,13 +7,10 @@ const FILE_QUALITIES = {
   m4a: [["256", "256 kbps"], ["192", "192 kbps"], ["128", "128 kbps"]],
   mp4: [["", "Same as now"], ["1080", "1080p"], ["720", "720p"], ["480", "480p"]],
   gif: [["320", "320 px"], ["480", "480 px"], ["640", "640 px"], ["800", "800 px"]],
-  resolve: [["", "Normal size"], ["smooth", "Smoothest editing (big files)"]],
-  srt: [["normal", "Normal lines"], ["short", "Short lines (Shorts and TikTok style)"]],
 };
-const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480", resolve: "", srt: "normal" };
-const VIDEO_FORMATS = ["mp4", "gif", "resolve"];
+const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480" };
 
-let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false, language: "", model: "quick" };
+let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false };
 try {
   const saved = loadPref("fileOptions") || {};
   fileOptions = { ...fileOptions, ...saved, quality: { ...FILE_DEFAULTS, ...(saved.quality || {}) } };
@@ -101,13 +98,6 @@ $("fileFitCustom").addEventListener("input", () => {
   saveFileOptions();
   drawFiles();
 });
-for (const [box, key] of [["fileLang", "language"], ["fileModel", "model"]]) {
-  $(box).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-    fileOptions[key] = b.dataset.value;
-    saveFileOptions();
-    drawFiles();
-  }));
-}
 $("fileNormalize").addEventListener("click", () => {
   fileOptions.normalize = !fileOptions.normalize;
   saveFileOptions();
@@ -134,12 +124,12 @@ function trimFile(file) {
   const saved = fileTrims.get(file.id);
   openTrim({
     key: "file:" + file.id, request: { file: file.id },
-    video: file.video && (VIDEO_FORMATS.includes(fileOptions.format) || !file.audio),
+    video: file.video && (["mp4", "gif"].includes(fileOptions.format) || !file.audio),
     title: file.name, duration: file.seconds,
     start: saved ? saved.start : 0,
     end: saved ? saved.end : gif ? Math.min(10, file.seconds) : file.seconds,
     maxLength: gif ? 60 : 0,
-    clip: fileOptions.format === "srt" ? null : () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
+    clip: () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
                    quality: fileOptions.quality[fileOptions.format] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize }),
     done: (part) => {
       if (part) fileTrims.set(file.id, part); else fileTrims.delete(file.id);
@@ -152,11 +142,11 @@ function trimFile(file) {
 
 // Files that can become the picked format (a song can't become an MP4).
 function fits(file, fmt) {
-  return VIDEO_FORMATS.includes(fmt) ? file.video : file.audio;
+  return ["mp4", "gif"].includes(fmt) ? file.video : file.audio;
 }
 
 function readyFiles() {
-  return serverFiles.filter((f) => f.status !== "active" && f.status !== "queued" && !f.fromResolve && fits(f, fileOptions.format));
+  return serverFiles.filter((f) => f.status !== "active" && f.status !== "queued" && fits(f, fileOptions.format));
 }
 
 $("fileConvert").addEventListener("click", async () => {
@@ -179,8 +169,7 @@ $("fileConvert").addEventListener("click", async () => {
   drawFiles();
   const res = await api("/api/files-convert", {
     items, folder,
-    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize,
-               language: fileOptions.language, model: fileOptions.model },
+    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize },
   }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) {
     for (const f of ready) delete f.waitingFor;
@@ -198,12 +187,6 @@ const FILE_ICONS = {
   music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
 };
 
-// "60 fps", "29.97 fps": what the video has now (it's made steady for Resolve).
-function fpsText(fps) {
-  if (!fps) return "";
-  return `${Math.abs(fps - Math.round(fps)) < 0.01 ? Math.round(fps) : fps.toFixed(2)} fps`;
-}
-
 function fileRow(el, file) {
   if (!el) {
     el = document.createElement("div");
@@ -218,7 +201,7 @@ function fileRow(el, file) {
       <div class="pct"></div>
       <div class="actions"></div>`;
   }
-  el.className = "image-row file-row " + file.status + (file.id && !file.fromResolve && !fits(file, fileOptions.format) ? " skipped" : "");
+  el.className = "image-row file-row " + file.status + (file.id && !fits(file, fileOptions.format) ? " skipped" : "");
   const draggable = file.status === "done" && file.canShow;
   setDrag(el, draggable ? { kind: "file", id: file.id } : null);
   el.title = draggable ? DRAG_HINT : "";
@@ -235,20 +218,13 @@ function fileRow(el, file) {
   const ext = (file.name.split(".").pop() || "").toUpperCase().slice(0, 5);
   const badge = el.querySelector(".badge");
   badge.hidden = !file.id;
-  badge.textContent = file.fromResolve ? "Subtitles for Resolve" : fmt === "resolve" ? `${ext} → MOV for Resolve` : fmt === "srt" ? `${ext} → Subtitles (SRT)` : `${ext} → ${fmt.toUpperCase()}`;
+  badge.textContent = `${ext} → ${fmt.toUpperCase()}`;
 
   const idle = file.id && !["queued", "active"].includes(file.status);
   let message = file.message;
-  if (file.fromResolve) {
-    message = message || "From DaVinci Resolve · " + clock(file.seconds, false);
-  } else if (idle && !fits(file, fmt)) {
+  if (idle && !fits(file, fmt)) {
     const an = fmt.startsWith("m") ? "an" : "a"; // "an MP4", "a GIF"
-    message = fmt === "resolve" ? "This has no video. Pick WAV to use the sound in Resolve."
-      : fmt === "srt" ? "This has no sound, so there's nothing to make subtitles from."
-      : `This has no ${VIDEO_FORMATS.includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
-  } else if (!message && file.id && fmt === "resolve") {
-    const tracks = file.audioTracks > 1 ? `${file.audioTracks} sound tracks (kept separate)` : file.audio ? "" : "No sound";
-    message = [`${file.width} × ${file.height}`, fpsText(file.fps), tracks, clock(file.seconds, false), sizeText(file.bytes)].filter(Boolean).join(" · ");
+    message = `This has no ${["mp4", "gif"].includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
   } else if (!message && file.id) {
     message = [file.video ? `${file.width} × ${file.height}` : "Sound only", clock(file.seconds, false), sizeText(file.bytes)].join(" · ");
   }
@@ -257,11 +233,11 @@ function fileRow(el, file) {
   // Trim: a button, or the part that's kept
   const trimBox = el.querySelector(".file-trim");
   const part = fileTrims.get(file.id);
-  const trimKey = file.fromResolve || (file.id && !fits(file, fmt)) ? "skip" : !idle ? (file.trimLabel ? "label:" + file.trimLabel : "") : part ? `part:${part.start}-${part.end}` : "none:" + fmt;
+  const trimKey = file.id && !fits(file, fmt) ? "skip" : !idle ? (file.trimLabel ? "label:" + file.trimLabel : "") : part ? `part:${part.start}-${part.end}` : "none:" + fmt;
   if (trimBox.dataset.key !== trimKey) {
     trimBox.dataset.key = trimKey;
     trimBox.innerHTML = "";
-    if (file.fromResolve || (file.id && !fits(file, fmt))) {
+    if (file.id && !fits(file, fmt)) {
       // can't be converted to this format, so nothing to trim
     } else if (!idle) {
       if (file.trimLabel) trimBox.textContent = "Keeping " + file.trimLabel;
@@ -344,7 +320,7 @@ function drawFiles() {
   const choices = FILE_QUALITIES[fmt];
   $("fileQualityRow").hidden = !choices;
   if (choices) {
-    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" || fmt === "resolve" ? "Size" : fmt === "srt" ? "Lines" : "Quality";
+    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" ? "Size" : "Quality";
     const box = $("fileQuality");
     if (box.dataset.format !== fmt) {
       box.dataset.format = fmt;
@@ -363,21 +339,13 @@ function drawFiles() {
   $("fileFit").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === o.fit));
   $("fileFitCustomBox").hidden = o.fit !== "custom";
   if ($("fileFitCustom").value !== o.fitCustom) $("fileFitCustom").value = o.fitCustom;
-  $("fileVolumeRow").hidden = ["gif", "resolve", "srt"].includes(fmt);
-  $("fileLangRow").hidden = $("fileModelRow").hidden = fmt !== "srt";
-  $("fileLang").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === (o.language || "")));
-  $("fileModel").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === (o.model || "quick")));
+  $("fileVolumeRow").hidden = fmt === "gif";
   $("fileNormalize").classList.toggle("active", !!o.normalize);
 
   const notes = {
     wav: "WAV is the original sound with nothing taken away, so the files are big.",
     flac: "FLAC keeps the sound perfect like WAV, at about half the size.",
     gif: "GIFs have no sound and can be up to 60 seconds.",
-    resolve: o.quality.resolve === "smooth"
-      ? "Makes an editing file (DNxHR) that plays smoothly in Resolve even on a slow PC. Files get about 10 times bigger, so keep space free."
-      : "Fixes laggy or out-of-sync videos from OBS, games and phones: a steady frame rate, sound Resolve always reads, and every sound track kept separate.",
-    srt: "Listens to the speech on your PC (nothing is uploaded) and makes an .srt file. Drag it onto your Resolve timeline. The first time it downloads the speech model, "
-      + (o.model === "best" ? "about 1.6 GB." : "about 480 MB.") + " In Resolve you can also use Workspace › Scripts › VaultHub Subtitles.",
   };
   $("fileNote").classList.toggle("error", !!fileError);
   $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
@@ -392,16 +360,8 @@ function drawFiles() {
 }
 
 // Called by app.js with the app's state a few times a second.
-const seenResolve = new Set();
 function renderFiles(list) {
   const known = new Map(serverFiles.map((f) => [f.id, f]));
-  // Subtitles started from the button in DaVinci Resolve: show them here while they're made.
-  for (const f of list || []) {
-    if (f.fromResolve && !seenResolve.has(f.id)) {
-      seenResolve.add(f.id);
-      if (f.status === "queued" || f.status === "active") showTab("files");
-    }
-  }
   serverFiles = (list || []).map((f) => {
     const mine = known.get(f.id);
     // Just clicked Convert, and the app hasn't caught up yet: keep showing "Waiting..."

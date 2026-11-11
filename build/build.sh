@@ -45,7 +45,7 @@ find "$R/Lib/site-packages/bin" -type f ! -name "deno.exe" -delete
 
 echo "==> Copying the app"
 cp "$ROOT"/src/*.py "$STAGE/app/"
-cp "$ROOT"/src/*.lua "$STAGE/app/"
+cp -r "$ROOT/src/resolve_scripts" "$STAGE/app/resolve_scripts"
 cp -r "$ROOT/src/ui" "$STAGE/app/ui"
 cp "$ROOT/assets/icon.png" "$ROOT/assets/icon.ico" "$STAGE/app/"
 

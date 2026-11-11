@@ -234,7 +234,8 @@ def get_ready(model, progress):
         progress("Starting the speech model", 0)
         try:
             WhisperModel = _load_engine()
-            threads = max(1, min(8, (os.cpu_count() or 4) - 1))
+            # Half the processor, so DaVinci Resolve and the rest of the PC stay smooth meanwhile.
+            threads = max(1, min(6, (os.cpu_count() or 4) // 2))
             loaded = WhisperModel(os.path.join(MODEL_DIR, model), device="cpu", compute_type="int8", cpu_threads=threads)
         except Exception as e:
             # A broken download: start over next time.
@@ -282,13 +283,32 @@ def listen(model, audio, language, on_progress):
         vad_parameters={"min_silence_duration_ms": 500}, condition_on_previous_text=False)
     words = []
     on_progress(0)
-    for segment in segments:  # (it listens while this loop runs)
-        for w in segment.words or []:
-            if w.word.strip():
-                words.append((w.start, w.end, w.word))
-        if seconds:
-            on_progress(min(99.0, segment.end * 100 / seconds))
+    with _gentle():
+        for segment in segments:  # (it listens while this loop runs)
+            for w in segment.words or []:
+                if w.word.strip():
+                    words.append((w.start, w.end, w.word))
+            if seconds:
+                on_progress(min(99.0, segment.end * 100 / seconds))
     return words
+
+
+class _gentle:
+    """While listening, Windows gives the app less of the processor than other programs (like Resolve)."""
+    BELOW_NORMAL, NORMAL = 0x4000, 0x20
+
+    def __enter__(self):
+        self._set(self.BELOW_NORMAL)
+
+    def __exit__(self, *args):
+        self._set(self.NORMAL)
+
+    def _set(self, level):
+        if os.name == "nt":
+            try:
+                ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), level)
+            except (AttributeError, OSError):
+                pass
 
 
 # ---------------------------------------------------------------- writing the .srt
@@ -361,7 +381,7 @@ def write_srt(cues, target):
 
 # ---------------------------------------------------------------- the whole thing
 
-def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None):
+def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
@@ -385,9 +405,41 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
         end = min(len(mix), begin + len(audio))
         mix[begin:end] += audio[: end - begin]  # clips on several tracks play at the same time
     np.clip(mix, -1.0, 1.0, out=mix)
+    if sound_copy:
+        _save_wav(mix, sound_copy)  # for the subtitle editor, when there's no single file to play
     words = listen(whisper, mix, language, lambda percent: report("Listening", percent))
     if not words:
         raise ValueError("Couldn't hear any speech in this.")
     cues = make_cues(words, style)
     write_srt(cues, target)
-    return len(cues)
+    return cues
+
+
+def _save_wav(audio, target):
+    import wave
+
+    import numpy as np
+
+    with wave.open(target, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes((np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes())
+
+
+def read_srt(path):
+    """[(start, end, text)] from an .srt file."""
+    with open(path, encoding="utf-8-sig") as f:
+        blocks = re.split(r"\n\s*\n", f.read().replace("\r\n", "\n").strip())
+    cues = []
+    for block in blocks:
+        lines = block.split("\n")
+        for i, line in enumerate(lines):
+            found = re.match(r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)", line.strip())
+            if found:
+                g = [int(x) for x in found.groups()]
+                start = g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000
+                end = g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000
+                cues.append((start, end, "\n".join(lines[i + 1:]).strip()))
+                break
+    return cues

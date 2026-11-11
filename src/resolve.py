@@ -1,17 +1,20 @@
-"""The VaultHub Subtitles button inside DaVinci Resolve.
+"""The VaultHub buttons inside DaVinci Resolve.
 
 Resolve runs scripts it finds in its Scripts folder from the Workspace >
-Scripts menu (the free version too). VaultHub puts resolve_subtitles.lua
-there, so making subtitles is one click in Resolve. The script reads the
-timeline, asks VaultHub to listen to it (see files.add_resolve_timeline) and
-puts the subtitles back on the timeline.
+Scripts menu (the free version too). VaultHub puts its scripts there
+(resolve_scripts/): Subtitles, Cut Silence and Import Project. They ask
+VaultHub to do the work (see resolvetools.py) and put the result in Resolve.
 """
 
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCRIPT_NAME = "VaultHub Subtitles.lua"
+SCRIPTS = {  # file in resolve_scripts -> name in Resolve's Scripts menu
+    "subtitles.lua": "VaultHub Subtitles.lua",
+    "silence.lua": "VaultHub Cut Silence.lua",
+    "project.lua": "VaultHub Import Project.lua",
+}
 
 
 def scripts_folder():
@@ -25,8 +28,13 @@ def scripts_folder():
     return os.path.join(resolve, "Support", "Fusion", "Scripts", "Utility")
 
 
+def installed():
+    folder = scripts_folder()
+    return bool(folder) and all(os.path.isfile(os.path.join(folder, name)) for name in SCRIPTS.values())
+
+
 def launch_command():
-    """How the script starts VaultHub when it isn't open (the same way the Start menu does)."""
+    """How the scripts start VaultHub when it isn't open (the same way the Start menu does)."""
     python = sys.executable
     if python.lower().endswith("python.exe"):
         windowless = python[:-len("python.exe")] + "pythonw.exe"
@@ -36,24 +44,33 @@ def launch_command():
     return f'"{python}" -E -s "{main}"'
 
 
+def build(name):
+    """One script's text, with the shared part and this PC's way of starting VaultHub filled in."""
+    folder = os.path.join(HERE, "resolve_scripts")
+    with open(os.path.join(folder, "common.lua"), encoding="utf-8") as f:
+        common = f.read().replace("{{LAUNCH}}", launch_command())
+    with open(os.path.join(folder, name), encoding="utf-8") as f:
+        return f.read().replace("{{COMMON}}", common)
+
+
 def install():
-    """Put the button into Resolve (or update it). Quietly does nothing without Resolve."""
+    """Put the buttons into Resolve (or update them). Quietly does nothing without Resolve."""
     folder = scripts_folder()
     if not folder:
         return False
     try:
-        with open(os.path.join(HERE, "resolve_subtitles.lua"), encoding="utf-8") as f:
-            script = f.read().replace("{{LAUNCH}}", launch_command())
-        target = os.path.join(folder, SCRIPT_NAME)
-        try:
-            with open(target, encoding="utf-8") as f:
-                if f.read() == script:
-                    return True
-        except OSError:
-            pass
         os.makedirs(folder, exist_ok=True)
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(script)
+        for source, name in SCRIPTS.items():
+            script = build(source)
+            target = os.path.join(folder, name)
+            try:
+                with open(target, encoding="utf-8") as f:
+                    if f.read() == script:
+                        continue
+            except OSError:
+                pass
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(script)
         return True
     except OSError:
         return False

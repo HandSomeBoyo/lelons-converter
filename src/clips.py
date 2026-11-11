@@ -41,7 +41,7 @@ class Clips:
         key = str(request.get("key") or "")
         fmt = request.get("format")
         trim = request.get("trim")
-        if not key or fmt not in (*AUDIO, "mp4", "gif", "resolve") or not (isinstance(trim, list) and len(trim) == 2):
+        if not key or fmt not in (*AUDIO, "mp4", "gif") or not (isinstance(trim, list) and len(trim) == 2):
             raise ValueError("Something's missing for the clip.")
         start, end = float(trim[0]), float(trim[1])
         if end - start < 0.1:
@@ -149,9 +149,9 @@ class Clips:
         url = source.get("url")
         if not url:
             raise ValueError("Something's missing for the clip.")
-        fmt = "mp4" if wanted["format"] in ("gif", "resolve") else wanted["format"]
+        fmt = "mp4" if wanted["format"] == "gif" else wanted["format"]
         quality = wanted["quality"]
-        if wanted["format"] in ("gif", "resolve") or quality.startswith("fit"):
+        if wanted["format"] == "gif" or quality.startswith("fit"):
             quality = "720"  # made smaller (or into a GIF) when it's cut
         if not settings.is_valid_quality(fmt, quality):
             quality = settings.DEFAULT_QUALITY[fmt]
@@ -189,12 +189,10 @@ class Clips:
         progress(0)
         os.makedirs(CLIP_DIR, exist_ok=True)
         stem = names.safe_stem(wanted["title"], "clip")
-        temp = names.temp_path(CLIP_DIR, stem + _label(trim), ".mov" if fmt == "resolve" else "." + fmt)
+        temp = names.temp_path(CLIP_DIR, stem + _label(trim), "." + fmt)
         quality = wanted["quality"]
         try:
-            if fmt == "resolve":
-                media.convert_for_resolve(source, temp, quality == "smooth", trim, length, progress)
-            elif fmt == "gif":
+            if fmt == "gif":
                 media.make_gif(source, temp, int(quality) if quality.isdigit() else 480, trim, length, progress)
             elif fmt == "mp4":
                 target_mb = wanted["targetMb"] or (int(quality[3:]) if quality.startswith("fit") else None)

@@ -80,6 +80,7 @@
       <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
       <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
       <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
       <div class="tab-group">Create</div>
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
@@ -281,6 +282,180 @@
   </section>
   </section>
 
+  <section class="tab-page" id="resolveTab" hidden>
+    <h1 class="headline">Edit faster<br><em>in DaVinci Resolve.</em></h1>
+
+    <div class="rt-tools" id="rtTools">
+      <button type="button" class="rt-tool" data-tool="fix">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>
+        <strong>Fix for Resolve</strong>
+        <span>Laggy or out-of-sync videos from OBS, games and phones play smoothly.</span>
+      </button>
+      <button type="button" class="rt-tool" data-tool="subtitles">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 11h4M13 11h4M7 15h7M16 15h1"/></svg>
+        <strong>Subtitles</strong>
+        <span>Listens to the speech, lets you fix it, and puts it on your timeline as Text+.</span>
+      </button>
+      <button type="button" class="rt-tool" data-tool="silence">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l2-5 2 10 2-5h2"/><path d="M15 12h6" stroke-dasharray="1.5 2.5"/><circle cx="6" cy="20" r="1.5"/><circle cx="12" cy="20" r="1.5"/><path d="M7.2 19l3.6-2M7.2 21l3.6-1"/></svg>
+        <strong>Cut the silence</strong>
+        <span>Takes out the quiet parts between what's said, so you don't cut them by hand.</span>
+      </button>
+    </div>
+
+    <label class="dropzone" id="rtDrop">
+      <input type="file" id="rtFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav" multiple hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span class="drop-text"><strong>Drop videos here</strong> or <span class="link">choose files</span></span>
+      <span class="drop-hint" id="rtDropHint">MP4, MKV, MOV, recordings from OBS, phones and more</span>
+    </label>
+
+    <div class="image-list file-list" id="rtList"></div>
+
+    <div class="image-options" id="rtOptions" hidden>
+      <div class="opt-row" id="rtFixRow">
+        <span class="opt-label">Size</span>
+        <div class="chips" data-key="fix">
+          <button data-value="">Normal size</button>
+          <button data-value="smooth">Smoothest editing (big files)</button>
+        </div>
+      </div>
+      <div class="opt-row" id="rtStyleRow">
+        <span class="opt-label">Lines</span>
+        <div class="chips" data-key="style">
+          <button data-value="normal">Normal lines</button>
+          <button data-value="short">Short lines (Shorts and TikTok style)</button>
+        </div>
+      </div>
+      <div class="opt-row" id="rtLangRow">
+        <span class="opt-label">Language</span>
+        <div class="chips" data-key="language">
+          <button data-value="">Find it by itself</button>
+          <button data-value="en">English</button>
+          <button data-value="no">Norwegian</button>
+          <button data-value="sv">Swedish</button>
+          <button data-value="da">Danish</button>
+          <button data-value="de">German</button>
+          <button data-value="es">Spanish</button>
+          <button data-value="fr">French</button>
+        </div>
+      </div>
+      <div class="opt-row" id="rtModelRow">
+        <span class="opt-label">Listening</span>
+        <div class="chips" data-key="model">
+          <button data-value="quick" title="About 480 MB to download the first time">Quick</button>
+          <button data-value="best" title="About 1.6 GB to download the first time. Slower, but catches more words, especially in Norwegian">Best (slower)</button>
+        </div>
+      </div>
+      <div class="opt-row" id="rtLevelRow">
+        <span class="opt-label">Background</span>
+        <div class="chips" data-key="level">
+          <button data-value="quiet">Quiet room</button>
+          <button data-value="normal">Normal</button>
+          <button data-value="noisy">Noisy (game sound, music, wind)</button>
+        </div>
+      </div>
+      <div class="opt-row" id="rtPauseRow">
+        <span class="opt-label">Cut pauses</span>
+        <div class="chips" data-key="pause">
+          <button data-value="0.3">Longer than 0.3 s (fast, punchy)</button>
+          <button data-value="0.5">Longer than 0.5 s</button>
+          <button data-value="1">Longer than 1 s (relaxed)</button>
+        </div>
+      </div>
+      <p class="opt-note" id="rtNote"></p>
+      <div class="image-go">
+        <button class="link" id="rtClear">Remove all</button>
+        <button class="convert" id="rtGo" type="button">
+          <span id="rtGoText">Start</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="rt-cards">
+      <div class="home-card rt-card" id="rtProject">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+          Project folder</h3>
+          <span class="rt-on" id="rtProjectOn" hidden>On</span>
+        </div>
+        <div id="rtProjectNone">
+          <p class="rt-text">One tidy folder for each video. VaultHub makes the folders, and while it's on, everything you make in VaultHub is saved into the right one.</p>
+          <div class="rt-project-new">
+            <label class="input"><input id="rtProjectName" placeholder="Name of the video, like Minecraft hardcore ep 3" autocomplete="off" spellcheck="false"></label>
+            <button type="button" class="convert" id="rtProjectMake"><span>Make project folder</span></button>
+          </div>
+        </div>
+        <div id="rtProjectSome" hidden>
+          <div class="rt-project-name" id="rtProjectTitle"></div>
+          <div class="rt-project-path" id="rtProjectPath"></div>
+          <div class="rt-folders" id="rtFolders"></div>
+          <div class="rt-project-buttons">
+            <button type="button" class="outline-button" id="rtProjectOpen">Open folder</button>
+            <button type="button" class="ghost-button" id="rtProjectOff">Turn off</button>
+            <button type="button" class="link" id="rtProjectAnother">New project</button>
+          </div>
+        </div>
+        <div class="rt-recent" id="rtRecent"></div>
+        <p class="error-text" id="rtProjectError" hidden></p>
+      </div>
+
+      <div class="home-card rt-card" id="rtInResolve">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg>
+          Buttons inside Resolve</h3>
+          <span class="rt-on" id="rtResolveOn" hidden>Added</span>
+        </div>
+        <p class="rt-text" id="rtResolveText">In Resolve, open <b>Workspace › Scripts</b>:</p>
+        <ul class="rt-steps">
+          <li><b>VaultHub Subtitles</b> listens to your timeline and puts the subtitles on it as Text+. You check the words in VaultHub first.</li>
+          <li><b>VaultHub Cut Silence</b> makes a new timeline from the clip you clicked in the Media Pool, with the quiet cut out.</li>
+          <li><b>VaultHub Import Project</b> brings your project folder in as bins.</li>
+        </ul>
+        <p class="rt-text rt-small">The first time, drag a <b>Text+</b> from Effects › Titles into the Media Pool. Style it how you like, and every subtitle copies it. Restart Resolve once if you don't see the buttons.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal" id="subsModal" hidden>
+    <div class="dialog subs-dialog" role="dialog" aria-labelledby="subsHeading">
+      <div class="subs-head">
+        <div>
+          <h2 id="subsHeading">Check the subtitles</h2>
+          <p class="sub" id="subsSub"></p>
+        </div>
+        <button type="button" class="icon-button" id="subsClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="subs-body">
+        <div class="subs-player">
+          <div class="subs-screen" id="subsScreen">
+            <video id="subsVideo" playsinline preload="auto"></video>
+            <div class="subs-caption" id="subsCaption"></div>
+          </div>
+          <div class="subs-wave" id="subsWave"><canvas id="subsCanvas"></canvas><div class="subs-marks" id="subsMarks"></div><div class="playhead" id="subsHead"></div></div>
+          <div class="subs-transport">
+            <button type="button" class="subs-play" id="subsPlay" title="Play or pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
+            <span class="subs-time" id="subsTime">0:00.0</span>
+            <span class="spacer"></span>
+            <span class="subs-shift">Move all
+              <button type="button" class="nudge" data-all="-0.1" title="All subtitles 0.1 second earlier">&minus;0.1s</button>
+              <button type="button" class="nudge" data-all="0.1" title="All subtitles 0.1 second later">+0.1s</button>
+            </span>
+          </div>
+          <p class="subs-tip">Click a line to jump to it. Fix words right in the list. If a line shows too early or late, use <b>◀ ▶</b> to nudge it, or play to the right spot and click <b>Start here</b>.</p>
+        </div>
+        <div class="subs-list" id="subsList"></div>
+      </div>
+      <div class="dialog-actions">
+        <span class="subs-saved" id="subsSaved"></span>
+        <span class="spacer"></span>
+        <button type="button" class="ghost-button" id="subsShow">Show .srt file</button>
+        <button type="button" class="convert" id="subsSend"><span>Put in Resolve</span></button>
+      </div>
+    </div>
+  </div>
+
   <section class="tab-page" id="filesTab" hidden>
     <h1 class="headline">Drop a video or song.<br><em>Make it what you need.</em></h1>
 
@@ -303,8 +478,6 @@
           <button data-value="flac">FLAC</button>
           <button data-value="mp4">MP4</button>
           <button data-value="gif">GIF</button>
-          <button data-value="resolve" title="A steady .MOV file that DaVinci Resolve edits smoothly, with the sound in sync">For Resolve</button>
-          <button data-value="srt" title="Listens to the speech and makes a subtitle file for Resolve, Premiere or YouTube">Subtitles</button>
         </div>
       </div>
       <div class="opt-row" id="fileQualityRow">
@@ -323,26 +496,6 @@
         <div class="custom-size" id="fileFitCustomBox" hidden>
           <input id="fileFitCustom" inputmode="decimal" placeholder="MB" autocomplete="off">
           <span>MB</span>
-        </div>
-      </div>
-      <div class="opt-row" id="fileLangRow">
-        <span class="opt-label">Language</span>
-        <div class="chips" id="fileLang">
-          <button data-value="">Find it by itself</button>
-          <button data-value="en">English</button>
-          <button data-value="no">Norwegian</button>
-          <button data-value="sv">Swedish</button>
-          <button data-value="da">Danish</button>
-          <button data-value="de">German</button>
-          <button data-value="es">Spanish</button>
-          <button data-value="fr">French</button>
-        </div>
-      </div>
-      <div class="opt-row" id="fileModelRow">
-        <span class="opt-label">Listening</span>
-        <div class="chips" id="fileModel">
-          <button data-value="quick" title="About 480 MB to download the first time">Quick</button>
-          <button data-value="best" title="About 1.6 GB to download the first time. Slower, but catches more words, especially in Norwegian and other languages">Best (slower)</button>
         </div>
       </div>
       <div class="opt-row" id="fileVolumeRow">
@@ -1556,6 +1709,7 @@
 <script src="fx.js"></script>
 <script src="games.js"></script>
 <script src="povs.js"></script>
+<script src="resolve.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>
