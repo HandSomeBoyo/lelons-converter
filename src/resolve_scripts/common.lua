@@ -159,5 +159,6 @@ local function split_tabs(line)
   return out
 end
 
-local resolve = Resolve()
+-- (Resolve's own scripts menu already has "resolve"; Resolve() and bmd.scriptapp are the other ways in)
+local resolve = resolve or (Resolve and Resolve()) or (bmd and bmd.scriptapp and bmd.scriptapp("Resolve"))
 local project = resolve:GetProjectManager():GetCurrentProject()
