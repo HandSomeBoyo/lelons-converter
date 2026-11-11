@@ -52,7 +52,17 @@ def build(name):
     with open(os.path.join(folder, "progress.ps1"), encoding="utf-8") as f:
         common = common.replace("{{PROGRESS}}", f.read())
     with open(os.path.join(folder, name), encoding="utf-8") as f:
-        return f.read().replace("{{COMMON}}", common)
+        script = f.read().replace("{{COMMON}}", common)
+    # Any mistake shows up as a message instead of only in Resolve's Console.
+    return ('print("VaultHub: starting...")\n'
+            "local ok, problem = pcall(function()\n" + script + "\nend)\n"
+            "if not ok then\n"
+            '  print("VaultHub: something went wrong: " .. tostring(problem))\n'
+            '  os.execute([[powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; '
+            "$top = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; "
+            "[void][System.Windows.Forms.MessageBox]::Show($top, 'Something went wrong in VaultHub. Open Workspace > Console in Resolve "
+            "and send a screenshot of the VaultHub lines.', 'VaultHub')\"]])\n"
+            "end\n")
 
 
 def install():

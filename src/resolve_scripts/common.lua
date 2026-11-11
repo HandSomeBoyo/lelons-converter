@@ -18,12 +18,24 @@ local function tell(text)
   print("VaultHub: " .. text)
   -- (inside PowerShell's '...': a ' is written twice, and " would end the command, so it becomes ')
   local safe = text:gsub('"', "'"):gsub("'", "''"):gsub("\n", "' + [char]10 + '")
-  run('powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName PresentationFramework; '
-    .. "[void][System.Windows.MessageBox]::Show(('" .. safe .. "'), 'VaultHub')\"")
+  -- (an invisible window that stays on top owns the box, so it never opens behind Resolve)
+  run('powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; '
+    .. "$top = New-Object System.Windows.Forms.Form -Property @{TopMost=$true}; "
+    .. "[void][System.Windows.Forms.MessageBox]::Show($top, ('" .. safe .. "'), 'VaultHub')\"")
+end
+
+-- Starts a program and doesn't wait for it. (Not through run: the program would keep run's pipe
+-- open, and run would wait until it closed.)
+local function start(command)
+  os.execute('start "" ' .. command)
 end
 
 local function sleep(seconds)
-  run("ping -n " .. (seconds + 1) .. " 127.0.0.1 >nul")
+  if bmd and bmd.wait then
+    bmd.wait(seconds)  -- Resolve's own wait, no extra program
+  else
+    run("ping -n " .. (seconds + 1) .. " 127.0.0.1 >nul")
+  end
 end
 
 local function json_text(s)
@@ -75,7 +87,7 @@ end
 local function connect()
   PORT, TOKEN = read_port()
   if PORT and ask("/api/rt-options", "{}") ~= "" then return true end
-  run('start "" ' .. LAUNCH)
+  start(LAUNCH)
   for _ = 1, 45 do
     sleep(1)
     PORT, TOKEN = read_port()
@@ -94,7 +106,7 @@ local function show_progress(id, title)
   if not f then return end
   f:write(PROGRESS)
   f:close()
-  run('start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. file .. '" -Port '
+  start('powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' .. file .. '" -Port '
     .. PORT .. " -Token " .. TOKEN .. " -Id " .. id .. ' -Title "' .. title .. '"')
 end
 
