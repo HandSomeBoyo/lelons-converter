@@ -216,7 +216,9 @@ class Tools(files.Files):
 
         if tool == "subtitles":
             temp = names.temp_path(folder, stem, ".srt")
-            parts = item.get("parts") or [(item["path"], trim[0] if trim else 0, length if trim else None, 0)]
+            # Every sound track (OBS often puts the game, your mic and Discord on separate ones).
+            parts = item.get("parts") or [(item["path"], trim[0] if trim else 0, length if trim else None, 0, stream)
+                                          for stream in range(max(1, item.get("audioTracks") or 1))]
             try:
                 cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
                                                 gpu=job.get("device") != "cpu")

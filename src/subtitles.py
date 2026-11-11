@@ -48,6 +48,8 @@ GPU_PACKAGES = (("nvidia-cuda-runtime-cu12", "12.9.79"), ("nvidia-cublas-cu12", 
 MODELS = {
     "quick": "Systran/faster-whisper-small",
     "best": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    # "best" on a graphics card: the full big model, the most accurate (about 3 GB).
+    "large": "Systran/faster-whisper-large-v3",
 }
 SAMPLE_RATE = 16000
 
@@ -294,6 +296,8 @@ def get_ready(model, progress, gpu=True):
         model = "quick"
     global _gpu_failed
     gpu = gpu and not _gpu_failed and has_nvidia()
+    if model == "best" and gpu:
+        model = "large"
     with _ready_lock:
         cached = _model_cache.get(model)
         if cached and (cached.on_gpu or not gpu):
@@ -371,20 +375,30 @@ def read_audio(path, start=0.0, length=None, stream=0, on_progress=None):
 
 
 def listen(model, audio, language, on_progress):
-    """Words with times: [(start, end, word)]. Listens to several pieces at once (much faster)."""
-    from faster_whisper import BatchedInferencePipeline
+    """Words with times: [(start, end, word)].
 
+    On the graphics card it listens in order, using what was said before to understand what comes
+    next (the most accurate way). On the processor it listens to several pieces at once (faster)."""
     seconds = len(audio) / SAMPLE_RATE
-    batched = BatchedInferencePipeline(model=model)
-    segments, _info = batched.transcribe(
-        audio, language=language or None, word_timestamps=True, vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500}, batch_size=16 if getattr(model, "on_gpu", False) else 8)
+    common = dict(language=language or None, word_timestamps=True, vad_filter=True,
+                  vad_parameters={"min_silence_duration_ms": 500}, beam_size=5,
+                  language_detection_segments=4)  # find the language from more than the first 30 s
+    if getattr(model, "on_gpu", False):
+        segments, _info = model.transcribe(
+            audio, condition_on_previous_text=True, no_speech_threshold=0.6, log_prob_threshold=-1.0,
+            compression_ratio_threshold=2.4,
+            hallucination_silence_threshold=2.0,  # drops "words" it imagines in game noise or silence
+            **common)
+    else:
+        from faster_whisper import BatchedInferencePipeline
+
+        segments, _info = BatchedInferencePipeline(model=model).transcribe(audio, batch_size=8, **common)
     words = []
     on_progress(0)
     with _gentle():
         for segment in segments:  # (it listens while this loop runs)
             for w in segment.words or []:
-                if w.word.strip():
+                if w.word.strip() and getattr(w, "probability", 1) >= 0.05:
                     words.append((w.start, w.end, w.word))
             if seconds:
                 on_progress(min(99.0, segment.end * 100 / seconds))
@@ -489,9 +503,9 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     import numpy as np
 
     pieces, total = [], 0.0
-    for i, (path, start, length, at) in enumerate(parts):
+    for i, (path, start, length, at, *rest) in enumerate(parts):
         report("Reading the sound", i * 100 / max(1, len(parts)))
-        audio = read_audio(path, start, length)
+        audio = read_audio(path, start, length, stream=rest[0] if rest else 0)
         if length:
             audio = audio[: int(length * SAMPLE_RATE)]
         pieces.append((at, audio))
@@ -503,7 +517,9 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
         begin = max(0, int(at * SAMPLE_RATE))
         end = min(len(mix), begin + len(audio))
         mix[begin:end] += audio[: end - begin]  # clips on several tracks play at the same time
-    np.clip(mix, -1.0, 1.0, out=mix)
+    peak = float(np.max(np.abs(mix))) if len(mix) else 0.0
+    if peak > 1.0:  # several sound tracks added up: turn it down instead of cutting off the loud bits
+        mix /= peak
     if sound_copy:
         _save_wav(mix, sound_copy)  # for the subtitle editor, when there's no single file to play
     where = " on the graphics card" if getattr(whisper, "on_gpu", False) else ""

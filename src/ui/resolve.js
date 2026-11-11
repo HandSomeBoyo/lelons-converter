@@ -24,7 +24,7 @@ const RT_NOTES = {
     ? "Makes an editing file (DNxHR) that plays smoothly even on a slow PC. Files get about 10 times bigger."
     : "A steady frame rate, sound Resolve always reads, and every sound track (game, mic, Discord) kept separate.",
   subtitles: (o) => "Listens on your PC (nothing is uploaded). Then you check the words, and VaultHub makes a timeline with your video and the subtitles for Resolve. "
-    + `The first time it downloads the speech model, ${o.model === "best" ? "about 1.6 GB" : "about 480 MB"}`
+    + `The first time it downloads the speech model, ${o.model !== "best" ? "about 480 MB" : rtNvidia && o.device !== "cpu" ? "about 3 GB" : "about 1.6 GB"}`
     + (rtNvidia && o.device !== "cpu" ? ", plus NVIDIA's tools for your graphics card (about 1.3 GB)." : "."),
   silence: (o) => o.cutAs === "video"
     ? "Makes a new video without the quiet parts."
@@ -545,13 +545,15 @@ $("subsSend").addEventListener("click", async () => {
   note.innerHTML = "";
   const text = document.createElement("span");
   text.innerHTML = "Done! In Resolve: <b>File › Import › Timeline</b>, and pick ";
+  const tip = document.createElement("div");
+  tip.innerHTML = "Then right-click the subtitle track's name (ST1) › <b>Convert Subtitles to Text+</b> to get Text+ you can style and animate.";
   const name = document.createElement("b");
   name.textContent = `"${res.name}"`;
   const show = document.createElement("button");
   show.className = "link";
   show.textContent = "Show it";
   show.onclick = () => api("/api/rt-show", { id: subs.id, timeline: true });
-  note.append(text, name, ". ", show);
+  note.append(text, name, ". ", show, tip);
   refresh();
 });
 
