@@ -38,6 +38,7 @@ import docs  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
+import fcpxml  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
 import resolve  # noqa: E402
@@ -637,9 +638,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **tools.send(data.get("id"))})
             # ---- from the buttons inside Resolve
             elif path == "/api/resolve-subtitles":
+                for p in data.get("parts") or []:
+                    if "length" not in p:  # a whole clip from the Media Pool
+                        p["length"] = media.probe(str(p.get("path") or ""))["duration"]
                 parts = [(str(p["path"]), max(0.0, float(p.get("from") or 0)), float(p["length"]), float(p.get("at") or 0))
                          for p in data.get("parts") or [] if float(p.get("length") or 0) > 0]
-                name = str(data.get("name") or "Timeline")[:100] + " (Resolve timeline)"
+                name = str(data.get("name") or "Timeline")[:100] + (" (Resolve clip)" if data.get("clip") else " (Resolve timeline)")
                 return self.send_json({"ok": True, "id": tools.add_from_resolve("subtitles", name, parts)})
             elif path == "/api/resolve-silence":
                 found = media.probe(str(data.get("path") or ""))
@@ -652,6 +656,16 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/resolve-cues":
                 item = tools.cues(data.get("id"))
                 return self.send_body(tools.cue_text(item).encode("utf-8"), "text/plain; charset=utf-8")
+            elif path == "/api/resolve-fcpxml":
+                item = tools.cues(data.get("id"))
+                name = re.sub(r'[<>:"/\\|?*]+', " ", str(data.get("name") or "Subtitles")).strip()[:80] or "Subtitles"
+                folder = item["job"]["folder"] if os.path.isdir(item["job"].get("folder") or "") else resolvetools.OUT_FOLDER
+                os.makedirs(folder, exist_ok=True)
+                target = os.path.join(folder, f"{name} {item['id']}.fcpxml")
+                clip = str(data.get("clip") or "")
+                count = fcpxml.make(item["cues"], target, name, clip if os.path.isfile(clip) else None,
+                                    float(data.get("fps") or 0), float(data.get("offset") or 0))
+                return self.send_json({"ok": True, "path": target, "count": count})
             elif path == "/api/resolve-keep":
                 item = tools.find(data.get("id"))
                 keep = (item or {}).get("keep") or []

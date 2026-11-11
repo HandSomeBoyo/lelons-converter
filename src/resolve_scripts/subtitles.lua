@@ -1,17 +1,18 @@
--- VaultHub Subtitles: subtitles as Text+ on your timeline, each at the frame it's spoken.
--- If you just clicked "Put in Resolve" in VaultHub, those subtitles are used. Otherwise VaultHub
--- listens to the timeline, you check the words in VaultHub, then they come in here.
+-- VaultHub Subtitles: subtitles as Text+ titles, each at the frame it's spoken.
+-- Click a video in the Media Pool first to get a new timeline with that video and its subtitles.
+-- With nothing clicked, VaultHub listens to the timeline that's open. If you just clicked
+-- "Put in Resolve" in VaultHub, those subtitles are used.
 
 {{COMMON}}
 
 local timeline = project and project:GetCurrentTimeline()
-if not timeline then
-  tell("Open a timeline first, then run VaultHub Subtitles again.")
+local pool = project and project:GetMediaPool()
+if not pool then
+  tell("Open a project first, then run VaultHub Subtitles again.")
   return
 end
-local fps = frame_rate(timeline)
-local first = timeline:GetStartFrame()
-local pool = project:GetMediaPool()
+local fps = timeline and frame_rate(timeline) or 30
+local first = timeline and timeline:GetStartFrame() or 0
 
 -- ---------------------------------------------------------------- the Text+ to copy
 
@@ -31,11 +32,19 @@ local function find_template(folder)
   return nil
 end
 
+-- Optional: a Text+ you styled yourself, copied for every subtitle (otherwise Resolve's own Text+ is used).
 local template = find_template(pool:GetRootFolder())
-if not template then
-  tell("One-time setup: in the Edit page open Effects › Titles, and drag \"Text+\" into your Media Pool. "
-    .. "Style it how you like (font, size, color, position): all subtitles will copy it.\n\nThen run VaultHub Subtitles again.")
-  return
+
+-- The video clicked in the Media Pool, if any.
+local function clicked_clip()
+  local ok, list = pcall(function() return pool:GetSelectedClips() end)
+  if not ok or type(list) ~= "table" then return nil end
+  for _, clip in pairs(list) do
+    local kind = tostring(clip:GetClipProperty("Type") or "")
+    local path = tostring(clip:GetClipProperty("File Path") or "")
+    if path ~= "" and (kind:find("Video") or kind:find("Audio")) then return clip end
+  end
+  return nil
 end
 
 if not connect() then return end
@@ -43,6 +52,7 @@ if not connect() then return end
 -- ---------------------------------------------------------------- which subtitles
 
 local cue_id, place_at = nil, nil  -- place_at(seconds in the subtitles) -> timeline frame
+local clip, clip_path, pending_offset = nil, nil, 0  -- a Media Pool clip (or VaultHub file) the subtitles are for
 
 local pending = ask("/api/resolve-pending", "{}")
 local pending_id = json_field(pending, "id")
@@ -51,8 +61,9 @@ if pending_id and pending_id ~= "" then
   local path = json_field(pending, "path") or ""
   local name = (json_field(pending, "name") or ""):lower()
   local offset = tonumber(json_field(pending, "offset") or "0") or 0
+  clip_path, pending_offset = path, offset
   local lower = path:lower():gsub("/", "\\")
-  for _, kind in ipairs({ "video", "audio" }) do
+  for _, kind in ipairs(timeline and { "video", "audio" } or {}) do
     for i = 1, timeline:GetTrackCount(kind) do
       for _, item in ipairs(timeline:GetItemListInTrack(kind, i) or {}) do
         local media = item:GetMediaPoolItem()
@@ -67,11 +78,22 @@ if pending_id and pending_id ~= "" then
       end
     end
   end
-  if not place_at then
-    print("VaultHub: that file isn't on this timeline, so the subtitles start where the timeline starts.")
-    place_at = function(t) return first + math.floor(t * fps + 0.5) end
-  end
   cue_id = pending_id
+elseif clicked_clip() then
+  clip = clicked_clip()
+  clip_path = tostring(clip:GetClipProperty("File Path"))
+  local answer = ask("/api/resolve-subtitles", '{"clip":true,"name":' .. json_text(clip:GetName())
+    .. ',"parts":[{"path":' .. json_text(clip_path) .. "}]}")
+  cue_id = json_field(answer, "id")
+  if not cue_id then
+    tell(json_field(answer, "error") or "VaultHub didn't answer. Make sure it's open and try again.")
+    return
+  end
+  print("VaultHub: listening to " .. clip:GetName() .. ". Check the words in VaultHub, then click \"Put in Resolve\".")
+  if not wait_for(cue_id, { queued = true, active = true, checking = true }, "VaultHub Subtitles") then return end
+elseif not timeline then
+  tell("Click a video in the Media Pool (or open a timeline), then run VaultHub Subtitles again.")
+  return
 else
   -- Listen to the whole timeline: every clip with sound, where it is on the timeline.
   local parts = {}
@@ -126,6 +148,61 @@ if #cues == 0 then
   tell("There were no subtitles to put in.")
   return
 end
+
+-- ---------------------------------------------------------------- the Resolve way: a timeline file
+
+-- Resolve brings in a timeline file with the subtitles as Text+ titles: no setup needed.
+local function import_timeline()
+  local name = (clip and clip:GetName() or clip_path and clip_path:match("[^\\/]+$") or (timeline and timeline:GetName())
+    or "Video"):gsub("%.%w+$", "") .. " (subtitles)"
+  local answer = ask("/api/resolve-fcpxml", '{"id":' .. json_text(cue_id) .. ',"name":' .. json_text(name)
+    .. ',"clip":' .. json_text(clip_path or "") .. ',"fps":' .. fps .. ',"offset":' .. (clip_path and pending_offset or 0) .. "}")
+  local file = json_field(answer, "path")
+  if not file then
+    tell(json_field(answer, "error") or "VaultHub couldn't make the subtitles file.")
+    return
+  end
+  local made = pool:ImportTimelineFromFile(file, { timelineName = name, importSourceClips = true })
+  if not made then
+    tell("Resolve didn't take the subtitles file. You can bring it in yourself: File › Import › Timeline, and pick\n" .. file)
+    return
+  end
+  project:SetCurrentTimeline(made)
+  -- Subtitle look: low in the picture, like normal subtitles. (Style any of them in the Inspector.)
+  local count = 0
+  for i = 1, made:GetTrackCount("video") do
+    for _, item in ipairs(made:GetItemListInTrack("video", i) or {}) do
+      pcall(function()
+        local comp = item:GetFusionCompByIndex(1)
+        local tool = comp and (comp:FindToolByID("TextPlus") or (comp:GetToolList(false, "TextPlus") or {})[1])
+        if tool then
+          tool:SetInput("Center", { 0.5, 0.12 })
+          count = count + 1
+        end
+      end)
+    end
+  end
+  if clip_path then
+    tell("Done! The new timeline \"" .. name .. "\" has your video with the subtitles above it as Text+.")
+  else
+    tell("Done! The subtitles are on a new timeline, \"" .. name .. "\". To put them on your own timeline: "
+      .. "select them there, copy (Ctrl+C), go back to your timeline and paste them at the start (Ctrl+V).")
+  end
+end
+
+if not template or not timeline or (clip and not place_at) then
+  import_timeline()
+  return
+end
+
+if not place_at then
+  if clip_path then
+    print("VaultHub: that file isn't on this timeline, so the subtitles start where the timeline starts.")
+  end
+  place_at = function(t) return first + math.floor(t * fps + 0.5) end
+end
+
+-- ---------------------------------------------------------------- your own Text+: copied for each line
 
 timeline:AddTrack("video")
 local track = timeline:GetTrackCount("video")

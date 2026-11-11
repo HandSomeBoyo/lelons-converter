@@ -6,7 +6,7 @@ const CHANGES = [
     "New Resolve tab: tools that make editing in DaVinci Resolve easier, all in one place.",
     "Fix for Resolve: drop in a video from OBS, a game or your phone and get a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
     "Subtitles: VaultHub listens to the speech and makes subtitles, all on your PC. Then you can check them next to the video, fix words and move a line a little earlier or later before they go into Resolve.",
-    "In Resolve the subtitles come in as Text+ titles on their own track, so you can style them however you like.",
+    "In Resolve, click a video in the Media Pool and run VaultHub Subtitles: you get a new timeline with the video and its subtitles as Text+ titles, ready to style. No setup needed.",
     "Cut the silence: finds the quiet parts and cuts them out, either as a new video or as a new timeline in Resolve where you can still change every cut.",
     "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place, and one click in Resolve brings them all in.",
     "In Resolve, open Workspace › Scripts to find VaultHub Subtitles, VaultHub Cut Silence and VaultHub Import Project. While they work, a small window shows how far along it is, with a Cancel button. (Restart Resolve once if you don't see them.)",
