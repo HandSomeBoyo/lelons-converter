@@ -38,7 +38,6 @@ import docs  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
-import fcpxml  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
 import resolve  # noqa: E402
@@ -584,7 +583,7 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
     def handle_resolve(self, data):
-        """The Resolve tab (rt-), the buttons inside DaVinci Resolve (resolve-) and project folders (project-)."""
+        """The Resolve tab (rt-) and project folders (project-)."""
         tools = resolvetools.get()
         path = self.path
         try:
@@ -609,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
                 tools.convert(data.get("items") or [], data.get("options") or {}, save_folder(data, kind))
                 return self.send_json({"ok": True})
             if path == "/api/rt-options":
-                return self.send_json({"ok": True, "options": resolvetools.load_options(), "resolve": resolve.installed()})
+                return self.send_json({"ok": True, "options": resolvetools.load_options()})
             if path == "/api/rt-remove":
                 tools.remove(data.get("id"))
             elif path == "/api/rt-cancel":
@@ -618,8 +617,9 @@ class Handler(BaseHTTPRequestHandler):
                 tools.clear()
             elif path == "/api/rt-show":
                 item = tools.find(data.get("id"))
-                if item and item["out"]:
-                    show_in_folder(item["out"])
+                shown = item and (item.get("timeline") if data.get("timeline") else item["out"])
+                if shown and os.path.exists(shown):
+                    show_in_folder(shown)
             elif path == "/api/rt-cues":
                 item = tools.cues(data.get("id"))
                 media_info = {}
@@ -636,60 +636,6 @@ class Handler(BaseHTTPRequestHandler):
                 tools.save_cues(data.get("id"), data.get("cues") or [])
             elif path == "/api/rt-send":
                 return self.send_json({"ok": True, **tools.send(data.get("id"))})
-            # ---- from the buttons inside Resolve
-            elif path == "/api/resolve-subtitles":
-                for p in data.get("parts") or []:
-                    if "length" not in p:  # a whole clip from the Media Pool
-                        p["length"] = media.probe(str(p.get("path") or ""))["duration"]
-                parts = [(str(p["path"]), max(0.0, float(p.get("from") or 0)), float(p["length"]), float(p.get("at") or 0))
-                         for p in data.get("parts") or [] if float(p.get("length") or 0) > 0]
-                name = str(data.get("name") or "Timeline")[:100] + (" (Resolve clip)" if data.get("clip") else " (Resolve timeline)")
-                return self.send_json({"ok": True, "id": tools.add_from_resolve("subtitles", name, parts)})
-            elif path == "/api/resolve-silence":
-                found = media.probe(str(data.get("path") or ""))
-                if not found["audio"]:
-                    raise ValueError("This clip has no sound, so there's no quiet to find.")
-                name = os.path.basename(str(data["path"])) + " (cut silence in Resolve)"
-                return self.send_json({"ok": True, "id": tools.add_from_resolve("silence", name, [(str(data["path"]), 0, found["duration"], 0)])})
-            elif path == "/api/resolve-job":
-                return self.send_json({"ok": True, **tools.status(data.get("id"))})
-            elif path == "/api/resolve-cues":
-                item = tools.cues(data.get("id"))
-                return self.send_body(tools.cue_text(item).encode("utf-8"), "text/plain; charset=utf-8")
-            elif path == "/api/resolve-install":
-                if not resolve.scripts_folder():
-                    raise ValueError("Can't find DaVinci Resolve on this PC. Open Resolve once, then try again.")
-                if not resolve.install(always=True):
-                    raise ValueError("Couldn't update the buttons. Close Resolve and try again.")
-                return self.send_json({"ok": True, "message": "Updated! Restart Resolve to use the newest buttons."})
-            elif path == "/api/resolve-fcpxml":
-                item = tools.cues(data.get("id"))
-                name = re.sub(r'[<>:"/\\|?*]+', " ", str(data.get("name") or "Subtitles")).strip()[:80] or "Subtitles"
-                folder = item["job"]["folder"] if os.path.isdir(item["job"].get("folder") or "") else resolvetools.OUT_FOLDER
-                os.makedirs(folder, exist_ok=True)
-                target = os.path.join(folder, f"{name} {item['id']}.fcpxml")
-                clip = str(data.get("clip") or "")
-                count = fcpxml.make(item["cues"], target, name, clip if os.path.isfile(clip) else None,
-                                    float(data.get("fps") or 0), float(data.get("offset") or 0))
-                return self.send_json({"ok": True, "path": target, "count": count})
-            elif path == "/api/resolve-keep":
-                item = tools.find(data.get("id"))
-                keep = (item or {}).get("keep") or []
-                return self.send_body("".join(f"{a:.3f}\t{b:.3f}\n" for a, b in keep).encode(), "text/plain; charset=utf-8")
-            elif path == "/api/resolve-pending":
-                item = tools.take_pending()
-                if not item:
-                    return self.send_json({"ok": True, "id": ""})
-                trim = (item.get("job") or {}).get("trim")
-                return self.send_json({"ok": True, "id": item["id"], "path": item["path"], "name": item["name"],
-                                       "offset": trim[0] if trim else 0})
-            elif path == "/api/resolve-project":
-                found = project.contents()
-                if not found:
-                    return self.send_body(b"", "text/plain; charset=utf-8")
-                lines = [found["name"]] + [f"{b['name']}\t{f}" for b in found["bins"] for f in b["files"]] + \
-                        [f"{b['name']}\t" for b in found["bins"] if not b["files"]]
-                return self.send_body(("\n".join(lines) + "\n").encode("utf-8"), "text/plain; charset=utf-8")
             # ---- project folders
             elif path == "/api/project-make":
                 parent = pick_folder(state.folder, "Where should the project folder go?")
@@ -1518,7 +1464,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/files-clear":
             local_files.clear()
             self.send_json({"ok": True})
-        elif self.path.startswith(("/api/rt-", "/api/resolve-", "/api/project-")):
+        elif self.path.startswith(("/api/rt-", "/api/project-")):
             self.handle_resolve(data)
         elif self.path == "/api/file-show":
             item = local_files.find(data.get("id"))
@@ -1791,7 +1737,7 @@ def main():
         names.remove_all_leftovers(started, state.folder)
         updater.remove_old_setups()
         sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
-        resolve.install()  # the VaultHub Subtitles button in DaVinci Resolve's Scripts menu
+        resolve.uninstall()  # the old test buttons in Resolve's Scripts menu (the free Resolve 21 can't run them)
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
         if state.auto_update:
             start_background(check_for_updates)

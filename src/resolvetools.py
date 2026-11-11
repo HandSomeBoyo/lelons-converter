@@ -2,27 +2,27 @@
 
 - Fix for Resolve: a steady .mov that Resolve edits smoothly (media.convert_for_resolve).
 - Subtitles: listens to the speech (subtitles.py). Checked and fixed in the
-  subtitle editor, then put on the Resolve timeline as Text+ by the
-  "VaultHub Subtitles" button in Resolve, or dragged in as an .srt.
-- Cut the silence: a video without the quiet parts (silence.py), or a new
-  Resolve timeline without them from the "VaultHub Cut Silence" button.
+  subtitle editor, then "Put in Resolve" makes a timeline file (fcpxml.py) with
+  the video and the subtitles as titles, for File > Import > Timeline in Resolve.
+- Cut the silence: a timeline file with the quiet parts cut out (every cut can
+  still be changed in Resolve), or a new video without them (silence.py).
 
 The list works like the Files tab's (same adding, removing and stopping), so
-it's built on files.Files. The buttons in Resolve (resolve_*.lua) add their
-own jobs here too, so you can see how they're going.
+it's built on files.Files. (Buttons inside Resolve can't be used: the free
+Resolve 21 turns off what scripts would need to reach VaultHub.)
 """
 
 import itertools
 import json
 import os
+import shutil
 import threading
-import time
 
+import fcpxml
 import files
 import history
 import media
 import names
-import project
 import settings
 import silence
 import subtitles
@@ -30,7 +30,7 @@ import subtitles
 TOOLS = ("fix", "subtitles", "silence")
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
-DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "quick", "level": "normal", "pause": "0.5"}
+DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "quick", "level": "normal", "pause": "0.5", "cutAs": "timeline"}
 
 
 def load_options():
@@ -52,6 +52,8 @@ def load_options():
         o["level"] = saved["level"]
     if saved.get("pause") in silence.PAUSES:
         o["pause"] = saved["pause"]
+    if saved.get("cutAs") in ("timeline", "video"):
+        o["cutAs"] = saved["cutAs"]
     return o
 
 
@@ -77,7 +79,6 @@ class Tools(files.Files):
     def __init__(self):
         super().__init__()
         self.ids = (f"r{n}" for n in itertools.count(1))  # apart from the Files tab's ids
-        self.pending = None  # (item id, when): subtitles waiting for the Resolve button
 
     # ---- the list
 
@@ -95,6 +96,7 @@ class Tools(files.Files):
         extra["hasCues"] = bool(item.get("cues"))
         extra["outName"] = os.path.basename(item["out"]) if item.get("out") else ""
         extra["kept"] = item.get("keptSeconds")
+        extra["timeline"] = os.path.basename(item["timeline"]) if item.get("timeline") else ""
         return super()._public(item) | extra
 
     def convert(self, picks, options, folder):
@@ -120,61 +122,43 @@ class Tools(files.Files):
                             trimLabel=f"{files._clock(trim[0])} to {files._clock(trim[1])}" if trim else "")
             self.wake.notify()
 
-    # ---- from the buttons in Resolve
-
-    def add_from_resolve(self, kind, name, parts):
-        """kind "subtitles": parts [(path, from, length, at)] of a timeline. kind "silence": one file, the
-        parts to keep are worked out. Returns the job's id; Resolve asks for its status."""
-        if not parts:
-            raise ValueError("There's nothing to listen to.")
-        for path, *_ in parts:
-            if not os.path.isfile(path):
-                raise ValueError(f"Can't find {os.path.basename(path)} on this PC.")
-        o = load_options()
-        length = max(at + length for _, _, length, at in parts)
-        tool = "subtitles" if kind == "subtitles" else "silence"
-        item = {
-            "id": next(self.ids), "name": name, "path": parts[0][0], "copied": False, "bytes": 0, "seconds": length,
-            "video": False, "audio": True, "width": 0, "height": 0, "fps": 0, "audioTracks": 1, "thumb": "",
-            "thumbPath": "", "status": "queued", "progress": 0, "message": "Waiting...", "trimLabel": "", "out": "",
-            "run": 1, "cancel": False, "fromResolve": kind, "parts": parts, "tool": tool, "cues": None, "sent": False,
-            "soundCopy": "", "keep": None,
-            "job": {"format": tool, "quality": "", "targetMb": None, "normalize": False, "trim": None,
-                    "folder": project.folder_for("subtitles", OUT_FOLDER), **o},
-        }
-        with self.lock:
-            self.items.append(item)
-            self.wake.notify()
-        return item["id"]
-
     def status(self, file_id):
         item = self.find(file_id)
         if not item:
             return {"status": "gone", "message": "It was removed from VaultHub."}
         status = item["status"]
-        if status == "done" and item["tool"] == "subtitles" and item.get("fromResolve") and not item.get("sent"):
-            status = "checking"  # waiting for "Put in Resolve" in the subtitle editor
         return {"status": status, "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
     def send(self, file_id):
-        """"Put in Resolve" in the subtitle editor."""
+        """"Put in Resolve" in the subtitle editor: a timeline file with the video and its subtitles."""
         item = self.find(file_id)
         if not item or not item.get("cues"):
             raise ValueError("There are no subtitles to send yet.")
+        source = item["path"]
+        if not os.path.isfile(source):
+            raise ValueError("Can't find the video anymore.")
+        folder = item["job"]["folder"]
+        os.makedirs(folder, exist_ok=True)
+        stem = os.path.splitext(os.path.basename(item["name"]))[0] or "Video"
+        if item.get("copied"):
+            # A dropped file is a copy VaultHub cleans up later: keep it next to the timeline instead.
+            keep = os.path.join(folder, os.path.basename(item["name"]))
+            if not os.path.exists(keep):
+                try:
+                    os.replace(source, keep)
+                except OSError:
+                    shutil.copy2(source, keep)
+                with self.lock:
+                    item.update(path=keep, copied=False)
+                source = keep
+            elif os.path.getsize(keep) == os.path.getsize(source):
+                source = keep
+        trim = item["job"].get("trim")
+        target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
+        fcpxml.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
         with self.lock:
-            item["sent"] = True
-            if not item.get("fromResolve"):
-                self.pending = (item["id"], time.time())
-        return {"waiting": bool(item.get("fromResolve"))}
-
-    def take_pending(self):
-        """For the Resolve button: subtitles sent from the Resolve tab in the last hour, if any."""
-        with self.lock:
-            if not self.pending or time.time() - self.pending[1] > 3600:
-                return None
-            item = next((i for i in self.items if i["id"] == self.pending[0]), None)
-            self.pending = None
-        return item
+            item.update(sent=True, timeline=target)
+        return {"file": target, "name": os.path.basename(target)}
 
     # ---- the subtitle editor
 
@@ -231,25 +215,20 @@ class Tools(files.Files):
         if tool == "subtitles":
             temp = names.temp_path(folder, stem, ".srt")
             parts = item.get("parts") or [(item["path"], trim[0] if trim else 0, length if trim else None, 0)]
-            sound = ""
-            if item.get("fromResolve"):  # no single file to play in the editor: keep the sound it listened to
-                os.makedirs(files.FOLDER, exist_ok=True)
-                sound = os.path.join(files.FOLDER, f"sound-{item['id']}.wav")
             try:
-                cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
-                                                sound_copy=sound or None)
+                cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report)
                 path = names.finish(temp)
             except BaseException:
                 if os.path.exists(temp):
                     os.remove(temp)
                 raise
-            self._update(item, cues=cues, soundCopy=sound, message=f"{len(cues)} subtitles. Check them, then put them in Resolve.")
+            self._update(item, cues=cues, message=f"{len(cues)} subtitles. Check them, then put them in Resolve.")
             return path
 
         if tool == "silence":
             source = item["path"]
             start = trim[0] if trim else 0
-            share = 1 if item.get("fromResolve") else 0.3  # (the rest is for cutting the video)
+            share = 0.3 if job.get("cutAs") == "video" else 1  # (the rest is for cutting the video)
             quiet = silence.find_quiet(source, job["level"], job["pause"], item["seconds"] or length,
                                        lambda p: report("Finding the quiet parts", p * share))
             keep = silence.parts_to_keep(quiet, item["seconds"] or length)
@@ -257,8 +236,10 @@ class Tools(files.Files):
                 keep = [(max(s, start), min(e, trim[1])) for s, e in keep if e > start and s < trim[1]]
             kept = sum(e - s for s, e in keep)
             self._update(item, keep=keep, keptSeconds=kept)
-            if item.get("fromResolve"):
-                return ""
+            if job.get("cutAs") != "video":
+                target = names.temp_path(folder, stem + " (no silence)", ".fcpxml")
+                fcpxml.make_cuts(source, keep, target, stem + " (no silence)")
+                return names.finish(target)
             temp = names.temp_path(folder, stem + " (no silence)", ".mov")
             try:
                 silence.cut(source, keep, temp, on_progress=lambda p: report("Cutting", 30 + p * 0.7))
@@ -298,7 +279,9 @@ class Tools(files.Files):
             if tool == "silence":
                 before, after = item["seconds"] or 0, item.get("keptSeconds") or 0
                 message = f"Cut {files._clock(max(0, before - after))} of quiet, {files._clock(after)} left"
-                if path:
+                if path.endswith(".fcpxml"):
+                    message += " · In Resolve: File › Import › Timeline"
+                elif path:
                     message = f"Saved as {os.path.basename(path)} · " + message
             elif tool == "subtitles":
                 message = item["message"]

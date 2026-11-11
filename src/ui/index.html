@@ -294,7 +294,7 @@
       <button type="button" class="rt-tool" data-tool="subtitles">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 11h4M13 11h4M7 15h7M16 15h1"/></svg>
         <strong>Subtitles</strong>
-        <span>Listens to the speech, lets you fix it, and puts it on your timeline as Text+.</span>
+        <span>Listens to the speech, lets you fix it, and makes a timeline with the subtitles for Resolve.</span>
       </button>
       <button type="button" class="rt-tool" data-tool="silence">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l2-5 2 10 2-5h2"/><path d="M15 12h6" stroke-dasharray="1.5 2.5"/><circle cx="6" cy="20" r="1.5"/><circle cx="12" cy="20" r="1.5"/><path d="M7.2 19l3.6-2M7.2 21l3.6-1"/></svg>
@@ -355,6 +355,13 @@
           <button data-value="noisy">Noisy (game sound, music, wind)</button>
         </div>
       </div>
+      <div class="opt-row" id="rtCutAsRow">
+        <span class="opt-label">Make</span>
+        <div class="chips" data-key="cutAs">
+          <button data-value="timeline">A timeline for Resolve (change any cut)</button>
+          <button data-value="video">A new video</button>
+        </div>
+      </div>
       <div class="opt-row" id="rtPauseRow">
         <span class="opt-label">Cut pauses</span>
         <div class="chips" data-key="pause">
@@ -404,20 +411,14 @@
       <div class="home-card rt-card" id="rtInResolve">
         <div class="home-card-head"><h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg>
-          Buttons inside Resolve</h3>
-          <span class="rt-on" id="rtResolveOn" hidden>Added</span>
+          Into Resolve</h3>
         </div>
-        <p class="rt-text" id="rtResolveText">In Resolve, open <b>Workspace › Scripts</b>:</p>
         <ul class="rt-steps">
-          <li><b>VaultHub Subtitles</b>: click a video in the Media Pool first, and you get a new timeline with the video and its subtitles as Text+. You check the words in VaultHub first.</li>
-          <li><b>VaultHub Cut Silence</b> makes a new timeline from the clip you clicked in the Media Pool, with the quiet cut out.</li>
-          <li><b>VaultHub Import Project</b> brings your project folder in as bins.</li>
+          <li><b>Subtitles</b>: check the words, click <b>Put in Resolve</b>, then in Resolve use <b>File › Import › Timeline</b>. You get your video with the subtitles above it as titles you can style.</li>
+          <li><b>Cut the silence</b>: same thing, <b>File › Import › Timeline</b>. Every cut can still be changed.</li>
+          <li><b>Fix for Resolve</b> videos: drag them straight into the Media Pool.</li>
+          <li><b>Project folder</b>: drag the whole folder into the Media Pool, and Resolve makes a bin for each folder.</li>
         </ul>
-        <p class="rt-text rt-small">A small window shows how far along it is. Restart Resolve once if you don't see the buttons.</p>
-        <div class="rt-install">
-          <button type="button" class="outline-button" id="rtInstall">Update Resolve buttons</button>
-          <span class="rt-text rt-small" id="rtInstallNote"></span>
-        </div>
       </div>
     </div>
   </section>

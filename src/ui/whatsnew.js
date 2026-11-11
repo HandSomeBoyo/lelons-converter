@@ -5,11 +5,10 @@ const CHANGES = [
   { version: "2.24.0", items: [
     "New Resolve tab: tools that make editing in DaVinci Resolve easier, all in one place.",
     "Fix for Resolve: drop in a video from OBS, a game or your phone and get a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
-    "Subtitles: VaultHub listens to the speech and makes subtitles, all on your PC. Then you can check them next to the video, fix words and move a line a little earlier or later before they go into Resolve.",
-    "In Resolve, click a video in the Media Pool and run VaultHub Subtitles: you get a new timeline with the video and its subtitles as Text+ titles, ready to style. No setup needed.",
-    "Cut the silence: finds the quiet parts and cuts them out, either as a new video or as a new timeline in Resolve where you can still change every cut.",
-    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place, and one click in Resolve brings them all in.",
-    "In Resolve, open Workspace › Scripts to find VaultHub Subtitles, VaultHub Cut Silence and VaultHub Import Project. While they work, a small window shows how far along it is, with a Cancel button. (Restart Resolve once if you don't see them.)",
+    "Subtitles: VaultHub listens to the speech and makes subtitles, all on your PC. Check them next to the video, fix words and move a line a little earlier or later.",
+    "Then click Put in Resolve, and in Resolve use File \u203a Import \u203a Timeline: you get your video with the subtitles above it as titles you can style.",
+    "Cut the silence: finds the quiet parts and makes a timeline without them (every cut can still be changed in Resolve), or a new video if you like.",
+    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place. Drag the folder into Resolve's Media Pool to get it all in.",
   ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",

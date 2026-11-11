@@ -3,18 +3,16 @@
 // sizeText() from images.js. The list works like the Files tab's.
 
 let rtTool = loadPref("rtTool") || "subtitles";
-let rtOptions = { fix: "", style: "normal", language: "", model: "quick", level: "normal", pause: "0.5" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "quick", level: "normal", pause: "0.5", cutAs: "timeline" };
 let rtServer = []; // from the app's state
 const rtUploads = []; // still being copied in, or couldn't be opened
 const rtTrims = new Map();
 let rtError = "";
 let rtProjectPath = "";
-let rtResolveFound = null;
 
 api("/api/rt-options", {}).then((res) => {
   if (!res.ok) return;
   rtOptions = { ...rtOptions, ...res.options };
-  rtResolveFound = res.resolve;
   drawResolve();
 }).catch(() => {});
 
@@ -23,9 +21,11 @@ const RT_NOTES = {
   fix: (o) => o.fix === "smooth"
     ? "Makes an editing file (DNxHR) that plays smoothly even on a slow PC. Files get about 10 times bigger."
     : "A steady frame rate, sound Resolve always reads, and every sound track (game, mic, Discord) kept separate.",
-  subtitles: (o) => "Listens on your PC (nothing is uploaded). Then you check the words and put them in Resolve as Text+. "
+  subtitles: (o) => "Listens on your PC (nothing is uploaded). Then you check the words, and VaultHub makes a timeline with your video and the subtitles for Resolve. "
     + `The first time it downloads the speech model, ${o.model === "best" ? "about 1.6 GB" : "about 480 MB"}.`,
-  silence: () => "Makes a new video without the quiet parts. To keep every cut changeable, click the clip in Resolve's Media Pool and use Workspace › Scripts › VaultHub Cut Silence instead.",
+  silence: (o) => o.cutAs === "video"
+    ? "Makes a new video without the quiet parts."
+    : "Makes a timeline without the quiet parts. In Resolve: File › Import › Timeline. Every cut is a normal cut you can still change.",
 };
 
 // ---- adding files
@@ -199,15 +199,15 @@ function rtRow(el, file) {
     bits.push(clock(file.seconds, false), sizeText(file.bytes));
     message = bits.join(" · ");
   }
-  if (file.status === "done" && file.fromResolve === "subtitles" && file.hasCues && !file.sent) {
-    message = "Ready! Check the words, then click Put in Resolve.";
+  if (file.status === "done" && file.hasCues && file.timeline) {
+    message = `Timeline ready: in Resolve, File › Import › Timeline, and pick "${file.timeline}".`;
   }
   el.querySelector(".msg").textContent = message;
 
   // Trim, or the subtitle editor
   const box = el.querySelector(".file-trim");
   const part = rtTrims.get(file.id);
-  const key = file.status === "done" && file.hasCues ? "subs:" + file.sent : file.fromResolve || skipped ? "none"
+  const key = file.status === "done" && file.hasCues ? "subs:" + file.timeline : file.fromResolve || skipped ? "none"
     : !idle ? (file.trimLabel ? "label:" + file.trimLabel : "") : part ? `part:${part.start}-${part.end}` : "trim";
   if (box.dataset.key !== key) {
     box.dataset.key = key;
@@ -218,6 +218,13 @@ function rtRow(el, file) {
       open.textContent = file.fromResolve ? "Check the words" : "Check and fix the subtitles";
       open.onclick = () => openSubs(file.id);
       box.append(open);
+      if (file.timeline) {
+        const show = document.createElement("button");
+        show.className = "link";
+        show.textContent = "Show timeline file";
+        show.onclick = () => api("/api/rt-show", { id: file.id, timeline: true });
+        box.append(show);
+      }
     } else if (key.startsWith("label:")) {
       box.textContent = "Keeping " + file.trimLabel;
     } else if (key.startsWith("part:")) {
@@ -294,7 +301,7 @@ function drawResolve() {
   const mine = rtServer.filter((f) => !f.fromResolve);
   $("rtDrop").classList.toggle("compact", all.length > 0);
   $("rtOptions").hidden = !mine.length;
-  const show = { rtFixRow: "fix", rtStyleRow: "subtitles", rtLangRow: "subtitles", rtModelRow: "subtitles", rtLevelRow: "silence", rtPauseRow: "silence" };
+  const show = { rtFixRow: "fix", rtStyleRow: "subtitles", rtLangRow: "subtitles", rtModelRow: "subtitles", rtLevelRow: "silence", rtPauseRow: "silence", rtCutAsRow: "silence" };
   for (const [id, tool] of Object.entries(show)) $(id).hidden = rtTool !== tool;
   $("rtOptions").querySelectorAll(".chips[data-key]").forEach((box) => box.querySelectorAll("button")
     .forEach((b) => b.classList.toggle("active", b.dataset.value === String(rtOptions[box.dataset.key] ?? ""))));
@@ -307,7 +314,6 @@ function drawResolve() {
   $("rtGoText").textContent = !ready && busy ? "Working..." : ready > 1 ? `${verb} ${ready} videos`
     : { fix: "Fix it", subtitles: "Make subtitles", silence: "Cut the silence" }[rtTool];
   $("rtClear").hidden = busy;
-  $("rtResolveOn").hidden = !rtResolveFound;
   const waiting = rtServer.filter((f) => f.fromResolve === "subtitles" && f.status === "done" && f.hasCues && !f.sent).length;
   $("resolveTabBadge").hidden = !waiting;
   $("resolveTabBadge").textContent = waiting || "";
@@ -427,8 +433,7 @@ async function openSubs(id) {
   $("subsScreen").classList.toggle("no-video", !res.video);
   subsVideo.src = res.media || "";
   $("subsSend").hidden = false;
-  $("subsSend").firstElementChild.textContent = res.fromResolve ? "Put in Resolve" : "Put in Resolve";
-  $("subsSaved").textContent = res.sent ? "Sent to Resolve." : "";
+  $("subsSaved").textContent = "";
   $("subsModal").hidden = false;
   drawSubsList();
   drawSubsWave();
@@ -524,11 +529,17 @@ $("subsSend").addEventListener("click", async () => {
   await saveSubsNow();
   const res = await api("/api/rt-send", { id: subs.id }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) { $("subsSaved").textContent = res.error; return; }
-  if (res.waiting) {
-    closeSubs();
-  } else {
-    $("subsSaved").innerHTML = "Ready! Now in Resolve click <b>Workspace › Scripts › VaultHub Subtitles</b>.";
-  }
+  const note = $("subsSaved");
+  note.innerHTML = "";
+  const text = document.createElement("span");
+  text.innerHTML = "Done! In Resolve: <b>File › Import › Timeline</b>, and pick ";
+  const name = document.createElement("b");
+  name.textContent = `"${res.name}"`;
+  const show = document.createElement("button");
+  show.className = "link";
+  show.textContent = "Show it";
+  show.onclick = () => api("/api/rt-show", { id: subs.id, timeline: true });
+  note.append(text, name, ". ", show);
   refresh();
 });
 
@@ -606,19 +617,3 @@ function drawSubsMarks() {
 }
 
 drawResolve();
-
-// Puts the newest buttons into Resolve's Scripts menu right now (VaultHub also does this when it starts).
-$("rtInstall").addEventListener("click", async () => {
-  const note = $("rtInstallNote");
-  $("rtInstall").disabled = true;
-  note.classList.remove("error");
-  note.textContent = "Updating...";
-  const res = await api("/api/resolve-install", {});
-  $("rtInstall").disabled = false;
-  note.classList.toggle("error", !res.ok);
-  note.textContent = res.ok ? res.message : res.error || "That didn't work.";
-  if (res.ok) {
-    rtResolveFound = true;
-    $("rtResolveOn").hidden = false;
-  }
-});

@@ -1,4 +1,4 @@
-"""Subtitles as a timeline file DaVinci Resolve can bring in (File > Import > Timeline).
+"""Timeline files DaVinci Resolve can bring in (File > Import > Timeline), even the free version.
 
 Resolve turns the titles in it into Text+ titles, so nothing has to be set up in
 Resolve first. With a video, the timeline has the video with the subtitles on the
@@ -68,6 +68,7 @@ def make(cues, target, name, clip=None, fps=0, offset=0.0):
     def title(n, at, until, text, lane=""):
         return (f'<title ref="r3" name={quoteattr("Subtitle " + str(n))}{lane} offset="{_time(at, frame)}" '
                 f'duration="{_time(until - at, frame)}" start="0s">'
+                f'<adjust-transform position="0 -38"/>'
                 f'<text><text-style ref="ts{n}">{escape(text)}</text-style></text>'
                 f'<text-style-def id="ts{n}"><text-style font="Arial" fontSize="{size}" fontFace="Bold" '
                 f'fontColor="1 1 1 1" strokeColor="0 0 0 1" strokeWidth="-4" alignment="center"/></text-style-def>'
@@ -103,3 +104,42 @@ def make(cues, target, name, clip=None, fps=0, offset=0.0):
     with open(target, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
     return len(lines)
+
+
+def make_cuts(source, keep, target, name):
+    """A timeline with only the parts in keep [(start, end)] of the video, one after the other.
+    Each part is its own clip, so any cut can still be moved in Resolve."""
+    info = media.probe(source)
+    _, fps = media.resolve_rate(info.get("fps"))
+    frame = _frame(fps)
+    per_second = 1 / frame
+    width, height = (info["width"] or 1920, info["height"] or 1080) if info.get("video") else (1920, 1080)
+
+    def frames(seconds):
+        return max(0, round(Fraction(seconds).limit_denominator(100000) * per_second))
+
+    length = frames(info["duration"])
+    sound = ' hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000"' if info.get("audio") else ""
+    title = os.path.basename(source)
+    clips, at = [], 0
+    for start, end in keep:
+        a, b = frames(start), min(frames(end), length or frames(end))
+        if b - a < 2:
+            continue
+        clips.append(f'<asset-clip ref="r2" name={quoteattr(title)} offset="{_time(at, frame)}" start="{_time(a, frame)}" '
+                     f'duration="{_time(b - a, frame)}" format="r1" tcFormat="NDF"/>')
+        at += b - a
+    if not clips:
+        raise ValueError("This is all quiet, so there's nothing left to keep.")
+    text = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n<fcpxml version="1.8">\n'
+        f'<resources><format id="r1" name="VaultHub" frameDuration="{_time(1, frame)}" width="{width}" height="{height}"/>'
+        f'<asset id="r2" name={quoteattr(title)} src={quoteattr(_uri(source))} start="0s" duration="{_time(length, frame)}" '
+        f'hasVideo="{int(bool(info.get("video")))}" format="r1"{sound}/></resources>\n'
+        f'<library><event name="VaultHub"><project name={quoteattr(name)}>'
+        f'<sequence format="r1" duration="{_time(at, frame)}" tcStart="0s" tcFormat="NDF" '
+        f'audioLayout="stereo" audioRate="48k"><spine>{"".join(clips)}</spine></sequence></project></event></library>\n'
+        '</fcpxml>\n')
+    with open(target, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    return len(clips)
