@@ -69,7 +69,7 @@ _gpu_failed = False  # the graphics card didn't work once: don't keep trying
 
 def _wheel_tags():
     cp = f"cp{sys.version_info[0]}{sys.version_info[1]}"
-    return (f"-{cp}-{cp}-win_amd64.whl", "-abi3-win_amd64.whl", "-none-any.whl")
+    return (f"-{cp}-{cp}-win_amd64.whl", "-abi3-win_amd64.whl", "-py3-none-win_amd64.whl", "-none-any.whl")
 
 
 def _pick_wheel(package, version):
@@ -194,26 +194,36 @@ def _get_gpu(progress):
     temp = GPU_DIR + ".part"
     shutil.rmtree(temp, ignore_errors=True)
     os.makedirs(temp)
+    download = os.path.join(temp, "download.whl")
     for wheel in wheels:
-        def on_bytes(n):
-            nonlocal done
-            done += n
-            progress("Getting the graphics card tools (only the first time, about 1.3 GB)", done * 100 / total)
-        data = _download(wheel["url"], wheel["size"], on_bytes, timeout=120)
-        if hashlib.sha256(data).hexdigest() != wheel["digests"]["sha256"]:
+        # These are big (up to 770 MB), so they go to a file instead of memory.
+        digest = hashlib.sha256()
+        with updater._get(wheel["url"], timeout=120) as response, open(download, "wb") as out:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                digest.update(chunk)
+                done += len(chunk)
+                progress("Getting the graphics card tools (only the first time, about 1.3 GB)", done * 100 / total)
+        if digest.hexdigest() != wheel["digests"]["sha256"]:
             raise OSError("A graphics card tools download was damaged. Try again.")
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
+        with zipfile.ZipFile(download) as z:
             for name in z.namelist():
                 if name.lower().endswith(".dll"):
                     with z.open(name) as src, open(os.path.join(temp, os.path.basename(name)), "wb") as dst:
                         shutil.copyfileobj(src, dst)
-        del data
+        os.remove(download)
     open(os.path.join(temp, "ready"), "w").close()
     shutil.rmtree(GPU_DIR, ignore_errors=True)
     os.replace(temp, GPU_DIR)
 
 
 def _use_gpu_files():
+    # Newer cards (like RTX 50) get the engine's graphics code translated for them the first time;
+    # a bigger cache keeps that from happening again every time.
+    os.environ.setdefault("CUDA_CACHE_MAXSIZE", str(2 ** 31))
     os.add_dll_directory(GPU_DIR)
     os.environ["PATH"] = GPU_DIR + os.pathsep + os.environ.get("PATH", "")
     for name in sorted(os.listdir(GPU_DIR)):
@@ -292,12 +302,17 @@ def get_ready(model, progress, gpu=True):
         try:
             _get_engine(progress)
             _get_model(model, progress)
-            if gpu:
-                _get_gpu(progress)
         except (OSError, ValueError, KeyError) as e:
             if isinstance(e, Stopped) or getattr(e, "friendly", False):
                 raise
             raise OSError("Couldn't download the speech tools. Check your internet and try again.") from e
+        if gpu:
+            try:
+                _get_gpu(progress)
+            except Stopped:
+                raise
+            except Exception:
+                gpu = False  # no graphics card tools this time: the processor still works
         progress("Starting the speech model", 0)
         try:
             WhisperModel = _load_engine()
