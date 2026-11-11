@@ -7,6 +7,7 @@ same folder as the downloads.
 """
 
 import itertools
+import json
 import os
 import shutil
 import tempfile
@@ -15,17 +16,19 @@ import threading
 import history
 import media
 import names
+import settings
+import subtitles
 import waveform
 
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter", "files")
-FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif", "resolve")
+FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif", "resolve", "srt")
 # The Open window's list of file types.
 PICK_KINDS = [
     ("Videos and songs", ";".join("*." + e for e in (
         "mp4 mkv mov avi wmv flv webm m4v mpg mpeg 3gp ts mts mp3 m4a wav flac ogg opus wma aac aiff aif amr".split()))),
     ("All files", "*.*"),
 ]
-PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "fps", "audioTracks", "thumb",
+PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "fps", "audioTracks", "thumb", "fromResolve",
           "status", "progress", "message", "trimLabel", "run", "cancel")
 
 
@@ -91,10 +94,40 @@ class Files:
             "audioTracks": found["audioTracks"],
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
             "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
+            "fromResolve": False,
         }
         with self.lock:
             self.items.append(item)
         return self._public(item)
+
+    def add_resolve_timeline(self, name, parts):
+        """Subtitles for a DaVinci Resolve timeline (from the VaultHub Subtitles button in Resolve).
+        parts: [(path, from, length, at)]. Shows up in the list like any file. Returns its id."""
+        if not parts:
+            raise ValueError("There's nothing on this timeline to listen to.")
+        for path, *_ in parts:
+            if not os.path.isfile(path):
+                raise ValueError(f"Can't find {os.path.basename(path)} on this PC.")
+        length = max(at + length for _, _, length, at in parts)
+        options = subtitle_options()
+        item = {
+            "id": str(next(self.ids)), "name": f"{name} (Resolve timeline)", "path": parts[0][0], "copied": False,
+            "bytes": 0, "seconds": length, "video": False, "audio": True, "width": 0, "height": 0, "fps": 0,
+            "audioTracks": 1, "thumb": "", "thumbPath": "", "status": "queued", "progress": 0, "message": "Waiting...",
+            "trimLabel": "", "out": "", "run": 1, "cancel": False, "fromResolve": True, "parts": parts,
+            "job": {"format": "srt", "quality": options["style"], "targetMb": None, "normalize": False, "trim": None,
+                    "folder": RESOLVE_FOLDER, "language": options["language"], "model": options["model"]},
+        }
+        with self.lock:
+            self.items.append(item)
+            self.wake.notify()
+        return item["id"]
+
+    def status(self, file_id):
+        item = self.find(file_id)
+        if not item:
+            return {"status": "gone", "message": "It was removed from VaultHub's list."}
+        return {"status": item["status"], "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
     def find(self, file_id):
         with self.lock:
@@ -145,12 +178,16 @@ class Files:
     def convert(self, picks, options, folder):
         """picks: [{"id", "start", "end"}]. Queues each file with the same options."""
         fmt = options.get("format") if options.get("format") in FORMATS else "mp3"
+        if fmt == "srt":
+            save_subtitle_options(options)  # the Resolve button uses the same choices
         settings = {
             "format": fmt,
             "quality": str(options.get("quality") or ""),
             "targetMb": None,
-            "normalize": bool(options.get("normalize")) and fmt not in ("gif", "resolve"),
+            "normalize": bool(options.get("normalize")) and fmt not in ("gif", "resolve", "srt"),
             "folder": folder,
+            "language": options.get("language") if options.get("language") in subtitles.LANGUAGES else "",
+            "model": options.get("model") if options.get("model") in subtitles.MODELS else "quick",
         }
         if fmt == "mp4" and options.get("targetMb"):
             try:
@@ -163,7 +200,7 @@ class Files:
         with self.lock:
             for pick in picks:
                 item = next((i for i in self.items if i["id"] == str(pick.get("id"))), None)
-                if not item or item["status"] in ("queued", "active"):
+                if not item or item["status"] in ("queued", "active") or item.get("fromResolve"):
                     continue
                 trim = None
                 try:
@@ -191,8 +228,10 @@ class Files:
                 item.update(status="active", message="Starting...", cancel=False)
             try:
                 path = self._run(item)
-                message = f"Saved as {os.path.basename(path)} · {os.path.getsize(path) / 1e6:.1f} MB"
-                if item["job"]["format"] == "resolve":
+                message = f"Saved as {os.path.basename(path)}"
+                if item["job"]["format"] != "srt":
+                    message += f" · {os.path.getsize(path) / 1e6:.1f} MB"
+                if item["job"]["format"] in ("resolve", "srt"):
                     message += " · Drag it into Resolve"
             except Exception as e:
                 if item.get("cancel"):
@@ -208,7 +247,7 @@ class Files:
     def _run(self, item):
         job = item["job"]
         fmt, quality, trim = job["format"], job["quality"], job["trim"]
-        if fmt in media.AUDIO_FORMATS and not item["audio"]:
+        if fmt in (*media.AUDIO_FORMATS, "srt") and not item["audio"]:
             raise ValueError("This file has no sound in it.")
         if fmt in ("mp4", "gif", "resolve") and not item["video"]:
             raise ValueError("This file has no video in it. Pick MP3 or another sound format.")
@@ -223,6 +262,22 @@ class Files:
             stem += " (for Resolve)"
         os.makedirs(job["folder"], exist_ok=True)
         temp = names.temp_path(job["folder"], stem, ".mov" if fmt == "resolve" else "." + fmt)
+        if fmt == "srt":
+            def report(text, percent):
+                if item.get("cancel"):
+                    raise Stopped()
+                self._update(item, progress=percent, message=f"{text}... {percent:.0f}%" if percent else text + "...")
+            report("Starting", 0)
+            try:
+                start = trim[0] if trim else 0
+                parts = item.get("parts") or [(item["path"], start, length if trim else None, 0)]
+                subtitles.make_subtitles(parts, temp, job["model"],
+                                         job["language"], quality if quality in subtitles.STYLES else "normal", report)
+                return names.finish(temp)
+            except BaseException:
+                if os.path.exists(temp):
+                    os.remove(temp)
+                raise
 
         verb = {"gif": "Making the GIF", "resolve": "Making it ready for Resolve", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
 
@@ -254,6 +309,30 @@ class Files:
         else:
             kbps = quality if quality.isdigit() else "192"
             media.convert_audio(item["path"], temp, fmt, kbps, trim, job["normalize"], length, progress)
+
+
+RESOLVE_FOLDER = os.path.join(settings.DATA_DIR, "Resolve subtitles")
+OPTIONS_FILE = os.path.join(settings.DATA_DIR, "subtitle-options.json")
+
+
+def subtitle_options():
+    try:
+        with open(OPTIONS_FILE, encoding="utf-8") as f:
+            saved = json.load(f)
+    except (OSError, ValueError):
+        saved = {}
+    return {"style": saved.get("style") if saved.get("style") in subtitles.STYLES else "normal",
+            "language": saved.get("language") if saved.get("language") in subtitles.LANGUAGES else "",
+            "model": saved.get("model") if saved.get("model") in subtitles.MODELS else "quick"}
+
+
+def save_subtitle_options(options):
+    try:
+        os.makedirs(settings.DATA_DIR, exist_ok=True)
+        with open(OPTIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"style": options.get("quality"), "language": options.get("language"), "model": options.get("model")}, f)
+    except OSError:
+        pass
 
 
 def clean_up():

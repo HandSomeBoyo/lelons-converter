@@ -6,6 +6,9 @@ const CHANGES = [
     "Files: new \"For Resolve\" button. Drop in a video from OBS, a game or your phone and get a .MOV that DaVinci Resolve edits smoothly, with the sound staying in sync.",
     "Every sound track stays separate (like game, mic and Discord from OBS), so you can change each one in Resolve.",
     "Pick \"Smoothest editing\" if Resolve still lags on your PC. The files get much bigger, but they play back smoothly. When it's done, drag it straight into Resolve.",
+    "New: auto subtitles. Pick \"Subtitles\" in Files and VaultHub listens to the speech and makes an .srt file to drag onto your timeline. It all happens on your PC, nothing is uploaded.",
+    "Normal lines or short lines (like on Shorts and TikTok), and it understands English, Norwegian and lots of other languages. The first time it downloads the speech model (about 480 MB).",
+    "And right inside DaVinci Resolve: Workspace › Scripts › VaultHub Subtitles makes subtitles for the whole timeline and puts them on it. (Restart Resolve once if you don't see it.)",
   ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",

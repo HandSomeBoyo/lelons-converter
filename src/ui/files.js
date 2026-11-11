@@ -8,11 +8,12 @@ const FILE_QUALITIES = {
   mp4: [["", "Same as now"], ["1080", "1080p"], ["720", "720p"], ["480", "480p"]],
   gif: [["320", "320 px"], ["480", "480 px"], ["640", "640 px"], ["800", "800 px"]],
   resolve: [["", "Normal size"], ["smooth", "Smoothest editing (big files)"]],
+  srt: [["normal", "Normal lines"], ["short", "Short lines (Shorts and TikTok style)"]],
 };
-const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480", resolve: "" };
+const FILE_DEFAULTS = { mp3: "320", m4a: "256", mp4: "", gif: "480", resolve: "", srt: "normal" };
 const VIDEO_FORMATS = ["mp4", "gif", "resolve"];
 
-let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false };
+let fileOptions = { format: "mp3", quality: { ...FILE_DEFAULTS }, fit: "", fitCustom: "", normalize: false, language: "", model: "quick" };
 try {
   const saved = loadPref("fileOptions") || {};
   fileOptions = { ...fileOptions, ...saved, quality: { ...FILE_DEFAULTS, ...(saved.quality || {}) } };
@@ -100,6 +101,13 @@ $("fileFitCustom").addEventListener("input", () => {
   saveFileOptions();
   drawFiles();
 });
+for (const [box, key] of [["fileLang", "language"], ["fileModel", "model"]]) {
+  $(box).querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    fileOptions[key] = b.dataset.value;
+    saveFileOptions();
+    drawFiles();
+  }));
+}
 $("fileNormalize").addEventListener("click", () => {
   fileOptions.normalize = !fileOptions.normalize;
   saveFileOptions();
@@ -131,7 +139,7 @@ function trimFile(file) {
     start: saved ? saved.start : 0,
     end: saved ? saved.end : gif ? Math.min(10, file.seconds) : file.seconds,
     maxLength: gif ? 60 : 0,
-    clip: () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
+    clip: fileOptions.format === "srt" ? null : () => ({ source: { file: file.id }, title: file.name.replace(/\.[^.]+$/, ""), format: fileOptions.format,
                    quality: fileOptions.quality[fileOptions.format] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize }),
     done: (part) => {
       if (part) fileTrims.set(file.id, part); else fileTrims.delete(file.id);
@@ -148,7 +156,7 @@ function fits(file, fmt) {
 }
 
 function readyFiles() {
-  return serverFiles.filter((f) => f.status !== "active" && f.status !== "queued" && fits(f, fileOptions.format));
+  return serverFiles.filter((f) => f.status !== "active" && f.status !== "queued" && !f.fromResolve && fits(f, fileOptions.format));
 }
 
 $("fileConvert").addEventListener("click", async () => {
@@ -171,7 +179,8 @@ $("fileConvert").addEventListener("click", async () => {
   drawFiles();
   const res = await api("/api/files-convert", {
     items, folder,
-    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize },
+    options: { format: fmt, quality: fileOptions.quality[fmt] ?? "", targetMb: targetMb(), normalize: fileOptions.normalize,
+               language: fileOptions.language, model: fileOptions.model },
   }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) {
     for (const f of ready) delete f.waitingFor;
@@ -209,7 +218,7 @@ function fileRow(el, file) {
       <div class="pct"></div>
       <div class="actions"></div>`;
   }
-  el.className = "image-row file-row " + file.status + (file.id && !fits(file, fileOptions.format) ? " skipped" : "");
+  el.className = "image-row file-row " + file.status + (file.id && !file.fromResolve && !fits(file, fileOptions.format) ? " skipped" : "");
   const draggable = file.status === "done" && file.canShow;
   setDrag(el, draggable ? { kind: "file", id: file.id } : null);
   el.title = draggable ? DRAG_HINT : "";
@@ -226,13 +235,16 @@ function fileRow(el, file) {
   const ext = (file.name.split(".").pop() || "").toUpperCase().slice(0, 5);
   const badge = el.querySelector(".badge");
   badge.hidden = !file.id;
-  badge.textContent = fmt === "resolve" ? `${ext} → MOV for Resolve` : `${ext} → ${fmt.toUpperCase()}`;
+  badge.textContent = file.fromResolve ? "Subtitles for Resolve" : fmt === "resolve" ? `${ext} → MOV for Resolve` : fmt === "srt" ? `${ext} → Subtitles (SRT)` : `${ext} → ${fmt.toUpperCase()}`;
 
   const idle = file.id && !["queued", "active"].includes(file.status);
   let message = file.message;
-  if (idle && !fits(file, fmt)) {
+  if (file.fromResolve) {
+    message = message || "From DaVinci Resolve · " + clock(file.seconds, false);
+  } else if (idle && !fits(file, fmt)) {
     const an = fmt.startsWith("m") ? "an" : "a"; // "an MP4", "a GIF"
     message = fmt === "resolve" ? "This has no video. Pick WAV to use the sound in Resolve."
+      : fmt === "srt" ? "This has no sound, so there's nothing to make subtitles from."
       : `This has no ${VIDEO_FORMATS.includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
   } else if (!message && file.id && fmt === "resolve") {
     const tracks = file.audioTracks > 1 ? `${file.audioTracks} sound tracks (kept separate)` : file.audio ? "" : "No sound";
@@ -245,11 +257,11 @@ function fileRow(el, file) {
   // Trim: a button, or the part that's kept
   const trimBox = el.querySelector(".file-trim");
   const part = fileTrims.get(file.id);
-  const trimKey = file.id && !fits(file, fmt) ? "skip" : !idle ? (file.trimLabel ? "label:" + file.trimLabel : "") : part ? `part:${part.start}-${part.end}` : "none:" + fmt;
+  const trimKey = file.fromResolve || (file.id && !fits(file, fmt)) ? "skip" : !idle ? (file.trimLabel ? "label:" + file.trimLabel : "") : part ? `part:${part.start}-${part.end}` : "none:" + fmt;
   if (trimBox.dataset.key !== trimKey) {
     trimBox.dataset.key = trimKey;
     trimBox.innerHTML = "";
-    if (file.id && !fits(file, fmt)) {
+    if (file.fromResolve || (file.id && !fits(file, fmt))) {
       // can't be converted to this format, so nothing to trim
     } else if (!idle) {
       if (file.trimLabel) trimBox.textContent = "Keeping " + file.trimLabel;
@@ -332,7 +344,7 @@ function drawFiles() {
   const choices = FILE_QUALITIES[fmt];
   $("fileQualityRow").hidden = !choices;
   if (choices) {
-    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" || fmt === "resolve" ? "Size" : "Quality";
+    $("fileQualityLabel").textContent = fmt === "gif" ? "Width" : fmt === "mp4" || fmt === "resolve" ? "Size" : fmt === "srt" ? "Lines" : "Quality";
     const box = $("fileQuality");
     if (box.dataset.format !== fmt) {
       box.dataset.format = fmt;
@@ -351,7 +363,10 @@ function drawFiles() {
   $("fileFit").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === o.fit));
   $("fileFitCustomBox").hidden = o.fit !== "custom";
   if ($("fileFitCustom").value !== o.fitCustom) $("fileFitCustom").value = o.fitCustom;
-  $("fileVolumeRow").hidden = fmt === "gif" || fmt === "resolve";
+  $("fileVolumeRow").hidden = ["gif", "resolve", "srt"].includes(fmt);
+  $("fileLangRow").hidden = $("fileModelRow").hidden = fmt !== "srt";
+  $("fileLang").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === (o.language || "")));
+  $("fileModel").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.value === (o.model || "quick")));
   $("fileNormalize").classList.toggle("active", !!o.normalize);
 
   const notes = {
@@ -361,6 +376,8 @@ function drawFiles() {
     resolve: o.quality.resolve === "smooth"
       ? "Makes an editing file (DNxHR) that plays smoothly in Resolve even on a slow PC. Files get about 10 times bigger, so keep space free."
       : "Fixes laggy or out-of-sync videos from OBS, games and phones: a steady frame rate, sound Resolve always reads, and every sound track kept separate.",
+    srt: "Listens to the speech on your PC (nothing is uploaded) and makes an .srt file. Drag it onto your Resolve timeline. The first time it downloads the speech model, "
+      + (o.model === "best" ? "about 1.6 GB." : "about 480 MB.") + " In Resolve you can also use Workspace › Scripts › VaultHub Subtitles.",
   };
   $("fileNote").classList.toggle("error", !!fileError);
   $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
@@ -375,8 +392,16 @@ function drawFiles() {
 }
 
 // Called by app.js with the app's state a few times a second.
+const seenResolve = new Set();
 function renderFiles(list) {
   const known = new Map(serverFiles.map((f) => [f.id, f]));
+  // Subtitles started from the button in DaVinci Resolve: show them here while they're made.
+  for (const f of list || []) {
+    if (f.fromResolve && !seenResolve.has(f.id)) {
+      seenResolve.add(f.id);
+      if (f.status === "queued" || f.status === "active") showTab("files");
+    }
+  }
   serverFiles = (list || []).map((f) => {
     const mine = known.get(f.id);
     // Just clicked Convert, and the app hasn't caught up yet: keep showing "Waiting..."

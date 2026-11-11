@@ -38,6 +38,7 @@ import docs  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
+import resolve  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -1359,6 +1360,17 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/files-clear":
             local_files.clear()
             self.send_json({"ok": True})
+        elif self.path == "/api/resolve-subtitles":
+            # From the VaultHub Subtitles button in DaVinci Resolve (see resolve.py).
+            try:
+                parts = [(str(p["path"]), max(0.0, float(p.get("from") or 0)), float(p["length"]), float(p.get("at") or 0))
+                         for p in data.get("parts") or [] if float(p.get("length") or 0) > 0]
+                file_id = local_files.add_resolve_timeline(str(data.get("name") or "Timeline")[:100], parts)
+            except (ValueError, KeyError, TypeError) as e:
+                return self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Something's missing."})
+            self.send_json({"ok": True, "id": file_id})
+        elif self.path == "/api/resolve-subtitles-status":
+            self.send_json({"ok": True, **local_files.status(data.get("id"))})
         elif self.path == "/api/file-show":
             item = local_files.find(data.get("id"))
             if item and item["out"]:
@@ -1628,6 +1640,7 @@ def main():
         names.remove_all_leftovers(started, state.folder)
         updater.remove_old_setups()
         sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
+        resolve.install()  # the VaultHub Subtitles button in DaVinci Resolve's Scripts menu
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
         if state.auto_update:
             start_background(check_for_updates)

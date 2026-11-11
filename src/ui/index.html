@@ -304,6 +304,7 @@
           <button data-value="mp4">MP4</button>
           <button data-value="gif">GIF</button>
           <button data-value="resolve" title="A steady .MOV file that DaVinci Resolve edits smoothly, with the sound in sync">For Resolve</button>
+          <button data-value="srt" title="Listens to the speech and makes a subtitle file for Resolve, Premiere or YouTube">Subtitles</button>
         </div>
       </div>
       <div class="opt-row" id="fileQualityRow">
@@ -322,6 +323,26 @@
         <div class="custom-size" id="fileFitCustomBox" hidden>
           <input id="fileFitCustom" inputmode="decimal" placeholder="MB" autocomplete="off">
           <span>MB</span>
+        </div>
+      </div>
+      <div class="opt-row" id="fileLangRow">
+        <span class="opt-label">Language</span>
+        <div class="chips" id="fileLang">
+          <button data-value="">Find it by itself</button>
+          <button data-value="en">English</button>
+          <button data-value="no">Norwegian</button>
+          <button data-value="sv">Swedish</button>
+          <button data-value="da">Danish</button>
+          <button data-value="de">German</button>
+          <button data-value="es">Spanish</button>
+          <button data-value="fr">French</button>
+        </div>
+      </div>
+      <div class="opt-row" id="fileModelRow">
+        <span class="opt-label">Listening</span>
+        <div class="chips" id="fileModel">
+          <button data-value="quick" title="About 480 MB to download the first time">Quick</button>
+          <button data-value="best" title="About 1.6 GB to download the first time. Slower, but catches more words, especially in Norwegian and other languages">Best (slower)</button>
         </div>
       </div>
       <div class="opt-row" id="fileVolumeRow">
