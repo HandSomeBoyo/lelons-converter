@@ -5000,3 +5000,10 @@ html.side-small .sidebar .tabs .beta-tag { display: none; }
 .sidebar { -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* Resolve: the "Add a video" button was squashed flat (it lost its height inside the drop box). */
 .rt-start .rt-add-button { height: 44px; min-height: 44px; flex: none; box-sizing: border-box; }
+
+/* ---- 2.24.2: the side bar's highlight moves calmly. It slides quickly to a tab close by (no stretching
+   on the way), and fades in on a tab further away instead of flying past everything in between (motion.js).
+   The names change color at the same speed, so the highlight and the text arrive together. */
+.sidebar .tabs .tab-line.ready { transition: transform .24s cubic-bezier(.2, .8, .2, 1), height .24s cubic-bezier(.2, .8, .2, 1), width .24s cubic-bezier(.2, .8, .2, 1), opacity .15s; }
+.sidebar .tabs .tab-line.moving { animation: none; }
+.sidebar .tabs button, .sidebar .tabs button svg { transition: color .15s ease-out, background-color .15s ease-out; }
