@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.24.2", items: [
+    "Calmer side bar: the highlight no longer stretches and wobbles when you switch pages.",
+    "It slides quickly to a page close by, and simply fades in on a page further away instead of flying past everything.",
+  ] },
   { version: "2.24.1", items: [
     "Smoother Library: with lots of sounds, typing in search used to stutter. Now it stays smooth, and the Library opens faster.",
     "History opens faster when you have a long list of downloads.",
