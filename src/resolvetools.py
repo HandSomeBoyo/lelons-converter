@@ -180,7 +180,7 @@ class Tools(files.Files):
         item = self.find(file_id)
         if not item:
             return None
-        path = item.get("preview") if copy else item["path"]
+        path = item.get("mixed") if copy == "mix" else item.get("preview") if copy else item["path"]
         return path if path and os.path.isfile(path) else None
 
     def preview(self, file_id):
@@ -231,13 +231,51 @@ class Tools(files.Files):
             with self.lock:
                 item.update(previewBusy=False, previewError="VaultHub can't show this video, but the tools still work on it.")
 
+    def mix(self, file_id):
+        """The window plays only a video's first sound track. With more (OBS: game on one, your mic on
+        another), VaultHub mixes them all into one sound file that plays along with the picture.
+        Returns {"ready", "progress"}; call again to see how it's going."""
+        item = self.find(file_id)
+        if not item:
+            raise ValueError("This video was removed.")
+        with self.lock:
+            if item.get("mixed") and os.path.isfile(item["mixed"]):
+                return {"ready": True, "progress": 100}
+            if item.get("mixError"):
+                return {"ready": False, "error": item["mixError"]}
+            if not item.get("mixBusy"):
+                item.update(mixBusy=True, mixProgress=0)
+                threading.Thread(target=self._make_mix, args=(item,), daemon=True).start()
+            return {"ready": False, "progress": item.get("mixProgress", 0)}
+
+    def _make_mix(self, item):
+        tracks = max(1, item.get("audioTracks") or 1)
+        os.makedirs(files.FOLDER, exist_ok=True)
+        target = os.path.join(files.FOLDER, f"preview-{item['id']}-mix.m4a")
+        temp = target + ".part.m4a"
+        inputs = "".join(f"[0:a:{n}]" for n in range(tracks))
+        try:
+            media.run(["-i", item["path"], "-filter_complex", f"{inputs}amix=inputs={tracks}:normalize=0:dropout_transition=0,"
+                       "alimiter=limit=0.95[out]", "-map", "[out]", "-vn", "-ac", "2", "-c:a", "aac", "-b:a", "128k", temp],
+                      item["seconds"] or 0, lambda p: item.update(mixProgress=p))
+            os.replace(temp, target)
+            with self.lock:
+                item.update(mixed=target, mixBusy=False, mixProgress=100)
+        except Exception:
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+            with self.lock:
+                item.update(mixBusy=False, mixError="Couldn't mix the sound tracks.")
+
     def peaks(self, file_id):
         """How loud the sound is along the video, for drawing under the player."""
         item = self.find(file_id)
         if not item:
             raise ValueError("This video was removed.")
         if item.get("peaks") is None:
-            item["peaks"] = waveform.peaks_of(item["path"], item["seconds"]) if item["audio"] else []
+            item["peaks"] = waveform.peaks_of(item["path"], item["seconds"], max(1, item.get("audioTracks") or 1)) if item["audio"] else []
         return item["peaks"]
 
     # ---- the subtitle editor
@@ -374,7 +412,7 @@ class Tools(files.Files):
     def remove(self, file_id):
         item = self.find(file_id)
         super().remove(file_id)
-        for path in (item or {}).get("soundCopy"), (item or {}).get("preview"):
+        for path in (item or {}).get("soundCopy"), (item or {}).get("preview"), (item or {}).get("mixed"):
             if path:
                 try:
                     os.remove(path)

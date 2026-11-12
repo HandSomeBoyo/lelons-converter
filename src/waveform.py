@@ -184,14 +184,16 @@ def _result(path, duration):
     }
 
 
-def peaks_of(path, duration):
-    """Just the loudness values for a file (its first sound track), read straight from it."""
+def peaks_of(path, duration, tracks=1):
+    """Just the loudness values for a file (all its sound tracks together), read straight from it."""
     import imageio_ffmpeg
 
     rate = max(200, min(4000, int(1_000_000 / duration))) if duration else 2000
     try:
         pcm = subprocess.run(
-            [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-nostdin", "-i", path, "-map", "0:a:0", "-vn", "-ac", "1",
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-nostdin", "-i", path,
+             *(["-filter_complex", "".join(f"[0:a:{n}]" for n in range(tracks)) + f"amix=inputs={tracks}:normalize=0[out]",
+                "-map", "[out]"] if tracks > 1 else ["-map", "0:a:0"]), "-vn", "-ac", "1",
              "-ar", str(rate), "-f", "s16le", "-"],
             capture_output=True, timeout=300, creationflags=downloader.NO_WINDOW,
         ).stdout

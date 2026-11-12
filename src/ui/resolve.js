@@ -15,6 +15,12 @@ let rtError = "";
 let rtProjectPath = "";
 let rtSeenRun = ""; // the finished job the tab already moved on from
 const rtVideo = $("rtVideo");
+// With several sound tracks (OBS: game on one, your mic on another) the window would only play the first,
+// so a mix of them all plays along with the picture instead.
+const rtSound = new Audio();
+rtSound.preload = "auto";
+let rtMixed = false;
+let rtMixText = "";
 
 api("/api/rt-options", {}).then((res) => {
   if (!res.ok) return;
@@ -69,6 +75,11 @@ function rtLetGo() {
   subs.peaks = null;
   rtVideo.removeAttribute("src");
   rtVideo.load();
+  rtMixed = false;
+  rtMixText = "";
+  rtSound.pause();
+  rtSound.removeAttribute("src");
+  rtVideo.muted = false;
 }
 
 // A dropped file: it plays right away from memory while it's copied into VaultHub.
@@ -96,6 +107,7 @@ function rtUse(file) {
     rtServer.push(res.file);
     rtId = res.file.id;
     rtLoadWave();
+    rtLoadMix();
     if (rtVideo.dataset.broken) rtMakePreview(); // the window couldn't play it: make a copy it can
     drawResolve();
   };
@@ -128,6 +140,7 @@ async function rtPick(e) {
   rtId = file.id;
   rtPlay(`/rt-video/${file.id}`);
   rtLoadWave();
+  rtLoadMix();
   drawResolve();
 }
 $("rtFiles").addEventListener("change", (e) => {
@@ -182,6 +195,38 @@ async function rtMakePreview() {
   }
 }
 
+async function rtLoadMix() {
+  const item = rtItem();
+  if (!item || (item.audioTracks || 0) < 2) return;
+  const id = rtId;
+  while (id === rtId) {
+    const res = await api("/api/rt-mix", { id }).catch(() => ({ ok: false }));
+    if (id !== rtId) return;
+    if (!res.ok || res.error) { rtMixText = ""; drawResolve(); return; }
+    if (res.ready) {
+      rtSound.src = `/rt-video/${id}/mix`;
+      rtMixed = true;
+      rtVideo.muted = true;
+      rtMixText = "";
+      rtSyncSound(true);
+      drawResolve();
+      return;
+    }
+    rtMixText = `Adding your other sound tracks... ${Math.floor(res.progress || 0)}%`;
+    drawResolve();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+}
+
+function rtSyncSound(force) {
+  if (!rtMixed) return;
+  if (force || Math.abs(rtSound.currentTime - rtVideo.currentTime) > 0.25) rtSound.currentTime = rtVideo.currentTime;
+  rtSound.playbackRate = rtVideo.playbackRate;
+  if (rtVideo.paused) rtSound.pause();
+  else rtSound.play().catch(() => {});
+}
+for (const ev of ["play", "pause", "seeked", "ratechange", "waiting", "playing"]) rtVideo.addEventListener(ev, () => rtSyncSound(ev !== "pause"));
+
 async function rtLoadWave() {
   const id = rtId;
   const res = await api("/api/rt-wave", { id }).catch(() => ({ ok: false }));
@@ -222,6 +267,7 @@ function rtTick() {
   const length = rtLength() || 1;
   $("rtHead").style.left = Math.min(100, (t / length) * 100) + "%";
   drawCaption();
+  rtSyncSound(false);
   if (!rtVideo.paused && !$("resolveTab").hidden) requestAnimationFrame(rtTick);
 }
 
@@ -339,7 +385,7 @@ function drawResolve() {
     if (item.fps) bits.push(`${Math.abs(item.fps - Math.round(item.fps)) < 0.01 ? Math.round(item.fps) : item.fps.toFixed(2)} fps`);
     if (item.audioTracks > 1) bits.push(`${item.audioTracks} sound tracks`);
     bits.push(clock(item.seconds, false), sizeText(item.bytes));
-    info = bits.join(" · ");
+    info = bits.join(" · ") + (rtMixText ? " · " + rtMixText : "");
   }
   $("rtFileInfo").textContent = info;
   $("rtFileInfo").classList.toggle("error", !!(rtLocal && rtLocal.error));

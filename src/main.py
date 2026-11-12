@@ -546,11 +546,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/rt-video/"):  # a video on the Resolve tab, played right from where it is
             file_id, _, copy = self.path[len("/rt-video/"):].partition("/")
-            path = resolvetools.get().video_path(file_id, copy == "copy")
+            path = resolvetools.get().video_path(file_id, copy if copy in ("copy", "mix") else "")
             if not path:
                 return self.send_error(404)
             ext = os.path.splitext(path)[1].lower()
-            kind = "video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv") else None
+            kind = ("video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv")
+                    else "audio/mp4" if ext == ".m4a" else None)
             return self.send_media(path, kind)
         if self.path.startswith("/file-thumb/"):
             file_id = self.path[len("/file-thumb/"):]
@@ -636,6 +637,8 @@ class Handler(BaseHTTPRequestHandler):
                                        "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent")})
             elif path == "/api/rt-preview":
                 return self.send_json({"ok": True, **tools.preview(data.get("id"))})
+            elif path == "/api/rt-mix":
+                return self.send_json({"ok": True, **tools.mix(data.get("id"))})
             elif path == "/api/rt-wave":
                 return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
             elif path == "/api/rt-cues-save":
