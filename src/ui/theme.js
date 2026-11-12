@@ -2,7 +2,7 @@
 // - Things the page remembers (the open tab, sort, options). The app writes what was saved
 //   into the page as LELONS_SAVED, because the browser's own storage is lost every time
 //   the app starts (it gets a new address each time).
-// - Themes: dark, black or light, with an accent color, set before anything is drawn.
+// - Themes: dark, black, light or sharp, with an accent color, set before anything is drawn.
 
 const pageSaved = (typeof LELONS_SAVED === "object" && LELONS_SAVED) || {};
 // What the page showed last time (account, Home, the Library list): drawn straight away when the
@@ -34,7 +34,7 @@ const ACCENT_COLORS = {
 };
 
 function applyTheme(theme, accent) {
-  if (!["dark", "black", "light"].includes(theme)) theme = "dark";
+  if (!["dark", "black", "light", "sharp"].includes(theme)) theme = "dark";
   if (!ACCENT_COLORS[accent]) accent = "yellow";
   const root = document.documentElement;
   root.dataset.theme = theme;
