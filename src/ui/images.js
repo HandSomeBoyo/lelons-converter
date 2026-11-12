@@ -28,6 +28,7 @@ function showTab(tab) {
   if (tab === "copyright" && typeof openCopyright === "function") openCopyright();
   if (typeof docsTabChanged === "function") docsTabChanged(tab);
   if (typeof boardsTabChanged === "function") boardsTabChanged(tab);
+  if (typeof resolveTabChanged === "function") resolveTabChanged(tab);
   if (typeof fxTabChanged === "function") fxTabChanged(tab);
   if (typeof gamesTabChanged === "function") gamesTabChanged(tab);
   if (typeof povsTabChanged === "function") povsTabChanged(tab);

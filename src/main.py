@@ -553,6 +553,9 @@ class Handler(BaseHTTPRequestHandler):
             kind = ("video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv")
                     else "audio/mp4" if ext == ".m4a" else None)
             return self.send_media(path, kind)
+        if self.path.startswith("/board-bg/"):  # a board's own background picture
+            path = boards.background_path(self.path[len("/board-bg/"):])
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/file-thumb/"):
             file_id = self.path[len("/file-thumb/"):]
             item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
@@ -1202,6 +1205,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **sfx.library.set_group_picture(group, self.rfile.read(length))})
             except sfx.Error as e:
                 return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+        if self.path == "/api/boards-background":  # the body is a picture for a board's background
+            if length > 40 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                bg = boards.background(self.rfile.read(length), self.headers.get("X-Team") == "1")
+            except sfx.LoggedOut as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+            except boards.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save the picture. Try again."})
+            return self.send_json({"ok": True, "bg": bg})
         if self.path == "/api/sfx-picture":  # the body is the new profile picture
             if length > 30 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})

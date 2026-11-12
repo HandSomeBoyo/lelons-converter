@@ -80,7 +80,7 @@
       <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
       <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
       <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
-      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
+      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
       <div class="tab-group">Create</div>
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
@@ -283,6 +283,7 @@
   </section>
 
   <section class="tab-page" id="resolveTab" hidden>
+    <p class="rt-beta"><i class="beta-tag">Beta</i> Early version, still being worked on. Tell us what to fix.</p>
     <h1 class="headline">Edit faster<br><em>in DaVinci Resolve.</em></h1>
 
     <label class="dropzone rt-start" id="rtDrop">

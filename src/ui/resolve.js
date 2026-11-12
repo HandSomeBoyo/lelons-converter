@@ -734,3 +734,10 @@ function drawSubsMarks() {
 }
 
 drawResolve();
+
+// Leaving the Resolve page stops the preview (it kept playing out of sight).
+function resolveTabChanged(tab) {
+  if (tab === "resolve") return;
+  if (!rtVideo.paused) rtVideo.pause();
+  rtSound.pause();
+}

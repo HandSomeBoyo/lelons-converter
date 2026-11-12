@@ -4968,3 +4968,24 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 .rt-subs .subs-when { white-space: nowrap; }
 .rt-subs .subs-row .nudge { min-width: 24px; padding: 0 6px; white-space: nowrap; }
 .rt-subs .subs-row-top { gap: 3px; }
+
+/* 2.24.0: the Resolve tab is a beta */
+.beta-tag { font-style: normal; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 5px; padding: 0 4px; line-height: 14px; margin-left: 6px; flex: none; }
+.sidebar .tabs button .beta-tag { margin-left: 6px; }
+html.side-small .sidebar .tabs .beta-tag { display: none; }
+.rt-beta { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+.rt-beta .beta-tag { margin-left: 0; }
+
+/* 2.24.0: Boards: your own background pictures, delete from the tile */
+.bd-tile-delete { all: unset; position: absolute; z-index: 2; right: 7px; top: 7px; width: 26px; height: 26px; display: grid; place-items: center; cursor: pointer; border-radius: 7px;
+  color: #fff; background: rgba(0, 0, 0, .35); opacity: 0; transform: translateY(-4px); transition: opacity .15s, transform .2s var(--ease-out), background .15s; }
+.bd-tile-delete svg { width: 15px; height: 15px; }
+.bd-tile:hover .bd-tile-delete, .bd-tile-delete:focus-visible { opacity: 1; transform: none; }
+.bd-tile-delete:hover { background: #c9372c; }
+.bd-bg-upload { display: grid; place-items: center; color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent) !important; border: 1px dashed color-mix(in srgb, var(--text) 30%, transparent); box-sizing: border-box; }
+.bd-bg-upload svg { width: 20px; height: 20px; }
+.bd-bg-upload:hover { background: color-mix(in srgb, var(--text) 14%, transparent) !important; }
+.bd-bg-upload.busy { pointer-events: none; animation: bd-busy 1s ease-in-out infinite; }
+@keyframes bd-busy { 50% { opacity: .45; } }
+.bd-menu-body.bd-drop-on { outline: 2px dashed var(--accent); outline-offset: -6px; }
+#bdBoard.bd-has-pic .bd-bar { background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .25)); }
