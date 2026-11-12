@@ -74,7 +74,6 @@ const tabLine = document.createElement("span");
 tabLine.className = "tab-line";
 document.getElementById("tabs").append(tabLine);
 let tabLineReady = false;
-tabLine.addEventListener("animationend", () => tabLine.classList.remove("moving"));
 
 function moveTabLine(instant) {
   const active = document.getElementById("tabs").querySelector("button.active");
@@ -84,15 +83,19 @@ function moveTabLine(instant) {
   }
   tabLine.style.opacity = "1";
   const x = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`; // (the tabs are a list down the side)
-  // Moving to another tab, the glass stretches a little on the way, like a drop of liquid.
-  if (!instant && tabLineReady && tabLine.style.transform && tabLine.style.transform !== x && !reduceMotion.matches) {
-    tabLine.classList.remove("moving");
-    void tabLine.offsetWidth;
-    tabLine.classList.add("moving");
-  }
+  // Moving to a tab close by, the highlight slides there quickly. Going further it doesn't fly past
+  // everything in between: it just fades in on the new tab.
+  const from = tabLine.style.transform && /translate\([^,]*,\s*(-?[\d.]+)px/.exec(tabLine.style.transform);
+  const far = !instant && tabLineReady && from && from.length > 1 && Math.abs(Number(from[1]) - active.offsetTop) > 90 && !reduceMotion.matches;
+  if (far) tabLine.classList.remove("ready");
   tabLine.style.width = active.offsetWidth + "px";
   tabLine.style.height = active.offsetHeight + "px";
   tabLine.style.transform = x;
+  if (far) {
+    void tabLine.offsetWidth;
+    tabLine.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "cubic-bezier(.2, .8, .2, 1)" });
+    requestAnimationFrame(() => { if (!following) tabLine.classList.add("ready"); });
+  }
   if (!tabLineReady) {
     // The first time it just appears there; after that it slides.
     tabLineReady = true;
