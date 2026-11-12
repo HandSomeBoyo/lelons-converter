@@ -2,6 +2,16 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.24.0", items: [
+    "New Resolve tab (beta, still being worked on): add a video, watch it right away, then pick what VaultHub should do with it.",
+    "Subtitles: VaultHub listens to the speech and writes it down, all on your PC (on an NVIDIA graphics card it's many times faster). It finds the sound track with your voice, learns names you type in, and lines up each line with when you really talk.",
+    "Read along with the video in VaultHub, fix words and nudge lines, then click Put in Resolve. In Resolve, File › Import › Timeline gives you your video with every subtitle as Text+, ready to style and animate.",
+    "Cut the silence: makes a timeline without the quiet parts (every cut can still be changed in Resolve), or a new video if you like.",
+    "Fix for Resolve: videos from OBS, games and phones become a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
+    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place.",
+    "Boards: use your own picture as a board's background. Open the board's menu, then Change background, and click + or drop a picture there. On team boards everyone sees it.",
+    "Boards: delete a board for good right from its tile on the Boards page (hover it and click the bin), or from the board's menu.",
+  ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",
     "Text you change takes the same room as the old text, so the line doesn't shift, and bold words in a line stay bold.",

@@ -38,6 +38,10 @@ import docs  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
+import project  # noqa: E402
+import resolvetools  # noqa: E402
+import subtitles  # noqa: E402
+import resolve  # noqa: E402
 import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
@@ -141,6 +145,8 @@ class State:
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
                 "files": local_files.snapshot(),
+                "resolveTools": resolvetools.get().snapshot(),
+                "project": project.current(),
                 "historyVersion": history.version,
                 "sfxUploads": sfx.library.snapshot(),
             }
@@ -151,7 +157,7 @@ class State:
 
     @property
     def converting(self):
-        return queue.busy or local_files.busy or waveform.busy() or sfx.library.busy
+        return queue.busy or local_files.busy or resolvetools.get().busy or waveform.busy() or sfx.library.busy
 
     def start(self, flag):
         """Set a flag (like "checking") if it isn't set yet. False if it already was."""
@@ -291,6 +297,9 @@ def drag_path(data):
     if kind == "file":
         item = local_files.find(data.get("id"))
         return item and item["out"]
+    if kind == "rt":
+        item = resolvetools.get().find(data.get("id"))
+        return item and item["out"]
     if kind == "image":
         return images.was_made(data.get("path")) and data["path"]
     if kind == "clip":
@@ -318,12 +327,18 @@ def pick_folder(current, title="Where should files be saved?"):
 
 # ---------------------------------------------------------------- web server
 
-def save_folder(data):
-    """The folder the page asked for with /api/ask-folder, else the one picked in Settings."""
+def save_folder(data, kind=None):
+    """The folder the page asked for with /api/ask-folder, else the one picked in Settings.
+    While a project folder is on (Resolve tab), things go into its folder for their kind."""
     folder = data.get("folder") if isinstance(data, dict) else None
     if isinstance(folder, str) and folder and os.path.isdir(folder):
-        return os.path.normpath(folder)
-    return state.folder
+        folder = os.path.normpath(folder)
+    else:
+        folder = state.folder
+    root = project.current()
+    if kind and root and os.path.normcase(folder) == os.path.normcase(root):
+        return project.folder_for(kind, folder)
+    return folder
 
 
 def home_page():
@@ -477,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
         self.send_body(body, content_type, cookie)
 
-    def send_media(self, path):
+    def send_media(self, path, kind=None):
         """Audio for the trim editor. Supports byte ranges so the player can jump around."""
         size = os.path.getsize(path)
         start, end = 0, size - 1
@@ -498,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_response(200)
         content_type = {".webm": "audio/webm", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".opus": "audio/ogg"}
-        self.send_header("Content-Type", content_type.get(os.path.splitext(path)[1], "application/octet-stream"))
+        self.send_header("Content-Type", kind or content_type.get(os.path.splitext(path)[1], "application/octet-stream"))
         self.send_header("Content-Length", str(end - start + 1))
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
@@ -529,8 +544,21 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/rt-video/"):  # a video on the Resolve tab, played right from where it is
+            file_id, _, copy = self.path[len("/rt-video/"):].partition("/")
+            path = resolvetools.get().video_path(file_id, copy if copy in ("copy", "mix") else "")
+            if not path:
+                return self.send_error(404)
+            ext = os.path.splitext(path)[1].lower()
+            kind = ("video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv")
+                    else "audio/mp4" if ext == ".m4a" else None)
+            return self.send_media(path, kind)
+        if self.path.startswith("/board-bg/"):  # a board's own background picture
+            path = boards.background_path(self.path[len("/board-bg/"):])
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/file-thumb/"):
-            item = local_files.find(self.path[len("/file-thumb/"):])
+            file_id = self.path[len("/file-thumb/"):]
+            item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
             path = item and item["thumbPath"]
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/image/"):
@@ -566,6 +594,86 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": "Something went wrong. Try again."})
             except OSError:
                 pass
+
+    def handle_resolve(self, data):
+        """The Resolve tab (rt-) and project folders (project-)."""
+        tools = resolvetools.get()
+        path = self.path
+        try:
+            if path == "/api/rt-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    picked = folder_picker.pick_files("Pick videos", files.PICK_KINDS)
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                added, errors = [], []
+                for p in picked:
+                    try:
+                        added.append(tools.add_path(p))
+                    except (ValueError, OSError) as e:
+                        errors.append(str(e) if isinstance(e, ValueError) else f"Couldn't open {os.path.basename(p)}.")
+                return self.send_json({"ok": True, "files": added, "errors": errors})
+            if path == "/api/rt-convert":
+                tool = (data.get("options") or {}).get("tool")
+                kind = "subtitles" if tool == "subtitles" else "footage"
+                tools.convert(data.get("items") or [], data.get("options") or {}, save_folder(data, kind))
+                return self.send_json({"ok": True})
+            if path == "/api/rt-options":
+                return self.send_json({"ok": True, "options": resolvetools.load_options(), "nvidia": subtitles.has_nvidia()})
+            if path == "/api/rt-remove":
+                tools.remove(data.get("id"))
+            elif path == "/api/rt-cancel":
+                tools.cancel(data.get("id"))
+            elif path == "/api/rt-clear":
+                tools.clear()
+            elif path == "/api/rt-show":
+                item = tools.find(data.get("id"))
+                shown = item and (item.get("timeline") if data.get("timeline") else item["out"])
+                if shown and os.path.exists(shown):
+                    show_in_folder(shown)
+            elif path == "/api/rt-cues":
+                item = tools.cues(data.get("id"))
+                trim = (item.get("job") or {}).get("trim")
+                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in item["cues"]],
+                                       "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent")})
+            elif path == "/api/rt-preview":
+                return self.send_json({"ok": True, **tools.preview(data.get("id"))})
+            elif path == "/api/rt-mix":
+                return self.send_json({"ok": True, **tools.mix(data.get("id"))})
+            elif path == "/api/rt-wave":
+                return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
+            elif path == "/api/rt-cues-save":
+                tools.save_cues(data.get("id"), data.get("cues") or [])
+            elif path == "/api/rt-send":
+                return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt")})
+            # ---- project folders
+            elif path == "/api/project-make":
+                parent = pick_folder(state.folder, "Where should the project folder go?")
+                if not parent:
+                    return self.send_json({"ok": False, "cancelled": True})
+                root = project.make(parent, data.get("name"))
+                return self.send_json({"ok": True, "project": root, "projects": project.recent()})
+            elif path == "/api/project-use":
+                project.use(str(data.get("path") or ""))
+            elif path == "/api/project-list":
+                return self.send_json({"ok": True, "project": project.current(), "projects": project.recent(),
+                                       "folders": [project.FOLDERS[k].replace(os.sep, " › ") for k in project.ORDER]})
+            elif path == "/api/project-open":
+                if project.current():
+                    open_folder(project.current())
+            elif path == "/api/project-pick":
+                picked = pick_folder(state.folder, "Pick a project folder")
+                if not picked:
+                    return self.send_json({"ok": False, "cancelled": True})
+                project.use(picked)
+                return self.send_json({"ok": True, "project": project.current(), "projects": project.recent()})
+            else:
+                return self.send_json({"ok": False, "error": "Unknown."})
+            self.send_json({"ok": True})
+        except (ValueError, KeyError, TypeError) as e:
+            self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Something's missing."})
 
     def handle_sfx(self, action, data):
         """The SFX tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
@@ -690,7 +798,7 @@ class Handler(BaseHTTPRequestHandler):
                 library.delete(data.get("id"))
                 result = {}
             elif action == "download":
-                path = library.download(str(data.get("url") or ""), data.get("name"), save_folder(data))
+                path = library.download(str(data.get("url") or ""), data.get("name"), save_folder(data, "sfx"))
                 result = {"path": path, "fileName": os.path.basename(path)}
             elif action == "show":
                 path = str(data.get("path") or "")
@@ -802,7 +910,7 @@ class Handler(BaseHTTPRequestHandler):
                     f.add_paths(pack_id, paths)
                 result = {"added": len(paths)}
             elif action == "download":
-                f.download(pack_id, save_folder(data), str(data.get("clip") or "") or None)
+                f.download(pack_id, save_folder(data, "vfx"), str(data.get("clip") or "") or None)
                 result = {}
             elif action == "jobs":
                 result = f.snapshot()
@@ -937,7 +1045,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "can-send":
                 result = p.can_send(item)
             elif action == "start":
-                result = p.start(item, save_folder(data) if data.get("folder") else "",
+                result = p.start(item, save_folder(data, "footage") if data.get("folder") else "",
                                  data.get("name"), data.get("size"), data.get("session"), data.get("by"))
             elif action == "cancel":
                 p.cancel(item, bool(data.get("delete")))
@@ -1011,7 +1119,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"comments": docs.collab_comment(doc_id, data.get("what"), data.get("comment"),
                                                           data.get("block"), data.get("quote"), data.get("body"))}
             elif action == "export":
-                path = docs.export(save_folder(data), data.get("title"), data.get("ext"), data.get("text"))
+                path = docs.export(save_folder(data, "docs"), data.get("title"), data.get("ext"), data.get("text"))
                 result = {"path": path, "fileName": os.path.basename(path)}
             elif action == "show":
                 path = str(data.get("path") or "")
@@ -1041,6 +1149,14 @@ class Handler(BaseHTTPRequestHandler):
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
             try:
                 return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length)})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/rt-add":  # a file dropped on the Resolve tab; the body is the file itself
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
+            try:
+                return self.send_json({"ok": True, "file": resolvetools.get().add(name, self.rfile, length)})
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
@@ -1089,6 +1205,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **sfx.library.set_group_picture(group, self.rfile.read(length))})
             except sfx.Error as e:
                 return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+        if self.path == "/api/boards-background":  # the body is a picture for a board's background
+            if length > 40 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                bg = boards.background(self.rfile.read(length), self.headers.get("X-Team") == "1")
+            except sfx.LoggedOut as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+            except boards.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save the picture. Try again."})
+            return self.send_json({"ok": True, "bg": bg})
         if self.path == "/api/sfx-picture":  # the body is the new profile picture
             if length > 30 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})
@@ -1124,7 +1252,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e) if isinstance(e, OSError) else "Couldn't load this file."})
         elif self.path == "/api/waveform" and data.get("file"):
-            item = local_files.find(data["file"])
+            item = (resolvetools.get() if str(data["file"]).startswith("r") else local_files).find(data["file"])
             try:
                 if not item:
                     raise OSError("That file is gone. Drop it in again.")
@@ -1169,7 +1297,7 @@ class Handler(BaseHTTPRequestHandler):
                         length = 0
                     trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data), trim, state.normalize)
+            queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim, state.normalize)
             state.set(notice=None)
             self.send_json({"ok": True})
         elif self.path == "/api/convert-many":
@@ -1179,7 +1307,7 @@ class Handler(BaseHTTPRequestHandler):
             items = [i for i in (data.get("items") or []) if isinstance(i, dict) and str(i.get("url", "")).startswith("http")]
             for item in items:
                 trim = [0, min(media.GIF_DEFAULT_SECONDS, int(item.get("seconds") or 0) or media.GIF_DEFAULT_SECONDS)] if fmt == "gif" else None
-                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), save_folder(data), trim,
+                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
                           state.normalize, preview=item)
             state.set(notice=None)
             self.send_json({"ok": True, "added": len(items)})
@@ -1199,7 +1327,7 @@ class Handler(BaseHTTPRequestHandler):
                 quality = state.quality.get(fmt) or settings.DEFAULT_QUALITY[fmt]
             trim = item.get("trim")
             trim = (float(trim[0]), float(trim[1])) if isinstance(trim, list) and len(trim) == 2 else None
-            queue.add(item["url"], fmt, quality, quality_label(fmt, quality), save_folder(data), trim,
+            queue.add(item["url"], fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
                       state.normalize, preview=item)
             self.send_json({"ok": True})
         elif self.path == "/api/history-show":
@@ -1217,7 +1345,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path == "/api/find-add":
                     result = {"file": findsounds.add_to_library(data.get("id"))}
                 else:
-                    path = findsounds.save(data.get("id"), save_folder(data))
+                    path = findsounds.save(data.get("id"), save_folder(data, "sfx"))
                     result = {"path": path, "fileName": os.path.basename(path)}
             except (findsounds.Error, sfx.Error) as e:
                 return self.send_json({"ok": False, "error": str(e)})
@@ -1346,7 +1474,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "files": added, "errors": errors})
         elif self.path == "/api/files-convert":
             try:
-                local_files.convert(data.get("items") or [], data.get("options") or {}, save_folder(data))
+                local_files.convert(data.get("items") or [], data.get("options") or {},
+                                   save_folder(data, project.kind_for((data.get("options") or {}).get("format"))))
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
             self.send_json({"ok": True})
@@ -1359,6 +1488,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/files-clear":
             local_files.clear()
             self.send_json({"ok": True})
+        elif self.path.startswith(("/api/rt-", "/api/project-")):
+            self.handle_resolve(data)
         elif self.path == "/api/file-show":
             item = local_files.find(data.get("id"))
             if item and item["out"]:
@@ -1366,7 +1497,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/image-convert":
             try:
-                made = images.convert(str(data.get("id")), data.get("options") or {}, save_folder(data))
+                made = images.convert(str(data.get("id")), data.get("options") or {}, save_folder(data, "pictures"))
                 self.send_json({"ok": True, **made})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't save this picture."})
@@ -1391,6 +1522,8 @@ class Handler(BaseHTTPRequestHandler):
                 settings.save(folder=state.folder)
             self.send_json({**state.snapshot(), "picked": picked})
         elif self.path == "/api/ask-folder":  # before saving: where to? (or the folder picked in Settings)
+            if project.current():  # a project folder is on: everything goes into it
+                return self.send_json({"ok": True, "folder": project.current()})
             if state.save_mode != "ask":
                 return self.send_json({"ok": True, "folder": state.folder})
             folder = pick_folder(state.last_asked, "Where should this be saved?")
@@ -1628,6 +1761,7 @@ def main():
         names.remove_all_leftovers(started, state.folder)
         updater.remove_old_setups()
         sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
+        resolve.uninstall()  # the old test buttons in Resolve's Scripts menu (the free Resolve 21 can't run them)
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
         if state.auto_update:
             start_background(check_for_updates)

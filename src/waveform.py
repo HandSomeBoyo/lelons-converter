@@ -184,6 +184,31 @@ def _result(path, duration):
     }
 
 
+def peaks_of(path, duration, tracks=1):
+    """Just the loudness values for a file (all its sound tracks together), read straight from it."""
+    import imageio_ffmpeg
+
+    rate = max(200, min(4000, int(1_000_000 / duration))) if duration else 2000
+    try:
+        pcm = subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-nostdin", "-i", path,
+             *(["-filter_complex", "".join(f"[0:a:{n}]" for n in range(tracks)) + f"amix=inputs={tracks}:normalize=0[out]",
+                "-map", "[out]"] if tracks > 1 else ["-map", "0:a:0"]), "-vn", "-ac", "1",
+             "-ar", str(rate), "-f", "s16le", "-"],
+            capture_output=True, timeout=300, creationflags=downloader.NO_WINDOW,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        pcm = b""
+    samples = array.array("h")
+    samples.frombytes(pcm[: len(pcm) // 2 * 2])
+    if not samples:
+        return []
+    step = max(1, len(samples) // BARS)
+    peaks = [max(max(c), -min(c)) for c in (samples[i:i + step] for i in range(0, len(samples), step))]
+    loudest = max(peaks) or 1
+    return [round((p / loudest) ** 0.5, 3) for p in peaks]
+
+
 def busy():
     """True while a trim editor is waiting for its sound or video."""
     return _waiting > 0
