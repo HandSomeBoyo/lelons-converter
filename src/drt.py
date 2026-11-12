@@ -40,7 +40,10 @@ def unpack(blob):
     return _zstd()[1](blob[9:]) if flag == 0x81 else blob[9:]
 
 
-def pack(data, version=2):
+def pack(data, version=2, plain=False):
+    """Resolve keeps small things plain (0x80) and packs bigger ones with zstd (0x81)."""
+    if plain:
+        return struct.pack(">II", version, len(data) + 1) + b"\x80" + data
     packed = _zstd()[0](data)
     return struct.pack(">II", version, len(packed) + 1) + b"\x81" + packed
 
@@ -220,7 +223,7 @@ def _set_clip_start(blob, start):
     pb_set(two, 21, start)
     pb_set(one, 1, write_pb(two))
     pb_set(msg, 1, write_pb(one))
-    return pack(write_pb(msg), blob[3])
+    return pack(write_pb(msg), blob[3], plain=blob[8] == 0x80)
 
 
 # ---------------------------------------------------------------- new ids for everything
@@ -256,7 +259,7 @@ class Ids:
             if is_packed(b):
                 inner = unpack(b)
                 changed = self.blob(inner)
-                return raw if changed == inner else pack(changed, b[3]).hex()
+                return raw if changed == inner else pack(changed, b[3], plain=b[8] == 0x80).hex()
             if len(b) > 6 and b[4:6] in (b"\x78\x9c", b"\x78\xda", b"\x78\x01"):
                 inner = unzlib(b)
                 changed = self.blob(inner)
@@ -358,21 +361,28 @@ def _read(name):
         return f.read()
 
 
+def _read_bytes(name):
+    with open(os.path.join(TEMPLATE, name), "rb") as f:
+        return f.read()
+
+
+TIMELINE_FPS = 24  # the template timeline's frame rate
+
+
 def _rate(fps):
     """The timeline's frame rate: whole numbers (Resolve keeps the real timing of other rates)."""
     return max(1, int(round(fps or 30)))
 
 
-def make(cues, target, name, clip=None, offset=0.0, style=None):
+def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=None):
     """Writes the .drt. cues [(start, end, text)] in seconds from the start of the video (or of the
     timeline with no video); offset: where they start inside the video. Returns how many went in."""
     style = style or {}
     info = media.probe(clip) if clip else {"duration": 0, "video": False, "audio": False, "width": 0, "height": 0,
                                            "fps": 0, "audioTracks": 0}
     has_video = bool(clip and info["video"])
-    fps = _rate(info.get("fps") if has_video else 30)
-    width, height = (info["width"] or 1920, info["height"] or 1080) if has_video else (1920, 1080)
-    width, height = width + width % 2, height + height % 2
+    fps = timeline_fps or TIMELINE_FPS
+    width, height = 1920, 1080  # the timeline's size (see _timeline_blobs)
     origin = 3600 * fps  # timelines start at 01:00:00:00
 
     def frame(seconds):
@@ -560,32 +570,17 @@ def _media_pool_clip(pool, clip, info, fps, frames):
 
 def _timeline_blobs(pool, width, height, fps, seconds, clip):
     """The timeline's settings (size and frame rate), its picture in the Media Pool and its length."""
+    # Resolve crashes when the timeline's own size/frame rate settings are changed here, so
+    # the timeline keeps the template's 1920x1080 at 24 fps (the video is fitted into it).
     seq_match = re.search(r"(<Sm2Sequence DbId=\"[^\"]+\">\s*<FieldsBlob>)(\w+)(</FieldsBlob>)", pool)
     items = read_map(bytes.fromhex(seq_match[2]))
-    setup = bytearray(map_get(items, "SequenceSetup")[2])
-    for at, value in ((44, width), (52, height), (234, width), (242, height)):
-        setup[at:at + 4] = struct.pack(">I", value)
-    setup[80:84] = struct.pack(">I", fps)
-    map_set(items, "SequenceSetup", bytes(setup))
     thumb = read_map(map_get(items, "Thumbnail")[2])
-    picture = _thumbnail(clip)
+    picture = _thumbnail(clip) or _read_bytes("thumb.jpg")  # never empty: an empty one crashes it too
     map_set(thumb, "Buffer", picture)
-    map_set(thumb, "ImgWidth", 208 if picture else -1)
-    map_set(thumb, "ImgHeight", 117 if picture else -1)
+    map_set(thumb, "ImgWidth", 208)
+    map_set(thumb, "ImgHeight", 117)
     map_set(items, "Thumbnail", write_map(thumb))
     pool = pool.replace(seq_match[0], seq_match[1] + write_map(items).hex() + seq_match[3])
-
-    # The size, once more, in the timeline's output settings
-    body_hex = _get(pool, "Body")
-    msg = read_pb(unpack_bare(bytes.fromhex(body_hex)))
-    one = read_pb(pb_get(msg, 1))
-    three = read_pb(pb_get(one, 3))
-    for field, value in ((1, width), (2, height), (4, width), (5, height), (7, width), (8, height)):
-        pb_set(three, field, value)
-    pb_set(one, 3, write_pb(three))
-    pb_set(one, 4, 3600 * fps * 2)
-    pb_set(msg, 1, write_pb(one))
-    pool = pool.replace(body_hex, pack_bare(write_pb(msg)).hex(), 1)
 
     # How long the timeline is, in its Media Pool entry
     clip_match = re.search(r"(<Sm2MpTimelineClip DbId=\"[^\"]+\">\s*<FieldsBlob>)(\w+)(</FieldsBlob>)", pool)
