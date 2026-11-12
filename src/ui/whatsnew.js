@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.24.1", items: [
+    "Smoother Library: with lots of sounds, typing in search used to stutter. Now it stays smooth, and the Library opens faster.",
+    "History opens faster when you have a long list of downloads.",
+    "The side bar does less work in the background (it looks the same), so everything moving on the page has more room to stay smooth.",
+    "Resolve: the Add a video button was squashed flat. It's a proper button again.",
+  ] },
   { version: "2.24.0", items: [
     "New Resolve tab (beta, still being worked on): add a video, watch it right away, then pick what VaultHub should do with it.",
     "Subtitles: VaultHub listens to the speech and writes it down, all on your PC (on an NVIDIA graphics card it's many times faster). It finds the sound track with your voice, learns names you type in, and lines up each line with when you really talk.",

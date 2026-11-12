@@ -3593,7 +3593,7 @@ label.set-row, .set-choice-label { cursor: pointer; }
 .set-choice input[type=radio] { flex: none; width: 18px; height: 18px; margin: 0; }
 .set-button { flex: none; padding: 7px 14px; font-size: 13px; }
 .set-help { margin: 8px 4px 0; padding: 0; font-size: 12.5px; color: var(--muted); }
-.set2 .theme-picks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.set2 .theme-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .set2 .theme-picks button { width: auto; }
 .set2 .volume-row, .set2 .size-row { padding: 0; background: none; margin: 0; }
 .set2 .accent-picks { margin: 0; }
@@ -4990,7 +4990,7 @@ html.side-small .sidebar .tabs .beta-tag { display: none; }
 .bd-menu-body.bd-drop-on { outline: 2px dashed var(--accent); outline-offset: -6px; }
 #bdBoard.bd-has-pic .bd-bar { background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .25)); }
 
-/* ================================================================ 2.25.0: smooth and fast.
+/* ================================================================ 2.24.1: smooth and fast.
    Long lists only work out the rows you can see: a row off the screen keeps its place (its height is
    remembered) but isn't styled, laid out or painted until it scrolls near. */
 .sound { content-visibility: auto; contain-intrinsic-size: auto 62px; }
@@ -5000,127 +5000,3 @@ html.side-small .sidebar .tabs .beta-tag { display: none; }
 .sidebar { -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* Resolve: the "Add a video" button was squashed flat (it lost its height inside the drop box). */
 .rt-start .rt-add-button { height: 44px; min-height: 44px; flex: none; box-sizing: border-box; }
-
-/* ================================================================ The "Sharp" theme (Settings > Appearance).
-   A whole different look, picked like any other theme: square corners, thin lines on a dotted black page,
-   big Grotesk headings in capitals, no glass and no blur. Cards and buttons lift off the page with a hard
-   edge of your color when you point at them. Everything here is under :root[data-theme="sharp"], so the
-   other themes don't change. It builds on the dark theme's rules. */
-:root[data-theme="sharp"] {
-  --bg: #0a0a0b; --panel: #101012; --panel2: #18181b; --line: #26262a; --line2: #3b3b41; --text: #f4f4f2; --muted: #8b8b93;
-  --ink: #0a0a0b; --bars: #34343a; --bars-hover: #5c5c66; --switch-on: var(--accent);
-  --head: Grotesk, InterVar, Inter, "Segoe UI", sans-serif;
-  --r-xs: 0px; --r-sm: 0px; --r: 0px; --r-lg: 0px;
-  --ease: cubic-bezier(.2, .8, .2, 1); --hard: 4px 4px 0 var(--accent);
-  --shadow: none; --shadow-lg: none;
-  --g-fill: none; --g-edge: var(--line); --g-shine: transparent; --g-float: var(--panel); --g-blur: none; --g-shadow: none;
-  --gl-fill: none; --gl-tint: var(--bg); --gl-blur: none; --gl-rim: none; --gl-shadow: none; --gl-line: var(--line); --gl-lens: var(--panel2); --gl-card: var(--panel);
-  --side-gap: 0px; --content-left: var(--side-w);
-}
-/* square everything (but not what you write in Docs, and not the things that have to be round) */
-:root[data-theme="sharp"] *:not(.doc-page *, .pdfe-page *, .spinner, .spin, input[type=radio], [class*="ring"]),
-:root[data-theme="sharp"] *::before, :root[data-theme="sharp"] *::after { border-radius: 0 !important; }
-:root[data-theme="sharp"] *, :root[data-theme="sharp"] *::before, :root[data-theme="sharp"] *::after {
-  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
-}
-:root[data-theme="sharp"] { background: var(--bg); }
-:root[data-theme="sharp"] body { background: transparent; }
-:root[data-theme="sharp"] body::before {
-  background-image: radial-gradient(rgba(255, 255, 255, .11) 1px, transparent 1.5px); background-size: 22px 22px; background-position: 0 0;
-  -webkit-mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, .35) 70%); mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, .35) 70%);
-}
-:root[data-theme="sharp"] ::selection { background: var(--accent); color: #000; }
-
-/* ---- the side bar: a flat column with a line down its edge; the open page is a block with your color on its edge */
-:root[data-theme="sharp"] .sidebar { top: 0; bottom: 0; left: 0; padding: 20px 0 10px; background: var(--bg); box-shadow: inset -1px 0 0 var(--line); }
-:root[data-theme="sharp"] .side-brand { padding: 0 20px 18px; }
-:root[data-theme="sharp"] .side-brand .mark { background: var(--accent); box-shadow: none; }
-:root[data-theme="sharp"] .side-brand .mark svg { fill: #000; color: #000; }
-:root[data-theme="sharp"] .side-brand .word { font: 700 17px var(--head); letter-spacing: .04em; text-transform: uppercase; }
-:root[data-theme="sharp"]:not(.side-small) .tab-group { padding: 20px 20px 8px; font: 500 10.5px/1 var(--head); letter-spacing: .16em; color: var(--muted); }
-:root[data-theme="sharp"]:not(.side-small) .tab-group::before { content: "/ "; color: var(--accent); }
-:root[data-theme="sharp"] .tab-group { font: 500 10.5px/1 var(--head); letter-spacing: .16em; }
-:root[data-theme="sharp"] .sidebar .tabs { gap: 0; }
-:root[data-theme="sharp"] .sidebar .tabs button, :root[data-theme="sharp"] .side-link {
-  padding: 10px 20px; font: 500 13.5px/1.2 var(--head); letter-spacing: .01em; color: var(--muted);
-  transition: color .15s, background-color .15s, padding-left .2s var(--ease);
-}
-:root[data-theme="sharp"] .sidebar .tabs button:hover, :root[data-theme="sharp"] .side-link:hover { color: var(--text); background: none; }
-:root[data-theme="sharp"]:not(.side-small) .sidebar .tabs button:hover, :root[data-theme="sharp"]:not(.side-small) .side-link:hover { padding-left: 26px; }
-:root[data-theme="sharp"] .sidebar .tabs button.active { color: var(--text); font-weight: 600; }
-:root[data-theme="sharp"] .sidebar .tabs button.active svg { color: var(--accent); }
-:root[data-theme="sharp"] .sidebar .tabs .tab-line { background: var(--panel2); box-shadow: inset 3px 0 0 var(--accent); }
-:root[data-theme="sharp"] .sidebar .tabs .tab-line::after { display: none; }
-:root[data-theme="sharp"] .sidebar .tabs .tab-line.moving { animation: none; }
-:root[data-theme="sharp"] .sidebar .tabs .tab-line.ready { transition: transform .32s var(--ease), height .32s var(--ease), width .32s var(--ease), opacity .2s; }
-:root[data-theme="sharp"] .side-foot { border-top: 1px solid var(--line); }
-
-/* ---- pages: big headings in capitals */
-:root[data-theme="sharp"] main { padding-top: 26px; }
-:root[data-theme="sharp"] .headline { font: 700 46px/1 var(--head); letter-spacing: -.035em; text-transform: uppercase; margin: 10px 0 30px; }
-:root[data-theme="sharp"] .headline em { margin-top: 12px; font: 500 12px/1.4 var(--head); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-:root[data-theme="sharp"] .headline em::before { content: "// "; color: var(--accent); }
-:root[data-theme="sharp"] h2, :root[data-theme="sharp"] .home-head h2 { font: 700 13px/1 var(--head); letter-spacing: .14em; text-transform: uppercase; }
-:root[data-theme="sharp"] .home-head h2::before, :root[data-theme="sharp"] main h2::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 10px; background: var(--accent); }
-
-/* ---- cards: a thin outline; point at one and it lifts with a hard edge of your color */
-:root[data-theme="sharp"] :is(.home-card, .home-stats div, .channel-card, .stats-card, .upload-card, .acct-card, .acct-out, .lib-out, .copy-card,
-  .image-options, .playlist, .upload-strip, .preview, .sound-list, .fx-out, .fx-wait, .lib-genres, .gm-card, .fx-card, .job, .dropzone, .doc-tile, .pv-card) {
-  background: var(--panel); border: 1px solid var(--line); box-shadow: none; background-image: none;
-  transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s;
-}
-:root[data-theme="sharp"] :is(.channel-card, .home-card, .gm-card, .fx-card, .upload-card, .pv-card, .bd-tile):hover {
-  transform: translate(-3px, -3px); box-shadow: var(--hard); border-color: var(--text);
-}
-:root[data-theme="sharp"] .dropzone { border-style: dashed; border-color: var(--line2); background: transparent; }
-:root[data-theme="sharp"] .dropzone:hover, :root[data-theme="sharp"] .dragging .dropzone { border-color: var(--accent); background: rgba(var(--accent-rgb), .05); }
-
-/* ---- boxes you type in */
-:root[data-theme="sharp"] .input { background: var(--panel); border: 1px solid var(--line2); box-shadow: none; background-image: none; transition: border-color .15s, box-shadow .18s var(--ease); }
-:root[data-theme="sharp"] .input:hover { border-color: var(--muted); }
-:root[data-theme="sharp"] .input:focus-within { border-color: var(--accent); box-shadow: 3px 3px 0 rgba(var(--accent-rgb), .35); }
-
-/* ---- buttons: your color, black capitals; they lift when you point and press down when you click */
-:root[data-theme="sharp"] :is(.convert, .small-button:not(.ghost-button):not(.outline-button):not(.lib-out-buttons .small-button)) {
-  background: var(--accent); color: #000; box-shadow: none; border: 0; background-image: none;
-  font-family: var(--head); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  transition: transform .16s var(--ease), box-shadow .16s var(--ease), background-color .15s;
-}
-:root[data-theme="sharp"] :is(.convert, .small-button:not(.ghost-button):not(.outline-button):not(.lib-out-buttons .small-button)):hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--text); filter: none; }
-:root[data-theme="sharp"] :is(.convert, .small-button:not(.ghost-button):not(.outline-button):not(.lib-out-buttons .small-button)):active:not(:disabled) { transform: none; box-shadow: none; }
-:root[data-theme="sharp"] .convert:disabled { background: var(--panel2); color: var(--muted); }
-:root[data-theme="sharp"] :is(.ghost-button, .outline-button, .lib-out-buttons .small-button) {
-  background: transparent; color: var(--text); border: 1px solid var(--line2); box-shadow: none; background-image: none;
-  font-family: var(--head); letter-spacing: .06em; text-transform: uppercase; font-size: 12px; transition: border-color .15s, background-color .15s, color .15s;
-}
-:root[data-theme="sharp"] :is(.ghost-button, .outline-button, .lib-out-buttons .small-button):hover { border-color: var(--text); background: var(--text); color: #000; }
-:root[data-theme="sharp"] :is(.toggle button, .quality, .chips button) { background: transparent; border: 1px solid var(--line2); box-shadow: none; background-image: none; color: var(--muted); font-family: var(--head); letter-spacing: .04em; }
-:root[data-theme="sharp"] :is(.toggle button, .chips button):hover { color: var(--text); border-color: var(--muted); }
-:root[data-theme="sharp"] :is(.toggle button.active, .chips button.active) { background: var(--text); color: #000; border-color: var(--text); }
-:root[data-theme="sharp"] .link, :root[data-theme="sharp"] .home-link { text-transform: uppercase; font: 600 12px var(--head); letter-spacing: .1em; }
-
-/* switches: a square that slides */
-:root[data-theme="sharp"] .check input[type=checkbox] { background: transparent; box-shadow: inset 0 0 0 1px var(--line2); }
-:root[data-theme="sharp"] .check input[type=checkbox]::after { background: var(--muted); box-shadow: none; }
-:root[data-theme="sharp"] .check input[type=checkbox]:checked { background: var(--accent); box-shadow: none; }
-:root[data-theme="sharp"] .check input[type=checkbox]:checked::after { background: #000; }
-
-/* ---- popups: a solid box with a hard edge, the page goes dark behind it (no blur) */
-:root[data-theme="sharp"] .modal { background: rgba(0, 0, 0, .78); }
-:root[data-theme="sharp"] .modal > .dialog, :root[data-theme="sharp"] .dialog {
-  background: var(--panel); background-image: none; border: 1px solid var(--line2); box-shadow: 8px 8px 0 var(--accent);
-}
-:root[data-theme="sharp"] :is(.account-panel, .help-pop, .people-pop, .volume-pop, .lib-menu, .player-bar) { background: var(--panel); background-image: none; border: 1px solid var(--line2); box-shadow: var(--hard); }
-:root[data-theme="sharp"] .dialog h2 { font-size: 18px; letter-spacing: .04em; }
-:root[data-theme="sharp"] .dialog h2::before { display: none; }
-
-/* the Sharp sample in Settings */
-.theme-sample.sharp { background: #0a0a0b; background-image: radial-gradient(rgba(255, 255, 255, .22) 1px, transparent 1.5px); background-size: 8px 8px; border-radius: 0; }
-.theme-sample.sharp i { color: #f4f4f2; border-radius: 0; height: 9px; }
-.theme-sample.sharp b { border-radius: 0; box-shadow: 3px 3px 0 #f4f4f2; }
-:root[data-theme="sharp"].side-small .side-brand { padding: 0 0 12px 17px; }
-:root[data-theme="sharp"].side-small .side-fold { left: 17px; }
-:root[data-theme="sharp"].side-small .sidebar .tabs button, :root[data-theme="sharp"].side-small .side-link { padding-left: 23px; }
-:root[data-theme="sharp"] .sidebar .tabs button, :root[data-theme="sharp"] .side-link { transition: color .15s, background-color .15s, padding-left .3s var(--ease); }
-/* spinners stay round (a spinning square looks broken) */
-:root[data-theme="sharp"] :is(.find-spinner, .copy-spin, .spinner), :root[data-theme="sharp"] .wave-message.loading::before { border-radius: 50% !important; }
