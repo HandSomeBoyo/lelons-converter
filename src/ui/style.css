@@ -4826,22 +4826,68 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 
 /* ---------------------------------------------------------------- Resolve tab */
 
-.rt-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.rt-start { padding: 46px 20px; gap: 12px; }
+.rt-start > svg { width: 34px; height: 34px; }
+.rt-add-button { pointer-events: none; padding: 0 22px; height: 44px; display: inline-flex; align-items: center; font-size: 15px; }
+.rt-work { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
+.rt-stage { min-width: 0; }
+.rt-screen .rt-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(0, 0, 0, .55); color: #ddd; font-size: 13.5px; }
+.rt-screen .rt-loading[hidden] { display: none; }
+.rt-loading .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.rt-file { min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-file-info { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.rt-file-info.error { color: var(--red); }
+.rt-side { min-width: 0; background: var(--panel); border-radius: var(--r); padding: 16px; }
+.rt-panel-title { margin: 0 0 12px; font: 700 17px var(--head); letter-spacing: -.2px; }
+.rt-count { font: 500 13px var(--body, inherit); color: var(--muted); margin-left: 4px; }
+.rt-back { display: inline-block; margin: 0 0 8px; font-size: 12.5px; }
+.rt-tools { display: grid; gap: 8px; }
 .rt-tool {
-  all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 6px; min-width: 0;
-  padding: 14px 16px 15px; border-radius: var(--r); background: var(--panel); border: 1.5px solid transparent;
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: flex-start; gap: 12px; min-width: 0;
+  padding: 13px 14px; border-radius: 12px; background: var(--panel2); border: 1.5px solid transparent;
   transition: border-color .15s, background .15s, transform .15s var(--ease-out);
 }
-.rt-tool:hover { background: var(--panel2); }
+.rt-tool:hover { border-color: rgba(var(--accent-rgb), .6); }
 .rt-tool:active { transform: scale(.985); }
-.rt-tool.active { border-color: var(--accent); background: rgba(var(--accent-rgb), .07); }
-.rt-tool svg { width: 22px; height: 22px; color: var(--accent); }
-.rt-tool strong { font-size: 15px; }
-.rt-tool span { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.rt-tool:disabled { opacity: .45; cursor: default; border-color: transparent; }
+.rt-tool > svg { flex: none; width: 22px; height: 22px; color: var(--accent); margin-top: 1px; }
+.rt-tool-text { display: grid; gap: 3px; }
+.rt-tool strong { font-size: 14.5px; }
+.rt-tool-text span { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 .rt-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-#rtList { margin-top: 10px; }
-.rt-row .pic svg { width: 26px; height: 26px; color: var(--accent); }
-#rtOptions { margin-top: 14px; }
+#rtOptions { margin: 0; padding: 0; background: none; }
+#rtOptions .opt-row { flex-direction: column; align-items: stretch; gap: 6px; }
+#rtOptions .opt-label { width: auto; }
+.rt-words { width: 100%; }
+.rt-part { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+.rt-part:empty { display: none; }
+#rtNote { margin: 12px 0 0; }
+#rtNote.error { color: var(--red); }
+.rt-go { width: 100%; justify-content: center; margin-top: 14px; }
+.rt-progress { margin-top: 14px; }
+.rt-progress .bar { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; }
+.rt-progress .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.rt-progress .bar.indeterminate > div { width: 35%; animation: rt-slide 1.2s ease-in-out infinite; }
+@keyframes rt-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.rt-progress-line { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.rt-subs { display: flex; flex-direction: column; }
+.rt-subs .subs-tip { margin: -4px 0 10px; }
+.rt-subs .subs-shift { margin-bottom: 10px; }
+.rt-subs .subs-list { max-height: min(460px, 52vh); }
+.rt-subs-foot { margin-top: 12px; }
+.rt-subs-foot .subs-saved { display: block; line-height: 1.5; }
+.rt-subs-foot .subs-saved:empty { display: none; }
+.rt-subs-foot .rt-go { margin-top: 10px; }
+.rt-old { display: block; margin-top: 8px; font-size: 12px; }
+.rt-done-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(var(--accent-rgb), .15); color: var(--accent); margin: 6px 0 10px; }
+.rt-done-icon svg { width: 22px; height: 22px; }
+.rt-done-file { margin: 0 0 14px; padding: 12px 14px; border-radius: 10px; background: var(--panel2); font-size: 13px; font-weight: 600; word-break: break-all; }
+.rt-done-file:empty { display: none; }
+.rt-done-file.can-drag { cursor: grab; border: 1.5px dashed rgba(var(--accent-rgb), .6); }
+#rtWork[hidden], .rt-panel[hidden] { display: none; }
+@media (max-width: 960px) { .rt-work { grid-template-columns: minmax(0, 1fr); } }
 
 .rt-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 22px; }
 .rt-card h3 svg { width: 17px; height: 17px; color: var(--accent); }
@@ -4868,7 +4914,7 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 #rtProjectError { margin: 10px 0 0; color: var(--red); font-size: 12.5px; }
 
 @media (max-width: 900px) {
-  .rt-tools, .rt-cards { grid-template-columns: minmax(0, 1fr); }
+  .rt-cards { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* the subtitle editor */
@@ -4916,3 +4962,9 @@ body.doc-pdf #docDarkButton, body.doc-pdf #docNotesButton, body.doc-pdf #docGuid
 @media (max-width: 900px) { .subs-body { grid-template-columns: minmax(0, 1fr); } }
 .rt-install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 #rtInstallNote.error { color: #ff6b6b; }
+.rt-go { box-sizing: border-box; }
+.rt-words { box-sizing: border-box; flex: none; height: 42px; padding: 0 12px; background: var(--panel2); }
+.rt-words input { width: 100%; font-size: 13.5px; }
+.rt-subs .subs-when { white-space: nowrap; }
+.rt-subs .subs-row .nudge { min-width: 24px; padding: 0 6px; white-space: nowrap; }
+.rt-subs .subs-row-top { gap: 3px; }

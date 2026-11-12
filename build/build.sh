@@ -46,6 +46,7 @@ find "$R/Lib/site-packages/bin" -type f ! -name "deno.exe" -delete
 echo "==> Copying the app"
 cp "$ROOT"/src/*.py "$STAGE/app/"
 cp -r "$ROOT/src/ui" "$STAGE/app/ui"
+cp -r "$ROOT/src/resolve_template" "$STAGE/app/resolve_template"
 cp "$ROOT/assets/icon.png" "$ROOT/assets/icon.ico" "$STAGE/app/"
 
 echo "==> Getting WebView2Loader.dll"

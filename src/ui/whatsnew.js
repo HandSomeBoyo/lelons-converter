@@ -3,12 +3,12 @@
 
 const CHANGES = [
   { version: "2.24.0", items: [
-    "New Resolve tab: tools that make editing in DaVinci Resolve easier, all in one place.",
-    "Fix for Resolve: drop in a video from OBS, a game or your phone and get a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
-    "Subtitles: VaultHub listens to the speech and makes subtitles, all on your PC (on an NVIDIA graphics card it's many times faster). Check them next to the video, fix words and move a line a little earlier or later.",
-    "Then click Put in Resolve, and in Resolve use File \u203a Import \u203a Timeline: you get your video with the subtitles. Right-click the subtitle track's name \u203a Convert Subtitles to Text+ to style and animate them.",
-    "Cut the silence: finds the quiet parts and makes a timeline without them (every cut can still be changed in Resolve), or a new video if you like.",
-    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place. Drag the folder into Resolve's Media Pool to get it all in.",
+    "New Resolve tab: add a video, watch it right away, then pick what VaultHub should do with it.",
+    "Subtitles: VaultHub listens to the speech and writes it down, all on your PC (on an NVIDIA graphics card it's many times faster). It finds the sound track with your voice, learns names you type in, and lines up each line with when you really talk.",
+    "Read along with the video in VaultHub, fix words and nudge lines, then click Put in Resolve. In Resolve, File › Import › Timeline gives you your video with every subtitle as Text+, ready to style and animate.",
+    "Cut the silence: makes a timeline without the quiet parts (every cut can still be changed in Resolve), or a new video if you like.",
+    "Fix for Resolve: videos from OBS, games and phones become a .MOV that Resolve edits smoothly, with the sound in sync and every sound track kept separate.",
+    "Project folder: make a folder for your video with Footage, Audio, VFX and more. While it's on, the things you download or make in VaultHub land in the right place.",
   ] },
   { version: "2.23.0", items: [
     "Docs: editing a PDF works better with any PDF. Icons made of several parts (like a person icon) are now picked up as one piece, and picking something up never changes how it looks.",

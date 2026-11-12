@@ -492,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
         self.send_body(body, content_type, cookie)
 
-    def send_media(self, path):
+    def send_media(self, path, kind=None):
         """Audio for the trim editor. Supports byte ranges so the player can jump around."""
         size = os.path.getsize(path)
         start, end = 0, size - 1
@@ -513,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_response(200)
         content_type = {".webm": "audio/webm", ".m4a": "audio/mp4", ".mp4": "video/mp4", ".opus": "audio/ogg"}
-        self.send_header("Content-Type", content_type.get(os.path.splitext(path)[1], "application/octet-stream"))
+        self.send_header("Content-Type", kind or content_type.get(os.path.splitext(path)[1], "application/octet-stream"))
         self.send_header("Content-Length", str(end - start + 1))
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
@@ -544,6 +544,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/rt-video/"):  # a video on the Resolve tab, played right from where it is
+            file_id, _, copy = self.path[len("/rt-video/"):].partition("/")
+            path = resolvetools.get().video_path(file_id, copy == "copy")
+            if not path:
+                return self.send_error(404)
+            ext = os.path.splitext(path)[1].lower()
+            kind = "video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv") else None
+            return self.send_media(path, kind)
         if self.path.startswith("/file-thumb/"):
             file_id = self.path[len("/file-thumb/"):]
             item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
@@ -623,20 +631,17 @@ class Handler(BaseHTTPRequestHandler):
                     show_in_folder(shown)
             elif path == "/api/rt-cues":
                 item = tools.cues(data.get("id"))
-                media_info = {}
-                if item.get("soundCopy") and os.path.isfile(item["soundCopy"]):
-                    media_info = waveform.get_local(item["id"] + "-mix", item["soundCopy"], False)
-                elif not item.get("fromResolve"):
-                    media_info = waveform.get_local(item["id"], item["path"], bool(item["video"]))
                 trim = (item.get("job") or {}).get("trim")
                 return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in item["cues"]],
-                                       "offset": trim[0] if trim else 0, "video": bool(item["video"]) and not item.get("fromResolve"),
-                                       "name": item["name"], "fromResolve": bool(item.get("fromResolve")),
-                                       "sent": item.get("sent"), **media_info})
+                                       "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent")})
+            elif path == "/api/rt-preview":
+                return self.send_json({"ok": True, **tools.preview(data.get("id"))})
+            elif path == "/api/rt-wave":
+                return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
             elif path == "/api/rt-cues-save":
                 tools.save_cues(data.get("id"), data.get("cues") or [])
             elif path == "/api/rt-send":
-                return self.send_json({"ok": True, **tools.send(data.get("id"))})
+                return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt")})
             # ---- project folders
             elif path == "/api/project-make":
                 parent = pick_folder(state.folder, "Where should the project folder go?")

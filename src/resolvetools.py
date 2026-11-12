@@ -18,6 +18,7 @@ import os
 import shutil
 import threading
 
+import drt
 import fcpxml
 import files
 import history
@@ -26,11 +27,13 @@ import names
 import settings
 import silence
 import subtitles
+import waveform
 
 TOOLS = ("fix", "subtitles", "silence")
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
-DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "quick", "level": "normal", "pause": "0.5", "cutAs": "timeline", "device": "gpu"}
+DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
+            "device": "gpu", "words": ""}
 
 
 def load_options():
@@ -56,6 +59,8 @@ def load_options():
         o["device"] = saved["device"]
     if saved.get("cutAs") in ("timeline", "video"):
         o["cutAs"] = saved["cutAs"]
+    if isinstance(saved.get("words"), str):
+        o["words"] = saved["words"][:300]
     return o
 
 
@@ -86,9 +91,9 @@ class Tools(files.Files):
 
     def _register(self, file_id, name, path, copied):
         super()._register(file_id, name, path, copied)
-        found = media.probe(path)
         with self.lock:
             item = next(i for i in self.items if i["id"] == file_id)
+            found = item["probe"]
             item.update(fps=found["fps"], audioTracks=found["audioTracks"], tool="", cues=None, sent=False,
                         fromResolve="", soundCopy="", keep=None)
             return self._public(item)
@@ -106,7 +111,8 @@ class Tools(files.Files):
         if tool not in TOOLS:
             raise ValueError("Pick what to do first.")
         o = save_options(options)
-        job = {"format": tool, "quality": "", "targetMb": None, "normalize": False, "folder": folder, **o}
+        job = {"format": tool, "quality": "", "targetMb": None, "normalize": False, "folder": folder, **o,
+               "track": str(options.get("track") or "auto")}
         with self.lock:
             for pick in picks:
                 item = next((i for i in self.items if i["id"] == str(pick.get("id"))), None)
@@ -131,8 +137,9 @@ class Tools(files.Files):
         status = item["status"]
         return {"status": status, "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
-    def send(self, file_id):
-        """"Put in Resolve" in the subtitle editor: a timeline file with the video and its subtitles."""
+    def send(self, file_id, kind="drt"):
+        """"Put in Resolve" under the subtitles: a timeline file with the video and its subtitles as
+        Text+ (a .drt, Resolve's own kind of file), or the old way (FCPXML: a subtitle track)."""
         item = self.find(file_id)
         if not item or not item.get("cues"):
             raise ValueError("There are no subtitles to send yet.")
@@ -156,11 +163,82 @@ class Tools(files.Files):
             elif os.path.getsize(keep) == os.path.getsize(source):
                 source = keep
         trim = item["job"].get("trim")
-        target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
-        fcpxml.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
+        if kind == "fcpxml":
+            target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
+            fcpxml.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
+        else:
+            target = os.path.join(folder, f"{stem} (subtitles).drt")
+            drt.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
         with self.lock:
             item.update(sent=True, timeline=target)
         return {"file": target, "name": os.path.basename(target)}
+
+    # ---- watching it in VaultHub
+
+    def video_path(self, file_id, copy=False):
+        """The file the window plays: the video itself (instant), or the copy made by preview()."""
+        item = self.find(file_id)
+        if not item:
+            return None
+        path = item.get("preview") if copy else item["path"]
+        return path if path and os.path.isfile(path) else None
+
+    def preview(self, file_id):
+        """The window couldn't play the video itself (say an MKV or ProRes), so make a copy it can.
+        Just repacked when the picture is already fine (a few seconds), else remade on the graphics
+        card when there is one. Returns {"ready", "progress"}; call again to see how it's going."""
+        item = self.find(file_id)
+        if not item:
+            raise ValueError("This video was removed.")
+        with self.lock:
+            if item.get("preview") and os.path.isfile(item["preview"]):
+                return {"ready": True, "progress": 100}
+            if item.get("previewError"):
+                return {"ready": False, "error": item["previewError"]}
+            if not item.get("previewBusy"):
+                item.update(previewBusy=True, previewProgress=0)
+                threading.Thread(target=self._make_preview, args=(item,), daemon=True).start()
+            return {"ready": False, "progress": item.get("previewProgress", 0)}
+
+    def _make_preview(self, item):
+        found = item.get("probe") or media.probe(item["path"])
+        os.makedirs(files.FOLDER, exist_ok=True)
+        target = os.path.join(files.FOLDER, f"preview-{item['id']}.mp4")
+        temp = target + ".part.mp4"
+        seconds = item["seconds"] or 0
+
+        def progress(percent):
+            item["previewProgress"] = percent
+
+        sound = ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "160k", "-ac", "2"]
+        try:
+            if not item["video"]:
+                media.run(["-i", item["path"], "-vn", *sound, temp], seconds, progress)
+            elif found.get("videoCodec") in ("h264", "vp9", "av1") and not found.get("tenBit"):
+                media.run(["-i", item["path"], "-map", "0:v:0", "-c:v", "copy", *sound, "-movflags", "+faststart", temp],
+                          seconds, progress)
+            else:
+                media.run_video(["-i", item["path"], "-map", "0:v:0", "-vf", "scale=-2:'min(720,ih)'"],
+                                [*sound, "-movflags", "+faststart"], temp, seconds, progress)
+            os.replace(temp, target)
+            with self.lock:
+                item.update(preview=target, previewBusy=False, previewProgress=100)
+        except Exception:
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+            with self.lock:
+                item.update(previewBusy=False, previewError="VaultHub can't show this video, but the tools still work on it.")
+
+    def peaks(self, file_id):
+        """How loud the sound is along the video, for drawing under the player."""
+        item = self.find(file_id)
+        if not item:
+            raise ValueError("This video was removed.")
+        if item.get("peaks") is None:
+            item["peaks"] = waveform.peaks_of(item["path"], item["seconds"]) if item["audio"] else []
+        return item["peaks"]
 
     # ---- the subtitle editor
 
@@ -185,11 +263,6 @@ class Tools(files.Files):
         if item["out"] and os.path.isfile(item["out"]):
             subtitles.write_srt(clean, item["out"])
         return clean
-
-    def cue_text(self, item):
-        """The subtitles as plain lines for the Lua script: "start<TAB>end<TAB>text" (newlines as \\n)."""
-        return "".join(f"{s:.3f}\t{e:.3f}\t{t.replace(chr(92), '/').replace(chr(10), chr(92) + 'n')}\n"
-                       for s, e, t in item["cues"])
 
     # ---- doing the work
 
@@ -217,11 +290,14 @@ class Tools(files.Files):
         if tool == "subtitles":
             temp = names.temp_path(folder, stem, ".srt")
             # Every sound track (OBS often puts the game, your mic and Discord on separate ones).
-            parts = item.get("parts") or [(item["path"], trim[0] if trim else 0, length if trim else None, 0, stream)
-                                          for stream in range(max(1, item.get("audioTracks") or 1))]
+            tracks = max(1, item.get("audioTracks") or 1)
+            picked = job.get("track", "auto")
+            streams = [int(picked)] if picked.isdigit() and int(picked) < tracks else list(range(tracks))
+            parts = [(item["path"], trim[0] if trim else 0, length if trim else None, 0, stream) for stream in streams]
             try:
                 cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
-                                                gpu=job.get("device") != "cpu")
+                                                gpu=job.get("device") != "cpu", words=job.get("words", ""),
+                                                find_voice=picked == "auto" and tracks > 1)
                 path = names.finish(temp)
             except BaseException:
                 if os.path.exists(temp):
@@ -298,11 +374,12 @@ class Tools(files.Files):
     def remove(self, file_id):
         item = self.find(file_id)
         super().remove(file_id)
-        if item and item.get("soundCopy"):
-            try:
-                os.remove(item["soundCopy"])
-            except OSError:
-                pass
+        for path in (item or {}).get("soundCopy"), (item or {}).get("preview"):
+            if path:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
 
 tools = None

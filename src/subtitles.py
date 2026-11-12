@@ -374,7 +374,7 @@ def read_audio(path, start=0.0, length=None, stream=0, on_progress=None):
     return np.frombuffer(data[: len(data) // 4 * 4], dtype=np.float32)
 
 
-def listen(model, audio, language, on_progress):
+def listen(model, audio, language, on_progress, words=""):
     """Words with times: [(start, end, word)].
 
     On the graphics card it listens in order, using what was said before to understand what comes
@@ -382,7 +382,8 @@ def listen(model, audio, language, on_progress):
     seconds = len(audio) / SAMPLE_RATE
     common = dict(language=language or None, word_timestamps=True, vad_filter=True,
                   vad_parameters={"min_silence_duration_ms": 500}, beam_size=5,
-                  language_detection_segments=4)  # find the language from more than the first 30 s
+                  language_detection_segments=4,  # find the language from more than the first 30 s
+                  hotwords=words.strip() or None)  # names and words it should know (spelled the way you want)
     if getattr(model, "on_gpu", False):
         segments, _info = model.transcribe(
             audio, condition_on_previous_text=True, no_speech_threshold=0.6, log_prob_threshold=-1.0,
@@ -494,7 +495,8 @@ def write_srt(cues, target):
 
 # ---------------------------------------------------------------- the whole thing
 
-def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True):
+def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True,
+                   words="", find_voice=False):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
@@ -512,6 +514,11 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
         total = max(total, at + len(audio) / SAMPLE_RATE)
     if not total:
         raise ValueError("There's no sound to listen to.")
+    if find_voice and len(pieces) > 1:
+        report("Finding your voice", 0)
+        best = _voice_track([audio for _at, audio in pieces])
+        if best is not None:
+            pieces = [pieces[best]]
     mix = np.zeros(int(total * SAMPLE_RATE) + 1, dtype=np.float32)
     for at, audio in pieces:
         begin = max(0, int(at * SAMPLE_RATE))
@@ -523,12 +530,91 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     if sound_copy:
         _save_wav(mix, sound_copy)  # for the subtitle editor, when there's no single file to play
     where = " on the graphics card" if getattr(whisper, "on_gpu", False) else ""
-    words = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent))
-    if not words:
+    heard = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent), words)
+    if not heard:
         raise ValueError("Couldn't hear any speech in this.")
-    cues = make_cues(words, style)
+    cues = snap_to_voice(make_cues(heard, style), mix)
     write_srt(cues, target)
     return cues
+
+
+def _voice_track(tracks):
+    """Which sound track has your voice: the one with the most speech that stands out the most from
+    the sound around it (a mic track is quiet between words; game sound and music aren't)."""
+    import numpy as np
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    best, best_score = None, 0.0
+    for n, audio in enumerate(tracks):
+        if not len(audio):
+            continue
+        sample = audio[: SAMPLE_RATE * 600]  # the first 10 minutes say enough
+        speech = get_speech_timestamps(sample, VadOptions(min_silence_duration_ms=300))
+        if not speech:
+            continue
+        mask = np.zeros(len(sample), dtype=bool)
+        for s in speech:
+            mask[s["start"]:s["end"]] = True
+        share = mask.mean()
+        talking = float(np.sqrt(np.mean(sample[mask] ** 2)))
+        rest = float(np.sqrt(np.mean(sample[~mask] ** 2))) if (~mask).any() else 0.0
+        score = share * talking / (rest + 1e-4)
+        if score > best_score:
+            best, best_score = n, score
+    return best
+
+
+def snap_to_voice(cues, audio):
+    """Whisper's times are often a little off (most of all where a line ends). Moves each line's start
+    to where the voice really starts and its end to where it stops, using how loud the sound is."""
+    import numpy as np
+
+    if not len(audio) or not cues:
+        return cues
+    step = SAMPLE_RATE // 100  # 10 ms
+    n = len(audio) // step
+    if n < 10:
+        return cues
+    loud = np.sqrt(np.mean(audio[: n * step].reshape(n, step) ** 2, axis=1))
+    out = []
+    for i, (start, end, text) in enumerate(cues):
+        a, b = int(start * 100), int(end * 100)
+        lo, hi = max(0, a - 150), min(n, b + 150)
+        if hi - lo < 20:
+            out.append([start, end, text])
+            continue
+        floor = float(np.percentile(loud[lo:hi], 15))
+        peak = float(np.percentile(loud[lo:hi], 95))
+        if peak < floor * 2.5 or peak < 1e-3:  # too noisy to tell: keep Whisper's times
+            out.append([start, end, text])
+            continue
+        level = floor + (peak - floor) * 0.15
+        on = loud > level
+        # Start: the first moment it gets loud, from 0.2 s before to 0.25 s after Whisper's start.
+        new_start = start
+        for f in range(max(0, a - 20), min(n - 3, a + 25)):
+            if on[f] and on[f + 1] and on[f + 2]:
+                new_start = max(0.0, f / 100 - 0.05)
+                break
+        # End: where it goes quiet for 0.2 s, from 0.3 s before to 0.6 s after Whisper's end.
+        new_end = end
+        for f in range(max(a + 10, b - 30), min(n - 20, b + 60)):
+            if on[f] and not on[f + 1:f + 21].any():
+                new_end = f / 100 + 0.12
+                break
+        out.append([new_start, max(new_end, new_start + 0.4), text])
+    # In order, never on top of each other; short gaps closed so lines don't flicker.
+    style_min = 0.7
+    for i, cue in enumerate(out):
+        if i:
+            cue[0] = max(cue[0], out[i - 1][0] + 0.2)
+        nxt = out[i + 1][0] if i + 1 < len(out) else None
+        if nxt is not None:
+            if nxt - cue[1] < 0.3:
+                cue[1] = nxt - 0.04
+            cue[1] = min(cue[1], nxt - 0.04)
+        cue[1] = max(cue[1], cue[0] + min(style_min, (nxt - cue[0] - 0.04) if nxt else style_min))
+    return [(round(a, 3), round(b, 3), t) for a, b, t in out]
 
 
 def _save_wav(audio, target):

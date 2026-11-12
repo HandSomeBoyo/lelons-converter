@@ -33,7 +33,7 @@ def probe(path):
     except subprocess.TimeoutExpired:
         text = ""
     found = {"duration": 0.0, "video": False, "audio": False, "width": 0, "height": 0,
-             "fps": 0.0, "videoCodec": "", "audioTracks": 0}
+             "fps": 0.0, "videoCodec": "", "audioTracks": 0, "tenBit": False}
     match = re.search(r"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", text)
     if match:
         h, m, s = match.groups()
@@ -42,6 +42,12 @@ def probe(path):
         if not line.strip().startswith("Stream #"):
             continue
         if ": Audio:" in line:
+            if not found["audio"]:
+                rate = re.search(r", (\d+) Hz", line)
+                found["audioRate"] = int(rate[1]) if rate else 48000
+                found["audioChannels"] = 1 if ", mono" in line else 6 if "5.1" in line else 8 if "7.1" in line else 2
+                codec = re.search(r": Audio: (\w+)", line)
+                found["audioCodec"] = codec[1] if codec else ""
             found["audio"] = True
             found["audioTracks"] += 1
         elif ": Video:" in line and "attached pic" not in line and not found["video"]:
@@ -50,6 +56,7 @@ def probe(path):
                 found.update(video=True, width=int(size[1]), height=int(size[2]))
                 codec = re.search(r": Video: (\w+)", line)
                 found["videoCodec"] = codec[1] if codec else ""
+                found["tenBit"] = bool(re.search(r"\b(yuvj?4(22|44)\w*|p010\w*|yuv\w*1[02](le|be))\b", line))  # not 8-bit 4:2:0
                 rate = re.search(r", (\d+(?:\.\d+)?)(k?) fps", line) or re.search(r", (\d+(?:\.\d+)?)(k?) tbr", line)
                 if rate:
                     found["fps"] = float(rate[1]) * (1000 if rate[2] else 1)
