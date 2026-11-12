@@ -80,6 +80,7 @@
       <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
       <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
       <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
       <div class="tab-group">Create</div>
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
@@ -279,6 +280,220 @@
     </div>
     <div class="jobs" id="jobs"></div>
   </section>
+  </section>
+
+  <section class="tab-page" id="resolveTab" hidden>
+    <p class="rt-beta"><i class="beta-tag">Beta</i> Early version, still being worked on. Tell us what to fix.</p>
+    <h1 class="headline">Edit faster<br><em>in DaVinci Resolve.</em></h1>
+
+    <label class="dropzone rt-start" id="rtDrop">
+      <input type="file" id="rtFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z"/></svg>
+      <span class="convert rt-add-button">Add a video</span>
+      <span class="drop-hint">or drop it here. MP4, MKV, MOV, recordings from OBS, phones and more</span>
+    </label>
+
+    <div class="rt-work" id="rtWork" hidden>
+      <div class="rt-stage">
+        <div class="subs-screen rt-screen" id="rtScreen">
+          <video id="rtVideo" playsinline preload="auto"></video>
+          <div class="subs-caption" id="rtCaption"></div>
+          <div class="rt-loading" id="rtLoading" hidden><span class="spinner"></span><span id="rtLoadingText">Opening the video...</span></div>
+        </div>
+        <div class="subs-wave" id="rtWave"><canvas id="rtCanvas"></canvas><div class="subs-marks" id="rtMarks"></div><div class="playhead" id="rtHead"></div></div>
+        <div class="subs-transport">
+          <button type="button" class="subs-play" id="rtPlay" title="Play or pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
+          <span class="subs-time" id="rtTime">0:00.0</span>
+          <span class="rt-file" id="rtFileName"></span>
+          <span class="spacer"></span>
+          <button type="button" class="ghost-button small-button" id="rtChange">Change video</button>
+        </div>
+        <p class="rt-file-info" id="rtFileInfo"></p>
+      </div>
+
+      <div class="rt-side">
+        <!-- 1: pick what to do -->
+        <div class="rt-panel" id="rtPick">
+          <h3 class="rt-panel-title">What should VaultHub do?</h3>
+          <div class="rt-tools" id="rtTools">
+            <button type="button" class="rt-tool" data-tool="subtitles">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 11h4M13 11h4M7 15h7M16 15h1"/></svg>
+              <span class="rt-tool-text"><strong>Subtitles</strong><span>Writes down what's said. You check it here, then it goes into Resolve as Text+.</span></span>
+            </button>
+            <button type="button" class="rt-tool" data-tool="silence">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l2-5 2 10 2-5h2"/><path d="M15 12h6" stroke-dasharray="1.5 2.5"/></svg>
+              <span class="rt-tool-text"><strong>Cut the silence</strong><span>Takes out the quiet parts between what's said.</span></span>
+            </button>
+            <button type="button" class="rt-tool" data-tool="fix">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>
+              <span class="rt-tool-text"><strong>Fix for Resolve</strong><span>Laggy or out-of-sync videos from OBS, games and phones play smoothly.</span></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2: a few choices, then go -->
+        <div class="rt-panel" id="rtSetup" hidden>
+          <button type="button" class="link rt-back" id="rtBack">‹ Back</button>
+          <h3 class="rt-panel-title" id="rtSetupTitle"></h3>
+          <div class="image-options" id="rtOptions">
+            <div class="opt-row" id="rtLangRow">
+              <span class="opt-label">Language</span>
+              <div class="chips" data-key="language">
+                <button data-value="">Find it by itself</button>
+                <button data-value="en">English</button>
+                <button data-value="no">Norwegian</button>
+                <button data-value="sv">Swedish</button>
+                <button data-value="da">Danish</button>
+                <button data-value="de">German</button>
+                <button data-value="es">Spanish</button>
+                <button data-value="fr">French</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtTrackRow" hidden>
+              <span class="opt-label">Listen to</span>
+              <div class="chips" id="rtTrackChips"></div>
+            </div>
+            <div class="opt-row" id="rtModelRow">
+              <span class="opt-label">Listening</span>
+              <div class="chips" data-key="model">
+                <button data-value="best">Best (most accurate)</button>
+                <button data-value="quick">Quick</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtStyleRow">
+              <span class="opt-label">Lines</span>
+              <div class="chips" data-key="style">
+                <button data-value="normal">Normal lines</button>
+                <button data-value="short">Short (Shorts and TikTok)</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtWordsRow">
+              <span class="opt-label">Names</span>
+              <label class="input rt-words"><input id="rtWords" placeholder="Names or words it should know, like Minecraft, VaultHub" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <div class="opt-row" id="rtDeviceRow" hidden>
+              <span class="opt-label">Uses</span>
+              <div class="chips" data-key="device">
+                <button data-value="gpu">Graphics card (fastest)</button>
+                <button data-value="cpu">Processor</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtFixRow">
+              <span class="opt-label">Size</span>
+              <div class="chips" data-key="fix">
+                <button data-value="">Normal size</button>
+                <button data-value="smooth">Smoothest editing (big files)</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtLevelRow">
+              <span class="opt-label">Background</span>
+              <div class="chips" data-key="level">
+                <button data-value="quiet">Quiet room</button>
+                <button data-value="normal">Normal</button>
+                <button data-value="noisy">Noisy (game, music)</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtPauseRow">
+              <span class="opt-label">Cut pauses</span>
+              <div class="chips" data-key="pause">
+                <button data-value="0.3">Over 0.3 s (punchy)</button>
+                <button data-value="0.5">Over 0.5 s</button>
+                <button data-value="1">Over 1 s (relaxed)</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtCutAsRow">
+              <span class="opt-label">Make</span>
+              <div class="chips" data-key="cutAs">
+                <button data-value="timeline">A Resolve timeline (change any cut)</button>
+                <button data-value="video">A new video</button>
+              </div>
+            </div>
+          </div>
+          <div class="rt-part" id="rtPart"></div>
+          <p class="opt-note" id="rtNote"></p>
+          <div class="rt-progress" id="rtProgress" hidden>
+            <div class="bar"><div></div></div>
+            <div class="rt-progress-line"><span id="rtProgressText"></span><button type="button" class="link" id="rtStop">Stop</button></div>
+          </div>
+          <button class="convert rt-go" id="rtGo" type="button">
+            <span id="rtGoText">Start</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <!-- 3a: check and fix the subtitles -->
+        <div class="rt-panel rt-subs" id="rtSubs" hidden>
+          <div class="rt-subs-head">
+            <button type="button" class="link rt-back" id="rtSubsBack">‹ Back</button>
+            <h3 class="rt-panel-title">Check the subtitles <span class="rt-count" id="rtSubsCount"></span></h3>
+            <p class="subs-tip">Play the video and read along. Click a line to jump to it, and type to fix words. Too early or late? <b>◀ ▶</b> nudges it, or <b>Start here</b> starts it where the video is.</p>
+            <span class="subs-shift">Move all
+              <button type="button" class="nudge" data-all="-0.1" title="All subtitles 0.1 second earlier">&minus;0.1s</button>
+              <button type="button" class="nudge" data-all="0.1" title="All subtitles 0.1 second later">+0.1s</button>
+            </span>
+          </div>
+          <div class="subs-list" id="subsList"></div>
+          <div class="rt-subs-foot">
+            <span class="subs-saved" id="subsSaved"></span>
+            <button type="button" class="convert rt-go" id="subsSend"><span>Put in Resolve</span></button>
+            <button type="button" class="link rt-old" id="subsOld" title="A timeline with a subtitle track (Resolve's own subtitles) instead of Text+">Or make it the old way, as a subtitle track</button>
+          </div>
+        </div>
+
+        <!-- 3b: done -->
+        <div class="rt-panel" id="rtDone" hidden>
+          <button type="button" class="link rt-back" id="rtDoneBack">‹ Do something else</button>
+          <div class="rt-done-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <h3 class="rt-panel-title" id="rtDoneTitle">Done!</h3>
+          <p class="rt-text" id="rtDoneText"></p>
+          <div class="rt-done-file" id="rtDoneFile"></div>
+          <div class="rt-project-buttons">
+            <button type="button" class="convert small-button" id="rtDoneShow">Show the file</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rt-cards">
+      <div class="home-card rt-card" id="rtProject">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+          Project folder</h3>
+          <span class="rt-on" id="rtProjectOn" hidden>On</span>
+        </div>
+        <div id="rtProjectNone">
+          <p class="rt-text">One tidy folder for each video. VaultHub makes the folders, and while it's on, everything you make in VaultHub is saved into the right one.</p>
+          <div class="rt-project-new">
+            <label class="input"><input id="rtProjectName" placeholder="Name of the video, like Minecraft hardcore ep 3" autocomplete="off" spellcheck="false"></label>
+            <button type="button" class="convert" id="rtProjectMake"><span>Make project folder</span></button>
+          </div>
+        </div>
+        <div id="rtProjectSome" hidden>
+          <div class="rt-project-name" id="rtProjectTitle"></div>
+          <div class="rt-project-path" id="rtProjectPath"></div>
+          <div class="rt-folders" id="rtFolders"></div>
+          <div class="rt-project-buttons">
+            <button type="button" class="outline-button" id="rtProjectOpen">Open folder</button>
+            <button type="button" class="ghost-button" id="rtProjectOff">Turn off</button>
+            <button type="button" class="link" id="rtProjectAnother">New project</button>
+          </div>
+        </div>
+        <div class="rt-recent" id="rtRecent"></div>
+        <p class="error-text" id="rtProjectError" hidden></p>
+      </div>
+
+      <div class="home-card rt-card" id="rtInResolve">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg>
+          Into Resolve</h3>
+        </div>
+        <ul class="rt-steps">
+          <li><b>Subtitles</b> and <b>Cut the silence</b>: in Resolve, use <b>File › Import › Timeline</b> and pick the file VaultHub made. Subtitles come in as Text+ you can style and animate.</li>
+          <li><b>Fix for Resolve</b> videos: drag them straight into the Media Pool.</li>
+          <li><b>Project folder</b>: drag the whole folder into the Media Pool, and Resolve makes a bin for each folder.</li>
+        </ul>
+      </div>
+    </div>
   </section>
 
   <section class="tab-page" id="filesTab" hidden>
@@ -1534,6 +1749,7 @@
 <script src="fx.js"></script>
 <script src="games.js"></script>
 <script src="povs.js"></script>
+<script src="resolve.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

@@ -79,7 +79,7 @@ def _clean(board):
 def _summary(board):
     cards = [c for l in board.get("lists") or [] if isinstance(l, dict) and not l.get("archived")
              for c in l.get("cards") or [] if isinstance(c, dict) and not c.get("archived")]
-    return {"id": board["id"], "title": _title(board.get("title")), "bg": str(board.get("bg") or "blue")[:40],
+    return {"id": board["id"], "title": _title(board.get("title")), "bg": str(board.get("bg") or "blue")[:400],
             "starred": bool(board.get("starred")), "opened": board.get("opened", 0), "updated": board.get("updated", 0),
             "created": board.get("created", 0), "cards": len(cards)}
 
@@ -139,6 +139,46 @@ def delete(board_id):
             os.remove(_path(board_id))
         except FileNotFoundError:
             pass
+
+
+BACKGROUNDS = os.path.join(FOLDER, "Backgrounds")
+_PICTURE = re.compile(r"[0-9a-f]{32}\.jpg$")
+
+
+def background(data, team):
+    """Your own picture as a board's background: made a sensible size, then kept on this computer
+    (just-me boards) or put online with the accounts (team boards, so everyone on it sees it).
+    Returns the board's new "bg" value: "pic:" and where the picture is."""
+    import io
+
+    from PIL import Image, ImageOps
+
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((2560, 1600), Image.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, "JPEG", quality=86, optimize=True)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise Error("That isn't a picture the app can open.") from None
+    if team:
+        try:
+            path = sfx.library._put_file("avatar", out.getvalue(), "image/jpeg")
+        except sfx.LoggedOut:
+            raise
+        except sfx.Error as e:
+            raise Error(str(e)) from None
+        return "pic:" + sfx.public_url(path)
+    name = uuid.uuid4().hex + ".jpg"
+    os.makedirs(BACKGROUNDS, exist_ok=True)
+    with open(os.path.join(BACKGROUNDS, name), "wb") as f:
+        f.write(out.getvalue())
+    return "pic:/board-bg/" + name
+
+
+def background_path(name):
+    """Where a just-me board's picture is kept (or None)."""
+    return os.path.join(BACKGROUNDS, name) if _PICTURE.match(name or "") else None
 
 
 def star(board_id, starred):

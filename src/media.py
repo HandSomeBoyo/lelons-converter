@@ -32,7 +32,8 @@ def probe(path):
         text = result.stderr.decode("utf-8", "replace")
     except subprocess.TimeoutExpired:
         text = ""
-    found = {"duration": 0.0, "video": False, "audio": False, "width": 0, "height": 0}
+    found = {"duration": 0.0, "video": False, "audio": False, "width": 0, "height": 0,
+             "fps": 0.0, "videoCodec": "", "audioTracks": 0, "tenBit": False}
     match = re.search(r"Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)", text)
     if match:
         h, m, s = match.groups()
@@ -41,11 +42,24 @@ def probe(path):
         if not line.strip().startswith("Stream #"):
             continue
         if ": Audio:" in line:
+            if not found["audio"]:
+                rate = re.search(r", (\d+) Hz", line)
+                found["audioRate"] = int(rate[1]) if rate else 48000
+                found["audioChannels"] = 1 if ", mono" in line else 6 if "5.1" in line else 8 if "7.1" in line else 2
+                codec = re.search(r": Audio: (\w+)", line)
+                found["audioCodec"] = codec[1] if codec else ""
             found["audio"] = True
+            found["audioTracks"] += 1
         elif ": Video:" in line and "attached pic" not in line and not found["video"]:
             size = re.search(r", (\d{2,5})x(\d{2,5})", line)
             if size:
                 found.update(video=True, width=int(size[1]), height=int(size[2]))
+                codec = re.search(r": Video: (\w+)", line)
+                found["videoCodec"] = codec[1] if codec else ""
+                found["tenBit"] = bool(re.search(r"\b(yuvj?4(22|44)\w*|p010\w*|yuv\w*1[02](le|be))\b", line))  # not 8-bit 4:2:0
+                rate = re.search(r", (\d+(?:\.\d+)?)(k?) fps", line) or re.search(r", (\d+(?:\.\d+)?)(k?) tbr", line)
+                if rate:
+                    found["fps"] = float(rate[1]) * (1000 if rate[2] else 1)
     return found
 
 
@@ -255,6 +269,54 @@ def convert_video(source, target, max_height=None, target_mb=None, trim=None, no
         if video_kbps < 60:
             break
     raise ValueError(f"Couldn't get this under {target_mb:g} MB. Trim it shorter or pick a bigger size.")
+
+
+# ---------------------------------------------------------------- for DaVinci Resolve
+
+# Frame rates Resolve timelines use. A video's own rate is moved to the closest one.
+RESOLVE_RATES = (("24000/1001", 23.976), ("24", 24), ("25", 25), ("30000/1001", 29.97), ("30", 30),
+                 ("48", 48), ("50", 50), ("60000/1001", 59.94), ("60", 60), ("100", 100),
+                 ("120000/1001", 119.88), ("120", 120))
+
+
+def resolve_rate(fps):
+    """The steady frame rate a video gets for Resolve, as (ffmpeg rate, number)."""
+    if not fps or fps > 1000:  # unknown (or a made-up number from a broken file)
+        return "30", 30
+    fps = min(fps, 120)
+    return min(RESOLVE_RATES, key=lambda r: abs(r[1] - fps))
+
+
+def convert_for_resolve(source, target, smooth=False, trim=None, length=0, on_progress=None, info=None):
+    """A .mov that DaVinci Resolve edits well, even the free version.
+
+    Game recordings (OBS, ShadowPlay, Medal), phone videos and downloads often
+    have a frame rate that changes all the time. Resolve wants a steady one, or
+    the sound slowly drifts out of sync and the picture stutters. This makes the
+    frame rate steady, turns the sound into plain 48 kHz WAV-style sound (which
+    Resolve always reads) and keeps every sound track separate, like game, mic
+    and Discord from OBS. smooth: DNxHR, an editing format that plays back
+    smoothly even on slow PCs, but makes big files. Otherwise H.264 with a
+    keyframe every second, so skipping around in the timeline is quick.
+    """
+    info = info or probe(source)
+    if not info["video"]:
+        raise ValueError("This file has no video in it. Pick WAV for sound in Resolve.")
+    length = length or (trim[1] - trim[0] if trim else info["duration"])
+    rate, fps = resolve_rate(info["fps"])
+    # Steady frames, an even picture size (H.264 needs it) and the start of the video at 0.
+    look = ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1", "-fps_mode", "cfr", "-r", rate]
+    sound = []
+    if info["audio"]:
+        # Gaps in the sound (from dropped frames while recording) are filled so it stays in sync.
+        sound = ["-c:a", "pcm_s16le", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"]
+    before = [*_part(trim), "-i", source, "-map", "0:v:0", "-map", "0:a?", "-dn", "-sn", "-map_metadata", "0", *look]
+    after = [*sound, "-video_track_timescale", "90000", "-movflags", "+faststart"]
+    if smooth:
+        run([*before, "-c:v", "dnxhd", "-profile:v", "dnxhr_sq", "-pix_fmt", "yuv422p", *after, target],
+            length, on_progress)
+    else:
+        run_video(before, ["-g", str(round(fps)), "-bf", "0", *after], target, length, on_progress)
 
 
 def make_gif(source, target, width=480, trim=None, length=0, on_progress=None, fps=15):

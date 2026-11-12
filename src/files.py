@@ -87,7 +87,7 @@ class Files:
         item = {
             "id": file_id, "name": name, "path": path, "copied": copied, "bytes": os.path.getsize(path),
             "seconds": found["duration"], "video": found["video"], "audio": found["audio"],
-            "width": found["width"], "height": found["height"],
+            "width": found["width"], "height": found["height"], "probe": found,
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
             "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
         }

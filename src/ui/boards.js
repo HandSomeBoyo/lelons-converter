@@ -16,6 +16,14 @@ const BD_BGS = {
   night: "linear-gradient(135deg, #172b4d 0%, #44546f 100%)", candy: "linear-gradient(135deg, #e774bb 0%, #fea362 100%)",
   aurora: "linear-gradient(135deg, #0055cc 0%, #6e5dc6 50%, #e774bb 100%)",
 };
+// A board's background as CSS: one of the colors above, or "pic:<where>" for your own picture.
+function bdBg(key) {
+  const pic = typeof key === "string" && key.startsWith("pic:") ? key.slice(4) : "";
+  if (pic && /^(\/board-bg\/[0-9a-f]{32}\.jpg|https:\/\/[^"\\\s]+)$/.test(pic)) return `#2c333a url("${pic}") center / cover no-repeat`;
+  return BD_BGS[key] || BD_BGS.blue;
+}
+const bdIsPic = (key) => typeof key === "string" && key.startsWith("pic:");
+
 const BD_BG_GRADIENTS = ["ocean", "dusk", "sunset", "forest", "night", "candy", "aurora"];
 const BD_BG_COLORS = ["blue", "orange", "green", "red", "purple", "pink", "lime", "sky", "grey"];
 // Label colors like Trello's: each hue in a soft, normal and strong shade.
@@ -386,10 +394,28 @@ function bdTile(b) {
     f.title = p.username;
     return f;
   })) : null;
-  return bdEl("div", { class: "bd-tile", tabindex: "0", style: { background: BD_BGS[b.bg] || BD_BGS.blue },
+  return bdEl("div", { class: "bd-tile", tabindex: "0", style: { background: bdBg(b.bg) },
     onclick: open, onkeydown: (e) => { if (e.key === "Enter") open(); } },
   bdEl("span", { class: "bd-tile-title", text: b.title }),
-  bdEl("span", { class: "bd-tile-foot" }, bdEl("span", { class: "bd-tile-count", text: b.cards === 1 ? "1 card" : b.cards + " cards" }), faces), star);
+  bdEl("span", { class: "bd-tile-foot" }, bdEl("span", { class: "bd-tile-count", text: b.cards === 1 ? "1 card" : b.cards + " cards" }), faces), star,
+  !b.team || b.mine ? bdEl("button", { type: "button", class: "bd-tile-delete", title: "Delete board", html: BD_ICONS.trash,
+    onclick: (e) => { e.stopPropagation(); bdDeletePop(e.currentTarget, b); } }) : null);
+}
+
+// Deleting a board for good (archiving only hides it), from its tile or its menu.
+function bdDeletePop(anchor, b) {
+  bdPop(anchor, "Delete board?", (box) => {
+    box.append(bdEl("p", { class: "bd-pop-note", text: `"${b.title}" and all its lists and cards will be gone for good${b.team ? ", for everyone on it" : ""}. There is no undo.` }),
+      bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete board", onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        const open = bd && bd.id === b.id;
+        if (open) { clearTimeout(bdSaveTimer); bd = null; }
+        const res = await api(b.team ? "/api/boards-team-delete" : "/api/boards-delete", { id: b.id }).catch(() => ({ ok: false }));
+        bdPopClose();
+        if (!res.ok) bdToast(res.error || "Couldn't delete the board.");
+        if (open) bdClose(); else bdLoadHome();
+      } }));
+  });
 }
 
 function bdInviteCard(inv) {
@@ -404,7 +430,7 @@ function bdInviteCard(inv) {
   };
   const face = avatarEl(inv.avatarUrl, inv.from, "bd-face big");
   return bdEl("div", { class: "bd-invite" },
-    bdEl("span", { class: "bd-invite-bg", style: { background: BD_BGS[inv.bg] || BD_BGS.blue } }), face,
+    bdEl("span", { class: "bd-invite-bg", style: { background: bdBg(inv.bg) } }), face,
     bdEl("div", { class: "bd-invite-text" }, bdEl("p", {}, bdEl("b", { text: inv.from }), " invited you to the board ", bdEl("b", { text: inv.title })),
       bdEl("small", { text: bdAgo(new Date(inv.at).getTime()) })),
     bdEl("button", { type: "button", class: "small-button", text: "Join", onclick: (e) => answer(true, e.currentTarget) }),
@@ -577,7 +603,8 @@ function bdDraw() {
   const focused = document.activeElement && root.contains(document.activeElement) ? document.activeElement.dataset.focus : "";
   const caret = bdCaret();
 
-  root.style.background = BD_BGS[bd.bg] || BD_BGS.blue;
+  root.style.background = bdBg(bd.bg);
+  root.classList.toggle("bd-has-pic", bdIsPic(bd.bg));
   root.classList.toggle("labels-wide", !!bd.labelsWide);
   root.replaceChildren(bdBar(), bdEl("div", { class: "bd-main" }, bdCanvas(), bdMenu ? bdMenuPanel() : null));
 
@@ -1713,6 +1740,25 @@ $("bdCardModal").addEventListener("click", (e) => {
 
 // ---------------------------------------------------------------- the board menu (right side)
 
+// Your own picture as the background: the app makes it a good size and keeps it (online for team boards).
+async function bdUseBackground(file, btn) {
+  if (!/^image\//.test(file.type)) return bdToast("That isn't a picture.");
+  const board = bd;
+  if (btn) btn.classList.add("busy");
+  let res;
+  try {
+    res = await fetch("/api/boards-background", { method: "POST", body: file, headers: { "X-Team": bdTeam ? "1" : "0" } }).then((r) => r.json());
+  } catch (e) {
+    res = { ok: false };
+  }
+  if (btn) btn.classList.remove("busy");
+  if (!res.ok) return bdToast(res.error || "Couldn't use that picture. Try again.");
+  if (bd !== board) return;
+  bd.bgPics = [res.bg, ...(bd.bgPics || []).filter((k) => k !== res.bg)].slice(0, 8);
+  bd.bg = res.bg;
+  bdChanged();
+}
+
 function bdMenuPanel() {
   const back = bdMenu !== "main" ? bdEl("button", { type: "button", class: "bd-x", title: "Back", html: BD_ICONS.back, onclick: () => { bdMenu = "main"; bdDraw(); } }) : bdEl("span", { class: "bd-x-space" });
   const titles = { main: "Menu", about: "About this board", bg: "Change background", labels: "Labels", archive: "Archived items", activity: "Activity" };
@@ -1723,7 +1769,7 @@ function bdMenuPanel() {
       bdMenuItem("activity", "Activity", () => { bdMenu = "activity"; bdDraw(); }),
       bdMenuItem("archive", "Archived items", () => { bdMenu = "archive"; bdDraw(); }),
       bdEl("div", { class: "bd-pop-sep" }),
-      bdEl("button", { type: "button", class: "bd-menu-item", onclick: () => { bdMenu = "bg"; bdDraw(); } }, bdEl("span", { class: "bd-menu-swatch", style: { background: BD_BGS[bd.bg] } }), bdEl("span", { text: "Change background" })),
+      bdEl("button", { type: "button", class: "bd-menu-item", onclick: () => { bdMenu = "bg"; bdDraw(); } }, bdEl("span", { class: "bd-menu-swatch", style: { background: bdBg(bd.bg) } }), bdEl("span", { text: "Change background" })),
       bdMenuItem("tag", "Labels", () => { bdMenu = "labels"; bdDraw(); }),
       bdMenuItem("eye", bd.labelsWide ? "Hide label names on cards" : "Show label names on cards", () => { bd.labelsWide = !bd.labelsWide; bdChanged(); }),
       bdEl("div", { class: "bd-pop-sep" }),
@@ -1756,19 +1802,7 @@ function bdMenuPanel() {
         });
       }),
       bdTeam && !bdTeam.mine ? bdMenuItem("trash", "Leave board", (e) => bdLeavePop(e.currentTarget), "bd-danger") :
-      bdMenuItem("trash", "Delete board", (e) => bdPop(e.currentTarget, "Delete board?", (b) => {
-        b.append(bdEl("p", { class: "bd-pop-note", text: `"${bd.title}" and all its lists and cards will be gone for good${bdTeam ? ", for everyone on it" : ""}. There is no undo.` }),
-          bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete board", onclick: async () => {
-            const id = bd.id;
-            const team = !!bdTeam;
-            clearTimeout(bdSaveTimer);
-            bd = null;
-            const res = await api(team ? "/api/boards-team-delete" : "/api/boards-delete", { id }).catch(() => ({ ok: false }));
-            if (!res.ok) bdToast(res.error || "Couldn't delete the board.");
-            bdPopClose();
-            bdClose();
-          } }));
-      }), "bd-danger"));
+      bdMenuItem("trash", "Delete board", (e) => bdDeletePop(e.currentTarget, { id: bd.id, title: bd.title, team: !!bdTeam }), "bd-danger"));
   } else if (bdMenu === "about") {
     const t = bdAutoGrow(bdEl("textarea", { class: "bd-input", placeholder: "Add a description to let people know what this board is for.", "data-focus": "board-desc", maxlength: "5000" }));
     t.value = bd.desc || "";
@@ -1781,7 +1815,23 @@ function bdMenuPanel() {
       bdEl("p", { class: "bd-muted", text: bdTeam ? `A team board: ${bdTeam.people.filter((p) => p.joined).length} people on it. Only they can see it.` : "Saved on this computer only. Nobody else can see it." }));
   } else if (bdMenu === "bg") {
     const pick = (keys, cls) => bdEl("div", { class: "bd-bg-grid " + cls }, keys.map((key) => bdEl("button", { type: "button", class: "bd-bg-pick" + (bd.bg === key ? " on" : ""), style: { background: BD_BGS[key] }, title: key, onclick: () => { bd.bg = key; bdChanged(); } })));
-    body.append(bdEl("h4", { text: "Gradients" }), pick(BD_BG_GRADIENTS, ""), bdEl("h4", { text: "Colors" }), pick(BD_BG_COLORS, ""));
+    const pics = [...new Set([...(bdIsPic(bd.bg) ? [bd.bg] : []), ...(bd.bgPics || [])])].slice(0, 8);
+    const file = bdEl("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif,image/bmp", hidden: true });
+    const upload = bdEl("button", { type: "button", class: "bd-bg-pick bd-bg-upload", title: "Use your own picture", html: BD_ICONS.plus, onclick: () => file.click() });
+    file.addEventListener("change", () => { if (file.files[0]) bdUseBackground(file.files[0], upload); });
+    body.append(bdEl("h4", { text: "Your pictures" }),
+      bdEl("div", { class: "bd-bg-grid" }, upload, ...pics.map((key) => bdEl("button", { type: "button", class: "bd-bg-pick" + (bd.bg === key ? " on" : ""), style: { background: bdBg(key) }, title: "Your picture", onclick: () => { bd.bg = key; bdChanged(); } }))), file,
+      bdEl("p", { class: "bd-muted bd-small-note", text: bdTeam ? "Everyone on this board sees the picture." : "Pick any picture from your computer. You can also drop one here." }),
+      bdEl("h4", { text: "Gradients" }), pick(BD_BG_GRADIENTS, ""), bdEl("h4", { text: "Colors" }), pick(BD_BG_COLORS, ""));
+    body.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); body.classList.add("bd-drop-on"); } });
+    body.addEventListener("dragleave", (e) => { if (!body.contains(e.relatedTarget)) body.classList.remove("bd-drop-on"); });
+    body.addEventListener("drop", (e) => {
+      body.classList.remove("bd-drop-on");
+      const f = [...e.dataTransfer.files].find((x) => /^image\//.test(x.type));
+      if (!f) return;
+      e.preventDefault();
+      bdUseBackground(f, upload);
+    });
   } else if (bdMenu === "labels") {
     body.append(bdEl("p", { class: "bd-muted", text: "Labels help you sort cards. Give them names like Short, Long video or Waiting." }),
       ...bd.labels.map((l) => bdEl("div", { class: "bd-label-row" },
