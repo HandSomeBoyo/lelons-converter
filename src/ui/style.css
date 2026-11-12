@@ -4989,3 +4989,14 @@ html.side-small .sidebar .tabs .beta-tag { display: none; }
 @keyframes bd-busy { 50% { opacity: .45; } }
 .bd-menu-body.bd-drop-on { outline: 2px dashed var(--accent); outline-offset: -6px; }
 #bdBoard.bd-has-pic .bd-bar { background: linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, .25)); }
+
+/* ================================================================ 2.24.1: smooth and fast.
+   Long lists only work out the rows you can see: a row off the screen keeps its place (its height is
+   remembered) but isn't styled, laid out or painted until it scrolls near. */
+.sound { content-visibility: auto; contain-intrinsic-size: auto 62px; }
+.history-list > .job { content-visibility: auto; contain-intrinsic-size: auto 66px; }
+/* The side bar sits beside the page, never over it, so there's nothing behind it to blur: blurring the
+   plain background cost a pass every frame for a look you can't tell apart. */
+.sidebar { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Resolve: the "Add a video" button was squashed flat (it lost its height inside the drop box). */
+.rt-start .rt-add-button { height: 44px; min-height: 44px; flex: none; box-sizing: border-box; }
