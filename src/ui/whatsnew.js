@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.24.3", items: [
+    "Fits small screens: on a laptop or a small window, the side bar names (Convert, Create, Tools) are no longer cut in half.",
+    "Home: the newest uploads line up neatly on smaller screens, and the Watch and Convert buttons stay inside their cards.",
+    "Docs, Resolve, Library, Games and Film assets also make better use of the room on small screens, so nothing gets squashed or cut off.",
+  ] },
   { version: "2.24.2", items: [
     "Calmer side bar: the highlight no longer stretches and wobbles when you switch pages.",
     "It slides quickly to a page close by, and simply fades in on a page further away instead of flying past everything.",
