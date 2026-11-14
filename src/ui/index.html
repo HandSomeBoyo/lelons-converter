@@ -1236,6 +1236,32 @@
   </div>
 </div>
 
+<div class="modal watch-modal" id="watchModal" hidden>
+  <div class="dialog watch-dialog" role="dialog" aria-labelledby="watchTitle">
+    <div class="watch-screen" id="watchScreen"></div>
+    <div class="watch-error" id="watchError" hidden>
+      <p id="watchErrorText"></p>
+      <button type="button" class="small-button" id="watchErrorOpen">Open on YouTube</button>
+    </div>
+    <div class="watch-bar">
+      <div class="watch-text"><b id="watchTitle"></b><small id="watchSub"></small></div>
+      <label class="watch-speed" title="Speed (slow motion or faster)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5.6 18.4a9 9 0 1 1 12.8 0"/><path d="M12 13l4-4"/></svg>
+        <select id="watchSpeed" aria-label="Speed">
+          <option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="0.75">0.75x</option>
+          <option value="1" selected>Normal</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option>
+          <option value="1.75">1.75x</option><option value="2">2x</option>
+        </select>
+      </label>
+      <button type="button" class="outline-button" id="watchConvert">Convert</button>
+      <button type="button" class="ghost-button" id="watchOpen">Open on YouTube</button>
+      <button type="button" class="watch-close" id="watchClose" title="Close (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="pvVideoModal" hidden>
   <div class="dialog fx-pack-dialog pv-add-dialog" role="dialog" aria-labelledby="pvVideoHeading">
     <h2 id="pvVideoHeading">New video</h2>
@@ -1690,6 +1716,28 @@
             </div>
         </div>
         <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
+        <div class="set-label">Speakers or headphones</div>
+        <div class="set-group set-pad">
+          <div class="set-device-row">
+            <select class="call-select set-device" id="setSpeaker" aria-label="Speakers or headphones"></select>
+            <button type="button" class="ghost-button" id="setSpeakerTest">Play a test sound</button>
+          </div>
+        </div>
+        <div class="set-label">Microphone</div>
+        <div class="set-group set-pad">
+          <div class="set-device-row">
+            <select class="call-select set-device" id="setMic" aria-label="Microphone"></select>
+            <button type="button" class="ghost-button" id="setMicTest">Test it</button>
+          </div>
+          <div class="set-mic-meter" id="setMicMeter" hidden><span id="setMicLevel"></span></div>
+          <p class="set-mic-note" id="setMicNote" hidden>Say something. The bar moves when the microphone hears you.</p>
+        </div>
+        <div class="set-label">Noise suppression</div>
+        <div class="set-group set-pad">
+          <div class="set-chips" id="setNoise"></div>
+          <p class="set-mic-note" id="setNoiseNote"></p>
+        </div>
+        <p class="set-help">Calls use these too. If you change them during a call, they change here as well.</p>
         <div class="set-label">Chat</div>
         <div class="set-group">
           <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
@@ -1750,6 +1798,7 @@
 <script src="games.js"></script>
 <script src="povs.js"></script>
 <script src="resolve.js"></script>
+<script src="watch.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

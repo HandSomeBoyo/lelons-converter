@@ -24,10 +24,30 @@ HTMLMediaElement.prototype.play = function (...args) {
   // A call's voices and videos aren't the app's sounds: they don't stop the Library, and aren't kept in the list.
   if (this.dataset.call) return realPlay.apply(this, args);
   this.volume = volumeLevel();
+  appSinkMedia(this);
   playedMedia.add(this);
   for (const [audio, stop] of appPlayers) if (audio !== this && !audio.paused) stop();
   return realPlay.apply(this, args);
 };
+
+// Where the sound comes out: the speakers or headphones picked in Settings > Sound (or in a call).
+// "" is the Windows default. Calls save it as "callSpeaker", so both places share one choice.
+function appSpeaker() { return loadPref("callSpeaker") || ""; }
+function appSinkMedia(media) {
+  const id = appSpeaker();
+  if (media.setSinkId && media.sinkId !== id) media.setSinkId(id).catch(() => { if (media.sinkId) media.setSinkId("").catch(() => {}); });
+}
+const appSoundCtxs = new Set(); // the app's own AudioContexts (the chat ding, the ringtone)
+function appSinkCtx(ctx) {
+  appSoundCtxs.add(ctx);
+  const id = appSpeaker();
+  if (ctx.setSinkId && (ctx.sinkId || "") !== id) ctx.setSinkId(id).catch(() => {});
+  return ctx;
+}
+function appSpeakerChanged() {
+  for (const media of playedMedia) appSinkMedia(media);
+  for (const ctx of appSoundCtxs) appSinkCtx(ctx);
+}
 
 let volumeSaveTimer = null;
 function setVolume(value) {

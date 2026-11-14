@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.25.0", items: [
+    "Watch videos right here: clicking a friend's new video now plays it inside VaultHub instead of opening your browser. Press Esc or the X to close it.",
+    "Slow motion or faster: pick a speed from 0.25x to 2x under the video. The gear button in the player also has the quality.",
+    "Works on Home (newest uploads and activity), on the Stats page and in Games (the video you made, and the YouTube videos about a game).",
+    "If a video's owner only lets it play on YouTube, you get a button to open it there instead.",
+    "Settings > Sound: pick your speakers or headphones and your microphone, test them, and choose noise suppression. Calls use the same choices, and the app's sounds play on the speakers you picked.",
+  ] },
   { version: "2.24.3", items: [
     "Fits small screens: on a laptop or a small window, the side bar names (Convert, Create, Tools) are no longer cut in half.",
     "Home: the newest uploads line up neatly on smaller screens, and the Watch and Convert buttons stay inside their cards.",
