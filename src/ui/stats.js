@@ -220,7 +220,7 @@ function drawStatsTop(series) {
   const top = videos.slice(0, 5);
   $("statsTopEmpty").hidden = top.length > 0;
   setChildren($("statsTop"), top.map((v, i) => statsBar(v.title, v.channel, v.views, top[0].views, v.color, i,
-    () => api("/api/open-youtube", { url: v.url }))));
+    () => openWatch(v.url, { title: v.title, sub: v.channel }))));
 }
 
 function drawStatsUploads(series) {

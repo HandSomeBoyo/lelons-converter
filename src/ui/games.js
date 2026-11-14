@@ -445,7 +445,7 @@ function drawGameYoutube() {
   sum.append(stats);
   const list = gmEl("div", "gm-yt-list");
   for (const v of yt.videos || []) {
-    const row = gmButton("gm-yt-video", "", "", () => api("/api/games-open", { url: "https://www.youtube.com/watch?v=" + v.id }));
+    const row = gmButton("gm-yt-video", "", "", () => openWatch("https://www.youtube.com/watch?v=" + v.id, { title: v.title, sub: `${v.channel} · ${gmViews(v.views)} views` }));
     const pic = gmEl("span", "gm-yt-thumb");
     const img = gmEl("img");
     img.alt = "";
@@ -533,7 +533,7 @@ function drawGameSide() {
   }
   st.append(seg);
   if (game.status === "done") {
-    if (game.video) st.append(gmButton("ghost-button gm-watch", GM_ICONS.play, "Watch the video", () => api("/api/games-open", { url: game.video })));
+    if (game.video) st.append(gmButton("ghost-button gm-watch", GM_ICONS.play, "Watch the video", () => openWatch(game.video, { title: game.info.name, sub: "The video we made" })));
     const row = gmEl("form", "gm-video-row");
     const input = gmEl("input");
     Object.assign(input, { placeholder: "Paste the YouTube link", value: game.video || "", maxLength: 300, spellcheck: false });

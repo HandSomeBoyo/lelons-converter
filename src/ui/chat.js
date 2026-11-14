@@ -106,7 +106,7 @@ let chatAudioCtx = null;
 function chatDing() {
   if (!chatSoundOn()) return;
   try {
-    chatAudioCtx = chatAudioCtx || new AudioContext();
+    chatAudioCtx = chatAudioCtx || appSinkCtx(new AudioContext());
     const now = chatAudioCtx.currentTime;
     [[880, 0], [1320, 0.09]].forEach(([freq, at]) => {
       const osc = chatAudioCtx.createOscillator(), gain = chatAudioCtx.createGain();

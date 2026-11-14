@@ -59,6 +59,8 @@ function showSettingsPage(page) {
   if (!document.querySelector(`#setNav button[data-set="${page}"]`)) page = "general";
   document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
   document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
+  if (page === "sound") listSoundDevices();
+  else if (typeof stopMicTest === "function") stopMicTest();
 }
 document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("click", () => {
   showSettingsPage(b.dataset.set);
@@ -72,7 +74,7 @@ function openSettings(part) {
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);
 }
-function closeSettings() { $("settingsModal").hidden = true; }
+function closeSettings() { $("settingsModal").hidden = true; stopMicTest(); }
 
 $("settingsOpen").addEventListener("click", () => openSettings());
 document.querySelectorAll('input[name="saveMode"]').forEach((r) => r.addEventListener("change", () => {
@@ -165,3 +167,125 @@ $("helpButton").addEventListener("click", (e) => { e.stopPropagation(); helpPop.
 helpPop.addEventListener("click", () => { helpPop.hidden = true; });
 document.addEventListener("click", (e) => { if (!helpPop.hidden && !helpPop.contains(e.target)) helpPop.hidden = true; });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !helpPop.hidden) helpPop.hidden = true; });
+
+// ---- Settings > Sound: speakers, microphone and noise suppression. The same choices calls use
+// (saved as callSpeaker, callMic and callNoise), so picking one here changes it in calls too.
+const NOISE_NAMES = { off: "Off", standard: "Standard", strong: "Strong", max: "Max" };
+const NOISE_NOTES = {
+  off: "Others hear everything your microphone picks up.",
+  standard: "Takes away steady hum, like a fan.",
+  strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",
+  max: "The strongest AI, for loud places. Your voice may sound a little less natural.",
+};
+let soundDevices = [];
+let soundAsked = false;
+
+async function listSoundDevices() {
+  try { soundDevices = await navigator.mediaDevices.enumerateDevices(); } catch { soundDevices = []; }
+  // Windows only tells the names once the app may use the microphone (it always may, in VaultHub's own window).
+  if (!soundAsked && soundDevices.length && soundDevices.every((d) => !d.label)) {
+    soundAsked = true;
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+      soundDevices = await navigator.mediaDevices.enumerateDevices();
+    } catch { /* no microphone, or not allowed: the lists just say "Microphone 1" */ }
+  }
+  drawSoundSettings();
+}
+
+function fillDeviceSelect(sel, kind, pref, label) {
+  const list = soundDevices.filter((d) => d.kind === kind && d.deviceId !== "default" && d.deviceId !== "communications");
+  const opts = [new Option("Windows default", "")];
+  list.forEach((d, i) => opts.push(new Option(d.label || `${label} ${i + 1}`, d.deviceId)));
+  const key = opts.map((o) => o.value + o.text).join("|");
+  if (sel.dataset.key !== key) { sel.replaceChildren(...opts); sel.dataset.key = key; }
+  const want = loadPref(pref) || "";
+  sel.value = want;
+  if (sel.value !== want) sel.value = ""; // that device is unplugged: Windows default for now
+}
+
+function drawSoundSettings() {
+  if (!$("setSpeaker")) return;
+  fillDeviceSelect($("setSpeaker"), "audiooutput", "callSpeaker", "Speakers");
+  fillDeviceSelect($("setMic"), "audioinput", "callMic", "Microphone");
+  const noise = callNoise();
+  setChildren($("setNoise"), NOISE_LEVELS.map((level) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", textContent: NOISE_NAMES[level] });
+    b.classList.toggle("active", level === noise);
+    b.addEventListener("click", () => { callSetNoise(level); if (micTest) startMicTest(); });
+    return b;
+  }));
+  $("setNoiseNote").textContent = NOISE_NOTES[noise];
+}
+
+$("setSpeaker").addEventListener("change", () => callUseSpeaker($("setSpeaker").value));
+$("setMic").addEventListener("change", () => { callUseMic($("setMic").value); if (micTest) startMicTest(); });
+navigator.mediaDevices && navigator.mediaDevices.addEventListener("devicechange", () => {
+  if (!$("settingsModal").hidden) listSoundDevices();
+});
+
+// A short two-note sound from the picked speakers.
+let speakerTestCtx = null;
+$("setSpeakerTest").addEventListener("click", () => {
+  try {
+    speakerTestCtx = speakerTestCtx || appSinkCtx(new AudioContext());
+    const ctx = speakerTestCtx, now = ctx.currentTime;
+    [[523, 0], [659, 0.16], [784, 0.32]].forEach(([freq, at]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + at);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.25 * volumeLevel() / 0.36), now + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.4);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + at);
+      osc.stop(now + at + 0.45);
+    });
+  } catch { /* no sound card */ }
+});
+
+// The microphone test: a bar that moves with your voice (after noise suppression, like in a call).
+let micTest = null; // {mic, ctx, frame}
+async function startMicTest() {
+  stopMicTest();
+  const mine = micTest = { frame: 0 };
+  $("setMicTest").textContent = "Stop";
+  $("setMicMeter").hidden = false;
+  $("setMicNote").hidden = false;
+  $("setMicNote").textContent = "Say something. The bar moves when the microphone hears you.";
+  try {
+    const mic = await callOpenMic();
+    if (micTest !== mine) return callMicClose(mic.stream, mic.parts);
+    mine.mic = mic;
+    mine.ctx = new AudioContext();
+    const analyser = mine.ctx.createAnalyser();
+    analyser.fftSize = 512;
+    mine.ctx.createMediaStreamSource(mic.stream).connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let peak = 0;
+      for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
+      $("setMicLevel").style.width = Math.min(100, peak / 128 * 160) + "%";
+      mine.frame = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch {
+    if (micTest !== mine) return;
+    stopMicTest();
+    $("setMicNote").hidden = false;
+    $("setMicNote").textContent = "Couldn't use that microphone. Is it plugged in?";
+  }
+}
+function stopMicTest() {
+  if (!micTest) return;
+  cancelAnimationFrame(micTest.frame);
+  if (micTest.mic) callMicClose(micTest.mic.stream, micTest.mic.parts);
+  if (micTest.ctx) micTest.ctx.close().catch(() => {});
+  micTest = null;
+  $("setMicTest").textContent = "Test it";
+  $("setMicMeter").hidden = true;
+  $("setMicNote").hidden = true;
+  $("setMicLevel").style.width = "0";
+}
+$("setMicTest").addEventListener("click", () => (micTest ? stopMicTest() : startMicTest()));

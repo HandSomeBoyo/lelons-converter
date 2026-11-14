@@ -334,11 +334,13 @@ async function callGetMic() {
 // Switch to another microphone (or noise suppression) in the middle of a call.
 async function callUseMic(id) {
   savePref("callMic", id || null);
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't use that microphone.");
 }
 async function callSetNoise(level) {
   savePref("callNoise", level);
   drawCallPop();
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't restart your microphone.");
 }
 async function callReopenMic(problem) {
@@ -363,6 +365,8 @@ async function callReopenMic(problem) {
 function callUseSpeaker(id) {
   savePref("callSpeaker", id || null);
   for (const p of callPeers.values()) callSetSpeaker(p.audio);
+  appSpeakerChanged(); // the rest of the app's sounds follow too
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
 }
 function callSetSpeaker(audio) {
   const id = loadPref("callSpeaker");
@@ -601,7 +605,7 @@ let callAudioCtx = null;
 const callSpeaking = new Map(); // "" (you) or lowercased username -> {analyser, data, on}
 function callWatchSpeaking(key, stream) {
   try {
-    callAudioCtx = callAudioCtx || new AudioContext();
+    callAudioCtx = callAudioCtx || appSinkCtx(new AudioContext());
     if (callAudioCtx.state === "suspended") callAudioCtx.resume().catch(() => {});
     const analyser = callAudioCtx.createAnalyser();
     analyser.fftSize = 512;
@@ -787,7 +791,7 @@ function callRing(kind) {
   if (!kind) return;
   const beep = (notes) => {
     try {
-      callRingCtx = callRingCtx || new AudioContext();
+      callRingCtx = callRingCtx || appSinkCtx(new AudioContext());
       if (callRingCtx.state === "suspended") callRingCtx.resume().catch(() => {});
       const now = callRingCtx.currentTime;
       for (const [freq, at, length] of notes) {

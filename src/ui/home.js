@@ -177,7 +177,10 @@ function drawUploads() {
     const views = u.views == null ? "" : `${u.views.toLocaleString()} ${u.views === 1 ? "view" : "views"}`;
     const likes = u.likes ? `${shortNumber(u.likes)} likes` : "";
     el.querySelector(".upload-meta").textContent = [u.channel, views, likes, u.when ? sfxAgo(u.when * 1000) : ""].filter(Boolean).join(" · ");
-    el.querySelector(".upload-watch").onclick = () => api("/api/open-youtube", { url: u.url });
+    const watch = () => openWatch(u.url, { title: u.title, sub: el.querySelector(".upload-meta").textContent });
+    el.querySelector(".upload-watch").onclick = watch;
+    el.querySelector(".upload-thumb").onclick = watch;
+    el.querySelector(".upload-thumb").title = "Watch it";
     el.querySelector(".upload-convert").onclick = () => homeConvert(u.url, false);
     return el;
   })));
@@ -283,9 +286,9 @@ function activityRow(item) {
     const thumb = document.createElement("button");
     thumb.type = "button";
     thumb.className = "activity-thumb";
-    thumb.title = "Watch on YouTube";
+    thumb.title = "Watch it";
     thumb.append(Object.assign(document.createElement("img"), { src: item.thumbnail, alt: "", loading: "lazy" }));
-    thumb.onclick = () => api("/api/open-youtube", { url: item.url });
+    thumb.onclick = () => openWatch(item.url, { title: item.title, sub: item.channel });
     row.append(thumb);
   }
   return row;
