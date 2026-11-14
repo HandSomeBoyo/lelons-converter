@@ -5097,3 +5097,122 @@ main { container: page / inline-size; }
   .subs-body { grid-template-columns: minmax(0, 1fr); }
 }
 @container page (max-width: 870px) { .rt-work { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------------------------------------------------------------- Clip maker tab */
+
+#cmWork[hidden], #cmHow[hidden], .cm-made[hidden], .cm-box[hidden] { display: none; }
+.cm-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .3164fr); gap: 18px; align-items: start; }
+.cm-screen { cursor: pointer; }
+.cm-frame { position: absolute; overflow: hidden; pointer-events: none; }
+.cm-box { position: absolute; top: 0; height: 100%; box-sizing: border-box; pointer-events: auto; cursor: grab; touch-action: none;
+  border: 2px solid var(--accent); border-radius: 4px; }
+.cm-box.dragging { cursor: grabbing; }
+.cm-box > span { position: absolute; left: 6px; top: 6px; font: 700 11px var(--head); letter-spacing: .3px; text-transform: uppercase;
+  color: #111; background: var(--accent); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+.cm-screen.dim .cm-crop { box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55); }
+.cm-cam { border-color: #fff; border-style: dashed; background: rgba(255, 255, 255, .06); z-index: 1; }
+.cm-cam > span { background: #fff; }
+.cm-handle { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; background: #fff; border-radius: 4px 0 4px 0; cursor: nwse-resize; }
+.cm-phone { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+.cm-phone canvas { display: block; width: 100%; height: auto; aspect-ratio: 9 / 16; box-sizing: border-box; border-radius: 14px;
+  background: #000; border: 4px solid var(--panel2); outline: 1px solid var(--line2); }
+.cm-phone-label { font-size: 11.5px; color: var(--muted); }
+
+.cm-timeline { position: relative; height: 62px; margin-top: 12px; border-radius: 8px; background: var(--panel2); overflow: hidden; cursor: pointer; }
+.cm-timeline canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .45; }
+.cm-timeline .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); left: 0; pointer-events: none; }
+.cm-block { position: absolute; top: 5px; bottom: 5px; box-sizing: border-box; border-radius: 5px; background: rgba(var(--accent-rgb), .3);
+  border: 1.5px solid rgba(var(--accent-rgb), .8); transition: background .15s; }
+.cm-block span { position: absolute; left: 4px; top: 3px; font: 700 10.5px var(--head); color: var(--text); }
+.cm-block:hover { background: rgba(var(--accent-rgb), .45); }
+.cm-block.sel { background: rgba(var(--accent-rgb), .55); border-color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent); }
+.cm-block.off { background: transparent; border-style: dashed; opacity: .6; }
+
+.cm-panels { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin-top: 16px; align-items: start; }
+.cm-find { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cm-find .convert { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; }
+.cm-find .convert svg { width: 17px; height: 17px; }
+.cm-lengths button { padding: 0 10px; }
+.cm-find-note { margin: 10px 0 0; font-size: 12.5px; }
+.cm-find-note.error { color: var(--red); }
+.cm-find-note[hidden] { display: none; }
+.cm-list { display: grid; gap: 6px; margin-top: 12px; }
+.cm-list:empty { display: none; }
+.cm-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; background: var(--panel2);
+  border: 1.5px solid transparent; cursor: pointer; transition: border-color .15s; }
+.cm-row:hover { border-color: var(--line2); }
+.cm-row.sel { border-color: rgba(var(--accent-rgb), .7); }
+.cm-row.off .cm-row-main { opacity: .45; }
+.cm-row input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; flex: none; }
+.cm-num { flex: none; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font: 700 12px var(--head);
+  background: rgba(var(--accent-rgb), .18); color: var(--accent); }
+.cm-row-main { flex: 1; min-width: 0; }
+.cm-row-time { font: 600 13.5px var(--head); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-row-time span { font: 500 12px var(--body, inherit); color: var(--muted); margin-left: 4px; }
+.cm-row-tag { display: flex; align-items: center; gap: 7px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.cm-heat { width: 44px; height: 4px; border-radius: 9px; background: var(--line2); overflow: hidden; flex: none; }
+.cm-heat i { display: block; height: 100%; background: var(--accent); border-radius: 9px; }
+.cm-icon { all: unset; flex: none; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+.cm-icon svg { width: 15px; height: 15px; }
+.cm-icon:hover { color: var(--text); background: var(--line); }
+.cm-icon:disabled { opacity: .35; cursor: default; background: none; }
+.cm-edit { display: grid; gap: 6px; margin: -2px 0 4px; padding: 10px 12px; border-radius: 0 0 10px 10px; background: var(--panel2); }
+.cm-edit-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.cm-edit-label { width: 38px; color: var(--muted); }
+.cm-edit .nudge { height: 26px; padding: 0 8px; font-size: 11.5px; }
+.cm-edit-at { min-width: 62px; text-align: center; font: 600 13px var(--mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.cm-edit .link { margin-left: 6px; font-size: 12.5px; }
+
+.cm-layouts { display: grid; gap: 6px; }
+.cm-layout { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px;
+  background: var(--panel2); border: 1.5px solid transparent; transition: border-color .15s; }
+.cm-layout:hover { border-color: var(--line2); }
+.cm-layout.active { border-color: var(--accent); }
+.cm-layout > span { display: grid; gap: 2px; min-width: 0; }
+.cm-layout strong { font-size: 13.5px; }
+.cm-layout > span > span { font-size: 12px; color: var(--muted); }
+.cm-layout:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-mini { flex: none; position: relative; width: 20px; height: 34px; border-radius: 4px; border: 1.5px solid var(--muted); overflow: hidden; box-sizing: border-box; }
+.cm-layout.active .cm-mini { border-color: var(--accent); }
+.cm-mini b { position: absolute; left: 0; right: 0; background: var(--muted); }
+.cm-layout.active .cm-mini b { background: var(--accent); }
+.cm-mini-fill b { top: 0; bottom: 0; opacity: .7; }
+.cm-mini-blur { background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.cm-mini-blur b { top: 11px; height: 9px; }
+.cm-mini-cam b:first-child { top: 0; height: 12px; opacity: .45; }
+.cm-mini-cam b:last-child { top: 13px; bottom: 0; opacity: .8; }
+.cm-options { margin: 14px 0 0; padding: 0; background: none; border: 0; box-shadow: none; }
+.cm-options .opt-row { flex-direction: column; align-items: stretch; gap: 6px; }
+.cm-options .opt-label { width: auto; }
+.cm-options .opt-row[hidden] { display: none; }
+#cmNote { margin: 12px 0 0; }
+#cmNote.error { color: var(--red); }
+#cmNote[hidden] { display: none; }
+#cmGo[hidden] { display: none; }
+
+.cm-made { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cm-made-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-size: 13.5px; }
+.cm-made-head .link[hidden] { display: none; }
+.cm-made-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 10px; }
+.cm-short { display: grid; gap: 6px; min-width: 0; }
+.cm-short.done { cursor: pointer; }
+.cm-short-pic { aspect-ratio: 9 / 16; border-radius: 10px; background: var(--panel2) center / cover no-repeat; display: grid; place-items: center;
+  transition: transform .15s var(--ease-out), box-shadow .15s; }
+.cm-short.done:hover .cm-short-pic { box-shadow: 0 0 0 2px var(--accent); }
+.cm-short.drag-lift .cm-short-pic { transform: scale(.96); }
+.cm-short.waiting .cm-short-pic, .cm-short.stopped .cm-short-pic, .cm-short.error .cm-short-pic { opacity: .45; }
+.cm-short .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.cm-short-text { display: grid; gap: 1px; min-width: 0; }
+.cm-short-text strong { font-size: 12.5px; }
+.cm-short-text span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Clip maker on smaller screens: the phone goes under the video, then the two panels stack */
+@container page (max-width: 900px) {
+  .cm-panels { grid-template-columns: minmax(0, 1fr); }
+}
+@container page (max-width: 640px) {
+  .cm-top { grid-template-columns: minmax(0, 1fr); }
+  .cm-phone canvas { width: 180px; }
+}
+.cm-work .subs-transport { flex-wrap: wrap; row-gap: 8px; }
+.cm-work .subs-transport button { white-space: nowrap; }

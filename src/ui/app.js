@@ -997,6 +997,7 @@ function render(s) {
   renderQueue(s.jobs);
   if (typeof renderFiles === "function") renderFiles(s.files);
   if (typeof renderResolve === "function") renderResolve(s.resolveTools, s.project);
+  if (typeof renderShorts === "function") renderShorts(s.shorts);
   if (typeof renderHistoryVersion === "function") renderHistoryVersion(s.historyVersion);
   if (typeof renderSfxUploads === "function") renderSfxUploads(s.sfxUploads);
   renderUpdatePopup(s);

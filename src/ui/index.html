@@ -81,6 +81,7 @@
       <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
       <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
       <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
+      <button data-tab="shorts" title="Clip maker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.6 9.4v5.2l4.1-2.6z"/></svg><span>Clip maker</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="shortsTabBadge" hidden></b></button>
       <div class="tab-group">Create</div>
       <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
@@ -491,6 +492,140 @@
           <li><b>Subtitles</b> and <b>Cut the silence</b>: in Resolve, use <b>File › Import › Timeline</b> and pick the file VaultHub made. Subtitles come in as Text+ you can style and animate.</li>
           <li><b>Fix for Resolve</b> videos: drag them straight into the Media Pool.</li>
           <li><b>Project folder</b>: drag the whole folder into the Media Pool, and Resolve makes a bin for each folder.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="shortsTab" hidden>
+    <p class="rt-beta"><i class="beta-tag">Beta</i> Early version, still being worked on. Tell us what to fix.</p>
+    <h1 class="headline">Long video in.<br><em>Shorts out.</em></h1>
+
+    <label class="dropzone rt-start" id="cmDrop">
+      <input type="file" id="cmFiles" accept="video/*,.mkv,.avi,.mov,.wmv,.flv,.webm" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.6 9.4v5.2l4.1-2.6z"/></svg>
+      <span class="convert rt-add-button">Add a long video</span>
+      <span class="drop-hint">or drop it here. A recording, a POV, a stream: VaultHub finds the best moments and makes them vertical</span>
+    </label>
+
+    <div class="cm-work" id="cmWork" hidden>
+      <div class="cm-top">
+        <div class="subs-screen cm-screen" id="cmScreen">
+          <video id="cmVideo" playsinline preload="auto"></video>
+          <div class="cm-frame" id="cmFrame">
+            <div class="cm-box cm-crop" id="cmCrop" title="Drag to pick what's in the Short"><span>Short</span></div>
+            <div class="cm-box cm-cam" id="cmCam" title="Drag it over your facecam"><span>Facecam</span><i class="cm-handle" id="cmCamSize" title="Drag to make it bigger or smaller"></i></div>
+          </div>
+          <div class="rt-loading" id="cmLoading" hidden><span class="spinner"></span><span id="cmLoadingText">Opening the video...</span></div>
+        </div>
+        <div class="cm-phone">
+          <canvas id="cmPhone" width="360" height="640"></canvas>
+          <span class="cm-phone-label">How the Short looks</span>
+        </div>
+      </div>
+
+      <div class="cm-timeline" id="cmTimeline"><canvas id="cmCanvas"></canvas><div class="cm-blocks" id="cmBlocks"></div><div class="playhead" id="cmHead"></div></div>
+      <div class="subs-transport">
+        <button type="button" class="subs-play" id="cmPlay" title="Play or pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
+        <span class="subs-time" id="cmTime">0:00.0</span>
+        <span class="rt-file" id="cmFileName"></span>
+        <span class="spacer"></span>
+        <button type="button" class="outline-button small-button" id="cmAddHere" title="A new moment that starts where the video is">+ Moment here</button>
+        <button type="button" class="ghost-button small-button" id="cmChange">Change video</button>
+      </div>
+      <p class="rt-file-info" id="cmFileInfo"></p>
+
+      <div class="cm-panels">
+        <div class="rt-side cm-moments">
+          <h3 class="rt-panel-title">Moments <span class="rt-count" id="cmCount"></span></h3>
+          <div class="cm-find">
+            <button type="button" class="convert small-button" id="cmFind">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+              <span id="cmFindText">Find the best moments</span>
+            </button>
+            <div class="chips cm-lengths" id="cmLengths">
+              <button data-value="15">15 s</button>
+              <button data-value="30">30 s</button>
+              <button data-value="45">45 s</button>
+              <button data-value="60">60 s</button>
+            </div>
+          </div>
+          <p class="rt-text cm-find-note" id="cmFindNote">VaultHub listens to the whole video and picks the parts that stand out: shouting, laughing, explosions, the big plays.</p>
+          <div class="cm-list" id="cmList"></div>
+        </div>
+
+        <div class="rt-side cm-look">
+          <h3 class="rt-panel-title">Look</h3>
+          <div class="cm-layouts" id="cmLayouts">
+            <button type="button" class="cm-layout" data-layout="fill">
+              <i class="cm-mini cm-mini-fill"><b></b></i><span><strong>Fill the screen</strong><span>Cut to fit. Drag the box on the video.</span></span>
+            </button>
+            <button type="button" class="cm-layout" data-layout="blur">
+              <i class="cm-mini cm-mini-blur"><b></b></i><span><strong>Whole picture</strong><span>On a blurred copy of itself.</span></span>
+            </button>
+            <button type="button" class="cm-layout" data-layout="facecam">
+              <i class="cm-mini cm-mini-cam"><b></b><b></b></i><span><strong>Facecam on top</strong><span>Your camera above the game.</span></span>
+            </button>
+          </div>
+          <div class="image-options cm-options" id="cmOptions">
+            <div class="opt-row">
+              <span class="opt-label">Subtitles</span>
+              <div class="chips" data-key="subs">
+                <button data-value="1">Big subtitles</button>
+                <button data-value="">None</button>
+              </div>
+            </div>
+            <div class="opt-row" id="cmLangRow">
+              <span class="opt-label">Language</span>
+              <div class="chips" data-key="language">
+                <button data-value="">Find it by itself</button>
+                <button data-value="en">English</button>
+                <button data-value="no">Norwegian</button>
+                <button data-value="sv">Swedish</button>
+                <button data-value="da">Danish</button>
+                <button data-value="de">German</button>
+              </div>
+            </div>
+          </div>
+          <p class="opt-note" id="cmNote"></p>
+          <div class="rt-progress" id="cmProgress" hidden>
+            <div class="bar"><div></div></div>
+            <div class="rt-progress-line"><span id="cmProgressText"></span><button type="button" class="link" id="cmStop">Stop</button></div>
+          </div>
+          <button class="convert rt-go" id="cmGo" type="button">
+            <span id="cmGoText">Make Shorts</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <div class="cm-made" id="cmMade" hidden>
+            <div class="cm-made-head"><strong id="cmMadeTitle"></strong><button type="button" class="link" id="cmOpenFolder">Open folder</button></div>
+            <div class="cm-made-list" id="cmMadeList"></div>
+            <p class="rt-small rt-text">Drag a Short straight into YouTube, TikTok or your editor, or click it to see it in its folder.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rt-cards cm-how" id="cmHow">
+      <div class="home-card rt-card">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+          How it works</h3>
+        </div>
+        <ul class="rt-steps">
+          <li>Add a long video and click <b>Find the best moments</b>. Or play it and click <b>+ Moment here</b> at the good parts.</li>
+          <li>Pick a look: <b>fill the screen</b>, the <b>whole picture</b> on a blurred background, or your <b>facecam on top</b>.</li>
+          <li>Click <b>Make Shorts</b>. Each moment becomes its own 1080 × 1920 video, ready for YouTube Shorts, TikTok and Reels.</li>
+        </ul>
+      </div>
+      <div class="home-card rt-card">
+        <div class="home-card-head"><h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 11h4M13 11h4M7 15h7M16 15h1"/></svg>
+          Good to know</h3>
+        </div>
+        <ul class="rt-steps">
+          <li>Everything happens on your PC. Nothing is uploaded.</li>
+          <li>With an NVIDIA graphics card, the videos and subtitles are made on it, which is many times faster.</li>
+          <li>Several sound tracks (game, mic, Discord from OBS) are mixed into one, and every Short gets the same loudness.</li>
         </ul>
       </div>
     </div>
@@ -1750,6 +1885,7 @@
 <script src="games.js"></script>
 <script src="povs.js"></script>
 <script src="resolve.js"></script>
+<script src="shorts.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 </body>

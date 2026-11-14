@@ -40,6 +40,7 @@ import games  # noqa: E402
 import povs  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
+import shorts  # noqa: E402
 import subtitles  # noqa: E402
 import resolve  # noqa: E402
 import history  # noqa: E402
@@ -146,6 +147,7 @@ class State:
                 "jobs": queue.snapshot(),
                 "files": local_files.snapshot(),
                 "resolveTools": resolvetools.get().snapshot(),
+                "shorts": shorts.get().snapshot(),
                 "project": project.current(),
                 "historyVersion": history.version,
                 "sfxUploads": sfx.library.snapshot(),
@@ -157,7 +159,7 @@ class State:
 
     @property
     def converting(self):
-        return queue.busy or local_files.busy or resolvetools.get().busy or waveform.busy() or sfx.library.busy
+        return queue.busy or local_files.busy or resolvetools.get().busy or shorts.get().busy or waveform.busy() or sfx.library.busy
 
     def start(self, flag):
         """Set a flag (like "checking") if it isn't set yet. False if it already was."""
@@ -300,6 +302,8 @@ def drag_path(data):
     if kind == "rt":
         item = resolvetools.get().find(data.get("id"))
         return item and item["out"]
+    if kind == "short":
+        return shorts.get().short_path(data.get("id"), data.get("n"))
     if kind == "image":
         return images.was_made(data.get("path")) and data["path"]
     if kind == "clip":
@@ -544,21 +548,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
-        if self.path.startswith("/rt-video/"):  # a video on the Resolve tab, played right from where it is
+        if self.path.startswith(("/rt-video/", "/sh-video/")):  # a video on the Resolve or Clip maker tab, played from where it is
             file_id, _, copy = self.path[len("/rt-video/"):].partition("/")
-            path = resolvetools.get().video_path(file_id, copy if copy in ("copy", "mix") else "")
+            tools = shorts.get() if self.path.startswith("/sh-") else resolvetools.get()
+            path = tools.video_path(file_id, copy if copy in ("copy", "mix") else "")
             if not path:
                 return self.send_error(404)
             ext = os.path.splitext(path)[1].lower()
             kind = ("video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv")
                     else "audio/mp4" if ext == ".m4a" else None)
             return self.send_media(path, kind)
+        if self.path.startswith(("/short-thumb/", "/short-file/")):  # a Short the Clip maker made
+            file_id, _, n = urllib.parse.urlsplit(self.path).path.split("/", 2)[2].partition("/")
+            path = shorts.get().short_path(file_id, n, thumb=self.path.startswith("/short-thumb/"))
+            if not path:
+                return self.send_error(404)
+            return self.send_file(path) if path.endswith(".jpg") else self.send_media(path, "video/mp4")
         if self.path.startswith("/board-bg/"):  # a board's own background picture
             path = boards.background_path(self.path[len("/board-bg/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/file-thumb/"):
             file_id = self.path[len("/file-thumb/"):]
-            item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
+            item = (resolvetools.get() if file_id.startswith("r") else shorts.get() if file_id.startswith("s")
+                    else local_files).find(file_id)
             path = item and item["thumbPath"]
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/image/"):
@@ -669,6 +681,59 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": False, "cancelled": True})
                 project.use(picked)
                 return self.send_json({"ok": True, "project": project.current(), "projects": project.recent()})
+            else:
+                return self.send_json({"ok": False, "error": "Unknown."})
+            self.send_json({"ok": True})
+        except (ValueError, KeyError, TypeError) as e:
+            self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Something's missing."})
+
+    def handle_shorts(self, data):
+        """The Clip maker tab (sh-): long videos into vertical Shorts."""
+        tools = shorts.get()
+        path = self.path
+        try:
+            if path == "/api/sh-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    picked = folder_picker.pick_files("Pick a video", files.PICK_KINDS)
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                added, errors = [], []
+                for p in picked[:1]:
+                    try:
+                        added.append(tools.add_path(p))
+                    except (ValueError, OSError) as e:
+                        errors.append(str(e) if isinstance(e, ValueError) else f"Couldn't open {os.path.basename(p)}.")
+                return self.send_json({"ok": True, "files": added, "errors": errors})
+            if path == "/api/sh-find":
+                return self.send_json({"ok": True, **tools.find_moments(data.get("id"), data.get("length"), data.get("count"))})
+            if path == "/api/sh-make":
+                tools.convert([{"id": data.get("id"), "clips": data.get("clips") or []}], data.get("options") or {},
+                              save_folder(data, "exports"))
+            elif path == "/api/sh-options":
+                o = resolvetools.load_options()
+                return self.send_json({"ok": True, "language": o["language"], "nvidia": subtitles.has_nvidia(),
+                                       "speechReady": subtitles.engine_ready() and subtitles.model_ready(o["model"])})
+            elif path == "/api/sh-remove":
+                tools.remove(data.get("id"))
+            elif path == "/api/sh-cancel":
+                tools.cancel(data.get("id"))
+            elif path == "/api/sh-preview":
+                return self.send_json({"ok": True, **tools.preview(data.get("id"))})
+            elif path == "/api/sh-mix":
+                return self.send_json({"ok": True, **tools.mix(data.get("id"))})
+            elif path == "/api/sh-wave":
+                return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
+            elif path == "/api/sh-show":
+                item = tools.find(data.get("id"))
+                if data.get("n"):
+                    shown = tools.short_path(data.get("id"), data.get("n"))
+                    if shown:
+                        show_in_folder(shown)
+                elif item and item.get("outFolder") and os.path.isdir(item["outFolder"]):
+                    open_folder(item["outFolder"])
             else:
                 return self.send_json({"ok": False, "error": "Unknown."})
             self.send_json({"ok": True})
@@ -1153,10 +1218,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
-        if self.path == "/api/rt-add":  # a file dropped on the Resolve tab; the body is the file itself
+        if self.path in ("/api/rt-add", "/api/sh-add"):  # a file dropped on the Resolve or Clip maker tab; the body is the file
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
+            tools = shorts.get() if self.path == "/api/sh-add" else resolvetools.get()
             try:
-                return self.send_json({"ok": True, "file": resolvetools.get().add(name, self.rfile, length)})
+                return self.send_json({"ok": True, "file": tools.add(name, self.rfile, length)})
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
@@ -1490,6 +1556,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path.startswith(("/api/rt-", "/api/project-")):
             self.handle_resolve(data)
+        elif self.path.startswith("/api/sh-"):
+            self.handle_shorts(data)
         elif self.path == "/api/file-show":
             item = local_files.find(data.get("id"))
             if item and item["out"]:
@@ -1704,6 +1772,7 @@ def clean_up():
     pagecache.flush()
     copyright_check.clean_up()
     clips.clean_up()
+    shorts.clean_up()
 
 
 # ---------------------------------------------------------------- main

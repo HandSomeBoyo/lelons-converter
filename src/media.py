@@ -63,11 +63,11 @@ def probe(path):
     return found
 
 
-def run(args, seconds, on_progress=None):
-    """Run ffmpeg, calling on_progress(percent) as it goes."""
+def run(args, seconds, on_progress=None, cwd=None):
+    """Run ffmpeg, calling on_progress(percent) as it goes. cwd: the folder it runs in."""
     command = [ffmpeg(), "-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats", *args]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               creationflags=NO_WINDOW)
+                               creationflags=NO_WINDOW, cwd=cwd)
     errors = []
     reader = threading.Thread(target=lambda: errors.extend(process.stderr.read().decode("utf-8", "replace").splitlines()),
                               daemon=True)

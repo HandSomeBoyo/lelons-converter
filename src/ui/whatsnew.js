@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.25.0", items: [
+    "New Clip maker tab (beta): turn a long recording, POV or stream into vertical Shorts, TikToks and Reels.",
+    "Click Find the best moments and VaultHub listens through the whole video for the parts that stand out, like shouting, laughing and big plays. Or play it and click + Moment here at the good parts.",
+    "Pick a look: fill the screen (drag the box to choose what's in it), the whole picture on a blurred background, or your facecam on top with the game under it. The phone next to the video shows how it will look.",
+    "Big subtitles can be added right into the video, heard on your PC. Every Short is 1080 × 1920 with even sound, made on your graphics card when you have one.",
+  ] },
   { version: "2.24.3", items: [
     "Fits small screens: on a laptop or a small window, the side bar names (Convert, Create, Tools) are no longer cut in half.",
     "Home: the newest uploads line up neatly on smaller screens, and the Watch and Convert buttons stay inside their cards.",
