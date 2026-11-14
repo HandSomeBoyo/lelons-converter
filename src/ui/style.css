@@ -5108,7 +5108,7 @@ main { container: page / inline-size; }
   padding: 24px; background: #000; color: #f1efe9; text-align: center;
 }
 .watch-error[hidden] { display: none; }
-.watch-error:not([hidden]) ~ .watch-bar .ghost-button { display: none; }
+.watch-error:not([hidden]) ~ .watch-bar .ghost-button, .watch-error:not([hidden]) ~ .watch-bar .watch-speed { display: none; }
 .watch-screen:empty { display: none; }
 .watch-error p { margin: 0; font: 600 16px var(--head); max-width: 420px; }
 .watch-bar { display: flex; align-items: center; gap: 10px; padding: 14px 16px 14px 20px; }
@@ -5155,3 +5155,12 @@ main { container: page / inline-size; }
 .set-chips button:hover { background: var(--panel2); }
 .set-chips button.active { background: var(--accent); border-color: var(--accent); color: var(--ink); }
 @media (max-width: 640px) { .set-device-row { flex-wrap: wrap; } .set-device-row .ghost-button { flex: 1; justify-content: center; } }
+.watch-speed {
+  position: relative; flex: none; height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 4px;
+  border: 1px solid var(--line2); color: var(--text); font: 600 13px var(--head); cursor: pointer;
+}
+.watch-speed:hover { background: var(--panel2); }
+.watch-speed svg { width: 16px; height: 16px; color: var(--accent); flex: none; }
+.watch-speed select { all: unset; cursor: pointer; padding-right: 2px; }
+.watch-speed select option { background: var(--panel); color: var(--text); }
+@media (max-width: 640px) { .watch-speed { order: 2; } }

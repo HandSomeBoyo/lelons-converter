@@ -1245,6 +1245,14 @@
     </div>
     <div class="watch-bar">
       <div class="watch-text"><b id="watchTitle"></b><small id="watchSub"></small></div>
+      <label class="watch-speed" title="Speed (slow motion or faster)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5.6 18.4a9 9 0 1 1 12.8 0"/><path d="M12 13l4-4"/></svg>
+        <select id="watchSpeed" aria-label="Speed">
+          <option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="0.75">0.75x</option>
+          <option value="1" selected>Normal</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option>
+          <option value="1.75">1.75x</option><option value="2">2x</option>
+        </select>
+      </label>
       <button type="button" class="outline-button" id="watchConvert">Convert</button>
       <button type="button" class="ghost-button" id="watchOpen">Open on YouTube</button>
       <button type="button" class="watch-close" id="watchClose" title="Close (Esc)" aria-label="Close">

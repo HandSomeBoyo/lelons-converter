@@ -35,6 +35,7 @@ function openWatch(url, info = {}) {
   $("watchSub").textContent = info.sub || "";
   $("watchConvert").hidden = !watchConvert;
   $("watchError").hidden = true;
+  $("watchSpeed").value = "1";
   const frame = document.createElement("iframe");
   frame.id = "watchFrame";
   frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
@@ -68,7 +69,18 @@ window.addEventListener("message", (e) => {
   let data;
   try { data = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch { return; }
   if (data && data.event === "onError") watchFailed(Number(data.info));
+  // The speed changed in the player's own gear menu: show it here too.
+  const rate = data && data.event === "infoDelivery" && data.info && data.info.playbackRate;
+  if (rate && $("watchSpeed").querySelector(`option[value="${rate}"]`)) $("watchSpeed").value = String(rate);
 });
+
+// Speed: slow motion (0.25x) up to 2x, through the player's own controls. (Quality is in the
+// player's gear button: YouTube no longer lets other apps pick it.)
+function watchCommand(func, args) {
+  const frame = $("watchFrame");
+  try { if (frame) frame.contentWindow.postMessage(JSON.stringify({ event: "command", func, args, id: "vh-watch", channel: "widget" }), "*"); } catch {}
+}
+$("watchSpeed").addEventListener("change", () => watchCommand("setPlaybackRate", [Number($("watchSpeed").value)]));
 
 $("watchClose").addEventListener("click", closeWatch);
 $("watchModal").addEventListener("click", (e) => { if (e.target === $("watchModal")) closeWatch(); });
