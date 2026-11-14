@@ -5007,3 +5007,93 @@ html.side-small .sidebar .tabs .beta-tag { display: none; }
 .sidebar .tabs .tab-line.ready { transition: transform .24s cubic-bezier(.2, .8, .2, 1), height .24s cubic-bezier(.2, .8, .2, 1), width .24s cubic-bezier(.2, .8, .2, 1), opacity .15s; }
 .sidebar .tabs .tab-line.moving { animation: none; }
 .sidebar .tabs button, .sidebar .tabs button svg { transition: color .15s ease-out, background-color .15s ease-out; }
+
+/* ================================================================ 2.24.3: fits small screens (laptops, small windows).
+   The page sizes itself by the room it really has next to the side bar, not by the whole window. */
+main { container: page / inline-size; }
+/* The side bar list never squashes its rows: when the window is short it scrolls instead */
+.sidebar .tabs > * { flex-shrink: 0; }
+@media (max-height: 820px) {
+  .side-brand { height: 40px; padding-bottom: 10px; }
+  .sidebar { padding-top: 14px; }
+  .sidebar .tabs button, .side-link, html.side-small .sidebar .tabs button, html.side-small .side-link { padding-top: 7px; padding-bottom: 7px; }
+  .tab-group { height: 30px; padding-top: 14px; padding-bottom: 6px; }
+}
+/* Home: newest uploads */
+.upload-actions { flex-wrap: wrap; }
+.upload-actions button { white-space: nowrap; }
+@container page (max-width: 760px) {
+  .upload-grid { grid-template-columns: 1fr 1fr; }
+  .upload-card.hero { grid-column: 1 / -1; grid-row: auto; flex-direction: row; padding: 10px; }
+  .upload-card.hero .upload-thumb { width: 52%; border-radius: var(--r-sm); }
+  .upload-card.hero .upload-body { padding: 4px 6px 2px; }
+}
+@container page (max-width: 520px) {
+  .upload-grid { grid-template-columns: 1fr; }
+  .upload-card.hero { flex-direction: column; padding: 0; }
+  .upload-card.hero .upload-thumb { width: 100%; border-radius: 0; }
+  .upload-card.hero .upload-body { padding: 14px 16px 16px; }
+  .upload-card:not(.hero) .upload-thumb { width: 96px; }
+}
+/* Resolve: the two cards stack when there isn't room for both side by side */
+@container page (max-width: 700px) {
+  .rt-cards { grid-template-columns: minmax(0, 1fr); }
+}
+.rt-project-new { flex-wrap: wrap; }
+.rt-project-new .input { flex: 1 1 200px; min-width: 0; }
+/* Home: the crew cards stack when narrow */
+@container page (max-width: 620px) {
+  .home-grid { grid-template-columns: 1fr; }
+  #homeCrewGrid { grid-template-rows: none; }
+  #homeCrewGrid > .home-card:nth-child(n) { grid-column: 1; grid-row: auto; }
+  .channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Docs: the same steps as before the side bar came, now measured by the room next to it */
+@container page (max-width: 1160px) { .doc-guide { width: 230px; } }
+@container page (max-width: 1010px) { .doc-outline { width: 170px; } }
+@container page (max-width: 960px) {
+  .doc-body { flex-wrap: wrap; }
+  .doc-guide { order: -1; position: static; width: 100%; max-height: none; }
+}
+@container page (max-width: 810px) {
+  .doc-outline { display: none; }
+  .doc-select.doc-font { display: none; }
+  .doc-menubar-item { padding: 3px 6px; font-size: 13px; }
+  .doc-save { padding: 0 12px; }
+  .doc-saved { display: none; }
+}
+/* The rest of the pages: the same narrow-window steps, measured by the room next to the side bar */
+@container page (max-width: 670px) {
+  .lib-layout { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .lib-side { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .side-head { display: none; }
+  .side-group { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .side-people { max-height: none; }
+  .side-item { width: auto; height: 30px; border: 1px solid var(--line); }
+  #sfxMain.lib-layout.has-genres { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .lib-genres { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; padding: 6px; }
+  .lib-genres-head, .pl-side-label { display: none; }
+  .side-item.lib-genre { width: auto; flex: none; gap: 8px; }
+  .side-item.pl-new { margin-bottom: 0; }
+  .pl-bar { flex-wrap: wrap; }
+  .pl-bar-text { min-width: 160px; }
+  .pl-faces { display: none; }
+  .stats-row { grid-template-columns: 22px 32px minmax(0, 1fr) 60px; }
+  .stats-spark { display: none; }
+  .pv-top { flex-direction: column; align-items: stretch; }
+  .pv-session-head { flex-wrap: wrap; }
+}
+@container page (max-width: 770px) {
+  .fx-hero-video, .fx-hero-art { left: 0; width: 100%; }
+  .fx-tools { flex-wrap: wrap; }
+  .gm-add { flex-wrap: wrap; }
+  .gm-link { flex: 1 1 100%; }
+  .gm-detail { grid-template-columns: 1fr; }
+  .gm-detail-side { padding-top: 0; }
+}
+@container page (max-width: 810px) {
+  .lib-tools { flex-wrap: wrap; }
+  .lib-tools .history-search { flex: 1 1 100%; }
+  .subs-body { grid-template-columns: minmax(0, 1fr); }
+}
+@container page (max-width: 870px) { .rt-work { grid-template-columns: minmax(0, 1fr); } }
