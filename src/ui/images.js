@@ -19,7 +19,7 @@ function saveImageOptions() {
 
 function showTab(tab) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab)));
-  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
@@ -34,6 +34,7 @@ function showTab(tab) {
   if (typeof povsTabChanged === "function") povsTabChanged(tab);
   if (typeof feedTabChanged === "function") feedTabChanged(tab);
   if (typeof channelTabChanged === "function") channelTabChanged(tab);
+  if (typeof titlesTabChanged === "function") titlesTabChanged(tab);
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
@@ -42,7 +43,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("cli
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["feed", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["feed", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // ---- adding pictures (drop anywhere in the window, or choose files)

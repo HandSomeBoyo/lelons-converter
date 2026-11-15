@@ -34,6 +34,7 @@ import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import boards  # noqa: E402
 import channelstats  # noqa: E402
+import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import film  # noqa: E402
@@ -1496,6 +1497,11 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/ch-"):
             self.handle_channel(self.path[len("/api/ch-"):], data)
+        elif self.path == "/api/titles-look":  # the Titles & tags tab looks up a topic on YouTube
+            try:
+                self.send_json(titles.look_up(data.get("topic")))
+            except titles.Error as e:
+                self.send_json({"ok": False, "error": str(e)})
         elif self.path.startswith("/api/games-"):
             self.handle_games(self.path[len("/api/games-"):], data)
         elif self.path.startswith("/api/pov-"):

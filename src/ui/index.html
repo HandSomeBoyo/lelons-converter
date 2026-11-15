@@ -119,6 +119,7 @@
       <button data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
       <div class="tab-group" data-group="tools" role="button" tabindex="0" aria-expanded="true" title="Hide or show Tools"><span>Tools</span><svg class="tab-group-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
       <button data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
+      <button data-tab="titles" title="Titles &amp; tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h11M4 11h7"/><path d="M13.5 20.5 12 21l.5-1.5 6.2-6.2a1.06 1.06 0 0 1 1.5 1.5z"/><path d="M4.5 15.5h3"/></svg><span>Titles &amp; tags</span></button>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
     </nav>
@@ -369,6 +370,76 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="titlesTab" hidden>
+    <h1 class="headline">Your title.<br><em>Made better.</em></h1>
+
+    <div class="tt-top">
+      <div class="home-card tt-write">
+        <label class="tt-field"><span>What's the video about?</span>
+          <input id="ttTopic" maxlength="80" placeholder="minecraft hardcore" spellcheck="false" autocomplete="off"></label>
+        <label class="tt-field"><span>Your title <b class="tt-count" id="ttCount">0 / 100</b></span>
+          <textarea id="ttTitle" rows="2" maxlength="100" placeholder="Type the title you want to use" spellcheck="true"></textarea></label>
+        <div class="tt-score" id="ttScore">
+          <div class="tt-ring" id="ttRing"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27"/><circle class="tt-ring-fill" id="ttRingFill" cx="32" cy="32" r="27"/></svg><b id="ttNum">–</b></div>
+          <div class="tt-verdict"><b id="ttWord">Type a title</b><span id="ttSummary">You'll see a score and tips right away.</span></div>
+        </div>
+        <ul class="tt-checks" id="ttChecks"></ul>
+      </div>
+
+      <div class="home-card tt-preview">
+        <div class="home-card-head"><h3>How it looks on YouTube</h3></div>
+        <p class="tt-where">On a phone</p>
+        <div class="tt-phone">
+          <div class="tt-thumb"><span>Your thumbnail</span><i id="ttLen1">10:24</i></div>
+          <div class="tt-meta"><span class="tt-dot"></span><div><b id="ttPhoneTitle"></b><small>Your channel · 12K views · 2 days ago</small></div></div>
+        </div>
+        <p class="tt-where">In search on a computer</p>
+        <div class="tt-search">
+          <div class="tt-thumb small"><span>Your thumbnail</span></div>
+          <div><b id="ttSearchTitle"></b><small>12K views · 2 days ago</small></div>
+        </div>
+        <p class="tt-cut" id="ttCut"></p>
+      </div>
+    </div>
+
+    <div class="home-card tt-card">
+      <div class="home-card-head"><h3>Other ways to say it</h3><button type="button" class="outline-button" id="ttMore">More ideas</button></div>
+      <p class="home-muted tt-muted" id="ttIdeasNote">Type your title and what it's about, and ideas show up here.</p>
+      <div class="tt-ideas" id="ttIdeas"></div>
+    </div>
+
+    <div class="home-card tt-card">
+      <div class="home-card-head">
+        <h3>Tags</h3>
+        <span class="tt-meter" id="ttMeter"><i><b id="ttMeterFill"></b></i><span id="ttMeterText">0 / 500</span></span>
+      </div>
+      <div class="tt-look">
+        <p class="home-muted tt-muted" id="ttLookNote">Find the tags the top videos use and what people search for.</p>
+        <button type="button" class="small-button" id="ttLook">Look it up on YouTube</button>
+      </div>
+      <p class="sfx-error" id="ttLookError"></p>
+      <div class="tt-tags" id="ttTags"></div>
+      <form class="tt-add" id="ttAddForm" autocomplete="off">
+        <input id="ttAdd" maxlength="60" placeholder="Add your own tag" spellcheck="false">
+        <button type="submit" class="outline-button">Add</button>
+      </form>
+      <div class="tt-copy">
+        <button type="button" class="small-button" id="ttCopyTags">Copy tags</button>
+        <button type="button" class="outline-button" id="ttCopyHash">Copy hashtags</button>
+        <span class="tt-hash" id="ttHash"></span>
+        <span class="tt-copied" id="ttCopied"></span>
+      </div>
+      <p class="tt-tip">Paste the tags in YouTube Studio under <b>Show more &gt; Tags</b>. Put the hashtags in your description: the first 3 show above your title.</p>
+    </div>
+
+    <div class="home-card tt-card" id="ttFound" hidden>
+      <div class="home-card-head"><h3>People search for</h3><small class="home-muted">click one to add it as a tag</small></div>
+      <div class="tt-searches" id="ttSearches"></div>
+      <div class="home-card-head tt-top-head"><h3>Top videos right now</h3><small class="home-muted" id="ttTopNote"></small></div>
+      <div class="ch-videos" id="ttVideos"></div>
     </div>
   </section>
 
@@ -2093,6 +2164,7 @@
 <script src="home.js"></script>
 <script src="stats.js"></script>
 <script src="channel.js"></script>
+<script src="titles.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
 <script src="pdfimport.js"></script>

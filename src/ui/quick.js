@@ -56,7 +56,7 @@ const QK_WORDS = {
   home: "start channels", video: "youtube tiktok mp3 mp4 download song link convert", files: "convert trim shrink compress",
   images: "picture photo png jpg resize crop", resolve: "davinci subtitles silence edit", sfx: "library sounds sound effects music songs",
   docs: "script write document notes pdf", boards: "trello plan todo cards", fx: "film assets vfx clips explosions",
-  feed: "friends activity feed today what new uploads", games: "steam record", povs: "recordings share friends", copyright: "music check song claim", history: "downloads recent",
+  feed: "friends activity feed today what new uploads", games: "steam record", povs: "recordings share friends", copyright: "music check song claim", titles: "title tags hashtags seo score ideas clickbait", history: "downloads recent",
 };
 
 function qkPages() {
