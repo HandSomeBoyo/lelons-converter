@@ -30,6 +30,7 @@ YT_DLP_VERSION = updater.use_newest_yt_dlp()
 import clips  # noqa: E402
 import downloader  # noqa: E402
 import files  # noqa: E402
+import watchfolders  # noqa: E402
 import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import boards  # noqa: E402
@@ -148,6 +149,8 @@ class State:
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
                 "files": local_files.snapshot(),
+                "fileScans": local_files.scan_snapshot(),
+                "watches": watches.snapshot(),
                 "resolveTools": resolvetools.get().snapshot(),
                 "project": project.current(),
                 "historyVersion": history.version,
@@ -174,6 +177,7 @@ class State:
 queue = jobs.Queue(on_done=history.add_job)
 page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()
+watches = watchfolders.Watches(local_files)
 clip_maker = clips.Clips(queue.lookup, local_files.find)
 state = State()
 
@@ -1331,12 +1335,55 @@ class Handler(BaseHTTPRequestHandler):
             docs_saved.add(result["path"])
         self.send_json({"ok": True, **result})
 
+    def handle_watch(self, data):
+        """Watched folders in the Files tab (watchfolders.py)."""
+        action = self.path[len("/api/watch-"):]
+        test_path = data.get("path") if isinstance(data.get("path"), str) and os.name != "nt" else ""
+        try:
+            if action == "add":
+                folder = test_path or pick_folder(state.last_asked, "Pick a folder to watch")
+                if not folder:
+                    return self.send_json({"ok": False})
+                return self.send_json({"ok": True, "watch": watches.add(folder, data.get("options"),
+                                                                        data.get("subfolders", True))})
+            if action == "update":
+                changes = {k: data[k] for k in ("options", "on", "subfolders") if k in data}
+                return self.send_json({"ok": True, "watch": watches.update(data.get("id"), changes)})
+            if action == "out":  # pick where its converted files go
+                e = watches.get(data.get("id"))
+                if not e:
+                    return self.send_json({"ok": False})
+                folder = test_path or pick_folder(e["out"] if os.path.isdir(e["out"]) else e["folder"],
+                                                  "Where should the converted files go?")
+                if not folder:
+                    return self.send_json({"ok": False})
+                return self.send_json({"ok": True, "watch": watches.update(e["id"], {"out": folder})})
+            if action == "backlog":
+                return self.send_json({"ok": True, "count": watches.convert_backlog(data.get("id"), bool(data.get("skip")))})
+            if action == "remove":
+                watches.remove(data.get("id"))
+                return self.send_json({"ok": True})
+            if action == "open":  # open the watched folder, or its converted files
+                e = watches.get(data.get("id"))
+                if e:
+                    folder = e["out"] if data.get("which") == "out" else e["folder"]
+                    if data.get("which") == "out":
+                        os.makedirs(folder, exist_ok=True)
+                    open_folder(folder)
+                return self.send_json({"ok": True})
+        except ValueError as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't open that folder."})
+        self.send_json({"ok": False, "error": "Unknown request."})
+
     def handle_post(self):
         length = int(self.headers.get("Content-Length") or 0)
         if self.path == "/api/file-add":  # the body is the file itself
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
+            sub = urllib.parse.unquote(self.headers.get("X-File-Folder") or "")  # from a dropped folder
             try:
-                return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length)})
+                return self.send_json({"ok": True, "file": local_files.add(name, self.rfile, length, sub)})
             except ValueError as e:
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
@@ -1705,6 +1752,18 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError, OSError) as e:
                     errors.append(str(e) if isinstance(e, ValueError) else f"Couldn't open {os.path.basename(path)}.")
             self.send_json({"ok": True, "files": added, "errors": errors})
+        elif self.path == "/api/files-pick-folder":
+            # A whole folder: everything in it (and its subfolders) is added where it is, nothing copied.
+            folder = data.get("path") if isinstance(data.get("path"), str) and os.name != "nt" else ""
+            folder = folder or pick_folder(state.last_asked, "Pick a folder with videos or songs")
+            if not folder:
+                return self.send_json({"ok": False})
+            try:
+                self.send_json({"ok": True, "count": local_files.add_folder(folder)})
+            except (ValueError, OSError) as e:
+                self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't open that folder."})
+        elif self.path.startswith("/api/watch-"):
+            self.handle_watch(data)
         elif self.path == "/api/files-convert":
             try:
                 local_files.convert(data.get("items") or [], data.get("options") or {},

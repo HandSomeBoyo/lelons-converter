@@ -496,6 +496,62 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .options { flex-wrap: wrap; align-items: center; }
 .file-row.skipped .pic, .file-row.skipped .title { opacity: .45; }
 .file-row.skipped .msg { color: var(--muted); }
+.file-from { flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--muted); }
+.file-from[hidden] { display: none; }
+.file-from svg { width: 13px; height: 13px; flex: none; }
+.dropzone .drop-text .link { font: inherit; }
+.dropzone .drop-text, .dropzone .drop-hint { text-align: center; padding: 0 16px; }
+.dropzone.compact .drop-text strong { font-weight: 600; }
+
+/* Files tab: folders being looked through */
+.file-scans:empty { display: none; }
+.file-scan { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.file-scan svg { width: 18px; height: 18px; color: var(--accent); flex: none; }
+.file-scan-text { flex: none; }
+.file-scan .bar { flex: 1; margin: 0; }
+
+/* Files tab: watched folders */
+.watch-box { margin-top: 28px; }
+.watch-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+.watch-head h2 { margin: 0; font: 700 17px var(--head); }
+.watch-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.watch-head .outline-button { gap: 6px; }
+.watch-head .outline-button svg { width: 15px; height: 15px; }
+.watch-box > .opt-note { margin: 0 0 8px; }
+.watch-box > .opt-note[hidden] { display: none; }
+.watch-empty { padding: 18px; border: 1.5px dashed var(--line2); border-radius: 4px; font-size: 13px; color: var(--muted); text-align: center; }
+.watch-row { background: var(--panel); border-radius: 4px; padding: 12px 14px; }
+.watch-row + .watch-row { margin-top: 8px; }
+.watch-top { display: flex; align-items: center; gap: 12px; }
+.watch-icon { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--panel2); color: var(--muted); }
+.watch-icon svg { width: 18px; height: 18px; }
+.watch-icon.live { color: var(--accent); background: rgba(var(--accent-rgb), .12); animation: watch-live 2.4s ease-in-out infinite; }
+@keyframes watch-live { 50% { box-shadow: 0 0 0 5px rgba(var(--accent-rgb), .08); } }
+.watch-body { flex: 1; min-width: 0; }
+.watch-name { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14px; min-width: 0; }
+.watch-folder { all: unset; cursor: pointer; font-weight: 400; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.watch-folder:hover { color: var(--text); text-decoration: underline; }
+.watch-line { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; font-size: 13px; color: var(--muted); }
+.watch-turns { color: var(--text); font-weight: 500; }
+.watch-row.missing .watch-status { color: var(--red); }
+.watch-row.paused .watch-name, .watch-row.paused .watch-turns { opacity: .55; }
+.watch-backlog { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 8px; padding: 7px 10px; border-radius: 4px; background: rgba(var(--accent-rgb), .08); font-size: 12.5px; }
+.watch-backlog .link { font-size: 12.5px; font-weight: 600; }
+.watch-backlog .link.muted { color: var(--muted); }
+.watch-backlog .link.muted:hover { color: var(--text); }
+.watch-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.watch-actions .check { margin-right: 6px; }
+.watch-actions .icon-button.active { color: var(--accent); }
+.watch-settings { margin: 12px 0 2px 50px; padding-top: 12px; border-top: 1px solid var(--line); }
+.watch-settings .opt-row + .opt-row { margin-top: 8px; }
+.watch-check { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.watch-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.watch-settings .link { font-size: 13px; font-weight: 600; flex: none; }
+@container page (max-width: 640px) {
+  .watch-head { flex-direction: column; align-items: stretch; }
+  .watch-settings { margin-left: 0; }
+  .watch-settings .opt-row { flex-wrap: wrap; }
+}
 
 /* History tab */
 .history-tools { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
