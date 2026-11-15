@@ -252,11 +252,19 @@ function callRedrawRoom() {
 
 // ---- your microphone and speakers
 
-const AUDIO_NAMES = { normal: "Normal", hd: "HD", music: "Music" };
-const AUDIO_NOTES = {
-  normal: "A clear voice that uses the least internet. Good for slow Wi-Fi.",
-  hd: "A full, rich voice with about 3 times the detail calls had before. Best for most calls.",
-  music: "Stereo with the most detail and no cleanup, for music, singing or game sound through your microphone. Use headphones so others don't hear themselves.",
+// What the sound quality and Music mode choices say about themselves.
+function callBitrateNote(kbps) {
+  const what = kbps <= 32 ? "Like a phone call (calls used this before). Uses the least internet."
+    : kbps <= 64 ? "A clear voice. Good for slow Wi-Fi."
+    : kbps <= 96 ? "A clear, natural voice."
+    : kbps <= 128 ? "A full, rich voice. Best for most calls."
+    : kbps <= 256 ? "Very detailed. Great together with Music mode."
+    : "The most detail there is. Needs good internet, and more for every person in a group call.";
+  return what;
+}
+const AUDIO_MUSIC_NOTES = {
+  off: "Your voice is cleaned up: echo cancelling, steady volume and noise suppression.",
+  on: "Stereo, and no cleanup at all, for music, singing or game sound through your microphone. Use headphones so others don't hear themselves.",
 };
 const AUDIO_MUSIC_NOISE = "Off in Music mode, so your music comes through clean.";
 
@@ -268,22 +276,22 @@ function callNoise() {
   return NOISE_LEVELS.includes(level) ? level : "strong";
 }
 
-// Sound quality: how much detail your voice gets. "normal" uses the least internet, "hd" is a full, rich
-// voice (the default), "music" is stereo with the most detail and no cleanup at all, for music, singing or a
-// game's sound through your microphone. Bits per second each person gets from you.
-const AUDIO_MODES = ["normal", "hd", "music"];
-const AUDIO_BITRATE = { normal: 64000, hd: 128000, music: 256000 };
-function callAudioMode() {
-  const mode = loadPref("callAudio");
-  return AUDIO_MODES.includes(mode) ? mode : "hd";
+// Sound quality: how much detail your voice gets, in kilobits a second to each person (you pick it;
+// 128 unless you do). Music mode sends stereo with no cleanup at all, for music, singing or a game's
+// sound through your microphone.
+const AUDIO_RATES = [32, 64, 96, 128, 192, 256, 320, 510];
+function callBitrate() {
+  const kbps = Number(loadPref("callBitrate"));
+  return AUDIO_RATES.includes(kbps) ? kbps : 128;
 }
+function callMusicOn() { return loadPref("callMusic") === true; }
 // Noise suppression is off in music mode (it would cut the music out), so that's what's really used.
-function callNoiseUsed() { return callAudioMode() === "music" ? "off" : callNoise(); }
+function callNoiseUsed() { return callMusicOn() ? "off" : callNoise(); }
 
 function callMicConstraints() {
   const id = loadPref("callMic");
   const device = id ? { deviceId: { ideal: id } } : {};
-  if (callAudioMode() === "music") {
+  if (callMusicOn()) {
     // Exactly what the microphone hears, in stereo if it can: no echo cancelling, no auto volume, no cleanup.
     return { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 }, ...device } };
   }
@@ -294,7 +302,7 @@ function callMicConstraints() {
 // send stereo, and it may use lots of detail when it sends to them; how much it really uses is set per
 // person with callAudioBitrate. Ours only says we can take stereo, so an older app doesn't send more.
 function callTuneSdp(sdp, theirs) {
-  const want = { stereo: "1", "sprop-stereo": "1", useinbandfec: "1", ...(theirs ? { maxaveragebitrate: String(AUDIO_BITRATE.music) } : {}) };
+  const want = { stereo: "1", "sprop-stereo": "1", useinbandfec: "1", ...(theirs ? { maxaveragebitrate: "510000" } : {}) };
   for (const [, pt] of sdp.matchAll(/^a=rtpmap:(\d+) opus\/48000/gim)) {
     const line = new RegExp(`^a=fmtp:${pt} (.*)$`, "m");
     const found = sdp.match(line);
@@ -320,7 +328,7 @@ function callAudioBitrate(p) {
   if (!p.audioTx) return;
   const params = p.audioTx.sender.getParameters();
   if (!params.encodings || !params.encodings[0]) return;
-  params.encodings[0].maxBitrate = AUDIO_BITRATE[callAudioMode()];
+  params.encodings[0].maxBitrate = callBitrate() * 1000;
   params.encodings[0].priority = "high";
   params.encodings[0].networkPriority = "high";
   p.audioTx.sender.setParameters(params).catch(() => {});
@@ -404,11 +412,18 @@ async function callSetNoise(level) {
   if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't restart your microphone.");
 }
-async function callSetAudio(mode) {
-  savePref("callAudio", mode);
+// A new sound quality: right away, for everyone in the call.
+function callSetBitrate(kbps) {
+  savePref("callBitrate", kbps);
   drawCallPop();
   if (typeof drawSoundSettings === "function") drawSoundSettings();
   for (const p of callPeers.values()) callAudioBitrate(p);
+}
+// Music mode on or off: the microphone opens again without (or with) the cleanup.
+async function callSetMusic(on) {
+  savePref("callMusic", !!on);
+  drawCallPop();
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't restart your microphone.");
 }
 async function callReopenMic(problem) {
@@ -1166,18 +1181,21 @@ async function drawCallPop() {
       return sel;
     };
     els.push(title("Microphone"), select("audioinput", "callMic", "Microphone", callUseMic));
-    const mode = callAudioMode();
-    els.push(title("Sound quality"));
-    els.push(chips(AUDIO_MODES, mode, (v) => AUDIO_NAMES[v], callSetAudio));
-    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: AUDIO_NOTES[mode] }));
+    const kbps = callBitrate(), music = callMusicOn();
+    els.push(title("Sound quality (kbps)"));
+    els.push(chips(AUDIO_RATES, kbps, String, callSetBitrate));
+    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: callBitrateNote(kbps) }));
+    els.push(title("Music mode"));
+    els.push(chips(["off", "on"], music ? "on" : "off", (v) => (v === "on" ? "On" : "Off"), (v) => callSetMusic(v === "on")));
+    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: AUDIO_MUSIC_NOTES[music ? "on" : "off"] }));
     const noise = callNoise();
     els.push(title("Noise suppression"));
-    const noiseChips = chips(NOISE_LEVELS, mode === "music" ? "off" : noise, (v) => ({ off: "Off", standard: "Standard", strong: "Strong", max: "Max" })[v], callSetNoise);
-    if (mode === "music") noiseChips.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    const noiseChips = chips(NOISE_LEVELS, music ? "off" : noise, (v) => ({ off: "Off", standard: "Standard", strong: "Strong", max: "Max" })[v], callSetNoise);
+    if (music) noiseChips.querySelectorAll("button").forEach((b) => { b.disabled = true; });
     els.push(noiseChips);
     els.push(Object.assign(document.createElement("p"), {
       className: "call-pop-note",
-      textContent: mode === "music" ? AUDIO_MUSIC_NOISE : {
+      textContent: music ? AUDIO_MUSIC_NOISE : {
         off: "Others hear everything your microphone picks up.",
         standard: "Takes away steady hum, like a fan.",
         strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",

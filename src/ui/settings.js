@@ -198,7 +198,7 @@ document.addEventListener("click", (e) => { if (!helpPop.hidden && !helpPop.cont
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !helpPop.hidden) helpPop.hidden = true; });
 
 // ---- Settings > Sound: speakers, microphone, call sound quality and noise suppression. The same choices calls use
-// (saved as callSpeaker, callMic, callAudio and callNoise), so picking one here changes it in calls too.
+// (saved as callSpeaker, callMic, callBitrate, callMusic and callNoise), so picking one here changes it in calls too.
 const NOISE_NAMES = { off: "Off", standard: "Standard", strong: "Strong", max: "Max" };
 const NOISE_NOTES = {
   off: "Others hear everything your microphone picks up.",
@@ -238,23 +238,30 @@ function drawSoundSettings() {
   if (!$("setSpeaker")) return;
   fillDeviceSelect($("setSpeaker"), "audiooutput", "callSpeaker", "Speakers");
   fillDeviceSelect($("setMic"), "audioinput", "callMic", "Microphone");
-  const mode = callAudioMode();
-  setChildren($("setAudio"), AUDIO_MODES.map((m) => {
-    const b = Object.assign(document.createElement("button"), { type: "button", textContent: AUDIO_NAMES[m] });
-    b.classList.toggle("active", m === mode);
-    b.addEventListener("click", async () => { await callSetAudio(m); if (micTest) startMicTest(); });
+  const kbps = callBitrate(), music = callMusicOn();
+  setChildren($("setAudio"), AUDIO_RATES.map((v) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", textContent: v + " kbps" });
+    b.classList.toggle("active", v === kbps);
+    b.addEventListener("click", () => callSetBitrate(v));
     return b;
   }));
-  $("setAudioNote").textContent = AUDIO_NOTES[mode];
+  $("setAudioNote").textContent = callBitrateNote(kbps);
+  setChildren($("setMusic"), ["off", "on"].map((v) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", textContent: v === "on" ? "On" : "Off" });
+    b.classList.toggle("active", (v === "on") === music);
+    b.addEventListener("click", async () => { await callSetMusic(v === "on"); if (micTest) startMicTest(); });
+    return b;
+  }));
+  $("setMusicNote").textContent = AUDIO_MUSIC_NOTES[music ? "on" : "off"];
   const noise = callNoiseUsed();
   setChildren($("setNoise"), NOISE_LEVELS.map((level) => {
     const b = Object.assign(document.createElement("button"), { type: "button", textContent: NOISE_NAMES[level] });
     b.classList.toggle("active", level === noise);
-    b.disabled = mode === "music";
+    b.disabled = music;
     b.addEventListener("click", () => { callSetNoise(level); if (micTest) startMicTest(); });
     return b;
   }));
-  $("setNoiseNote").textContent = mode === "music" ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise];
+  $("setNoiseNote").textContent = music ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise];
 }
 
 $("setSpeaker").addEventListener("change", () => callUseSpeaker($("setSpeaker").value));
