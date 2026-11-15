@@ -591,7 +591,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .sound .bars i { flex: 1; min-width: 0; border-radius: 1px; background: var(--bars); transition: background .1s, height .3s; }
 .sound:hover .bars i { background: var(--bars-hover); }
 .sound .bars i.on, .sound:hover .bars i.on { background: var(--accent); }
-.sound .sound-wave.loading .bars i { animation: pulse 1.2s ease-in-out infinite; }
+/* (one pulse per row, not one per bar: 72 animations a row made opening the Library slow) */
+.sound .sound-wave.loading .bars { animation: pulse 1.2s ease-in-out infinite; }
 .sound .time { flex: none; width: 38px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sound.playing .time { color: var(--accent); }
 .sound .actions { display: flex; justify-content: flex-end; gap: 2px; flex: none; min-width: 154px; opacity: .55; transition: opacity .15s; }
@@ -1268,6 +1269,10 @@ button, .convert, .small-button, .ghost-button, .outline-button, .toggle button,
 @container (max-width: 520px) {
   .sound .sound-wave { display: none; }
 }
+/* A narrow row wave shows every 2nd (or 4th) bar: 72 bars and their gaps didn't fit, so they all went to 0px wide. */
+.sound .bars { container: wave / inline-size; }
+@container wave (max-width: 180px) { .sound .bars i:nth-child(2n) { display: none; } }
+@container wave (max-width: 100px) { .sound .bars i:nth-child(4n+3) { display: none; } }
 
 /* Settings: Size */
 .size-row { display: flex; align-items: center; gap: 12px; }
@@ -5322,3 +5327,23 @@ main { container: page / inline-size; }
 .watch-speed select { all: unset; cursor: pointer; padding-right: 2px; }
 .watch-speed select option { background: var(--panel); color: var(--text); }
 @media (max-width: 640px) { .watch-speed { order: 2; } }
+
+/* Short windows: a popup taller than the window starts at the top (centered, its top could be cut off
+   where it can't be scrolled to), and the tour's picture gets shorter so it fits. */
+.modal { align-items: safe center; }
+@media (max-height: 640px) { .tour-stage { height: 250px; } .tour-caption { min-height: 0; } }
+
+/* The player bar fits its own width (the side bar takes room too, so the window's width wasn't enough to go by):
+   the text and the waveform give way first, then the times, then the volume slider. */
+.player-bar { container: pbar / inline-size; grid-template-columns: minmax(clamp(44px, 30% - 60px, 150px), 1fr) auto minmax(80px, 2.2fr) auto; }
+@container pbar (max-width: 900px) {
+  .pb-time { display: none; }
+  .pb-volume input.volume-slider { width: 64px; }
+}
+@container pbar (max-width: 640px) {
+  .pb-volume input.volume-slider { display: none; }
+  .pb-volume { margin: 0; }
+}
+@container pbar (max-width: 470px) {
+  .pb-text, #pbDownload, #pbPrev { display: none; }
+}

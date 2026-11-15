@@ -3184,10 +3184,15 @@ docsText.addEventListener("mousedown", (e) => {
 });
 window.addEventListener("scroll", () => { if (doc && !$("docFloat").hidden) docFloatTools(); }, { passive: true });
 // The page tabs scrolled up behind the toolbar are hidden (else their top peeked out above it).
+let docPartsFrame = 0; // (checked once a frame, not on every scroll event)
 window.addEventListener("scroll", () => {
-  if (!doc) return;
-  const parts = $("docParts"), bar = $("docToolbar");
-  parts.classList.toggle("under", parts.getBoundingClientRect().top < bar.getBoundingClientRect().bottom);
+  if (!doc || docPartsFrame) return;
+  docPartsFrame = requestAnimationFrame(() => {
+    docPartsFrame = 0;
+    if (!doc) return;
+    const parts = $("docParts"), bar = $("docToolbar");
+    parts.classList.toggle("under", parts.getBoundingClientRect().top < bar.getBoundingClientRect().bottom);
+  });
 }, { passive: true });
 
 // ---------------------------------------------------------------- typing
