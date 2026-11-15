@@ -24,6 +24,29 @@
           <button type="button" id="shortcutsOpen">Keyboard shortcuts</button>
         </div>
       </div>
+      <div class="note-menu">
+        <button type="button" class="icon-button head-button note-bell" id="noteBell" title="Notifications" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>
+          <b class="chat-badge note-badge" id="noteBadge" hidden></b>
+        </button>
+        <div class="note-panel" id="notePanel" hidden role="dialog" aria-labelledby="noteHeading">
+          <div class="note-head">
+            <h3 id="noteHeading">Notifications</h3>
+            <button type="button" class="note-tool" id="noteDnd" title="Do not disturb for 1 hour">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></svg>
+            </button>
+            <button type="button" class="note-tool" id="noteSettings" title="Notification settings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+            </button>
+          </div>
+          <div class="note-bar">
+            <div class="note-tabs" id="noteTabs"><button type="button" data-f="all" class="active">All</button><button type="button" data-f="new">New</button></div>
+            <button type="button" class="link" id="noteReadAll">Mark all as read</button>
+          </div>
+          <div class="note-list" id="noteList"></div>
+          <div class="note-foot"><button type="button" class="link" id="noteClear" hidden>Clear all</button></div>
+        </div>
+      </div>
       <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
       </button>
@@ -1491,6 +1514,8 @@
 </div>
 
 <!-- The chat: a whole page, Discord style (everyone, groups and private chats on the left) -->
+<div class="note-pop" id="notePop" aria-live="polite"></div>
+
 <aside class="chat-panel" id="chatPanel" hidden aria-labelledby="chatHeading">
   <nav class="chat-side">
     <div class="chat-side-head"><h3 id="chatHeading">Chat</h3></div>
@@ -1849,6 +1874,7 @@
       <button type="button" data-set="general" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>General</span></button>
       <button type="button" data-set="look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg><span>Appearance</span></button>
       <button type="button" data-set="sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span></button>
+      <button type="button" data-set="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Notifications</span></button>
       <button type="button" data-set="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5L5.5 13.5H12L11 20.5L18.5 10.5H12z"/></svg><span>Performance</span></button>
       <div class="set-about"><b>VaultHub</b><span id="version"></span></div>
     </nav>
@@ -1941,6 +1967,17 @@
         </div>
       </section>
 
+      <section class="set-page" data-set="notes" hidden>
+        <h3 class="set-title">Notifications</h3>
+        <div class="set-label">Pop-ups</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Windows notifications</b><small>A pop-up in the corner of your screen when VaultHub is behind other windows or minimized. Click it to jump straight there.</small></span><input type="checkbox" id="setNoteWindows"></label>
+        </div>
+        <div class="set-label">Tell me about</div>
+        <div class="set-group" id="setNoteKinds"></div>
+        <p class="set-help">Everything you turn on shows up under the bell at the top. The moon button there turns everything quiet for an hour.</p>
+      </section>
+
       <section class="set-page" data-set="speed" hidden>
         <h3 class="set-title">Performance</h3>
         <div class="set-label">Hardware acceleration</div>
@@ -1993,6 +2030,7 @@
 <script src="volume.js"></script>
 <script src="player.js"></script>
 <script src="app.js"></script>
+<script src="notify.js"></script>
 <script src="clip.js"></script>
 <script src="images.js"></script>
 <script src="files.js"></script>

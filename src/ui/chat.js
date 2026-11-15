@@ -87,8 +87,26 @@ function markSeen() {
   const key = chatWith.toLowerCase();
   if ((chatSeen[key] || 0) >= chatLastId) return;
   chatSeen = { ...chatSeen, [key]: chatLastId };
+  if (typeof notifyRead === "function") notifyRead((n) => n.key === "chat:" + key || (!key && n.key.startsWith("mention:")));
   if (!chatWith) chatMention = false;
   savePref("chatSeen", chatSeen);
+}
+
+// New private and group messages go under the bell too (one card per chat, with the newest message).
+function notifyChats() {
+  if (typeof notifyAdd !== "function") return;
+  const looking = (key) => key === chatWith && chatIsOpen() && !document.hidden;
+  for (const p of chatPrivate) {
+    if (!unreadIn(p.username) || looking(p.username)) continue;
+    notifyAdd({ key: "chat:" + p.username.toLowerCase(), stamp: p.last_id, kind: "chat", title: p.username,
+      text: p.last_message || "New message", pic: p.avatarUrl, open: { chat: p.username }, quiet: true });
+  }
+  for (const g of chatGroups) {
+    const key = "g:" + g.id;
+    if (!unreadIn(key) || looking(key)) continue;
+    notifyAdd({ key: "chat:" + key.toLowerCase(), stamp: g.last_id, kind: "chat", title: g.name,
+      text: g.last_message || "New message", pic: g.pictureUrl, open: { chat: key }, quiet: true });
+  }
 }
 
 function drawUnread() {
@@ -469,6 +487,7 @@ function addChat(res) {
     }
   }
   chatListsLoaded = true;
+  notifyChats();
   if (isGroupKey(chatWith) && res.group) chatGroup = res.group;
   chatEveryoneLast = res.everyoneLast || 0;
   if (res.names) chatNames = res.names;
@@ -479,6 +498,12 @@ function addChat(res) {
     chatMessages = chatMessages.concat(fresh).slice(-300);
     if (chatLoaded) {
       const theirs = fresh.filter((m) => !m.mine);
+      if (!chatWith && typeof notifyAdd === "function" && (!chatIsOpen() || document.hidden)) {
+        for (const m of theirs.filter((x) => mentionsMe(x.message))) {
+          notifyAdd({ key: "mention:" + m.id, stamp: 1, kind: "chat", title: `${m.username} mentioned you`, text: m.message,
+            pic: m.avatarUrl, open: { chat: "" }, quiet: true });
+        }
+      }
       if (!chatWith && theirs.some((m) => mentionsMe(m.message))) {
         if (!chatIsOpen() || document.hidden) chatMention = true;
         ding = true;

@@ -105,6 +105,7 @@ async function loadPovs(quiet) {
   if (quiet && sig === pvSig) return;
   pvSig = sig;
   pvSessions = res.sessions || [];
+  if (typeof notifyPovs === "function") { notifyPovs(pvSessions, true); notifyRead((n) => n.kind === "povs"); }
   renderPovsPage();
   pvCheckSoon(200);
 }
