@@ -6209,3 +6209,53 @@ html.side-small .tab-group[data-group] { cursor: default; }
   .tt-meter i { width: 60px; }
 }
 .tt-idea > span small { margin-left: 8px; font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
+/* ---- more for calls (callplus.js): recording, sound board, a person's volume, signal bars, push-to-talk */
+.call-btn.rec { background: #e5484d; color: #fff; font: 600 13px var(--head); font-variant-numeric: tabular-nums; }
+.call-btn.rec svg circle:last-child { animation: call-blink 1.4s ease-in-out infinite; }
+.call-rec-note i { background: #e5484d; }
+.call-person.pick { cursor: pointer; }
+.call-person.pick:hover .avatar { filter: brightness(1.15); }
+.call-bars { position: absolute; left: -3px; bottom: -3px; display: flex; align-items: flex-end; gap: 1px; height: 11px; padding: 2px 3px; border-radius: 6px;
+  background: var(--panel); box-sizing: content-box; }
+.call-bars b { width: 2.5px; border-radius: 1px; background: var(--green); }
+.call-bars b:nth-child(1) { height: 4px; } .call-bars b:nth-child(2) { height: 7px; } .call-bars b:nth-child(3) { height: 10px; }
+.call-bars.b2 b { background: #f5a623; } .call-bars.b2 b:nth-child(3) { background: color-mix(in srgb, var(--text) 22%, transparent); }
+.call-bars.b1 b { background: #e5484d; } .call-bars.b1 b:nth-child(n+2) { background: color-mix(in srgb, var(--text) 22%, transparent); }
+.call-person-head { display: flex; align-items: center; gap: 12px; }
+.call-person-head .avatar { width: 44px; height: 44px; font-size: 17px; }
+.call-person-head b { display: block; font: 600 15px var(--head); }
+.call-person-head small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.call-person-head .call-bars { position: static; padding: 0; background: none; }
+.call-board-volume { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.call-slider { flex: 1; accent-color: var(--accent); cursor: pointer; }
+.call-volume-value { min-width: 42px; text-align: right; font: 600 13px var(--head); color: var(--text); font-variant-numeric: tabular-nums; }
+.call-pop-note.rec { color: #ff6b6b; }
+.call-board-search { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel2);
+  color: var(--text); font: 13.5px Inter, "Segoe UI", sans-serif; }
+.call-board { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 236px; overflow-y: auto; margin-top: 8px; }
+.call-board .call-pop-note { grid-column: 1 / -1; margin: 4px 0; }
+.call-board-sound { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 10px;
+  background: var(--panel2); font: 600 12.5px var(--head); }
+.call-board-sound span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-board-sound:hover { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.call-board-sound.on { background: var(--accent); color: var(--ink); }
+.call-board-sound i { font-style: normal; font-size: 11px; opacity: .8; }
+.call-chips button.ptt-key, .set-chips button.ptt-key { margin-left: 8px; }
+#setPtt .set-chips { align-items: center; }
+.call-toast { position: fixed; z-index: 60; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px);
+  padding: 10px 14px; border-radius: 14px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-lg); font-size: 13px; font-weight: 600;
+  animation: call-in .3s var(--spring) both; }
+.call-toast[hidden] { display: none; }
+/* (the card has more buttons now: wider, and a bit smaller on small windows) */
+.call-in .call-card { max-width: min(840px, calc(100vw - 32px)); }
+.call-pop { max-height: calc(100vh - 110px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 1100px) {
+  .call-in .call-buttons { gap: 5px; }
+  .call-in .call-btn { height: 36px; min-width: 36px; padding: 0 8px; }
+  .call-in .call-card { gap: 10px; }
+  .call-in .call-person .avatar { width: 30px; height: 30px; }
+}
+@media (max-width: 860px) {
+  .call-in .call-text { display: none; }
+}

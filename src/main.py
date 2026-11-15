@@ -87,7 +87,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "chCmp")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -436,6 +436,55 @@ def stats_page(days):
 def version_channels():
     import version
     return list(version.CHANNELS)
+
+
+call_recordings = set()  # the recordings saved this time (the only files "Show in folder" may show)
+
+
+def save_call_recording(name, body, length):
+    """A call recording from the page (WebM sound), saved as an MP3 in the save folder."""
+    if length <= 0 or length > 4 * 1024 ** 3:
+        return {"ok": False, "error": "The recording was empty."}
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", name).strip(" .")[:100] or "Call"
+    folder = state.folder
+    try:
+        os.makedirs(folder, exist_ok=True)
+        tmp = os.path.join(settings.DATA_DIR, f"call-{secrets.token_hex(4)}.webm")
+        os.makedirs(settings.DATA_DIR, exist_ok=True)
+        with open(tmp, "wb") as f:
+            left = length
+            while left > 0:
+                chunk = body.read(min(left, 1 << 20))
+                if not chunk:
+                    break
+                f.write(chunk)
+                left -= len(chunk)
+    except OSError:
+        return {"ok": False, "error": "Couldn't save the recording. Is the drive full?"}
+    out = os.path.join(folder, name + ".mp3")
+    n = 2
+    while os.path.exists(out):
+        out = os.path.join(folder, f"{name} ({n}).mp3")
+        n += 1
+    try:
+        done = subprocess.run([media.ffmpeg(), "-hide_banner", "-nostdin", "-y", "-i", tmp, "-vn", "-c:a", "libmp3lame",
+                               "-b:a", "256k", out], capture_output=True, timeout=1800, creationflags=media.NO_WINDOW)
+        if done.returncode != 0 or not os.path.isfile(out):
+            raise OSError("ffmpeg")
+    except Exception:
+        # Couldn't make an MP3: keep the recording as it came (most players and editors open it too).
+        out = out[:-4] + ".webm"
+        try:
+            shutil.move(tmp, out)
+        except OSError:
+            return {"ok": False, "error": "Couldn't save the recording."}
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    call_recordings.add(out)
+    return {"ok": True, "path": out, "name": os.path.basename(out)}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1289,6 +1338,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/call-record":  # the body is a call recording (WebM); saved as an MP3
+            return self.send_json(save_call_recording(urllib.parse.unquote(self.headers.get("X-File-Name") or "Call"), self.rfile, length))
         if self.path == "/api/sfx-add":  # the body is the sound itself
             if length > 2 * 1024 ** 3:
                 return self.send_json({"ok": False, "error": "That file is too big."})
@@ -1492,6 +1543,17 @@ class Handler(BaseHTTPRequestHandler):
             url = str(data.get("url") or "")
             if re.fullmatch(r"https://www\.youtube\.com/(watch\?v=[\w-]{11}|@[^/?#\s]+|channel/[\w-]+|c/[^/?#\s]+|user/[^/?#\s]+)", url):
                 webbrowser.open(url)
+            self.send_json({"ok": True})
+        elif self.path == "/api/call-key":  # push-to-talk: is this key held down? (in any app, so it works in games)
+            vk = int(data.get("vk") or 0)
+            if os.name != "nt" or not 0 < vk < 256:
+                return self.send_json({"ok": False})
+            down = bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+            self.send_json({"ok": True, "down": down})
+        elif self.path == "/api/call-record-show":
+            path = data.get("path") or ""
+            if path in call_recordings and os.path.isfile(path):
+                show_in_folder(path)
             self.send_json({"ok": True})
         elif self.path == "/api/history-clear":
             history.clear()
