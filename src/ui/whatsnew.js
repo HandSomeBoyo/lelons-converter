@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.32.1", items: [
+    "Fixed Customize on Home: the widgets, their buttons and the \"Add a widget\" list look right again (they showed up as big gray boxes).",
+    "Customize is tidier: each card gets a small set of buttons in its corner instead of a second title.",
+  ] },
   { version: "2.32.0", items: [
     "Stream alerts: when a friend goes live on YouTube or Twitch, you get a ping in the bell, and a Windows notification if the app is behind other windows. Click it to watch.",
     "Who's live right now shows at the top of Home, with the stream's picture, title and how many are watching. Their profile shows it too.",
