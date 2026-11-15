@@ -3,6 +3,9 @@
 
 const CHANGES = [
   { version: "2.27.0", items: [
+    "New Channel stats tab (under Tools): paste your channel link to see your subscribers, views, newest uploads with likes and comments, how each one does next to your usual, and your top videos. A graph fills in day by day.",
+    "Want more? Sign in with Google on the Channel stats tab to see watch time and where your viewers come from (search, Shorts feed, suggested videos). The tab walks you through the one-time setup.",
+    "Find music: the Library's Find sounds window (now Find sounds & music) has a Music tab. Pick a mood like Chill or Epic, listen, and download copyright-free songs or add them to the Library. 'Safe for monetized videos' is on by default, and songs that need credit have a Copy credit button for your video description.",
     "Search everything: press Ctrl+K (or click Search at the top of the side bar) to jump to any page, document, board or game. Paste a link in it to convert it right away.",
     "Keyboard shortcuts: Ctrl+1 to 9 go to the pages in the side bar, Alt+Left and Alt+Right (or your mouse's side buttons) go back and forward, Ctrl+N makes something new on the page you're on, and Ctrl+, opens Settings.",
     "Press Ctrl+/ (or find Keyboard shortcuts under the ? button) to see every shortcut in the app.",
