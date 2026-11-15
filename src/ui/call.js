@@ -875,7 +875,7 @@ function drawCallPeople() {
     el.className = "call-person" + (r.speaking ? " speaking" : "") + (r.waiting ? " waiting" : "");
     el.title = (r.person.me ? "You" : r.person.username) + (r.deafened ? " (deafened)" : r.muted ? " (muted)" : "")
       + (r.sharing ? ", sharing their screen" : "") + (r.waiting ? ", connecting..." : "");
-    el.append(avatarEl(r.person.avatarUrl, r.person.username));
+    el.append(r.person.me ? avatarEl(r.person.avatarUrl, r.person.username) : profileLink(avatarEl(r.person.avatarUrl, r.person.username), r.person.username));
     if (r.muted || r.deafened) el.append(Object.assign(document.createElement("i"), { className: "call-person-icon", innerHTML: r.deafened ? CALL_ICONS.deafened : CALL_ICONS.micOff }));
     else if (r.sharing) el.append(Object.assign(document.createElement("i"), { className: "call-person-icon live", innerHTML: CALL_ICONS.screen }));
     return el;

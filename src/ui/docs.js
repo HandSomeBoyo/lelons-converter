@@ -1315,7 +1315,7 @@ function noteCard(c) {
 function noteMsg(m, root) {
   const el = document.createElement("div");
   el.className = "doc-note-msg";
-  el.append(docAvatar({ username: m.username, avatarUrl: m.avatarUrl }, "small"));
+  el.append(profileLink(docAvatar({ username: m.username, avatarUrl: m.avatarUrl }, "small"), m.username));
   const body = document.createElement("div");
   body.className = "doc-note-body";
   body.innerHTML = `<div class="doc-note-head"><b></b><small></small><span class="spacer"></span></div><p></p>`;
@@ -2306,7 +2306,7 @@ function drawHere() {
     const face = docAvatar(h);
     face.classList.add("here");
     face.title = h.username + (h.typing ? " is writing" : " is here");
-    return face;
+    return profileLink(face, h.username);
   });
   setChildren(box, faces);
   box.hidden = !faces.length;

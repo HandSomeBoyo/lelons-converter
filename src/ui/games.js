@@ -171,7 +171,7 @@ function gameCard(game) {
   body.append(gmEl("p", "gm-short", info.short));
   if (game.note) {
     const note = gmEl("div", "gm-note-line");
-    note.append(avatarEl(game.byAvatar, game.by || "?"), gmEl("span", "", game.note));
+    note.append(profileLink(avatarEl(game.byAvatar, game.by || "?"), game.by), gmEl("span", "", game.note));
     body.append(note);
   }
 
@@ -519,7 +519,7 @@ function drawGameSide() {
   vote.append(gmVoteButton(game, true));
   if (game.voters.length) {
     const who = gmEl("div", "gm-voters");
-    for (const v of game.voters) { const p = gmEl("span"); p.append(avatarEl(v.avatarUrl, v.username), v.username); who.append(p); }
+    for (const v of game.voters) { const p = profileLink(gmEl("span"), v.username); p.append(avatarEl(v.avatarUrl, v.username), v.username); who.append(p); }
     vote.append(who);
   }
 
@@ -587,7 +587,7 @@ function drawGameNote() {
   box.append(head);
   if (game.note) {
     const q = gmEl("div", "gm-note-line big");
-    q.append(avatarEl(game.byAvatar, game.by || "?"), gmEl("span", "", game.note));
+    q.append(profileLink(avatarEl(game.byAvatar, game.by || "?"), game.by), gmEl("span", "", game.note));
     box.append(q);
   }
 }
@@ -617,9 +617,9 @@ function drawGameTalk(comments) {
     const row = gmEl("div", "gm-comment");
     const text = gmEl("div");
     const who = gmEl("p", "gm-who");
-    who.append(gmEl("b", "", c.by || "someone"), gmEl("span", "", gmAgo(c.created)));
+    who.append(profileLink(gmEl("b", "", c.by || "someone"), c.by), gmEl("span", "", gmAgo(c.created)));
     text.append(who, gmEl("p", "", c.text));
-    row.append(avatarEl(c.avatarUrl, c.by || "?"), text);
+    row.append(profileLink(avatarEl(c.avatarUrl, c.by || "?"), c.by), text);
     if (c.mine) row.append(gmButton("gm-x", GM_ICONS.close, "", async () => {
       const res = await api("/api/games-delete-comment", { game: gmOpen.id, comment: c.id }).catch(() => null);
       if (res && res.ok) { drawGameTalk(res.comments); gmCountComments(res.comments.length); }

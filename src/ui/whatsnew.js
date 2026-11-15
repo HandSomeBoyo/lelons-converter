@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.26.0", items: [
+    "Profiles: click anyone's name or picture (in the chat, Boards, Games, POVs, Docs, the Library and calls) to see their profile.",
+    "A profile shows their banner, bio and status, whether they're online or in a call, their newest YouTube videos (they play right in the app), and the games, POVs and sounds they shared.",
+    "Message, call or invite a friend to one of your team boards straight from their profile.",
+    "Make yours: on the Account page, pick a banner, your color, a status line, a few words about you and your YouTube channel, and choose what friends can see.",
+    "Check for updates: when you click Check now in Settings and there's a new version, Settings closes so you can see the update right away.",
+  ] },
   { version: "2.25.0", items: [
     "Watch videos right here: clicking a friend's new video now plays it inside VaultHub instead of opening your browser. Press Esc or the X to close it.",
     "Slow motion or faster: pick a speed from 0.25x to 2x under the video. The gear button in the player also has the quality.",

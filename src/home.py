@@ -18,6 +18,7 @@ on_update = None  # called with (url, info) after each new look, to remember the
 
 _lock = threading.Lock()
 _cache = {}  # channel url -> {"at": time, "info": {...} or None, "error": "", "busy": bool}
+_profile_only = set()  # channels only seen on someone's profile: not counted in the stats
 
 
 def normalize(text):
@@ -88,18 +89,23 @@ def _refresh(url):
         if info:
             entry["info"] = info
             entry["checked"] = time.time()
-    if info and on_update:
+    if info and on_update and url not in _profile_only:
         try:
             on_update(url, info)
         except Exception:
             pass  # only for the stats
 
 
-def channel(url):
-    """What's known about the channel right now; looks again in the background when it's old."""
+def channel(url, stats=True):
+    """What's known about the channel right now; looks again in the background when it's old.
+    stats=False: a friend's channel on their profile, so its numbers aren't saved for the stats page."""
     if not url:
         return None
     with _lock:
+        if stats:
+            _profile_only.discard(url)
+        elif url not in _cache:
+            _profile_only.add(url)
         entry = _cache.setdefault(url, {"at": 0, "info": None, "error": "", "busy": False, "checked": 0})
         wait = REFRESH if entry["info"] and not entry["error"] else RETRY
         if not entry["busy"] and time.time() - entry["at"] > wait:

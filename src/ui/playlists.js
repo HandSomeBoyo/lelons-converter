@@ -253,7 +253,7 @@ function drawPlaylistModal() {
     setChildren($("plMembers"), everyone.map((m) => {
       const row = document.createElement("div");
       row.className = "group-member";
-      row.append(avatarEl(m.avatarUrl, m.username), Object.assign(document.createElement("span"), { textContent: m.username }));
+      row.append(profileLink(avatarEl(m.avatarUrl, m.username), m.username), profileLink(Object.assign(document.createElement("span"), { textContent: m.username }), m.username));
       if (m.made) row.append(Object.assign(document.createElement("small"), { textContent: "Made it" }));
       if (owner && !m.made) {
         const x = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Remove" });

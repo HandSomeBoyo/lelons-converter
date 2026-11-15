@@ -312,6 +312,8 @@ function bdFace(name, cls = "") {
   el.title = name || "";
   return el;
 }
+// A face that opens that person's profile when clicked.
+const bdFaceLink = (name, cls) => profileLink(bdFace(name, cls), name);
 
 function bdToast(text) {
   let t = $("bdToast");
@@ -392,7 +394,7 @@ function bdTile(b) {
   const faces = b.team ? bdEl("span", { class: "bd-tile-faces" }, (b.people || []).filter((p) => p.joined).slice(0, 5).map((p) => {
     const f = avatarEl(p.avatarUrl, p.username, "bd-face");
     f.title = p.username;
-    return f;
+    return profileLink(f, p.username);
   })) : null;
   return bdEl("div", { class: "bd-tile", tabindex: "0", style: { background: bdBg(b.bg) },
     onclick: open, onkeydown: (e) => { if (e.key === "Enter") open(); } },
@@ -658,7 +660,7 @@ function bdBar() {
     bdEl("span", { html: BD_ICONS.filter }), bdEl("span", { text: bdFiltering() ? `${count} match${count === 1 ? "" : "es"}` : "Filter" }));
   const clear = bdFiltering() ? bdEl("button", { type: "button", class: "bd-bar-btn", text: "Clear all", onclick: () => { bdFilter = bdNoFilter(); bdDraw(); } }) : null;
   const me = bdTeam ? bdEl("span", { class: "bd-people" }, bdTeam.people.filter((p) => p.joined).slice(0, 8).map((p) => {
-    const f = bdFace(p.username, p.here ? "here" : "");
+    const f = bdFaceLink(p.username, p.here ? "here" : "");
     f.title = p.username + (p.here ? " (looking at this board)" : "");
     return f;
   })) : bdEl("span", { class: "bd-me", title: bdMe(), text: bdMe()[0].toUpperCase() });
@@ -1117,7 +1119,7 @@ async function bdSharePop(anchor) {
       drawResults();
     }
     box.append(bdEl("label", { class: "bd-label-text", text: "On this board" }),
-      team.people.map((p) => bdEl("div", { class: "bd-person-row still" }, bdFace(p.username, p.here ? "here" : ""),
+      team.people.map((p) => bdEl("div", { class: "bd-person-row still" }, bdFaceLink(p.username, p.here ? "here" : ""),
         bdEl("span", { text: p.username + (p.username === me ? " (you)" : "") }),
         bdEl("small", { text: p.owner ? "Made it" : p.joined ? (p.here ? "Here now" : "Member") : "Invited" }),
         mine && !p.owner ? bdEl("button", { type: "button", class: "bd-icon-btn", title: p.joined ? "Take them off the board" : "Take back the invitation", html: BD_ICONS.close,
@@ -1549,7 +1551,7 @@ function bdDrawCard() {
   // labels and dates
   const meta = bdEl("div", { class: "bd-cd-meta" });
   if (bdTeam && card.members.length) meta.append(bdEl("div", { class: "bd-cd-meta-box" }, bdEl("h4", { text: "Members" }), bdEl("div", { class: "bd-cd-labels" },
-    card.members.map((m) => bdFace(m, "mid")),
+    card.members.map((m) => bdFaceLink(m, "mid")),
     bdEl("button", { type: "button", class: "bd-square round", title: "Add a member", html: BD_ICONS.plus, onclick: (e) => bdMembersPop(e.currentTarget, card) }))));
   const labels = card.labels.map(bdLabel).filter(Boolean);
   if (labels.length) meta.append(bdEl("div", { class: "bd-cd-meta-box" }, bdEl("h4", { text: "Labels" }), bdEl("div", { class: "bd-cd-labels" },
@@ -1653,7 +1655,7 @@ function bdDrawCard() {
     ...(bdDetails ? (card.log || []).map((l) => ({ at: l.at, log: l })) : []),
   ].sort((a, b) => b.at - a.at);
   const feedEls = feed.map((f) => {
-    if (f.log) return bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFace(f.log.who, "feed") : bdEl("span", { class: "bd-avatar", text: (f.log.who || "Y")[0].toUpperCase() })),
+    if (f.log) return bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFaceLink(f.log.who, "feed") : bdEl("span", { class: "bd-avatar", text: (f.log.who || "Y")[0].toUpperCase() })),
       bdEl("div", {}, bdEl("p", {}, bdEl("b", { text: f.log.who || "You" }), " " + f.log.text), bdEl("small", { text: bdAgo(f.at) })));
     const c = f.comment;
     let body;
@@ -1670,7 +1672,7 @@ function bdDrawCard() {
             bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete comment", onclick: () => { card.comments = card.comments.filter((x) => x !== c); bdPopClose(); bdChanged(); } }));
         }) }))];
     }
-    return bdEl("div", { class: "bd-feed" }, (bdTeam ? bdFace(c.who, "feed") : bdEl("span", { class: "bd-avatar", text: (c.who || "Y")[0].toUpperCase() })),
+    return bdEl("div", { class: "bd-feed" }, (bdTeam ? bdFaceLink(c.who, "feed") : bdEl("span", { class: "bd-avatar", text: (c.who || "Y")[0].toUpperCase() })),
       bdEl("div", { class: "bd-feed-main" }, bdEl("p", {}, bdEl("b", { text: c.who || "You" }), " ", bdEl("small", { text: bdAgo(c.at) + (c.edited ? " (edited)" : "") })), body));
   });
   const activity = bdSection("activity", "Activity", bdEl("button", { type: "button", class: "bd-plain-btn", text: bdDetails ? "Hide details" : "Show details", onclick: () => { bdDetails = !bdDetails; bdDrawCard(); } }),
@@ -1868,7 +1870,7 @@ function bdMenuPanel() {
   } else if (bdMenu === "activity") {
     const log = bd.log || [];
     if (!log.length) body.append(bdEl("p", { class: "bd-muted bd-center", text: "Nothing yet." }));
-    body.append(...log.slice(0, 120).map((l) => bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFace(l.who, "feed") : bdEl("span", { class: "bd-avatar", text: (l.who || "Y")[0].toUpperCase() })),
+    body.append(...log.slice(0, 120).map((l) => bdEl("div", { class: "bd-feed bd-feed-log" }, (bdTeam ? bdFaceLink(l.who, "feed") : bdEl("span", { class: "bd-avatar", text: (l.who || "Y")[0].toUpperCase() })),
       bdEl("div", {}, bdEl("p", {}, bdEl("b", { text: l.who || "You" }), " " + l.text), bdEl("small", { text: bdAgo(l.at) })))));
   }
   return bdEl("aside", { class: "bd-menu" }, bdEl("div", { class: "bd-menu-head" }, back, bdEl("h4", { text: titles[bdMenu] }),
