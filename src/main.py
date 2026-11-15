@@ -87,7 +87,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -1749,8 +1749,8 @@ class Handler(BaseHTTPRequestHandler):
                 media.use_gpu(changes["hardware"])
             if data.get("theme") in settings.THEMES:
                 changes["theme"] = data["theme"]
-            if data.get("accent") in settings.ACCENTS:
-                changes["accent"] = data["accent"]
+            if settings.is_accent(data.get("accent")):
+                changes["accent"] = data["accent"].lower()
             if isinstance(data.get("zoom"), (int, float)):
                 changes["zoom"] = round(min(2.0, max(0.5, float(data["zoom"]))), 2)
                 appwindow.set_zoom(changes["zoom"])

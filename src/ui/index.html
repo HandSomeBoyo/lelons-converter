@@ -2066,10 +2066,23 @@
           <div class="theme-picks" id="themePicks">
             <button type="button" data-theme="dark"><span class="theme-sample dark"><i></i><b></b></span>Dark</button>
             <button type="button" data-theme="black"><span class="theme-sample black"><i></i><b></b></span>Black</button>
+            <button type="button" data-theme="dim"><span class="theme-sample dim"><i></i><b></b></span>Dim</button>
+            <button type="button" data-theme="warm"><span class="theme-sample warm"><i></i><b></b></span>Warm</button>
             <button type="button" data-theme="light"><span class="theme-sample light"><i></i><b></b></span>Light</button>
           </div>
         <div class="set-label">Color</div>
         <div class="set-group set-pad"><div class="accent-picks" id="accentPicks"></div></div>
+        <div class="set-label">Background</div>
+        <div class="set-group set-pad">
+          <div class="page-bg-row">
+            <span class="page-bg-sample" id="pageBgSample"></span>
+            <div class="page-bg-text"><b id="pageBgTitle">The normal background</b><small>Put your own picture behind every page.</small></div>
+            <button type="button" class="outline-button" id="pageBgPick">Choose picture</button>
+            <button type="button" class="outline-button" id="pageBgClear" hidden>Remove</button>
+            <input type="file" id="pageBgFile" accept="image/*" hidden>
+          </div>
+          <p class="page-bg-error" id="pageBgError" hidden></p>
+        </div>
         <div class="set-label">Size</div>
         <div class="set-group set-pad">
             <div class="size-row">
