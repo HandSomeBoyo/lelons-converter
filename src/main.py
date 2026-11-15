@@ -964,6 +964,13 @@ class Handler(BaseHTTPRequestHandler):
                     result = {"profile": library.set_banner(f.read())}
             elif action == "banner-remove":
                 result = {"profile": library.remove_banner()}
+            elif action == "live":  # friends who are live on YouTube or Twitch right now (stream alerts)
+                import live
+                channels = []
+                for c in library.live_channels():
+                    url = home.normalize(c.get("youtube"))
+                    channels.append({**c, "youtube": url or "", "twitch": live.twitch_name(c.get("twitch")) or ""})
+                result = live.live(channels)
             elif action == "profile-videos":  # someone's YouTube channel on their profile (looked at in the background)
                 url = home.normalize(data.get("url"))
                 found = home.channel(url, stats=False) if url else None

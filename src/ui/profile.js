@@ -12,10 +12,10 @@ const CAT_NAMES = { sfx: "SFX", music: "Music", memes: "Memes", ambience: "Ambie
 // The colors you can pick for your profile (null: the app's own accent color).
 const PF_COLORS = [null, "#ff8a3d", "#ff5c5c", "#ff6fb5", "#a879ff", "#4f9dff", "#3fd0c9", "#7ed957", "#e8e4da"];
 const PF_PARTS = [
-  ["online", "Online status"], ["videos", "Newest videos"], ["games", "Games"],
+  ["online", "Online status"], ["videos", "Videos and streams"], ["games", "Games"],
   ["povs", "POVs"], ["sounds", "Sounds"], ["stats", "Numbers"],
 ];
-const PF_PART_NAMES = { online: "online status", videos: "videos", games: "games", povs: "POVs", sounds: "sounds", stats: "numbers" };
+const PF_PART_NAMES = { online: "online status", videos: "videos and streams", games: "games", povs: "POVs", sounds: "sounds", stats: "numbers" };
 
 let profileShown = null;
 let profilePlaying = null;
@@ -143,6 +143,7 @@ function drawProfile(p) {
     return box;
   }));
   $("profileStats").classList.toggle("one", !p.show_stats);
+  if (typeof drawProfileLive === "function") drawProfileLive(p);
 
   // Buttons: yours is "Edit profile"; theirs are message, call and invite.
   $("profileActions").hidden = false;
@@ -394,6 +395,7 @@ function peFill(p) {
   $("peStatus").value = p.status || "";
   $("peBio").value = p.bio || "";
   $("peYoutube").value = p.youtube ? p.youtube.replace("https://www.", "") : "";
+  $("peTwitch").value = p.twitch ? "twitch.tv/" + p.twitch : "";
   $("peNote").textContent = "";
   drawProfileEditor();
 }
@@ -403,6 +405,7 @@ function peChanged() {
   const yt = $("peYoutube").value.trim().replace(/^(https?:\/\/)?(www\.)?/, "");
   return $("peStatus").value.trim() !== (peSaved.status || "") || $("peBio").value.trim() !== (peSaved.bio || "")
     || (peAccent || null) !== (peSaved.accent || null) || yt !== (peSaved.youtube || "").replace("https://www.", "")
+    || $("peTwitch").value.trim().replace(/^(https?:\/\/)?(www\.)?(twitch\.tv\/)?@?/i, "").replace(/\/$/, "").toLowerCase() !== (peSaved.twitch || "")
     || [...peHide].sort().join() !== [...(peSaved.hide || [])].sort().join();
 }
 
@@ -448,14 +451,14 @@ function drawProfileEditor() {
   $("peSave").disabled = !peChanged();
 }
 
-for (const id of ["peStatus", "peBio", "peYoutube"]) $(id).addEventListener("input", drawProfileEditor);
+for (const id of ["peStatus", "peBio", "peYoutube", "peTwitch"]) $(id).addEventListener("input", drawProfileEditor);
 
 $("profileEditor").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("peSave").disabled = true;
   $("peSave").textContent = "Saving...";
   const res = await api("/api/sfx-profile-save", { profile: {
-    status: $("peStatus").value, bio: $("peBio").value, accent: peAccent, youtube: $("peYoutube").value, hide: peHide,
+    status: $("peStatus").value, bio: $("peBio").value, accent: peAccent, youtube: $("peYoutube").value, twitch: $("peTwitch").value, hide: peHide,
   } }).catch(() => ({ ok: false, error: "Couldn't save. Try again." }));
   $("peSave").textContent = "Save profile";
   if (sfxLoggedOut(res)) return;

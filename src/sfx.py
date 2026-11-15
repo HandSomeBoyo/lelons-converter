@@ -721,11 +721,16 @@ class Library:
         return {"me": result.get("me") or "", "items": items,
                 "channels": [{**c, "avatarUrl": pictured(c.get("avatar"))} for c in result.get("channels") or []]}
 
+    def live_channels(self):
+        """Everyone else's YouTube and Twitch channels (for stream alerts)."""
+        return [{**c, "avatarUrl": public_url(c["avatar"]) if c.get("avatar") else ""}
+                for c in _rpc("lelons_live_channels", token=self._token()) or []]
+
     def my_profile(self):
         return self.profile(_rpc("lelons_me", token=self._token())["username"])
 
     def set_profile(self, info):
-        """Your bio, status line, color, YouTube channel and the parts you hide. Only the keys given change."""
+        """Your bio, status line, color, YouTube and Twitch channels and the parts you hide. Only the keys given change."""
         import home
 
         info = info if isinstance(info, dict) else {}
@@ -743,6 +748,13 @@ class Library:
             if url is None:
                 raise Error("That isn't a YouTube channel link. It looks like youtube.com/@yourname.")
             out["youtube"] = url
+        if "twitch" in info:
+            import live
+
+            name = live.twitch_name(info["twitch"])
+            if name is None:
+                raise Error("That isn't a Twitch channel. It looks like twitch.tv/yourname.")
+            out["twitch"] = name
         if "hide" in info:
             out["hide"] = [str(h) for h in info["hide"] or [] if h in ("online", "videos", "sounds", "povs", "games", "stats")]
         _rpc("lelons_set_profile", token=self._token(), info=out)

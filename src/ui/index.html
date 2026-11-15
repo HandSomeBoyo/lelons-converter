@@ -146,6 +146,11 @@
       </button>
     </form>
 
+    <div class="home-section live-section" id="homeLive" hidden>
+      <div class="home-head"><h2><i class="live-dot"></i>Live now</h2><span class="home-muted" id="homeLiveCount"></span></div>
+      <div class="live-grid" id="homeLiveList"></div>
+    </div>
+
     <div class="home-section">
       <div class="home-head">
         <h2>Our channels</h2>
@@ -924,7 +929,11 @@
             </div>
             <label class="lib-field"><span>Status</span><input id="peStatus" maxlength="60" placeholder="Like: Editing my next video" spellcheck="false"></label>
             <label class="lib-field pe-bio"><span>About me <small id="peBioCount"></small></span><textarea id="peBio" maxlength="300" rows="3" placeholder="A few words about you"></textarea></label>
-            <label class="lib-field"><span>Your YouTube channel</span><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+            <div class="pe-channels">
+              <label class="lib-field"><span>YouTube channel</span><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+              <label class="lib-field"><span>Twitch</span><input id="peTwitch" maxlength="60" placeholder="twitch.tv/yourname" spellcheck="false"></label>
+            </div>
+            <p class="pe-hint">Friends get a ping when you go live on one of these.</p>
             <div class="pe-label pe-show-label">Show on my profile</div>
             <div class="pe-show" id="peShow"></div>
             <div class="pe-save">
@@ -1937,6 +1946,8 @@
       <p class="pf-status" id="profileStatus" hidden></p>
       <p class="pf-bio" id="profileBio" hidden></p>
       <div class="profile-stats" id="profileStats"></div>
+      <div class="pf-live" id="profileLive" hidden></div>
+      <button type="button" class="link pf-twitch" id="profileTwitch" hidden></button>
       <div class="pf-part" id="profileVideosPart" hidden>
         <h3 class="profile-h">Newest videos <button type="button" class="link pf-more" id="profileChannel"></button></h3>
         <div class="pf-videos" id="profileVideos"></div>
@@ -2260,6 +2271,7 @@
 <script src="call.js"></script>
 <script src="callplus.js"></script>
 <script src="profile.js"></script>
+<script src="live.js"></script>
 <script src="find.js"></script>
 <script src="home.js"></script>
 <script src="stats.js"></script>

@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.32.0", items: [
+    "Stream alerts: when a friend goes live on YouTube or Twitch, you get a ping in the bell, and a Windows notification if the app is behind other windows. Click it to watch.",
+    "Who's live right now shows at the top of Home, with the stream's picture, title and how many are watching. Their profile shows it too.",
+    "Put your Twitch next to your YouTube channel in Account > Edit profile, so your friends get a ping when you go live.",
+    "Don't want the pings? Turn off \"Friends going live\" in Settings > Notifications.",
+  ] },
   { version: "2.31.0", items: [
     "New themes in Settings: Dim (a softer dark gray) and Warm (cozy brown tones), next to Dark, Black and Light.",
     "Pick any color you like for the buttons and highlights, not just the ready-made ones.",

@@ -208,6 +208,8 @@ alter table lelons.accounts add column if not exists accent text check (accent ~
 alter table lelons.accounts add column if not exists youtube text not null default ''
   check (youtube = '' or (youtube like 'https://www.youtube.com/%' and length(youtube) <= 200));
 alter table lelons.accounts add column if not exists hide text[] not null default '{}';
+-- (2.32.0) Your Twitch name, so friends get a ping when you go live.
+alter table lelons.accounts add column if not exists twitch text not null default '' check (twitch ~ '^[a-z0-9_]{0,25}$');
 
 alter table lelons.config enable row level security;
 alter table lelons.accounts enable row level security;
@@ -280,6 +282,19 @@ create or replace function lelons.delete_ticket(file text) returns void
      on conflict (path) do update set kind = 'delete', expires_at = now() + interval '15 minutes' $$;
 
 grant usage on schema lelons to anon, authenticated;
+-- (2.32.0) Everyone's YouTube and Twitch channels (not yours), so the app can tell you when a friend goes live.
+create or replace function public.lelons_live_channels(token text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  return coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar,
+                                                     'youtube', a.youtube, 'twitch', a.twitch))
+                   from lelons.accounts a
+                   where a.id <> me.id and (a.youtube <> '' or a.twitch <> '')
+                     and not ('videos' = any (coalesce(a.hide, '{}')))), '[]'::json);
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 
 -- ---- what the app calls
@@ -992,6 +1007,7 @@ begin
                                     and rp.seen_at > now() - interval '30 seconds'),
     'bio', them.bio, 'status', them.status, 'banner', them.banner, 'accent', them.accent,
     'youtube', case when 'videos' = any (hid) and them.id <> me.id then '' else them.youtube end,
+    'twitch', case when 'videos' = any (hid) and them.id <> me.id then '' else them.twitch end,
     'hide', case when them.id = me.id then to_json(hid) else null end,
     'show_stats', not ('stats' = any (hid)),
     'sounds', (select count(*) from lelons.sounds s where s.uploader_id = them.id),
@@ -1045,7 +1061,11 @@ begin
   if info ? 'youtube' and coalesce(info->>'youtube', '') <> '' and info->>'youtube' not like 'https://www.youtube.com/%' then
     raise exception 'bad channel' using hint = 'bad_input';
   end if;
+  if info ? 'twitch' and coalesce(info->>'twitch', '') !~ '^[a-z0-9_]{0,25}$' then
+    raise exception 'bad twitch' using hint = 'bad_input';
+  end if;
   update lelons.accounts a set
+    twitch = case when info ? 'twitch' then coalesce(info->>'twitch', '') else a.twitch end,
     bio = case when info ? 'bio' then left(btrim(coalesce(info->>'bio', '')), 300) else a.bio end,
     status = case when info ? 'status' then left(btrim(coalesce(info->>'status', '')), 60) else a.status end,
     accent = case when info ? 'accent' then info->>'accent' else a.accent end,
@@ -3290,7 +3310,7 @@ begin
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
-    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)'] loop
+    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
