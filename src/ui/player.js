@@ -78,10 +78,12 @@ function playerPeaks() {
 
 function drawPlayerPeaks() {
   const peaks = playerPeaks() || null;
-  const sig = peaks ? peaks.length + ":" + peaks.slice(0, 6).join(",") : "none";
+  // As many bars as fit (each bar and its gap 4px): a fixed 110 left no room for the bars in a small window.
+  const width = pbEl("pbWave").clientWidth;
+  const count = width ? Math.max(16, Math.min(110, Math.floor((width + 2) / 4))) : 110;
+  const sig = count + "/" + (peaks ? peaks.length + ":" + peaks.slice(0, 6).join(",") : "none");
   if (sig === playerPeaksDrawn) return;
   playerPeaksDrawn = sig;
-  const count = 110;
   const heights = [];
   for (let i = 0; i < count; i++) {
     heights.push(peaks ? Math.max(10, (peaks[Math.floor(i * peaks.length / count)] || 0) * 100) : 18);
@@ -169,6 +171,7 @@ pbEl("pbClose").addEventListener("click", closePlayer);
 
 // Click or drag on the waveform to jump.
 const pbWave = pbEl("pbWave");
+new ResizeObserver(() => { if (playerMeta) drawPlayerPeaks(); }).observe(pbWave);
 function playerSeekAt(e) {
   const box = pbWave.getBoundingClientRect();
   const fraction = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));

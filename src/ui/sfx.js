@@ -830,7 +830,7 @@ function drawSoundWave(wave, sound) {
     bar.style.height = peaks ? Math.max(8, (peaks[Math.floor(i * peaks.length / count)] || 0) * 100) + "%" : "8%";
     bars.append(bar);
   }
-  wave.classList.toggle("loading", !peaks);
+  wave.classList.toggle("loading", !peaks && !sfxPeaksFailed.has(sound.path)); // (a wave that couldn't be made stops pulsing)
   if (!peaks) sfxWantPeaks(sound);
 }
 
@@ -852,7 +852,13 @@ async function fetchPeaks() {
     api("/api/sfx-peaks", { path }).catch(() => ({ ok: false })).then((res) => {
       sfxPeaksBusy--;
       sfxPeaksBeingMade.delete(path);
-      if (!res.ok) sfxPeaksFailed.add(path);
+      if (!res.ok) {
+        sfxPeaksFailed.add(path);
+        for (const sound of sfxSounds.filter((s) => s.path === path)) {
+          const kept = sfxRows.get(sound.id), wave = kept && kept.el.querySelector(".sound-wave");
+          if (wave) wave.classList.remove("loading");
+        }
+      }
       if (res.ok) {
         sfxPeaks.set(path, res.peaks);
         for (const sound of sfxSounds) if (sound.path === path) sound.peaks = res.peaks;
