@@ -2,6 +2,29 @@
 // opens with it), and again from the help menu at the top. It can read itself out loud (a recorded Kokoro voice in ui/voice/, see build/make_tour_voice.py).
 // Uses $, api() from app.js and loadPref(), savePref() from theme.js.
 
+// A pretend call (used by two tour steps): three people and the call buttons.
+function tourCallBox() {
+  const ic = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
+  const sig = (n) => `<span class="t-sig${n < 3 ? " meh" : ""}">${"<i></i>".repeat(3)}</span>`;
+  return `<div class="t-call-box">
+    <div class="t-call-tiles">
+      <div class="t-tile talk" style="--i:0"><span class="t-face a">L</span><small>Lelon</small></div>
+      <div class="t-tile cam" style="--i:1"><i class="t-person"></i><small>Kim</small>${sig(3)}</div>
+      <div class="t-tile screen" style="--i:2"><i class="t-scr"></i><small>Bob's screen</small><em class="t-pcsound">🔊 PC sound</em>${sig(2)}</div>
+    </div>
+    <div class="t-call-bar">
+      <i>${ic('<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>')}</i>
+      <i>${ic('<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3.5" y="14" width="4" height="6" rx="1.5"/><rect x="16.5" y="14" width="4" height="6" rx="1.5"/>')}</i>
+      <i class="camb">${ic('<rect x="3" y="6.5" width="13" height="11" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/>')}</i>
+      <i class="share">${ic('<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>')}</i>
+      <i class="board">${ic('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>')}</i>
+      <i class="rec"><b></b></i>
+      <i class="tune">${ic('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>')}</i>
+      <i class="end">${ic('<path d="M3.5 14.5c4.5-4.5 12.5-4.5 17 0l-2 2.2-3.2-1.6v-2.4a11 11 0 0 0-6.6 0v2.4l-3.2 1.6z" fill="currentColor" stroke="none"/>')}</i>
+    </div>
+  </div>`;
+}
+
 const TOUR = [
   {
     key: "welcome", seconds: 5,
@@ -103,26 +126,33 @@ const TOUR = [
   },
   {
     key: "calls", seconds: 9.5,
-    title: "Call, share your screen and sound great",
-    text: "Press Call in any chat or group. Turn on your camera, share your screen, and pick your sound quality. Music mode sends stereo sound for music or games.",
-    say: "Want to talk? Press Call in any chat or group. Turn on your camera, share your screen, and pick how good you want it to sound. Music mode even sends stereo, for music or games.",
+    title: "Call and share your screen",
+    text: "Press Call in any chat or group. Turn on your camera and share your screen, with your PC sound too. Click a friend's picture to make them louder or quieter, and the little bars show their signal.",
+    say: "Want to talk? Press Call in any chat or group. Turn on your camera, and share your screen, with your game sound too. Click a friend to make them louder or quieter. The little bars show how good their connection is.",
     html: `<div class="t-call">
-      <div class="t-call-box">
-        <div class="t-call-tiles">
-          <div class="t-tile talk" style="--i:0"><span class="t-face a">L</span><small>Lelon</small></div>
-          <div class="t-tile cam" style="--i:1"><i class="t-person"></i><small>Kim</small></div>
-          <div class="t-tile screen" style="--i:2"><i class="t-scr"></i><small>Bob's screen</small></div>
-        </div>
-        <div class="t-call-bar">
-          <i><svg viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></i>
-          <i><svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="13" height="11" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></svg></i>
-          <i><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg></i>
-          <i class="tune"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></i>
-          <i class="end"><svg viewBox="0 0 24 24"><path d="M3.5 14.5c4.5-4.5 12.5-4.5 17 0l-2 2.2-3.2-1.6v-2.4a11 11 0 0 0-6.6 0v2.4l-3.2 1.6z" fill="currentColor" stroke="none"/></svg></i>
-        </div>
+      ${tourCallBox()}
+      <div class="t-call-pop t-vol">
+        <div class="t-vol-who"><span class="t-face b">K</span><b>Kim</b><span class="t-sig"><i></i><i></i><i></i></span></div>
+        <div class="t-vol-row"><span>Volume</span><span class="t-vol-num"><span><i>100%</i><i>150%</i></span></span></div>
+        <div class="t-vol-track"><b></b><i></i></div>
+        <div class="t-vol-btn">See profile</div>
       </div>
-      <div class="t-call-pop">
-        <b>Sound quality</b>
+      <div class="t-cursor"></div>
+    </div>`,
+  },
+  {
+    key: "calltools", seconds: 10,
+    title: "Sound board, recording and more",
+    text: "The sound board plays Library sounds into the call, and the red button records everyone as an MP3. In the sliders menu, set a push-to-talk key and pick your sound quality or Music mode.",
+    say: "Calls have some fun extras too. The sound board plays sounds from the Library right into the call. The red button records the call as an MP3. And in the sliders menu, set a push to talk key, and pick your sound quality, or Music mode for stereo.",
+    html: `<div class="t-call t-call2">
+      ${tourCallBox()}
+      <span class="t-rec-badge"><i></i>REC 0:04</span>
+      <div class="t-call-pop t-board-pop"><b>Sound board</b>
+        <div class="t-sboard">${["Vine boom", "Airhorn", "Drumroll", "Bruh", "Laugh", "Wow"].map((n, i) => `<span${i === 1 ? ' class="hit"' : ""}>${n}</span>`).join("")}</div>
+      </div>
+      <div class="t-call-pop t-set-pop">
+        <div class="t-ptt"><span>Push to talk</span><kbd>Mouse 4</kbd></div>
         <div class="t-kbps"><span>64</span><span class="was">128</span><span class="pick">256</span><span>510</span><em>kbps</em></div>
         <div class="t-music"><span>Music mode<small>Stereo, no cleanup</small></span><i class="t-switch"></i></div>
       </div>
