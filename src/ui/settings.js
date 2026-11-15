@@ -124,6 +124,7 @@ function drawNoteSettings() {
       chat: "Private messages, group chats, and when someone @mentions you.",
       invite: "When a friend invites you to a document or a team board.",
       games: "When a game on your Games list goes on sale or becomes free.",
+      live: "When a friend goes live on YouTube or Twitch (from the channels on their profile).",
       povs: "When a friend shares a new recording in POVs.",
       downloads: "When a download finishes while you're doing something else.",
       updates: "When a new version of VaultHub is ready.",

@@ -102,6 +102,7 @@ function drawHome() {
   drawHomeChat();
   drawStats();
   drawRecent();
+  if (typeof hwDrawAll === "function") hwDrawAll(); // the other widgets (homewidgets.js)
 }
 
 function drawChannels() {
@@ -189,10 +190,8 @@ function drawUploads() {
 
 function drawCrew() {
   const d = homeData;
-  const out = !d.loggedIn;
-  $("homeCrewOut").hidden = !out;
-  $("homeCrewGrid").hidden = out;
-  if (out) return;
+  if (typeof hwApply === "function") hwApply(); // which widgets show (homewidgets.js): some need you logged in
+  if (!d.loggedIn) return;
   const online = d.online || { online: 0, people: [] };
   const people = online.people || [];
   const others = Math.max(0, (online.online || 0) - people.length);

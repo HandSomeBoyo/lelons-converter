@@ -7,6 +7,7 @@ const NOTE_KINDS = {
   chat: { name: "Messages", icon: '<path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v2.5L16 17h-4a1 1 0 0 1-1-1v-.5"/>' },
   invite: { name: "Invitations", icon: '<path d="M4 7.5h16v11H4z"/><path d="m4 8 8 6 8-6"/>' },
   games: { name: "Games on sale", icon: '<path d="M20.5 13.5 13.5 20.5a1.8 1.8 0 0 1-2.5 0L3.5 13V3.5H13l7.5 7.5a1.8 1.8 0 0 1 0 2.5z"/><circle cx="8" cy="8" r="1.4"/>' },
+  live: { name: "Friends going live", icon: '<circle cx="12" cy="12" r="2.2"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 18.6a9.4 9.4 0 0 1 0-13.2M18.6 5.4a9.4 9.4 0 0 1 0 13.2"/>' },
   povs: { name: "New POVs", icon: '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>' },
   downloads: { name: "Finished downloads", icon: '<path d="M12 4v11"/><path d="m7 10.5 5 5 5-5"/><path d="M5 19.5h14"/>' },
   updates: { name: "App updates", icon: '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8z"/><path d="M12 12.5 20 8M12 12.5 4 8M12 12.5v8"/>' },
@@ -91,6 +92,7 @@ async function noteOpen(n) {
   noteClose();
   const o = n.open || {};
   if (o.chat !== undefined && typeof openChat === "function") return openChat(o.chat);
+  if (o.live && typeof liveWatch === "function") return liveWatch(o.live);
   if (o.tab) showTab(o.tab);
   if (o.tab === "docs" && typeof docsSwitchTo === "function") {
     if (typeof doc !== "undefined" && doc && !(await docLeave())) return;
@@ -161,7 +163,7 @@ function noteDraw() {
   const list = $("noteList");
   if (!shown.length) {
     list.innerHTML = `<div class="note-empty">${NOTE_BELL}
-      <b>${noteFilter === "all" ? "Nothing here yet" : "You're all caught up"}</b><span>New messages, invitations, games on sale, and POVs show up here.</span></div>`;
+      <b>${noteFilter === "all" ? "Nothing here yet" : "You're all caught up"}</b><span>New messages, invitations, games on sale, POVs, and friends going live show up here.</span></div>`;
     return;
   }
   list.replaceChildren(...shown.map((n) => noteRow(n)));

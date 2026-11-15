@@ -100,6 +100,26 @@ def list_all():
     return boards
 
 
+def due_cards(limit=20):
+    """Cards with a due date that aren't done yet, on your own boards, soonest first (for Home)."""
+    found = []
+    for summary in list_all():
+        try:
+            board = _read(summary["id"])
+        except Error:
+            continue
+        for lst in board.get("lists") or []:
+            if not isinstance(lst, dict) or lst.get("archived"):
+                continue
+            for card in lst.get("cards") or []:
+                if isinstance(card, dict) and not card.get("archived") and card.get("due") and not card.get("done"):
+                    found.append({"board": board["id"], "boardTitle": _title(board.get("title")),
+                                  "list": str(lst.get("title") or "")[:200], "card": str(card.get("id") or ""),
+                                  "title": str(card.get("title") or "")[:300], "due": str(card["due"])[:20]})
+    found.sort(key=lambda c: c["due"])
+    return found[:limit]
+
+
 def create(board):
     board = _clean(board)
     board["id"] = uuid.uuid4().hex
