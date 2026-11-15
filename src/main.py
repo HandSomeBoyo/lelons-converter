@@ -33,6 +33,7 @@ import files  # noqa: E402
 import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import boards  # noqa: E402
+import channelstats  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import film  # noqa: E402
@@ -85,7 +86,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -533,6 +534,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
             if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
                 return self.send_file(os.path.join(UI_DIR, "index.html"), cookie=True)
+        if url.path == "/" and channelstats.is_callback(urllib.parse.parse_qs(url.query)):
+            # Google sends the browser back here after you sign in on the Channel stats tab.
+            if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
+                return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
         if self.path == "/api/state":
@@ -594,6 +599,52 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": "Something went wrong. Try again."})
             except OSError:
                 pass
+
+    def send_google_done(self, ok, text):
+        """The little page in the browser after signing in with Google."""
+        import html
+        color = "#2fbf71" if ok else "#e5484d"
+        body = (f"<!doctype html><meta charset=utf-8><title>VaultHub</title><body style=\"margin:0;display:grid;place-items:center;"
+                f"height:100vh;background:#111;color:#eee;font:16px system-ui,sans-serif\"><div style=\"max-width:420px;"
+                f"text-align:center\"><div style=\"width:14px;height:14px;border-radius:50%;background:{color};margin:0 auto 16px\">"
+                f"</div><h2 style=\"margin:0 0 8px\">{'All set' if ok else 'That did not work'}</h2><p style=\"color:#aaa;"
+                f"line-height:1.5\">{html.escape(text)}</p></div>").encode()
+        self.send_body(body, "text/html; charset=utf-8")
+
+    def handle_channel(self, action, data):
+        """The Channel stats tab."""
+        try:
+            if action == "page":
+                c = channelstats._config()
+                if not c["channel"] and not c["refresh"] and sfx.configured() and not data.get("noGuess"):
+                    try:  # the YouTube channel on your profile, if you put one there
+                        mine = sfx.library.my_profile().get("youtube")
+                        if mine:
+                            channelstats.set_channel(mine)
+                    except Exception:
+                        pass
+                return self.send_json(channelstats.page(data.get("days")))
+            elif action == "set":
+                channelstats.set_channel(data.get("url"))
+            elif action == "forget":
+                settings.save(ch_channel="")
+            elif action == "refresh":
+                channelstats.refresh_now()
+            elif action == "client":
+                channelstats.set_client(data.get("clientId"), data.get("clientSecret"))
+            elif action == "connect":
+                webbrowser.open(channelstats.connect_url(self.server.server_port))
+            elif action == "disconnect":
+                channelstats.disconnect(bool(data.get("forgetClient")))
+            elif action == "open":
+                url = str(data.get("url") or "")
+                if re.match(r"^https://(www\.youtube\.com|studio\.youtube\.com|console\.cloud\.google\.com)/", url):
+                    webbrowser.open(url)
+            else:
+                return self.send_error(404)
+        except channelstats.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True})
 
     def handle_resolve(self, data):
         """The Resolve tab (rt-) and project folders (project-)."""
@@ -1374,7 +1425,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path in ("/api/find-search", "/api/find-add", "/api/find-save"):  # Find sounds in the Library
             try:
                 if self.path == "/api/find-search":
-                    result = findsounds.search(data.get("query"), data.get("source"), data.get("page") or 1)
+                    result = findsounds.search(data.get("query"), data.get("source"), data.get("page") or 1,
+                                             data.get("safe", True))
                 elif self.path == "/api/find-add":
                     result = {"file": findsounds.add_to_library(data.get("id"))}
                 else:
@@ -1417,6 +1469,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_boards(self.path[len("/api/boards-"):], data)
         elif self.path.startswith("/api/fx-"):
             self.handle_film(self.path[len("/api/fx-"):], data)
+        elif self.path.startswith("/api/ch-"):
+            self.handle_channel(self.path[len("/api/ch-"):], data)
         elif self.path.startswith("/api/games-"):
             self.handle_games(self.path[len("/api/games-"):], data)
         elif self.path.startswith("/api/pov-"):
