@@ -2,6 +2,16 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.30.0", items: [
+    "New how-to-use tour: it now shows everything added lately, like the Resolve tab, calls, profiles, Boards and Games, POVs and Film assets, Channel stats, Titles & tags and Ctrl+K search. It pops up once after this update, and you can watch it again from the question mark at the top (turn the voice on for a friendly walkthrough).",
+    "Calls: click a friend's picture in a call to turn them down or up (to 200%). It's remembered for next time, and you also see how good their connection is.",
+    "Signal bars on everyone in a call, and calls hold up better on bad Wi-Fi: sound stays smoother and a dropped connection comes back faster.",
+    "Push to talk: pick any key or mouse side button in the call's settings or Settings > Sound. It works while you're in a game too.",
+    "Sound board: the new button in a call plays Library sounds for everyone. Your favorites come first.",
+    "Record a call: the red button saves everyone's voices as an MP3 in your save folder. Everyone in the call sees that it's being recorded.",
+    "Share your PC's sound with your screen, so friends hear your game or music too.",
+    "The Friends page is taken out for now, so the side bar is back to how it was (Ctrl+1 to 9 go to the same pages as before 2.29.0).",
+  ] },
   { version: "2.29.0", items: [
     "New Friends page (right under Home): see what your friends made and did, newest first, by day. New YouTube uploads, POVs they shared, games they posted, want to record, started recording or finished, sounds they added to the Library and changes on your team boards.",
     "Click a video to watch it (or Download to get it as MP3 or MP4), a game or board to open it, a sound to play it, and anyone's face to see their profile. Click a face at the top to see only what that person did.",
