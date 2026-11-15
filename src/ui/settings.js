@@ -197,8 +197,8 @@ helpPop.addEventListener("click", () => { helpPop.hidden = true; });
 document.addEventListener("click", (e) => { if (!helpPop.hidden && !helpPop.contains(e.target)) helpPop.hidden = true; });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !helpPop.hidden) helpPop.hidden = true; });
 
-// ---- Settings > Sound: speakers, microphone and noise suppression. The same choices calls use
-// (saved as callSpeaker, callMic and callNoise), so picking one here changes it in calls too.
+// ---- Settings > Sound: speakers, microphone, call sound quality and noise suppression. The same choices calls use
+// (saved as callSpeaker, callMic, callAudio and callNoise), so picking one here changes it in calls too.
 const NOISE_NAMES = { off: "Off", standard: "Standard", strong: "Strong", max: "Max" };
 const NOISE_NOTES = {
   off: "Others hear everything your microphone picks up.",
@@ -238,14 +238,23 @@ function drawSoundSettings() {
   if (!$("setSpeaker")) return;
   fillDeviceSelect($("setSpeaker"), "audiooutput", "callSpeaker", "Speakers");
   fillDeviceSelect($("setMic"), "audioinput", "callMic", "Microphone");
-  const noise = callNoise();
+  const mode = callAudioMode();
+  setChildren($("setAudio"), AUDIO_MODES.map((m) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", textContent: AUDIO_NAMES[m] });
+    b.classList.toggle("active", m === mode);
+    b.addEventListener("click", async () => { await callSetAudio(m); if (micTest) startMicTest(); });
+    return b;
+  }));
+  $("setAudioNote").textContent = AUDIO_NOTES[mode];
+  const noise = callNoiseUsed();
   setChildren($("setNoise"), NOISE_LEVELS.map((level) => {
     const b = Object.assign(document.createElement("button"), { type: "button", textContent: NOISE_NAMES[level] });
     b.classList.toggle("active", level === noise);
+    b.disabled = mode === "music";
     b.addEventListener("click", () => { callSetNoise(level); if (micTest) startMicTest(); });
     return b;
   }));
-  $("setNoiseNote").textContent = NOISE_NOTES[noise];
+  $("setNoiseNote").textContent = mode === "music" ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise];
 }
 
 $("setSpeaker").addEventListener("change", () => callUseSpeaker($("setSpeaker").value));
