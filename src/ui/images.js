@@ -105,6 +105,17 @@ window.addEventListener("drop", (e) => {
   if (typeof fxTakesDrop === "function" && fxTakesDrop(files)) return;
   if (typeof rtTakesDrop === "function" && rtTakesDrop(files)) return;
   const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
+  // A whole folder: its videos and songs go to the Files tab (or its pictures to Images, if that's all it has).
+  const inFolders = typeof droppedFolders === "function" && droppedFolders(e.dataTransfer);
+  if (inFolders) {
+    inFolders.then((all) => {
+      const media = all.filter((x) => MEDIA_RE.test(x.file.name)), pics = all.filter((x) => isPicture(x.file));
+      if (media.length) addMediaFiles(media);
+      else if (pics.length) addImageFiles(pics.map((x) => x.file));
+      else fileProblem("There are no videos or songs in that folder.");
+    });
+    return;
+  }
   const pictures = files.filter(isPicture), others = files.filter((f) => !isPicture(f));
   if (others.length) addMediaFiles(others);
   if (pictures.length) addImageFiles(pictures);

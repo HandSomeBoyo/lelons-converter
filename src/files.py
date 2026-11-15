@@ -4,10 +4,16 @@ Files picked with the Open window are used where they are. Dropped files
 have to be copied to a temporary folder while the app runs (the window can't
 tell the app where a dropped file lives). Finished files are saved in the
 same folder as the downloads.
+
+A whole folder can be added too (picked, or dropped on the window): every video
+and song in it (and its subfolders) is added, and the converted files keep the
+same subfolders inside a folder named after it. Watched folders (watchfolders.py)
+add new files here by themselves.
 """
 
 import itertools
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -19,6 +25,10 @@ import waveform
 
 FOLDER = os.path.join(tempfile.gettempdir(), "LelonsConverter", "files")
 FORMATS = ("mp3", "m4a", "wav", "flac", "mp4", "gif")
+# What counts as a video or song when a whole folder is added (pictures, documents and so on are skipped).
+MEDIA_EXTS = set(("." + e for e in
+                  "mp4 mkv mov avi wmv flv webm m4v mpg mpeg 3gp ts mts m2ts mp3 m4a wav flac ogg opus wma aac aiff aif amr".split()))
+MAX_FOLDER_FILES = 2000
 # The Open window's list of file types.
 PICK_KINDS = [
     ("Videos and songs", ";".join("*." + e for e in (
@@ -26,7 +36,36 @@ PICK_KINDS = [
     ("All files", "*.*"),
 ]
 PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "thumb",
-          "status", "progress", "message", "trimLabel", "run", "cancel")
+          "status", "progress", "message", "trimLabel", "run", "cancel", "sub", "watch")
+
+
+def is_media(name):
+    return os.path.splitext(name)[1].lower() in MEDIA_EXTS
+
+
+def clean_sub(sub):
+    """A subfolder path from the page ("Holiday/day 1") made safe to use inside the save folder."""
+    parts = [p for p in re.split(r"[\\/]+", str(sub or "")) if p.strip() and p.strip(". ")]
+    return "/".join(names.safe_stem(p, "folder", 60) for p in parts[:8])
+
+
+def folder_media(root, subfolders=True, skip=()):
+    """Every video and song in root (and its subfolders), as (path, relative folder), sorted.
+    skip: folders to leave out (like a watched folder's own Converted folder)."""
+    skip = {os.path.normcase(os.path.abspath(s)) for s in skip if s}
+    found = []
+    for here, dirs, files in os.walk(root):
+        if os.path.normcase(os.path.abspath(here)) in skip:
+            dirs[:] = []
+            continue
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".")) if subfolders else []
+        rel = os.path.relpath(here, root)
+        for name in sorted(files, key=str.lower):
+            if is_media(name) and names.MARK not in name:
+                found.append((os.path.join(here, name), "" if rel == "." else rel.replace(os.sep, "/")))
+                if len(found) >= MAX_FOLDER_FILES:
+                    return found
+    return found
 
 
 class Stopped(Exception):
@@ -45,11 +84,13 @@ class Files:
         self.wake = threading.Condition(self.lock)
         self.items = []
         self.ids = itertools.count(1)
+        self.scans = []  # folders being looked through: {"key", "name", "done", "total"}
+        self.on_finished = None  # set by watched folders: called with each finished (or failed) item
         threading.Thread(target=self._worker, daemon=True).start()
 
     # ---- adding and removing
 
-    def add(self, name, stream, length):
+    def add(self, name, stream, length, sub=""):
         """Save an uploaded (dropped) file and look at what's in it. Returns what the page shows."""
         os.makedirs(FOLDER, exist_ok=True)
         file_id = str(next(self.ids))
@@ -69,13 +110,39 @@ class Files:
         if left:  # stopped halfway (removed from the list, or the window closed)
             os.remove(path)
             raise OSError("The file wasn't copied all the way.")
-        return self._register(file_id, os.path.basename(name), path, copied=True)
+        return self._register(file_id, os.path.basename(name), path, copied=True, sub=clean_sub(sub))
 
-    def add_path(self, path):
+    def add_path(self, path, sub="", watch=""):
         """A file picked with the Open window: used where it is, without copying it."""
-        return self._register(str(next(self.ids)), os.path.basename(path), path, copied=False)
+        return self._register(str(next(self.ids)), os.path.basename(path), path, copied=False,
+                              sub=clean_sub(sub), watch=watch)
 
-    def _register(self, file_id, name, path, copied):
+    def add_folder(self, root):
+        """A whole folder (picked with the folder picker): looked through in the background,
+        so the files show up in the list one by one. Returns how many it found."""
+        found = folder_media(root)
+        name = os.path.basename(os.path.normpath(root)) or root
+        if not found:
+            raise ValueError(f"There are no videos or songs in {name}.")
+        scan = {"key": str(next(self.ids)), "name": name, "done": 0, "total": len(found), "errors": 0}
+        with self.lock:
+            self.scans.append(scan)
+
+        def work():
+            try:
+                for path, rel in found:
+                    try:
+                        self.add_path(path, sub="/".join(x for x in (name, rel) if x))
+                    except Exception:  # not a video or song after all, or couldn't be read
+                        scan["errors"] += 1
+                    scan["done"] += 1
+            finally:
+                with self.lock:
+                    self.scans.remove(scan)
+        threading.Thread(target=work, daemon=True).start()
+        return len(found)
+
+    def _register(self, file_id, name, path, copied, sub="", watch=""):
         found = media.probe(path)
         if not found["audio"] and not found["video"]:
             if copied:
@@ -90,6 +157,7 @@ class Files:
             "width": found["width"], "height": found["height"], "probe": found,
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
             "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
+            "sub": sub, "watch": watch,
         }
         with self.lock:
             self.items.append(item)
@@ -134,10 +202,14 @@ class Files:
         with self.lock:
             return [self._public(i) for i in self.items]
 
+    def scan_snapshot(self):
+        with self.lock:
+            return [dict(s) for s in self.scans]
+
     @property
     def busy(self):
         with self.lock:
-            return any(i["status"] in ("queued", "active") for i in self.items)
+            return bool(self.scans) or any(i["status"] in ("queued", "active") for i in self.items)
 
     # ---- converting
 
@@ -197,10 +269,19 @@ class Files:
                 else:
                     message = str(e) if isinstance(e, (ValueError, OSError)) else "Converting didn't work."
                 self._update(item, status="error", progress=0, message=message)
+                self._finished(item)
             else:
                 self._update(item, status="done", progress=100, out=path, message=message)
                 trim = item["job"]["trim"]
                 history.count(item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                self._finished(item)
+
+    def _finished(self, item):
+        if self.on_finished and item.get("watch"):
+            try:
+                self.on_finished(item)
+            except Exception:
+                pass
 
     def _run(self, item):
         job = item["job"]
@@ -216,8 +297,10 @@ class Files:
             stem += " ({}-{})".format(*(f"{int(t) // 60}m{int(t) % 60:02d}s" for t in trim))
         if fmt == "mp4" and job["targetMb"]:
             stem += f" ({job['targetMb']:g} MB)"
-        os.makedirs(job["folder"], exist_ok=True)
-        temp = names.temp_path(job["folder"], stem, "." + fmt)
+        # Files from a whole folder keep its subfolders inside the save folder.
+        out_folder = os.path.join(job["folder"], *item["sub"].split("/")) if item["sub"] else job["folder"]
+        os.makedirs(out_folder, exist_ok=True)
+        temp = names.temp_path(out_folder, stem, "." + fmt)
 
         verb = {"gif": "Making the GIF", "mp4": "Making it smaller" if job["targetMb"] else "Converting"}.get(fmt, "Converting")
 
