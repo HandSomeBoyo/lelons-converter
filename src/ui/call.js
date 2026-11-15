@@ -252,6 +252,22 @@ function callRedrawRoom() {
 
 // ---- your microphone and speakers
 
+// What the sound quality and Music mode choices say about themselves.
+function callBitrateNote(kbps) {
+  const what = kbps <= 32 ? "Like a phone call (calls used this before). Uses the least internet."
+    : kbps <= 64 ? "A clear voice. Good for slow Wi-Fi."
+    : kbps <= 96 ? "A clear, natural voice."
+    : kbps <= 128 ? "A full, rich voice. Best for most calls."
+    : kbps <= 256 ? "Very detailed. Great together with Music mode."
+    : "The most detail there is. Needs good internet, and more for every person in a group call.";
+  return what;
+}
+const AUDIO_MUSIC_NOTES = {
+  off: "Your voice is cleaned up: echo cancelling, steady volume and noise suppression.",
+  on: "Stereo, and no cleanup at all, for music, singing or game sound through your microphone. Use headphones so others don't hear themselves.",
+};
+const AUDIO_MUSIC_NOISE = "Off in Music mode, so your music comes through clean.";
+
 // Noise suppression: "off", "standard" (the one built into Windows' browser engine), "strong" (RNNoise, an AI
 // that keeps only voices) or "max" (GTCRN, a newer AI for really loud places). Runs on your computer.
 const NOISE_LEVELS = ["off", "standard", "strong", "max"];
@@ -260,15 +276,68 @@ function callNoise() {
   return NOISE_LEVELS.includes(level) ? level : "strong";
 }
 
+// Sound quality: how much detail your voice gets, in kilobits a second to each person (you pick it;
+// 128 unless you do). Music mode sends stereo with no cleanup at all, for music, singing or a game's
+// sound through your microphone.
+const AUDIO_RATES = [32, 64, 96, 128, 192, 256, 320, 510];
+function callBitrate() {
+  const kbps = Number(loadPref("callBitrate"));
+  return AUDIO_RATES.includes(kbps) ? kbps : 128;
+}
+function callMusicOn() { return loadPref("callMusic") === true; }
+// Noise suppression is off in music mode (it would cut the music out), so that's what's really used.
+function callNoiseUsed() { return callMusicOn() ? "off" : callNoise(); }
+
 function callMicConstraints() {
   const id = loadPref("callMic");
-  return { audio: { echoCancellation: true, noiseSuppression: callNoise() === "standard", autoGainControl: true, ...(id ? { deviceId: { ideal: id } } : {}) } };
+  const device = id ? { deviceId: { ideal: id } } : {};
+  if (callMusicOn()) {
+    // Exactly what the microphone hears, in stereo if it can: no echo cancelling, no auto volume, no cleanup.
+    return { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 }, ...device } };
+  }
+  return { audio: { echoCancellation: true, noiseSuppression: callNoise() === "standard", autoGainControl: true, sampleRate: { ideal: 48000 }, ...device } };
+}
+
+// The apps agree on how sound is sent in their offer and answer. Opus (the sound format) is told it may
+// send stereo, and it may use lots of detail when it sends to them; how much it really uses is set per
+// person with callAudioBitrate. Ours only says we can take stereo, so an older app doesn't send more.
+function callTuneSdp(sdp, theirs) {
+  const want = { stereo: "1", "sprop-stereo": "1", useinbandfec: "1", ...(theirs ? { maxaveragebitrate: "510000" } : {}) };
+  for (const [, pt] of sdp.matchAll(/^a=rtpmap:(\d+) opus\/48000/gim)) {
+    const line = new RegExp(`^a=fmtp:${pt} (.*)$`, "m");
+    const found = sdp.match(line);
+    const params = new Map();
+    for (const part of (found ? found[1] : "").split(";")) {
+      const bit = part.trim();
+      if (!bit) continue;
+      const at = bit.indexOf("=");
+      params.set(at < 0 ? bit : bit.slice(0, at), at < 0 ? "" : bit.slice(at + 1));
+    }
+    for (const [k, v] of Object.entries(want)) params.set(k, v);
+    const fmtp = `a=fmtp:${pt} ` + [...params].map(([k, v]) => (v === "" ? k : `${k}=${v}`)).join(";");
+    sdp = found ? sdp.replace(line, fmtp) : sdp.replace(new RegExp(`^(a=rtpmap:${pt} opus\\/48000.*)$`, "im"), `$1\r\n${fmtp}`);
+  }
+  return sdp;
+}
+function callSetLocal(pc, desc) { return pc.setLocalDescription({ type: desc.type, sdp: callTuneSdp(desc.sdp, false) }); }
+function callSetRemote(pc, desc) { return pc.setRemoteDescription({ type: desc.type, sdp: callTuneSdp(desc.sdp, true) }); }
+
+// How much detail your voice gets to one person (it can change in the middle of a call). Your voice also
+// goes first when the internet is busy, before shared screens and cameras.
+function callAudioBitrate(p) {
+  if (!p.audioTx) return;
+  const params = p.audioTx.sender.getParameters();
+  if (!params.encodings || !params.encodings[0]) return;
+  params.encodings[0].maxBitrate = callBitrate() * 1000;
+  params.encodings[0].priority = "high";
+  params.encodings[0].networkPriority = "high";
+  p.audioTx.sender.setParameters(params).catch(() => {});
 }
 
 // Your microphone, cleaned up: {stream (to send), parts}. Throws if there's no microphone.
 async function callOpenMic() {
   const raw = await navigator.mediaDevices.getUserMedia(callMicConstraints());
-  const level = callNoise();
+  const level = callNoiseUsed();
   if (level !== "strong" && level !== "max") return { stream: raw, parts: { raw } };
   let ctx = null;
   try {
@@ -343,6 +412,20 @@ async function callSetNoise(level) {
   if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't restart your microphone.");
 }
+// A new sound quality: right away, for everyone in the call.
+function callSetBitrate(kbps) {
+  savePref("callBitrate", kbps);
+  drawCallPop();
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
+  for (const p of callPeers.values()) callAudioBitrate(p);
+}
+// Music mode on or off: the microphone opens again without (or with) the cleanup.
+async function callSetMusic(on) {
+  savePref("callMusic", !!on);
+  drawCallPop();
+  if (typeof drawSoundSettings === "function") drawSoundSettings();
+  await callReopenMic("Couldn't restart your microphone.");
+}
 async function callReopenMic(problem) {
   if (!callIsLive() || !callMicStream) return;
   const mine = call;
@@ -357,7 +440,7 @@ async function callReopenMic(problem) {
   callMicStream = mic.stream;
   callMicParts = mic.parts;
   callMicStream.getAudioTracks().forEach((t) => { t.enabled = !callMuted && !callDeafened; });
-  for (const p of callPeers.values()) if (p.audioTx) p.audioTx.sender.replaceTrack(callMicStream.getAudioTracks()[0]).catch(() => {});
+  for (const p of callPeers.values()) if (p.audioTx) p.audioTx.sender.replaceTrack(callMicStream.getAudioTracks()[0]).then(() => callAudioBitrate(p), () => {});
   callMicClose(oldStream, oldParts);
   callWatchSpeaking("", callMicStream);
 }
@@ -443,6 +526,7 @@ function callPeer(name) {
   pc.onconnectionstatechange = () => {
     if (callPeers.get(key) !== p) return;
     p.connected = pc.connectionState === "connected";
+    if (p.connected) callAudioBitrate(p);
     if (pc.connectionState === "failed" && !callPeers.size) callSay(CALL_NO_ROUTE);
     drawCall();
   };
@@ -487,7 +571,7 @@ async function callOffer(name) {
   callChannel(p, p.pc.createDataChannel("call"));
   const mine = call;
   try {
-    await p.pc.setLocalDescription(await p.pc.createOffer());
+    await callSetLocal(p.pc, await p.pc.createOffer());
     await callGathered(p.pc);
   } catch (e) {
     return callDropPeer(lower(name));
@@ -505,7 +589,7 @@ async function callSignal(s) {
     const p = callPeers.get(key);
     if (!p || p.answered) return;
     p.answered = true;
-    p.pc.setRemoteDescription({ type: "answer", sdp: s.sdp }).catch(() => callDropPeer(key));
+    callSetRemote(p.pc, { type: "answer", sdp: s.sdp }).then(() => callAudioBitrate(p), () => callDropPeer(key));
     return;
   }
   // An offer: a new connection (or a fresh one, if theirs broke).
@@ -514,9 +598,10 @@ async function callSignal(s) {
   p.answered = true;
   const mine = call;
   try {
-    await p.pc.setRemoteDescription({ type: "offer", sdp: s.sdp });
+    await callSetRemote(p.pc, { type: "offer", sdp: s.sdp });
     callAddMyTracks(p, false);
-    await p.pc.setLocalDescription(await p.pc.createAnswer());
+    await callSetLocal(p.pc, await p.pc.createAnswer());
+    callAudioBitrate(p);
     await callGathered(p.pc);
   } catch (e) {
     return callDropPeer(key);
@@ -548,7 +633,7 @@ async function callAddCameraLane(p) {
   const track = callCam && callCam.getVideoTracks()[0];
   p.camTx = p.pc.addTransceiver(track || "video", { direction: "sendrecv" });
   try {
-    await p.pc.setLocalDescription(await p.pc.createOffer());
+    await callSetLocal(p.pc, await p.pc.createOffer());
     callSend(p, { sdp: { type: "offer", sdp: p.pc.localDescription.sdp } });
   } catch (e) { /* no camera with this person; sound and screens still work */ }
 }
@@ -556,7 +641,7 @@ async function callAddCameraLane(p) {
 async function callLaneSignal(p, desc) {
   if (!desc || (desc.type !== "offer" && desc.type !== "answer") || typeof desc.sdp !== "string") return;
   try {
-    await p.pc.setRemoteDescription({ type: desc.type, sdp: desc.sdp });
+    await callSetRemote(p.pc, desc);
     if (desc.type === "offer") {
       p.camTx = callVideoLanes(p.pc)[1] || null;
       if (p.camTx) {
@@ -564,10 +649,11 @@ async function callLaneSignal(p, desc) {
         const track = callCam && callCam.getVideoTracks()[0];
         if (track) await p.camTx.sender.replaceTrack(track);
       }
-      await p.pc.setLocalDescription(await p.pc.createAnswer());
+      await callSetLocal(p.pc, await p.pc.createAnswer());
       callSend(p, { sdp: { type: "answer", sdp: p.pc.localDescription.sdp } });
     }
     callCamBitrate(p);
+    callAudioBitrate(p);
   } catch (e) { /* no camera with this person; sound and screens still work */ }
 }
 
@@ -1095,12 +1181,21 @@ async function drawCallPop() {
       return sel;
     };
     els.push(title("Microphone"), select("audioinput", "callMic", "Microphone", callUseMic));
+    const kbps = callBitrate(), music = callMusicOn();
+    els.push(title("Sound quality (kbps)"));
+    els.push(chips(AUDIO_RATES, kbps, String, callSetBitrate));
+    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: callBitrateNote(kbps) }));
+    els.push(title("Music mode"));
+    els.push(chips(["off", "on"], music ? "on" : "off", (v) => (v === "on" ? "On" : "Off"), (v) => callSetMusic(v === "on")));
+    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: AUDIO_MUSIC_NOTES[music ? "on" : "off"] }));
     const noise = callNoise();
     els.push(title("Noise suppression"));
-    els.push(chips(NOISE_LEVELS, noise, (v) => ({ off: "Off", standard: "Standard", strong: "Strong", max: "Max" })[v], callSetNoise));
+    const noiseChips = chips(NOISE_LEVELS, music ? "off" : noise, (v) => ({ off: "Off", standard: "Standard", strong: "Strong", max: "Max" })[v], callSetNoise);
+    if (music) noiseChips.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    els.push(noiseChips);
     els.push(Object.assign(document.createElement("p"), {
       className: "call-pop-note",
-      textContent: {
+      textContent: music ? AUDIO_MUSIC_NOISE : {
         off: "Others hear everything your microphone picks up.",
         standard: "Takes away steady hum, like a fan.",
         strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",

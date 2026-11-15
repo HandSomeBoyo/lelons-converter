@@ -4009,6 +4009,8 @@ body.has-player .call-stage.small { bottom: 96px; }
 .call-chips button { all: unset; cursor: pointer; padding: 6px 11px; border-radius: 10px; background: var(--panel2); font: 600 13px var(--head); font-variant-numeric: tabular-nums; }
 .call-chips button:hover { background: color-mix(in srgb, var(--text) 14%, transparent); }
 .call-chips button.on { background: var(--text); color: var(--bg); }
+.call-chips button:disabled { cursor: default; opacity: 0.45; }
+.call-chips button:disabled:not(.on):hover { background: var(--panel2); }
 .call-pop-note { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .call-pop-actions { display: flex; gap: 8px; margin-top: 14px; }
 .call-pop-actions button { flex: 1; justify-content: center; }
@@ -5321,6 +5323,7 @@ main { container: page / inline-size; }
   border: 1px solid var(--line2); color: var(--text); font: 600 13px var(--head);
 }
 .set-chips button:hover { background: var(--panel2); }
+.set-chips button:disabled { cursor: default; opacity: 0.45; pointer-events: none; }
 .set-chips button.active { background: var(--accent); border-color: var(--accent); color: var(--ink); }
 @media (max-width: 640px) { .set-device-row { flex-wrap: wrap; } .set-device-row .ghost-button { flex: 1; justify-content: center; } }
 .watch-speed {
