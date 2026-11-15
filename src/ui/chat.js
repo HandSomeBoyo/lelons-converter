@@ -48,7 +48,12 @@ function personChip(person) {
   el.type = "button";
   el.className = "who";
   el.title = "See " + person.username + "'s profile";
-  el.append(avatarEl(person.avatarUrl, person.username), document.createTextNode(person.username));
+  const face = document.createElement("span");
+  face.className = "who-face";
+  face.append(avatarEl(person.avatarUrl, person.username));
+  if (typeof modeDot === "function") face.append(modeDot(person, "on-face"));
+  el.append(face, document.createTextNode(person.username));
+  if (person.mode || person.status) el.title = `${person.username}: ${modeText(person)}`;
   el.addEventListener("click", () => openProfile(person.username));
   return el;
 }
@@ -146,6 +151,12 @@ function mentionsMe(text) {
   return new RegExp("(^|[^\\w.-])@" + me.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w.-])", "i").test(text);
 }
 
+// (2.32.0) A message that @mentions you or answers one of yours.
+function aboutMe(m) {
+  const me = sfxUser();
+  return mentionsMe(m.message) || (!!me && !!m.reply && !m.reply.gone && m.reply.username === me.username);
+}
+
 // ---- the panel
 
 function openChat(withUser) {
@@ -165,6 +176,7 @@ function openChat(withUser) {
 }
 
 function closeChat() {
+  if (typeof stopVoice === "function") { stopVoice(false); closePop(); }
   $("chatPanel").hidden = true;
   $("chatOpen").classList.remove("open");
   $("chatButton").classList.remove("open");
@@ -183,6 +195,7 @@ function switchChat(name) {
   drawTyping();
   chatWith = name || "";
   chatGroup = null;
+  chatPlusReset();
   chatMessages = [];
   chatLastId = 0;
   chatLoaded = false;
@@ -223,7 +236,8 @@ function groupPic(g, cls = "") {
 let convosDrawn = "";
 function drawConvos() {
   const box = $("chatConvos");
-  const sig = JSON.stringify([chatWith, chatMention, chatPrivate.map((p) => [p.username, p.avatarUrl, unreadIn(p.username)]),
+  const sig = JSON.stringify([chatWith, chatMention, chatPrivate.map((p) => [p.username, p.avatarUrl, unreadIn(p.username), p.mode, p.status]),
+    ((onlineInfo && onlineInfo.people) || []).map((x) => x.username),
     chatGroups.map((g) => [g.id, g.name, g.pictureUrl, g.people, unreadIn("g:" + g.id)]), unreadIn("")]);
   if (sig !== convosDrawn) {
     convosDrawn = sig;
@@ -264,9 +278,14 @@ function drawConvos() {
     if (!chatGroups.length) list.push(Object.assign(document.createElement("p"), { className: "chat-sec-empty", textContent: "Make a group with just the people you pick." }));
     list.push(section("Private messages", "New private message", () => openGroupModal("dm")));
     const names = new Set();
+    const online = new Set(((onlineInfo && onlineInfo.people) || []).map((x) => x.username));
     for (const p of chatPrivate) {
       names.add(p.username);
-      list.push(row(p.username, p.username, avatarEl(p.avatarUrl, p.username)));
+      const face = document.createElement("span");
+      face.className = "who-face";
+      face.append(avatarEl(p.avatarUrl, p.username));
+      if (online.has(p.username)) face.append(modeDot(p, "on-face"));
+      list.push(row(p.username, p.username, face, online.has(p.username) ? modeText(p) : ""));
     }
     // A private chat you just started (no messages yet).
     if (chatWith && !isGroupKey(chatWith) && !names.has(chatWith)) list.push(row(chatWith, chatWith, avatarEl("", chatWith)));
@@ -285,7 +304,9 @@ function drawRoom() {
   const g = isGroupKey(chatWith) ? chatGroup || chatGroups.find((x) => "g:" + x.id === chatWith) : null;
   const sig = JSON.stringify([chatWith, g && [g.name, g.pictureUrl, (g.members || []).map((m) => m.username), g.people]]);
   const calls = typeof callWith === "function"; // (call.js loads after this file)
-  const sig2 = sig + (calls ? JSON.stringify([callWith(chatWith), callLiveIn(chatWith)]) : "");
+  const them = !isGroupKey(chatWith) && chatWith ? ((onlineInfo && onlineInfo.people) || []).find((x) => x.username === chatWith) : null;
+  const sig2 = sig + (calls ? JSON.stringify([callWith(chatWith), callLiveIn(chatWith)]) : "")
+    + JSON.stringify([chatPinCount, chatPane && chatPane.kind, them && [them.mode, them.status]]);
   if (sig2 === roomDrawn) return;
   roomDrawn = sig2;
   const room = $("chatRoom");
@@ -306,7 +327,8 @@ function drawRoom() {
     const who = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: chatWith, title: "See their profile" });
     who.addEventListener("click", () => openProfile(chatWith));
     h.append(who);
-    sub.textContent = "Private chat. Only you two can see it.";
+    const them = ((onlineInfo && onlineInfo.people) || []).find((x) => x.username === chatWith);
+    sub.textContent = them ? (modeText(them) || "Online") + " · Only you two can see this chat." : "Private chat. Only you two can see it.";
   } else {
     pic = Object.assign(document.createElement("span"), { className: "avatar chat-hash", innerHTML: CHAT_ICONS.hash });
     h.textContent = "everyone";
@@ -314,7 +336,7 @@ function drawRoom() {
   }
   title.append(h, sub);
   room.replaceChildren(pic, title);
-  const tools = [];
+  const tools = sfxUser() ? chatRoomButtons() : [];
   if (isGroupKey(chatWith)) {
     const tool = (icon, label, fn) => {
       const b = document.createElement("button");
@@ -491,20 +513,22 @@ function addChat(res) {
   if (isGroupKey(chatWith) && res.group) chatGroup = res.group;
   chatEveryoneLast = res.everyoneLast || 0;
   if (res.names) chatNames = res.names;
+  if (res.pinCount !== undefined && res.pinCount !== chatPinCount) { chatPinCount = res.pinCount; drawRoom(); }
 
   const fresh = (res.messages || []).filter((m) => m.id > chatLastId);
   if (fresh.length) {
     chatLastId = fresh[fresh.length - 1].id;
-    chatMessages = chatMessages.concat(fresh).slice(-300);
+    chatMessages = chatMessages.concat(fresh).slice(-2000);
     if (chatLoaded) {
       const theirs = fresh.filter((m) => !m.mine);
       if (!chatWith && typeof notifyAdd === "function" && (!chatIsOpen() || document.hidden)) {
-        for (const m of theirs.filter((x) => mentionsMe(x.message))) {
-          notifyAdd({ key: "mention:" + m.id, stamp: 1, kind: "chat", title: `${m.username} mentioned you`, text: m.message,
+        for (const m of theirs.filter(aboutMe)) {
+          notifyAdd({ key: "mention:" + m.id, stamp: 1, kind: "chat", title: mentionsMe(m.message) ? `${m.username} mentioned you` : `${m.username} answered you`,
+            text: m.message || "New message",
             pic: m.avatarUrl, open: { chat: "" }, quiet: true });
         }
       }
-      if (!chatWith && theirs.some((m) => mentionsMe(m.message))) {
+      if (!chatWith && theirs.some(aboutMe)) {
         if (!chatIsOpen() || document.hidden) chatMention = true;
         ding = true;
       }
@@ -514,15 +538,21 @@ function addChat(res) {
   if (!chatWith && !chatLoaded) {
     // The newest mention you haven't seen yet, from before the app opened.
     const seen = chatSeen[""] || 0;
-    if (fresh.some((m) => m.id > seen && !m.mine && mentionsMe(m.message))) chatMention = true;
+    if (fresh.some((m) => m.id > seen && !m.mine && aboutMe(m))) chatMention = true;
   }
   // Reactions and deleted messages, for the newest ones.
   const recent = res.recent || [];
   if (recent.length) {
-    const ids = new Map(recent.map((r) => [r.id, r.reactions || []]));
+    // (2.32.0: and edits, pins, threads and poll votes)
+    const ids = new Map(recent.map((r) => [r.id, r]));
     const oldest = Math.min(...recent.map((r) => r.id));
     chatMessages = chatMessages.filter((m) => m.id < oldest || ids.has(m.id));
-    for (const m of chatMessages) if (ids.has(m.id)) m.reactions = ids.get(m.id);
+    for (const m of chatMessages) {
+      const r = ids.get(m.id);
+      if (!r) continue;
+      m.reactions = r.reactions || [];
+      for (const key of ["message", "edited", "pinned", "thread", "poll", "votes", "voters"]) if (key in r) m[key] = r[key];
+    }
   } else if (chatLoaded && res.messages) {
     chatMessages = []; // everything was deleted
   }
@@ -538,10 +568,34 @@ function chatTime(when) {
   return new Date(when).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// The message text, with @names picked out (yours in the accent color).
+// The message text, with @names picked out (yours in the accent color) and links you can click
+// (2.32.0: YouTube links play right here).
 function chatText(text) {
   const el = document.createElement("div");
   el.className = "text";
+  let last = 0;
+  for (const match of text.matchAll(/\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/gi)) {
+    chatTextPart(el, text.slice(last, match.index));
+    const url = match[0];
+    const a = document.createElement("a");
+    a.className = "chat-link";
+    a.href = url;
+    a.textContent = url.length > 70 ? url.slice(0, 67) + "..." : url;
+    a.title = url;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof youtubeId === "function" && youtubeId(url)) openWatch(url);
+      else api("/api/games-open", { url });
+    });
+    el.append(a);
+    last = match.index + url.length;
+  }
+  chatTextPart(el, text.slice(last));
+  return el;
+}
+
+function chatTextPart(el, text) {
   const me = sfxUser() && sfxUser().username.toLowerCase();
   let last = 0;
   for (const match of text.matchAll(/(^|[^\w.-])@([A-Za-z0-9_.-]{3,20})/g)) {
@@ -556,7 +610,6 @@ function chatText(text) {
     last = at + 1 + name.length;
   }
   el.append(text.slice(last));
-  return el;
 }
 
 // A Library sound or a clip in a message: play it, or drag it out like any sound.
@@ -656,7 +709,7 @@ function reactionRow(m) {
 
 function drawChat(force) {
   const list = $("chatList");
-  const sig = JSON.stringify([chatWith, chatPlaying, chatAudio.paused, [...chatSure], chatMessages.map((m) => [m.id, m.reactions])]);
+  const sig = JSON.stringify([chatWith, chatPlaying, chatAudio.paused, [...chatSure], chatEditing, chatMessages]);
   if (!force && sig === chatDrawn) return;
   chatDrawn = sig;
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
@@ -688,9 +741,10 @@ function drawChat(force) {
     }
     // A message right after one from the same person (within 5 minutes) doesn't repeat the name.
     const follow = last && last.username === m.username && new Date(m.created_at) - new Date(last.created_at) < 300000
-      && new Date(last.created_at).toDateString() === day;
+      && new Date(last.created_at).toDateString() === day && !m.reply;
     // Messages that didn't change keep their element (so a click or a text selection on one survives).
-    const sig = JSON.stringify([m, follow, chatPlaying === m.id, chatPlaying === m.id && chatAudio.paused, chatSure.has(m.id), canDeleteAll, me && me.username]);
+    const sig = JSON.stringify([m, follow, chatPlaying === m.id, chatPlaying === m.id && chatAudio.paused, chatSure.has(m.id), canDeleteAll, me && me.username,
+      chatEditing === m.id, chatCanPin()]);
     keys.push(m.id);
     rows.push(keptNode(chatEls, m.id, sig, () => chatMessageEl(m, follow, shownUpTo, canDeleteAll)));
     last = m;
@@ -703,14 +757,18 @@ function drawChat(force) {
 
 function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
   const el = document.createElement("div");
-  el.className = "chat-msg" + (follow ? " follow" : "") + (!m.mine && mentionsMe(m.message) ? " mentions-me" : "")
-    + (m.id > shownUpTo ? " new" : "");
+  const me = sfxUser();
+  const answersMe = !m.mine && m.reply && !m.reply.gone && me && m.reply.username === me.username;
+  el.className = "chat-msg" + (follow ? " follow" : "") + ((!m.mine && mentionsMe(m.message)) || answersMe ? " mentions-me" : "")
+    + (m.id > shownUpTo ? " new" : "") + (m.pinned ? " pinned" : "") + (m.sticker && !m.message ? " has-sticker" : "");
+  el.dataset.id = m.id;
   const face = avatarEl(m.avatarUrl, m.username);
   face.title = "See " + m.username + "'s profile";
   face.addEventListener("click", () => openProfile(m.username));
   el.append(face);
   const body = document.createElement("div");
   body.className = "body";
+  if (m.reply) body.append(chatReplyQuote(m.reply)); // (2.32.0) what it answers
   if (!follow) {
     const line = document.createElement("div");
     line.className = "who-line";
@@ -724,44 +782,21 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
     when.className = "when";
     when.textContent = chatTime(m.created_at);
     line.append(name, when);
+    if (m.pinned) {
+      const pin = document.createElement("span");
+      pin.className = "pinned-tag";
+      pin.innerHTML = CP_ICONS.pin;
+      pin.append("Pinned");
+      line.append(pin);
+    }
     body.append(line);
   }
-  if (m.message) {
-    const text = chatText(m.message);
-    text.title = chatTime(m.created_at);
-    body.append(text);
-  }
-  if (m.call_seconds != null) body.append(chatCallLine(m));
-  if (m.sound || m.file || m.shared_gone) body.append(chatAttachment(m));
-  if ((m.reactions || []).length) body.append(reactionRow(m));
+  chatMessageParts(m, body, "main"); // (2.32.0) text, voice, GIFs, stickers, polls, link cards, reactions, thread
   el.append(body);
 
-  // On hover: react, and delete (yours, or anyone's for the owner and admins).
-  const tools = document.createElement("div");
-  tools.className = "msg-tools";
-  const pick = document.createElement("div");
-  pick.className = "react-pick";
-  for (const emoji of REACTIONS) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = emoji;
-    b.title = "React with " + emoji;
-    const mine = (m.reactions || []).some((r) => r.emoji === emoji && r.mine);
-    b.addEventListener("click", () => react(m, emoji, !mine));
-    pick.append(b);
-  }
-  tools.append(pick);
-  if (m.mine || canDeleteAll) {
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "icon-button del" + (chatSure.has(m.id) ? " sure" : "");
-    del.title = chatSure.has(m.id) ? "Click again to delete" : "Delete";
-    del.innerHTML = ICONS.remove;
-    del.addEventListener("click", () => deleteChat(m.id));
-    tools.append(del);
-    if (chatSure.has(m.id)) el.classList.add("sure");
-  }
-  el.append(tools);
+  // On hover: react, reply, thread, pin, edit and delete (yours, or anyone's for the owner and admins).
+  el.append(chatToolsEl(m, "main", m.mine || canDeleteAll));
+  if (chatSure.has(m.id)) el.classList.add("sure");
   return el;
 }
 
@@ -774,10 +809,12 @@ async function react(m, emoji, on) {
   else if (!on && found && found.mine) Object.assign(found, { count: found.count - 1, mine: false });
   m.reactions = list.filter((r) => r.count > 0);
   drawChat();
+  if (chatPane) drawPane(true);
   const res = await api("/api/sfx-chat-react", { id: m.id, emoji, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
   if (sfxLoggedOut(res)) return drawChatUser();
   if (!res.ok) $("chatNote").textContent = res.error;
   pollChat(200);
+  if (chatPane && chatPane.kind === "thread") setTimeout(loadThread, 250);
 }
 
 async function deleteChat(id) {
@@ -836,7 +873,7 @@ $("chatForm").addEventListener("submit", async (e) => {
   if (attached && attached.clip) $("chatNote").textContent = "Sending the clip...";
   const asked = chatWith;
   const res = await api("/api/sfx-chat-send", {
-    message, after: chatLastId, with: chatWith || null,
+    message, after: chatLastId, with: chatWith || null, reply: chatReplyTo ? chatReplyTo.id : null,
     sound: attached && attached.sound ? attached.sound.id : null, clip: attached && attached.clip ? attached.clip : null,
   }).catch(() => ({ ok: false, error: "That didn't send. Check your internet connection." }));
   $("chatSend").disabled = false;
@@ -849,6 +886,7 @@ $("chatForm").addEventListener("submit", async (e) => {
   sendTyping(true);
   $("chatNote").textContent = "";
   if (chatAttached === attached) { chatAttached = null; drawAttach(); }
+  if (asked === chatWith) { chatReplyTo = null; drawReplyBar(); }
   if (asked === chatWith) addChat(res);
   drawChat("bottom");
   $("chatInput").focus();
@@ -937,7 +975,8 @@ $("chatButton").addEventListener("click", (e) => { e.stopPropagation(); chatIsOp
 $("chatClose").addEventListener("click", closeChat);
 $("chatLogin").addEventListener("click", (e) => { e.stopPropagation(); closeChat(); openLogin("login"); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && chatIsOpen() && $("profileModal").hidden && $("groupModal").hidden) closeChat();
+  if (e.key === "Escape" && chatIsOpen() && $("profileModal").hidden && $("groupModal").hidden && $("pollModal").hidden
+      && $("watchModal").hidden) closeChat();
 });
 // Back to the window: check right away.
 document.addEventListener("visibilitychange", () => {

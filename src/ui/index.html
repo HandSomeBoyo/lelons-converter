@@ -1677,6 +1677,7 @@
     <div class="chat-side-head"><h3 id="chatHeading">Chat</h3></div>
     <div class="chat-convos" id="chatConvos"></div>
     <div class="chat-side-online"><small>Online now</small><div class="chat-online" id="chatOnline"></div></div>
+    <button type="button" class="chat-me" id="chatMe" title="Set your status"></button>
   </nav>
   <section class="chat-main">
     <div class="chat-head">
@@ -1696,13 +1697,24 @@
     <p class="chat-note" id="chatNote"></p>
     <div class="chat-attach" id="chatAttach" hidden></div>
     <div class="chat-suggest" id="chatSuggest" hidden></div>
+    <div class="chat-replying" id="chatReplying" hidden></div>
     <form class="chat-form" id="chatForm" autocomplete="off">
-      <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
+      <div class="chat-box">
+        <button type="button" class="chat-tool" id="chatPlus" title="Make a poll or send a GIF from your PC"></button>
+        <input id="chatInput" maxlength="500" placeholder="Say something..." spellcheck="true">
+        <button type="button" class="chat-tool" id="chatGifBtn" title="GIFs and stickers"></button>
+        <button type="button" class="chat-tool" id="chatEmojiBtn" title="Emoji"></button>
+        <button type="button" class="chat-tool" id="chatMic" title="Record a voice message"></button>
+        <div class="chat-rec" id="chatRec" hidden></div>
+      </div>
       <button type="submit" class="small-button" id="chatSend" title="Send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
+      <input type="file" id="chatGifFile" accept="image/gif" hidden>
     </form>
   </section>
+  <aside class="chat-pane" id="chatPane" hidden></aside>
+  <div class="chat-pop" id="chatPop" hidden></div>
 </aside>
 
 <!-- A call (private and group chats): ringing, talking, shared screens and cameras -->
@@ -1735,6 +1747,23 @@
 <audio id="callAudio" autoplay></audio>
 
 <!-- A group chat: make one, or change its name, picture and people. Also "pick a person" for a new private chat. -->
+<div class="modal" id="pollModal" hidden>
+  <div class="dialog poll-dialog" role="dialog" aria-labelledby="pollTitle">
+    <h2 id="pollTitle">Make a poll</h2>
+    <label class="input"><input id="pollQuestion" maxlength="200" placeholder="Ask something, like: What do we record next?" autocomplete="off"></label>
+    <h4 class="group-label">Answers</h4>
+    <div class="poll-options" id="pollOptions"></div>
+    <button type="button" class="link" id="pollAdd">+ Add an answer</button>
+    <label class="poll-multi"><input type="checkbox" id="pollMulti"> People can pick more than one</label>
+    <p class="group-note" id="pollNote"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="pollCancel">Cancel</button>
+      <button type="button" class="small-button" id="pollSend">Send poll</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="groupModal" hidden>
   <div class="dialog group-dialog" role="dialog" aria-labelledby="groupTitle">
     <h2 id="groupTitle">New group</h2>
@@ -2213,6 +2242,8 @@
 <script src="whatsnew.js"></script>
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
+<script src="emojidata.js"></script>
+<script src="chatplus.js"></script>
 <script src="call.js"></script>
 <script src="callplus.js"></script>
 <script src="profile.js"></script>
