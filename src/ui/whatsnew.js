@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.28.0", items: [
+    "Notifications: a new bell at the top shows everything new in one place: messages and @mentions, invites to docs and boards, games on sale, new POVs from friends, finished downloads and app updates. Click one to go straight there.",
+    "New things also pop up as a little card in the bottom corner, and as a Windows notification when VaultHub is behind other windows or minimized. Click it to jump right in.",
+    "Need quiet? The moon button under the bell turns on do not disturb for an hour. Pick what can notify you in Settings > Notifications.",
+    "Side bar: click a group's name (Convert, Create, Tools) to fold its pages away, and click again to bring them back. VaultHub remembers it. The page you're on always stays visible, and a folded group shows a dot when something inside is new.",
+  ] },
   { version: "2.27.0", items: [
     "New Channel stats tab (under Tools): paste your channel link to see your subscribers, views, newest uploads with likes and comments, how each one does next to your usual, and your top videos. A graph fills in day by day.",
     "Want more? Sign in with Google on the Channel stats tab to see watch time and where your viewers come from (search, Shorts feed, suggested videos). The tab walks you through the one-time setup.",

@@ -5520,3 +5520,96 @@ html.side-small .side-search kbd { opacity: 0; }
 .sc-keys { display: inline-flex; align-items: center; gap: 3px; flex: none; }
 .sc-or { margin: 0 4px; color: var(--muted); font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .quick-box, .quick-modal.leaving .quick-box { animation: none; } }
+
+/* ---------------------------------------------------------------- 2.28.0: the notification bell */
+.note-menu { position: relative; }
+.note-bell { position: relative; }
+.note-bell.has-new svg { animation: note-ring 1.2s var(--ease) 1; transform-origin: 50% 15%; }
+@keyframes note-ring { 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-12deg); } 50% { transform: rotate(0); } }
+.note-bell.open { background: var(--panel2); color: var(--text); }
+.note-badge { top: -2px; right: -2px; }
+.note-panel { position: absolute; right: -6px; top: calc(100% + 8px); z-index: 30; width: 370px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; max-height: min(560px, calc(100vh - 90px));
+  border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg);
+  transform-origin: top right; animation: pop-in .32s var(--ease) both; overflow: hidden; }
+.note-panel.leaving { animation: pop-out .16s ease-in both; pointer-events: none; }
+.note-head { display: flex; align-items: center; gap: 4px; padding: 14px 12px 6px 16px; }
+.note-head h3 { margin: 0 auto 0 0; font: 700 16px var(--head); }
+.note-tool { all: unset; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+.note-tool:hover { background: var(--panel2); color: var(--text); }
+.note-tool svg { width: 17px; height: 17px; }
+.note-tool.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.note-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 16px 10px; border-bottom: 1px solid var(--line); }
+.note-bar .link { font-size: 13px; }
+.note-bar .link:disabled { color: var(--muted); cursor: default; text-decoration: none; opacity: .6; }
+.note-tabs { display: flex; gap: 4px; }
+.note-tabs button { all: unset; padding: 4px 11px; border-radius: 99px; font: 600 12.5px var(--head); color: var(--muted); cursor: pointer; }
+.note-tabs button:hover { color: var(--text); }
+.note-tabs button.active { background: var(--panel2); color: var(--text); }
+.note-list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
+.note-row { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: flex-start; gap: 11px; padding: 10px 30px 10px 10px;
+  border-radius: var(--r-xs); cursor: pointer; position: relative; transition: background .15s; }
+.note-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.note-row.unread::after { content: ""; position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--accent); }
+.note-row:hover.unread::after { opacity: 0; }
+.note-face { flex: none; position: relative; width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel2) center / cover no-repeat; color: var(--text); }
+.note-face > svg { width: 18px; height: 18px; }
+.note-face.k-games, .note-face.k-downloads, .note-face.k-povs { border-radius: 9px; }
+.note-face.k-chat > svg { color: #5aa9ff; } .note-face.k-invite > svg { color: #b48cff; } .note-face.k-games > svg { color: var(--green, #4caf50); }
+.note-face.k-povs > svg { color: #ff8a5c; } .note-face.k-downloads > svg { color: var(--accent); } .note-face.k-updates > svg { color: var(--accent); }
+.note-face i { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--panel2); box-shadow: 0 0 0 2px var(--panel); color: var(--text); }
+.note-face i svg { width: 11px; height: 11px; }
+.note-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.note-body b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-row:not(.unread) .note-body b { font-weight: 500; color: color-mix(in srgb, var(--text) 80%, var(--muted)); }
+.note-text { font-size: 13px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.note-body small { font-size: 11.5px; color: var(--muted); opacity: .8; }
+.note-row.unread .note-body small { color: var(--accent); opacity: 1; }
+.note-x { position: absolute; right: 6px; top: 8px; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); }
+.note-x:hover { background: var(--panel2); color: var(--text); }
+.note-x svg { width: 13px; height: 13px; }
+.note-row:hover .note-x { display: inline-flex; }
+.note-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 38px 30px 42px; color: var(--muted); font-size: 13px; }
+.note-empty svg { width: 34px; height: 34px; opacity: .5; margin-bottom: 4px; }
+.note-empty b { color: var(--text); font-size: 14.5px; }
+.note-foot { display: flex; justify-content: center; padding: 9px 0 10px; border-top: 1px solid var(--line); }
+.note-foot .link { font-size: 12.5px; color: var(--muted); }
+.note-foot:has(.link[hidden]) { display: none; }
+
+/* the little cards in the corner */
+.note-pop { position: fixed; right: 18px; bottom: 18px; z-index: 900; display: flex; flex-direction: column; gap: 8px; width: 340px; max-width: calc(100vw - 36px); pointer-events: none; }
+body.has-player .note-pop { bottom: 96px; }
+.note-pop-card { pointer-events: auto; position: relative; display: flex; align-items: flex-start; gap: 11px; padding: 12px 34px 12px 12px; cursor: pointer;
+  border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg);
+  animation: note-in .42s var(--spring) both; }
+.note-pop-card.unread::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.note-pop-card.leaving { animation: note-out .28s ease-in both; }
+.note-pop-x { all: unset; position: absolute; right: 8px; top: 8px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: var(--muted); cursor: pointer; }
+.note-pop-x:hover { background: var(--panel2); color: var(--text); }
+.note-pop-x svg { width: 13px; height: 13px; }
+@keyframes note-in { from { opacity: 0; transform: translateX(30px) scale(.96); } }
+@keyframes note-out { to { opacity: 0; transform: translateX(30px); } }
+@media (prefers-reduced-motion: reduce) { .note-bell.has-new svg, .note-pop-card, .note-panel { animation: none; } }
+
+/* ================================================================ 2.27.1: fold a side bar group away (click its name) */
+.sidebar .tabs { interpolate-size: allow-keywords; }
+.tab-group[data-group] { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; border-radius: 8px; outline: none; }
+.tab-group[data-group]:hover, .tab-group[data-group]:focus-visible { color: var(--text); }
+.tab-group[data-group]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.tab-group-arrow { width: 13px; height: 13px; flex: none; margin-left: auto; opacity: 0; transition: transform .22s var(--ease), opacity .15s; }
+.tab-group[data-group]:hover .tab-group-arrow, .tab-group[data-group]:focus-visible .tab-group-arrow, .tab-group.shut .tab-group-arrow { opacity: .8; }
+.tab-group.shut .tab-group-arrow { transform: rotate(-90deg); }
+/* a folded group with news inside (like an unread doc) shows a small dot */
+.tab-group.news > span::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; vertical-align: 1px; border-radius: 50%; background: var(--accent); }
+.sidebar .tabs > button[data-tab] {
+  transition: color .15s ease-out, background-color .15s ease-out, height .26s var(--ease), padding .26s var(--ease), opacity .18s ease-out, visibility 0s; }
+html:not(.side-small) .sidebar .tabs > button.group-shut {
+  height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; visibility: hidden; pointer-events: none; overflow: hidden;
+  transition: color .15s ease-out, background-color .15s ease-out, height .26s var(--ease), padding .26s var(--ease), opacity .12s ease-out, visibility 0s .26s; }
+html.side-small .tab-group-arrow { display: none; }
+html.side-small .tab-group[data-group] { cursor: default; }
+@media (prefers-reduced-motion: reduce) { .sidebar .tabs > button[data-tab], html:not(.side-small) .sidebar .tabs > button.group-shut, .tab-group-arrow { transition: none; } }

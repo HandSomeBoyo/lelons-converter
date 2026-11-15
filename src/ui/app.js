@@ -1014,11 +1014,13 @@ function render(s) {
     $("notice").textContent = "";
   }
   renderQueue(s.jobs);
+  if (typeof notifyJobs === "function") notifyJobs(s.jobs);
   if (typeof renderFiles === "function") renderFiles(s.files);
   if (typeof renderResolve === "function") renderResolve(s.resolveTools, s.project);
   if (typeof renderHistoryVersion === "function") renderHistoryVersion(s.historyVersion);
   if (typeof renderSfxUploads === "function") renderSfxUploads(s.sfxUploads);
   renderUpdatePopup(s);
+  if (typeof notifyUpdate === "function") notifyUpdate(s);
   if (typeof syncSettings === "function") syncSettings(s);
   if (typeof renderOnline === "function") renderOnline(s.online);
 }

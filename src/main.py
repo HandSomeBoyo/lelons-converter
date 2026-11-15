@@ -86,7 +86,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -1625,9 +1625,17 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/check-updates":
             start_background(check_for_updates, True)
             self.send_json({"ok": True})
+        elif self.path == "/api/notify":  # the bell got something new: a Windows notification, if the app isn't in front
+            shown = False
+            if appwindow.active() and not appwindow.in_front():
+                shown = appwindow.toast(data.get("title"), data.get("text"), data.get("quiet"))
+                appwindow.flash()
+            self.send_json({"ok": True, "shown": shown})
+        elif self.path == "/api/notify-clicked":  # did they click one of those? (then the page opens it)
+            self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
             key, value = data.get("key"), data.get("value")
-            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < 4000:
+            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < (40000 if key == "notes" else 4000):
                 with page_pref_lock:
                     saved = settings.load().get("page") or {}
                     settings.save(page={**saved, key: value})

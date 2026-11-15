@@ -28,6 +28,9 @@ WM_SETICON, WM_APP = 0x0080, 0x8000
 WM_SHOW = WM_APP + 1  # "come to the front", from another thread
 WM_DRAG = WM_APP + 2  # "drag this file out of the window", from another thread
 WM_ZOOM = WM_APP + 3  # "show the page at this size", from another thread
+WM_TOAST = WM_APP + 4  # "show a Windows notification", from another thread
+WM_TRAY = WM_APP + 5  # the little icon by the clock (it's there for the notifications) was clicked
+NIN_BALLOONUSERCLICK = 0x0405
 
 _lock = threading.Lock()
 _window = None  # the open Window, if there is one
@@ -110,6 +113,46 @@ def flash():
     if window and window.alive and window.hwnd:
         info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), window.hwnd, 3 | 12, 0, 0)  # FLASHW_ALL | FLASHW_TIMERNOFG
         window.user32.FlashWindowEx(ctypes.byref(info))
+
+
+class NOTIFYICONDATAW(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uID", wintypes.UINT),
+                ("uFlags", wintypes.UINT), ("uCallbackMessage", wintypes.UINT), ("hIcon", wintypes.HICON),
+                ("szTip", wintypes.WCHAR * 128), ("dwState", wintypes.DWORD), ("dwStateMask", wintypes.DWORD),
+                ("szInfo", wintypes.WCHAR * 256), ("uVersion", wintypes.UINT), ("szInfoTitle", wintypes.WCHAR * 64),
+                ("dwInfoFlags", wintypes.DWORD), ("guidItem", ctypes.c_byte * 16), ("hBalloonIcon", wintypes.HICON)]
+
+
+def in_front():
+    """True when the app's window is the one being used right now (not behind others or minimized)."""
+    window = _window
+    if not (window and window.alive and window.hwnd):
+        return False
+    try:
+        window.user32.GetForegroundWindow.restype = wintypes.HWND
+        return window.user32.GetForegroundWindow() == window.hwnd and not window.user32.IsIconic(window.hwnd)
+    except Exception:
+        return False
+
+
+def toast(title, text, quiet=False):
+    """A Windows notification in the corner of the screen (the kind other apps show).
+    Clicking it brings the app to the front. Returns False when there's no window to show it from."""
+    window = _window
+    if not (window and window.alive and window.hwnd):
+        return False
+    window.toast_next = (str(title or "VaultHub")[:63], str(text or "")[:255], bool(quiet))
+    window.user32.PostMessageW(window.hwnd, WM_TOAST, 0, 0)
+    return True
+
+
+def take_clicked():
+    """True once after the person clicked one of the app's Windows notifications."""
+    window = _window
+    if window and window.toast_clicked:
+        window.toast_clicked = False
+        return True
+    return False
 
 
 def active():
@@ -235,6 +278,10 @@ class Window:
         self.webview = None
         self.hwnd = None
         self.drag_path = None
+        self.toast_next = None
+        self.toast_clicked = False
+        self.tray = False  # the icon by the clock is there
+        self.small_icon = None
         self.controller = None
         self.environment = None
         self.ok = False
@@ -333,6 +380,7 @@ class Window:
         cls = WNDCLASSEXW(cbSize=ctypes.sizeof(WNDCLASSEXW), lpfnWndProc=_window_procedure, hInstance=instance,
                           hIcon=big, hIconSm=small, hCursor=user32.LoadCursorW(None, ctypes.c_void_p(32512)),
                           hbrBackground=gdi32.CreateSolidBrush(r | g << 8 | b << 16), lpszClassName="LelonsConverterWindow")
+        self.small_icon = small
         user32.RegisterClassExW(ctypes.byref(cls))  # fails harmlessly when already registered
 
         width, height = (int(n * scale) for n in SIZE)
@@ -488,6 +536,31 @@ class Window:
             os.startfile(link)
         return S_OK
 
+    def _tray_data(self, hwnd, flags):
+        data = NOTIFYICONDATAW()
+        data.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+        data.hWnd = hwnd
+        data.uID = 1
+        data.uFlags = flags
+        data.uCallbackMessage = WM_TRAY
+        data.hIcon = self.small_icon
+        data.szTip = TITLE
+        return data
+
+    def _toast(self, hwnd, title, text, quiet):
+        shell = ctypes.windll.shell32
+        shell.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
+        if not self.tray:
+            # Windows shows notifications for an icon by the clock, so the app puts one there the first time.
+            self.tray = bool(shell.Shell_NotifyIconW(0, ctypes.byref(self._tray_data(hwnd, 0x1 | 0x2 | 0x4))))  # NIM_ADD: MESSAGE, ICON, TIP
+            if not self.tray:
+                return
+        data = self._tray_data(hwnd, 0x10)  # NIF_INFO
+        data.szInfoTitle = title
+        data.szInfo = text or " "
+        data.dwInfoFlags = 0x10 if quiet else 0  # NIIF_NOSOUND (the app plays its own ding)
+        shell.Shell_NotifyIconW(1, ctypes.byref(data))  # NIM_MODIFY
+
     def _fit(self):
         if self.controller:
             rect = wintypes.RECT()
@@ -520,12 +593,35 @@ class Window:
         elif message == WM_ZOOM:
             self._zoom()
             return 0
+        elif message == WM_TOAST:
+            wanted, self.toast_next = self.toast_next, None
+            if wanted:
+                try:
+                    self._toast(hwnd, *wanted)
+                except Exception:
+                    pass
+            return 0
+        elif message == WM_TRAY:
+            event = lparam & 0xFFFF
+            if event in (NIN_BALLOONUSERCLICK, 0x0202, 0x0203):  # the notification, or the icon (WM_LBUTTONUP/DBLCLK)
+                if event == NIN_BALLOONUSERCLICK:
+                    self.toast_clicked = True
+                if self.user32.IsIconic(hwnd):
+                    self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                self.user32.SetForegroundWindow(hwnd)
+            return 0
         elif message == WM_SHOW:
             if self.user32.IsIconic(hwnd):
                 self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             self.user32.SetForegroundWindow(hwnd)
             return 0
         elif message == WM_DESTROY:
+            if self.tray:
+                self.tray = False
+                try:
+                    ctypes.windll.shell32.Shell_NotifyIconW(2, ctypes.byref(self._tray_data(hwnd, 0)))  # NIM_DELETE
+                except Exception:
+                    pass
             if self.ok:
                 self._remember_placement(hwnd)
             if self.controller:

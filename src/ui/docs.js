@@ -440,6 +440,12 @@ function drawInvitesBadge() {
     };
     $("docToast").append(" ", look);
   }
+  if (typeof notifyAdd === "function") {
+    for (const i of invites) notifyAdd({ key: "doc-invite:" + i.id, stamp: 1, kind: "invite", title: `${i.from} invited you`,
+      text: `Write "${i.title}" together in Docs.`, open: { tab: "docs" } });
+    const ids = new Set(invites.map((i) => "doc-invite:" + i.id));
+    if (docsCollab) notifyDrop((n) => n.key.startsWith("doc-invite:") && !ids.has(n.key));
+  }
   for (const badge of [$("docsTabBadge"), $("docsCollabBadge")]) {
     badge.hidden = !invites.length;
     badge.textContent = invites.length > 9 ? "9+" : invites.length;

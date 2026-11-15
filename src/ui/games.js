@@ -470,6 +470,13 @@ let gmShownSales = new Set(); // sales that were new when you opened the tab (th
 const gmNewSale = (g) => gmShownSales.has(g.id) || (!!g.sale_at && g.sale_at > gmSaleSeen() && gmOnSale(g));
 
 function gmDrawBadge() {
+  if (typeof notifyAdd === "function" && gmLoggedIn() && $("gamesTab").hidden) {
+    for (const g of gmGames.filter((x) => x.sale_at && x.sale_at > gmSaleSeen() && gmOnSale(x))) {
+      notifyAdd({ key: "sale:" + g.id, stamp: g.sale_at, kind: "games", title: g.info.free ? `${g.info.name} is free!` : `${g.info.name} is on sale`,
+        text: g.info.free ? "Grab it while it lasts." : `${g.info.price.discount}% off` + (g.info.price.text ? `, now ${g.info.price.text}` : "") + ".",
+        pic: g.info.header || "", open: { tab: "games" } });
+    }
+  }
   const n = gmLoggedIn() && $("gamesTab").hidden ? gmGames.filter((g) => g.sale_at && g.sale_at > gmSaleSeen() && gmOnSale(g)).length : 0;
   $("gamesTabBadge").hidden = !n;
   $("gamesTabBadge").textContent = n;
@@ -487,6 +494,7 @@ function gmSeeSales() {
     const names = all.slice(0, 3).map((g) => g.info.name + (g.info.free ? " (free!)" : ` (-${g.info.price.discount}%)`)).join(", ");
     $("gmSalesText").textContent = (all.length === 1 ? "A game on your list went on sale: " : `${all.length} games on your list went on sale: `) + names + (all.length > 3 ? " and more" : "");
   }
+  if (typeof notifyRead === "function") notifyRead((n) => n.kind === "games");
   const newest = Math.max(gmSaleSeen(), ...gmGames.map((g) => g.sale_at || 0));
   if (newest > gmSaleSeen()) savePref("gamesSaleSeen", newest);
   gmDrawBadge();

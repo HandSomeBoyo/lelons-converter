@@ -375,6 +375,7 @@ async function bdLoadHome() {
   bdInvites = team && team.ok ? team.invites : [];
   bdTeamError = team && !team.ok && !team.loggedOut ? team.error || "" : "";
   bdDrawHome();
+  if (team && team.ok) bdNotifyInvites(bdInvites);
   const n = bdInvites.length;
   const badge = $("boardsTabBadge");
   if (badge) { badge.hidden = !n; badge.textContent = n; }
@@ -1915,6 +1916,16 @@ async function bdCheckInvites() {
   const res = await api("/api/boards-team-list", {}).catch(() => null);
   const badge = $("boardsTabBadge");
   if (res && res.ok && badge) { badge.hidden = !res.invites.length; badge.textContent = res.invites.length; }
+  if (res && res.ok) bdNotifyInvites(res.invites);
+}
+
+// Invitations go under the bell too (and leave it once they're answered).
+function bdNotifyInvites(invites) {
+  if (typeof notifyAdd !== "function") return;
+  for (const i of invites) notifyAdd({ key: "board-invite:" + i.id, stamp: 1, kind: "invite", title: `${i.from} invited you`,
+    text: `Join the board "${i.title}".`, pic: i.avatarUrl, open: { tab: "boards" } });
+  const ids = new Set(invites.map((i) => "board-invite:" + i.id));
+  notifyDrop((n) => n.key.startsWith("board-invite:") && !ids.has(n.key));
 }
 setTimeout(bdCheckInvites, 5000);
 setInterval(bdCheckInvites, 120000);
