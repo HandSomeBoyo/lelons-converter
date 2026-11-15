@@ -86,7 +86,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "sideGroupsShut")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
