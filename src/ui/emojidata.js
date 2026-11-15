@@ -1,4 +1,4 @@
-// (2.32.0) The emoji for reactions and messages, by group, with their names (for the search).
+// (2.31.0) The emoji for reactions and messages, by group, with their names (for the search).
 // From unicode-emoji-json 0.6.0 (MIT, Mu-An Chiou), Emoji 13.0 and older so Windows 10 shows them all.
 // Each list is "emoji name|emoji name|...".
 const EMOJI_GROUPS = [

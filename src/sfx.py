@@ -430,7 +430,7 @@ class Library:
     def chat_send(self, message, to_user=None, sound_id=None, clip=None, reply_to=None, thread_of=None,
                   gif=None, sticker=None, poll=None, upload=None):
         """clip: (path, name, seconds) of a trim editor clip to send along (its sound, as an MP3).
-        (2.32.0) reply_to / thread_of: message ids; gif: a GIF link; sticker: a sticker's name; poll:
+        (2.31.0) reply_to / thread_of: message ids; gif: a GIF link; sticker: a sticker's name; poll:
         {q, options, multi}; upload: what _chat_voice or _chat_gif uploaded (sent as it is)."""
         extra = dict(upload or {})
         if clip:
@@ -499,7 +499,7 @@ class Library:
         return {"file": file, "file_name": _clean_name(name, 120), "file_seconds": round(seconds, 2)}
 
     def chat_voice(self, data, seconds=0, peaks=None):
-        """(2.32.0) A voice message recorded in the page (WebM/Opus bytes): made an MP3 and uploaded.
+        """(2.31.0) A voice message recorded in the page (WebM/Opus bytes): made an MP3 and uploaded.
         Returns the upload for chat_send."""
         if not data or len(data) < 200:
             raise Error("That voice message was empty. Check your microphone in Settings > Sound devices.")
@@ -541,7 +541,7 @@ class Library:
                 "voice": True, "peaks": clean or None}
 
     def chat_gif(self, data, name="GIF"):
-        """(2.32.0) A GIF from your PC, uploaded for the chat. Returns the upload for chat_send."""
+        """(2.31.0) A GIF from your PC, uploaded for the chat. Returns the upload for chat_send."""
         if not data or data[:4] != b"GIF8":
             raise Error("That isn't a GIF.")
         if len(data) > MAX_BYTES:

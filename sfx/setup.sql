@@ -168,12 +168,12 @@ create table if not exists lelons.chat_reactions (
   emoji text not null check (emoji in ('👍', '😂', '🔥', '❤️', '😮', '😢')),
   primary key (message_id, account_id, emoji)
 );
--- (2.32.0) React with any emoji, not just the 6.
+-- (2.31.0) React with any emoji, not just the 6.
 alter table lelons.chat_reactions drop constraint if exists chat_reactions_emoji_check;
 alter table lelons.chat_reactions drop constraint if exists chat_reactions_emoji_any;
 alter table lelons.chat_reactions add constraint chat_reactions_emoji_any check (length(emoji) between 1 and 16 and emoji !~ '[A-Za-z0-9<>&"'']');
 
--- (2.32.0) Replies, threads, pins, edits, voice messages, GIFs and stickers, and polls.
+-- (2.31.0) Replies, threads, pins, edits, voice messages, GIFs and stickers, and polls.
 alter table lelons.chat add column if not exists call_seconds int;  -- (from 2.11.0, below; needed this early on a new setup)
 alter table lelons.chat add column if not exists reply_to bigint;  -- the message this one answers (it may be deleted since)
 alter table lelons.chat add column if not exists thread_of bigint; -- a reply in the thread under that message
@@ -194,7 +194,7 @@ create table if not exists lelons.chat_poll_votes (
   primary key (message_id, account_id, choice)
 );
 alter table lelons.chat_poll_votes enable row level security;
--- (2.32.0) What you're up to, next to your name: Away, Busy, Recording...
+-- (2.31.0) What you're up to, next to your name: Away, Busy, Recording...
 alter table lelons.accounts add column if not exists mode text not null default ''
   check (mode in ('', 'away', 'busy', 'recording', 'editing', 'gaming', 'streaming'));
 
@@ -509,7 +509,7 @@ end $$;
 
 -- Send a chat message (everyone with an account can chat). to_user: a private message to them.
 -- sound: a Library sound to share; file: a clip uploaded with a 'chat' ticket.
--- (2.32.0) reply_to: the message it answers; thread_of: a reply in that message's thread; voice: file is a
+-- (2.31.0) reply_to: the message it answers; thread_of: a reply in that message's thread; voice: file is a
 -- voice message (peaks: its waveform); gif: a GIF link (or '@file': the GIF is file); sticker; poll.
 drop function if exists public.lelons_chat_send(text, text, text, uuid, text, text, real);
 create or replace function public.lelons_chat_send(token text, message text, to_user text default null,
@@ -613,14 +613,14 @@ begin
   return json_build_object('ok', true, 'files', old_files);
 end $$;
 
--- (2.32.0) Is this message in this chat: the group gid, the private chat with peer, or (both null) everyone.
+-- (2.31.0) Is this message in this chat: the group gid, the private chat with peer, or (both null) everyone.
 create or replace function lelons.in_chat(c lelons.chat, gid uuid, peer uuid, me uuid) returns boolean
   language sql immutable as
   $$ select case when gid is not null then c.group_id is not distinct from gid
                  when peer is null then c.to_id is null and c.group_id is null
                  else (c.account_id = me and c.to_id = peer) or (c.account_id = peer and c.to_id = me) end $$;
 
--- (2.32.0) The parts of a message that can change: the text (edits), reactions, pinned, its thread, poll votes.
+-- (2.31.0) The parts of a message that can change: the text (edits), reactions, pinned, its thread, poll votes.
 create or replace function lelons.chat_bits(c lelons.chat, me uuid) returns jsonb
 language sql stable security definer set search_path = '' as $$
   select jsonb_build_object('id', c.id, 'message', c.message, 'edited', c.edited_at is not null,
@@ -648,7 +648,7 @@ language sql stable security definer set search_path = '' as $$
       (select count(distinct pv.account_id) from lelons.chat_poll_votes pv where pv.message_id = c.id) end)
 $$;
 
--- (2.32.0) A whole message, as the app shows it.
+-- (2.31.0) A whole message, as the app shows it.
 create or replace function lelons.chat_json(c lelons.chat, me uuid) returns jsonb
 language sql stable security definer set search_path = '' as $$
   select lelons.chat_bits(c, me) || jsonb_build_object(
@@ -671,7 +671,7 @@ language sql stable security definer set search_path = '' as $$
   where a.id = c.account_id
 $$;
 
--- (2.32.0) A message in a few words, for the list of chats and the bell: its text, or what it is.
+-- (2.31.0) A message in a few words, for the list of chats and the bell: its text, or what it is.
 create or replace function lelons.chat_preview(c lelons.chat) returns text
   language sql immutable as
   $$ select case when coalesce(c.message, '') <> '' then c.message
@@ -722,7 +722,7 @@ end $$;
 -- One conversation (the chat with everyone, or the private chat with with_user): messages newer than
 -- "after" (0: the newest 100) oldest first, the reactions and ids of the newest 150 (so changes and
 -- deletes show up), your private chats, and who's online.
--- (2.32.0) before: the 100 messages older than that one instead (scrolling up). Thread replies aren't in it.
+-- (2.31.0) before: the 100 messages older than that one instead (scrolling up). Thread replies aren't in it.
 drop function if exists public.lelons_chat_list(text, bigint, text);
 create or replace function public.lelons_chat_list(token text, after bigint, with_user text default null,
                                                    before bigint default null)
@@ -764,7 +764,7 @@ begin
                coalesce((select json_agg(a.username order by lower(a.username)) from lelons.accounts a), '[]'::json) end);
 end $$;
 
--- (2.32.0) A message's thread: the message itself and the replies under it (the newest 300).
+-- (2.31.0) A message's thread: the message itself and the replies under it (the newest 300).
 create or replace function public.lelons_chat_thread(token text, message_id bigint)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -780,7 +780,7 @@ begin
                           where c.id in (select x.id from lelons.chat x where x.thread_of = p.id order by x.id desc limit 300)), '[]'::jsonb));
 end $$;
 
--- (2.32.0) Look for old messages in a chat (and in its threads): the newest 50 that have the words.
+-- (2.31.0) Look for old messages in a chat (and in its threads): the newest 50 that have the words.
 create or replace function public.lelons_chat_search(token text, with_user text, q text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -802,7 +802,7 @@ begin
                    order by x.id desc limit 50)), '[]'::jsonb));
 end $$;
 
--- (2.32.0) The pinned messages in a chat, newest pin first.
+-- (2.31.0) The pinned messages in a chat, newest pin first.
 create or replace function public.lelons_chat_pins(token text, with_user text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -817,7 +817,7 @@ begin
     from lelons.chat c where c.pinned_at is not null and lelons.in_chat(c, gid, peer, me.id)), '[]'::jsonb));
 end $$;
 
--- (2.32.0) Pin a message (on_off = false takes it off). In the chat with everyone only the owner and
+-- (2.31.0) Pin a message (on_off = false takes it off). In the chat with everyone only the owner and
 -- admins can; in a group or a private chat everyone in it can. Up to 50 pins in a chat.
 create or replace function public.lelons_chat_pin(token text, message_id bigint, on_off boolean)
 returns json language plpgsql security definer set search_path = '' as $$
@@ -844,7 +844,7 @@ begin
   return json_build_object('ok', true);
 end $$;
 
--- (2.32.0) Change the words of your own message.
+-- (2.31.0) Change the words of your own message.
 create or replace function public.lelons_chat_edit(token text, message_id bigint, message text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -868,7 +868,7 @@ begin
   return json_build_object('ok', true);
 end $$;
 
--- (2.32.0) Vote in a poll (choices: the options you pick, [] takes your vote back), or end it
+-- (2.31.0) Vote in a poll (choices: the options you pick, [] takes your vote back), or end it
 -- (what = 'end', only the person who made it).
 create or replace function public.lelons_chat_poll(token text, message_id bigint, what text, choices int[] default null)
 returns json language plpgsql security definer set search_path = '' as $$
@@ -901,7 +901,7 @@ begin
   return json_build_object('ok', true);
 end $$;
 
--- (2.32.0) What you're up to: '' (just online), away, busy, recording, editing, gaming or streaming,
+-- (2.31.0) What you're up to: '' (just online), away, busy, recording, editing, gaming or streaming,
 -- and (when given) the short line under your name.
 create or replace function public.lelons_set_mode(token text, mode text, status text default null)
 returns json language plpgsql security definer set search_path = '' as $$
@@ -918,7 +918,7 @@ begin
   return json_build_object('ok', true);
 end $$;
 
--- React to a message (on = false takes it back). (2.32.0: any emoji, up to 20 different ones on a message.)
+-- React to a message (on = false takes it back). (2.31.0: any emoji, up to 20 different ones on a message.)
 create or replace function public.lelons_chat_react(token text, message_id bigint, emoji text, on_off boolean)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
@@ -950,7 +950,7 @@ begin
   return gone[1];
 end $$;
 
--- (2.32.0) The same, and the replies in its thread go too. Returns all the files to delete.
+-- (2.31.0) The same, and the replies in its thread go too. Returns all the files to delete.
 create or replace function public.lelons_chat_remove(token text, message_id bigint)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -1157,7 +1157,7 @@ begin
   end if;
   file := case when kind = 'sound' then 'sounds/' || gen_random_uuid() || '.mp3'
                when kind = 'chat' then 'chat/' || gen_random_uuid() || '.mp3'
-               when kind = 'gif' then 'chat/' || gen_random_uuid() || '.gif'  -- (2.32.0) a GIF in the chat
+               when kind = 'gif' then 'chat/' || gen_random_uuid() || '.gif'  -- (2.31.0) a GIF in the chat
                when kind = 'banner' then 'banners/' || gen_random_uuid() || '.jpg'
                else 'avatars/' || gen_random_uuid() || '.jpg' end;
   insert into lelons.tickets (path, kind, account_id) values (file, 'upload', me.id);

@@ -2,7 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.32.0", items: [
+  { version: "2.31.0", items: [
+    "New themes in Settings: Dim (a softer dark gray) and Warm (cozy brown tones), next to Dark, Black and Light.",
+    "Pick any color you like for the buttons and highlights, not just the ready-made ones.",
+    "Put your own picture behind every page in Settings > Background. It sits under a soft shade so text stays easy to read.",
     "Chat: answer a message with Reply (it shows what you answer, and a click on it jumps there), or start a thread under a message for a side talk that doesn't fill up the chat.",
     "Pin important messages with the pin button. The pin at the top of a chat shows them all. In the chat with everyone the owner and admins can pin; in groups and private chats everyone can.",
     "Voice messages: click the microphone, talk, and send. Play them at 1x, 1.5x or 2x, and click the waveform to skip ahead.",

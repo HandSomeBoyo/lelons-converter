@@ -24,8 +24,56 @@ function drawSettings() {
     b.classList.toggle("active", name === appSettings.accent);
     b.addEventListener("click", () => changeSettings({ accent: name }));
     return b;
-  }));
+  }).concat(customAccentPick(light)));
+  drawPageBg();
 }
+
+// The last round pick: your own color. Shows a rainbow until you pick one, then your color.
+function customAccentPick(light) {
+  const custom = isCustomAccent(appSettings.accent);
+  const b = document.createElement("label");
+  b.className = "accent-custom" + (custom ? " active picked" : "");
+  b.title = "Your own color";
+  if (custom) b.style.setProperty("--swatch", customAccent(appSettings.accent)[light ? 1 : 0]);
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = custom ? appSettings.accent : "#ffcf3f";
+  // While the color window is open: show it straight away. When it's picked: save it.
+  input.addEventListener("input", () => applyTheme(appSettings.theme, input.value));
+  input.addEventListener("change", () => changeSettings({ accent: input.value.toLowerCase() }));
+  b.append(input);
+  return b;
+}
+
+// ---- your own background picture
+function drawPageBg() {
+  const url = loadPref("pageBg");
+  const on = typeof url === "string" && url !== "";
+  $("pageBgTitle").textContent = on ? "Your picture" : "The normal background";
+  $("pageBgPick").textContent = on ? "Change" : "Choose picture";
+  $("pageBgClear").hidden = !on;
+  $("pageBgSample").style.backgroundImage = on ? `url("${url}")` : "";
+  $("pageBgSample").classList.toggle("empty", !on);
+}
+function setPageBg(url) {
+  savePref("pageBg", url);
+  applyPageBg(url);
+  drawPageBg();
+}
+$("pageBgPick").addEventListener("click", () => $("pageBgFile").click());
+$("pageBgClear").addEventListener("click", () => setPageBg(""));
+$("pageBgFile").addEventListener("change", async () => {
+  const file = $("pageBgFile").files[0];
+  $("pageBgFile").value = "";
+  if (!file) return;
+  $("pageBgError").hidden = true;
+  $("pageBgPick").disabled = true;
+  const res = await fetch("/api/boards-background", { method: "POST", body: file, headers: { "X-Team": "0" } })
+    .then((r) => r.json()).catch(() => ({ ok: false, error: "That didn't work. Try again." }));
+  $("pageBgPick").disabled = false;
+  if (res.ok && res.bg && res.bg.startsWith("pic:/board-bg/")) setPageBg(res.bg.slice(4));
+  else { $("pageBgError").textContent = res.error || "That didn't work. Try again."; $("pageBgError").hidden = false; }
+});
 
 // From the app's state, every refresh. Only redraws when something changed.
 let settingsSeen = "";

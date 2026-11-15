@@ -88,7 +88,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -1365,7 +1365,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
-        if self.path in ("/api/chat-voice", "/api/chat-gif"):  # (2.32.0) the body is a voice message (WebM) or a GIF
+        if self.path in ("/api/chat-voice", "/api/chat-gif"):  # (2.31.0) the body is a voice message (WebM) or a GIF
             if length > 40 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That's too big to send."})
             h = self.headers
@@ -1793,8 +1793,8 @@ class Handler(BaseHTTPRequestHandler):
                 media.use_gpu(changes["hardware"])
             if data.get("theme") in settings.THEMES:
                 changes["theme"] = data["theme"]
-            if data.get("accent") in settings.ACCENTS:
-                changes["accent"] = data["accent"]
+            if settings.is_accent(data.get("accent")):
+                changes["accent"] = data["accent"].lower()
             if isinstance(data.get("zoom"), (int, float)):
                 changes["zoom"] = round(min(2.0, max(0.5, float(data["zoom"]))), 2)
                 appwindow.set_zoom(changes["zoom"])

@@ -1,4 +1,4 @@
-// (2.32.0) More for the chat: replies, threads, pins, editing, voice messages, any emoji, GIFs and stickers,
+// (2.31.0) More for the chat: replies, threads, pins, editing, voice messages, any emoji, GIFs and stickers,
 // link cards (YouTube and Steam play right here), search, your status, and polls.
 // Works with chat.js (chatMessages, chatWith, drawChat, addChat, pollChat, react...), and uses $, api(),
 // ICONS, clock() from app.js, loadPref()/savePref() from theme.js, avatarEl(), sfxUser() from sfx.js,

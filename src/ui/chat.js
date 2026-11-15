@@ -151,7 +151,7 @@ function mentionsMe(text) {
   return new RegExp("(^|[^\\w.-])@" + me.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w.-])", "i").test(text);
 }
 
-// (2.32.0) A message that @mentions you or answers one of yours.
+// (2.31.0) A message that @mentions you or answers one of yours.
 function aboutMe(m) {
   const me = sfxUser();
   return mentionsMe(m.message) || (!!me && !!m.reply && !m.reply.gone && m.reply.username === me.username);
@@ -543,7 +543,7 @@ function addChat(res) {
   // Reactions and deleted messages, for the newest ones.
   const recent = res.recent || [];
   if (recent.length) {
-    // (2.32.0: and edits, pins, threads and poll votes)
+    // (2.31.0: and edits, pins, threads and poll votes)
     const ids = new Map(recent.map((r) => [r.id, r]));
     const oldest = Math.min(...recent.map((r) => r.id));
     chatMessages = chatMessages.filter((m) => m.id < oldest || ids.has(m.id));
@@ -569,7 +569,7 @@ function chatTime(when) {
 }
 
 // The message text, with @names picked out (yours in the accent color) and links you can click
-// (2.32.0: YouTube links play right here).
+// (2.31.0: YouTube links play right here).
 function chatText(text) {
   const el = document.createElement("div");
   el.className = "text";
@@ -768,7 +768,7 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
   el.append(face);
   const body = document.createElement("div");
   body.className = "body";
-  if (m.reply) body.append(chatReplyQuote(m.reply)); // (2.32.0) what it answers
+  if (m.reply) body.append(chatReplyQuote(m.reply)); // (2.31.0) what it answers
   if (!follow) {
     const line = document.createElement("div");
     line.className = "who-line";
@@ -791,7 +791,7 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
     }
     body.append(line);
   }
-  chatMessageParts(m, body, "main"); // (2.32.0) text, voice, GIFs, stickers, polls, link cards, reactions, thread
+  chatMessageParts(m, body, "main"); // (2.31.0) text, voice, GIFs, stickers, polls, link cards, reactions, thread
   el.append(body);
 
   // On hover: react, reply, thread, pin, edit and delete (yours, or anyone's for the owner and admins).

@@ -1,4 +1,4 @@
-"""(2.32.0) Cards for links in the chat: YouTube videos and Steam games (both play right in the app),
+"""(2.31.0) Cards for links in the chat: YouTube videos and Steam games (both play right in the app),
 and a title, text and picture for other pages. Also turns a GIPHY or Tenor page link into its GIF.
 
 Answers are kept for an hour, so a chat full of the same link asks the site only once."""
