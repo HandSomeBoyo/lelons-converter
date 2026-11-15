@@ -1425,7 +1425,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path in ("/api/find-search", "/api/find-add", "/api/find-save"):  # Find sounds in the Library
             try:
                 if self.path == "/api/find-search":
-                    result = findsounds.search(data.get("query"), data.get("source"), data.get("page") or 1)
+                    result = findsounds.search(data.get("query"), data.get("source"), data.get("page") or 1,
+                                             data.get("safe", True))
                 elif self.path == "/api/find-add":
                     result = {"file": findsounds.add_to_library(data.get("id"))}
                 else:

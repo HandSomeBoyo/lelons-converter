@@ -696,8 +696,8 @@
             </select>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </label>
-          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects and meme sounds online">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds</button>
+          <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects, copyright-free music and meme sounds online">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds &amp; music</button>
           <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
         </div>
         <div class="pl-bar" id="sfxPlaylistBar" hidden>
@@ -1580,7 +1580,7 @@
 <div class="modal" id="findModal" hidden>
   <div class="dialog find-dialog" role="dialog" aria-labelledby="findTitle">
     <div class="find-top">
-      <h2 id="findTitle">Find sounds</h2>
+      <h2 id="findTitle">Find sounds &amp; music</h2>
       <button type="button" class="icon-button" id="findClose" title="Close (Esc)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -1588,6 +1588,7 @@
     <div class="find-sources" id="findSources">
       <span class="find-pill" id="findPill"></span>
       <button type="button" class="active" data-source="effects">Sound effects</button>
+      <button type="button" data-source="music">Music</button>
       <button type="button" data-source="memes">Meme sounds</button>
     </div>
     <label class="input find-search">
@@ -1595,6 +1596,12 @@
       <input id="findInput" autocomplete="off" spellcheck="false">
       <span class="find-spinner" id="findSpinner" hidden></span>
     </label>
+    <div class="find-music" id="findMusic" hidden>
+      <div class="chips find-moods" id="findMoods"></div>
+      <label class="check find-safe" title="Only songs you can put in a YouTube video that makes money">
+        <input type="checkbox" id="findSafe" checked> Safe for monetized videos
+      </label>
+    </div>
     <p class="find-state" id="findState"></p>
     <div class="find-list" id="findList"></div>
     <button type="button" class="outline-button find-more" id="findMore" hidden>Show more</button>
