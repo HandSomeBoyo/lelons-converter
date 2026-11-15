@@ -89,6 +89,7 @@
       <button data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
       <button data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
       <div class="tab-group">Tools</div>
+      <button data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
       <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
       <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
     </nav>
@@ -208,6 +209,101 @@
       <div class="home-card">
         <div class="home-card-head"><h3>Uploads in the last 30 days</h3></div>
         <div class="stats-bars" id="statsUploads"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="channelTab" hidden>
+    <h1 class="headline">Your channel.<br><em>How it's doing.</em></h1>
+
+    <div class="home-card ch-start" id="chStart" hidden>
+      <h3>Which channel is yours?</h3>
+      <p class="home-muted">Paste your channel link and you'll see your numbers right away.</p>
+      <form class="row ch-form" id="chForm" autocomplete="off">
+        <label class="input"><input id="chUrl" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+        <button class="convert" type="submit"><span>Show my stats</span></button>
+      </form>
+      <p class="sfx-error" id="chFormError"></p>
+      <div class="ch-or"><span>or</span></div>
+      <button type="button" class="ch-google" id="chStartGoogle"><i class="ch-g" aria-hidden="true"></i>Sign in with Google</button>
+      <p class="home-muted ch-google-why">Signing in adds watch time and where your viewers come from.</p>
+    </div>
+
+    <div class="ch-main" id="chMain" hidden>
+      <div class="ch-head">
+        <span class="ch-avatar" id="chAvatar"></span>
+        <div class="ch-who">
+          <b id="chName"></b>
+          <span><span id="chHandle"></span><i class="ch-mode" id="chMode"></i></span>
+        </div>
+        <span class="spacer"></span>
+        <div class="find-sources stats-range" id="chRange">
+          <span class="find-pill" id="chPill"></span>
+          <button type="button" data-days="7">7 days</button>
+          <button type="button" data-days="28">28 days</button>
+          <button type="button" data-days="90">90 days</button>
+        </div>
+        <button type="button" class="icon-button" id="chRefresh" title="Look again">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
+        </button>
+        <div class="help-menu">
+          <button type="button" class="icon-button" id="chMore" title="More" aria-haspopup="menu">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>
+          </button>
+          <div class="lib-menu help-pop ch-menu" id="chMenu" hidden>
+            <button type="button" id="chOpenYt">Open on YouTube</button>
+            <button type="button" id="chOpenStudio">Open YouTube Studio</button>
+            <button type="button" id="chConnect">Sign in with Google</button>
+            <button type="button" id="chChange">Use another channel</button>
+            <button type="button" id="chDisconnect">Sign out of Google</button>
+          </div>
+        </div>
+      </div>
+      <p class="stats-note ch-note" id="chNote"></p>
+
+      <div class="ch-upsell" id="chUpsell" hidden>
+        <i class="ch-g" aria-hidden="true"></i>
+        <p><b>Want watch time and where viewers come from?</b><span>Sign in with Google once. It takes about 5 minutes the first time.</span></p>
+        <button type="button" class="small-button" id="chUpsellGo">Set it up</button>
+        <button type="button" class="icon-button ch-upsell-x" id="chUpsellX" title="Hide this">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="ch-numbers" id="chNumbers"></div>
+
+      <div class="home-card stats-card">
+        <div class="home-card-head">
+          <h3 id="chChartTitle">Views per day</h3>
+          <div class="ch-chart-pick" id="chChartPick">
+            <button type="button" data-chart="views" class="active">Views</button>
+            <button type="button" data-chart="subs">Subscribers</button>
+            <button type="button" data-chart="watch">Watch time</button>
+          </div>
+        </div>
+        <div class="stats-chart" id="chChart"></div>
+      </div>
+
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Newest uploads</h3><span class="home-muted" id="chNewestNote">compared to your usual</span></div>
+        <div class="ch-videos" id="chNewest"></div>
+      </div>
+
+      <div class="home-grid stats-grid">
+        <div class="home-card">
+          <div class="home-card-head"><h3>Top videos</h3><span class="home-muted" id="chTopNote"></span></div>
+          <p class="home-muted" id="chTopEmpty" hidden>No views in this time yet.</p>
+          <div class="stats-bars" id="chTop"></div>
+        </div>
+        <div class="home-card">
+          <div class="home-card-head"><h3>Where viewers come from</h3><span class="home-muted" id="chSourcesNote"></span></div>
+          <div class="stats-bars" id="chSources"></div>
+          <div class="ch-locked" id="chSourcesLocked" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>
+            <p>Only YouTube knows this. Sign in with Google to see search, Shorts feed, suggested videos and more.</p>
+            <button type="button" class="small-button" id="chSourcesGo">Sign in with Google</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1283,6 +1379,29 @@
   </div>
 </div>
 
+<div class="modal" id="chSetupModal" hidden>
+  <div class="dialog ch-setup" role="dialog" aria-labelledby="chSetupHeading">
+    <h2 id="chSetupHeading">Sign in with Google (set up once)</h2>
+    <p class="sub">YouTube only shares watch time and where viewers come from with apps you make yourself in Google Cloud. It's free and you only do it once.</p>
+    <ol class="ch-steps">
+      <li><b>Make a project.</b> Open <button type="button" class="link" data-open="https://console.cloud.google.com/projectcreate">Google Cloud</button>, sign in with the account your channel is on, name it <i>VaultHub</i> and click <b>Create</b>.</li>
+      <li><b>Turn on YouTube.</b> Click <button type="button" class="link" data-open="https://console.cloud.google.com/apis/library/youtube.googleapis.com">YouTube Data API v3</button> and press <b>Enable</b>. Do the same for <button type="button" class="link" data-open="https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com">YouTube Analytics API</button>.</li>
+      <li><b>Name the app.</b> Open the <button type="button" class="link" data-open="https://console.cloud.google.com/auth/overview">sign-in page settings</button>, click <b>Get started</b>, type <i>VaultHub</i> and your email, pick <b>External</b>, and finish. Then go to <b>Audience</b> and click <b>Publish app</b> (so Google doesn't sign you out every week).</li>
+      <li><b>Make the key.</b> Go to <button type="button" class="link" data-open="https://console.cloud.google.com/auth/clients/create">Clients</button>, pick <b>Desktop app</b>, click <b>Create</b>, and copy the <b>Client ID</b> and <b>Client secret</b> into the boxes below.</li>
+    </ol>
+    <div class="ch-keys">
+      <label class="fx-field"><span>Client ID</span><span class="input"><input id="chClientId" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false"></span></label>
+      <label class="fx-field"><span>Client secret</span><span class="input"><input id="chClientSecret" type="password" placeholder="GOCSPX-..." autocomplete="off" spellcheck="false"></span></label>
+    </div>
+    <p class="ch-setup-note" id="chSetupNote">When you sign in, Google says the app isn't checked by Google. That's normal for an app you made yourself: click <b>Advanced</b>, then <b>Go to VaultHub</b>. The app can only look at your numbers, never change anything.</p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="chSetupCancel">Cancel</button>
+      <button type="button" class="small-button" id="chSetupGo">Save and sign in</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal watch-modal" id="watchModal" hidden>
   <div class="dialog watch-dialog" role="dialog" aria-labelledby="watchTitle">
     <div class="watch-screen" id="watchScreen"></div>
@@ -1855,6 +1974,7 @@
 <script src="find.js"></script>
 <script src="home.js"></script>
 <script src="stats.js"></script>
+<script src="channel.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
 <script src="pdfimport.js"></script>
