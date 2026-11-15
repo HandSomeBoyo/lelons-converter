@@ -7,7 +7,6 @@ const NOTE_KINDS = {
   chat: { name: "Messages", icon: '<path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v2.5L16 17h-4a1 1 0 0 1-1-1v-.5"/>' },
   invite: { name: "Invitations", icon: '<path d="M4 7.5h16v11H4z"/><path d="m4 8 8 6 8-6"/>' },
   games: { name: "Games on sale", icon: '<path d="M20.5 13.5 13.5 20.5a1.8 1.8 0 0 1-2.5 0L3.5 13V3.5H13l7.5 7.5a1.8 1.8 0 0 1 0 2.5z"/><circle cx="8" cy="8" r="1.4"/>' },
-  friends: { name: "Friends' videos and recordings", icon: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8"/><path d="M17.5 14.2a6 6 0 0 1 3.5 5.3"/>' },
   povs: { name: "New POVs", icon: '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>' },
   downloads: { name: "Finished downloads", icon: '<path d="M12 4v11"/><path d="m7 10.5 5 5 5-5"/><path d="M5 19.5h14"/>' },
   updates: { name: "App updates", icon: '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8z"/><path d="M12 12.5 20 8M12 12.5 4 8M12 12.5v8"/>' },
@@ -20,7 +19,7 @@ const noteStarted = Date.now();
 // (stamps remember what was already shown, so a cleared one doesn't come back)
 let noteData = (() => {
   const saved = loadPref("notes");
-  return saved && Array.isArray(saved.list) ? { list: saved.list, stamps: saved.stamps || {} } : { list: [], stamps: {} };
+  return saved && Array.isArray(saved.list) ? { list: saved.list.filter((n) => n && NOTE_KINDS[n.kind]), stamps: saved.stamps || {} } : { list: [], stamps: {} };  // (kinds that were taken out are dropped)
 })();
 
 // What may notify you (Settings > Notifications). Missing means on.
@@ -162,7 +161,7 @@ function noteDraw() {
   const list = $("noteList");
   if (!shown.length) {
     list.innerHTML = `<div class="note-empty">${NOTE_BELL}
-      <b>${noteFilter === "all" ? "Nothing here yet" : "You're all caught up"}</b><span>New messages, invitations, games on sale, POVs and friends' new videos show up here.</span></div>`;
+      <b>${noteFilter === "all" ? "Nothing here yet" : "You're all caught up"}</b><span>New messages, invitations, games on sale, and POVs show up here.</span></div>`;
     return;
   }
   list.replaceChildren(...shown.map((n) => noteRow(n)));
@@ -183,7 +182,7 @@ $("notePanel").addEventListener("click", (e) => e.stopPropagation());
 document.addEventListener("click", () => noteClose());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") noteClose(); });
 $("noteReadAll").addEventListener("click", () => notifyRead(() => true));
-$("noteFeed").addEventListener("click", () => { noteClose(); if (typeof openFeed === "function") openFeed(); });
+$("noteFeed")?.addEventListener("click", () => { noteClose(); if (typeof openFeed === "function") openFeed(); });
 $("noteClear").addEventListener("click", () => { noteData.list = []; noteSave(); noteDraw(); });
 $("noteSettings").addEventListener("click", () => { noteClose(); if (typeof openSettings === "function") openSettings("notes"); });
 $("noteDnd").addEventListener("click", () => {
