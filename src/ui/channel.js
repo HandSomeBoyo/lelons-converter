@@ -94,6 +94,7 @@ function drawChannel() {
   drawChNewest(d);
   drawChTop(d);
   drawChSources(d);
+  drawChCompare(); // chcompare.js
 }
 
 function chNumberCard(label, value, unit, lines, i, locked) {

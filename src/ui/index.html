@@ -354,6 +354,31 @@
         <div class="ch-videos" id="chNewest"></div>
       </div>
 
+      <div class="home-card stats-card ch-cmp" id="chCompare">
+        <div class="home-card-head">
+          <h3>Compare two videos</h3><span class="home-muted">side by side</span>
+          <span class="spacer"></span>
+          <button type="button" class="icon-button" id="chCmpSwap" title="Swap sides" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/></svg>
+          </button>
+        </div>
+        <div class="ch-cmp-slots">
+          <div class="ch-cmp-slot" id="chCmpA"></div>
+          <span class="ch-cmp-vs">vs</span>
+          <div class="ch-cmp-slot" id="chCmpB"></div>
+        </div>
+        <div class="ch-cmp-quick" id="chCmpQuick">
+          <span class="home-muted">Quick pick:</span>
+          <button type="button" class="ghost-button" data-quick="last">Newest vs the one before</button>
+          <button type="button" class="ghost-button" data-quick="best">Newest vs your most viewed</button>
+        </div>
+        <div class="ch-cmp-result" id="chCmpResult" hidden>
+          <p class="ch-cmp-verdict" id="chCmpVerdict"></p>
+          <div class="ch-cmp-rows" id="chCmpRows"></div>
+          <div class="ch-cmp-first" id="chCmpFirst"></div>
+        </div>
+      </div>
+
       <div class="home-grid stats-grid">
         <div class="home-card">
           <div class="home-card-head"><h3>Top videos</h3><span class="home-muted" id="chTopNote"></span></div>
@@ -1537,6 +1562,31 @@
   </div>
 </div>
 
+<div class="modal" id="chPickModal" hidden>
+  <div class="dialog ch-pick" role="dialog" aria-labelledby="chPickHeading">
+    <h2 id="chPickHeading">Pick a video</h2>
+    <div class="ch-pick-bar">
+      <label class="input"><input id="chPickSearch" placeholder="Search your uploads" autocomplete="off" spellcheck="false"></label>
+      <div class="ch-chart-pick" id="chPickKind">
+        <button type="button" data-kind="all" class="active">All</button>
+        <button type="button" data-kind="video">Videos</button>
+        <button type="button" data-kind="short">Shorts</button>
+      </div>
+    </div>
+    <div class="ch-pick-list" id="chPickList"></div>
+    <form class="ch-pick-link" id="chPickLink" autocomplete="off">
+      <span class="home-muted">Or paste any YouTube video link</span>
+      <label class="input"><input id="chPickUrl" placeholder="youtube.com/watch?v=..." spellcheck="false"></label>
+      <button type="submit" class="small-button">Use it</button>
+    </form>
+    <p class="sfx-error" id="chPickError"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="chPickCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal watch-modal" id="watchModal" hidden>
   <div class="dialog watch-dialog" role="dialog" aria-labelledby="watchTitle">
     <div class="watch-screen" id="watchScreen"></div>
@@ -2164,6 +2214,7 @@
 <script src="home.js"></script>
 <script src="stats.js"></script>
 <script src="channel.js"></script>
+<script src="chcompare.js"></script>
 <script src="titles.js"></script>
 <script src="copyright.js"></script>
 <script src="docs.js"></script>
