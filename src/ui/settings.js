@@ -261,6 +261,8 @@ function drawSoundSettings() {
     b.addEventListener("click", () => { callSetNoise(level); if (micTest) startMicTest(); });
     return b;
   }));
+  $("setPtt").replaceChildren(callPttRows("set-chips"));
+  $("setPttNote").textContent = PTT_NOTE;
   $("setNoiseNote").textContent = music ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise];
 }
 

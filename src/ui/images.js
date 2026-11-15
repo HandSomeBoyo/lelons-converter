@@ -43,7 +43,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("cli
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["feed", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // ---- adding pictures (drop anywhere in the window, or choose files)

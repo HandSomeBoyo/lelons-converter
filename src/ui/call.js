@@ -15,6 +15,8 @@ const CALL_ICONS = {
   screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4M12 13V7.5M9.5 10 12 7.5l2.5 2.5"/></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg>',
   cameraOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h3a2.5 2.5 0 0 1 2.5 2.5v2l6-3.5v10l-2.4-1.4M15.5 15.5A2.5 2.5 0 0 1 13 18H5a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 5 6M3 3l18 18"/></svg>',
+  board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><path d="M15 15.5v4.5M18 14v6"/></svg>',
+  rec: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
   big: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   small: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>',
@@ -31,7 +33,8 @@ const CALL_VERSION = 2; // 2: cameras (each connection gets a camera lane once b
 // phase: "incoming" (ringing you), "joining" (getting your microphone), "in" (you're in it), "ended".
 let call = null;
 const callPeers = new Map(); // lowercased username -> {name, pc, dc, audioTx, videoTx, camTx, audio, video, cam, sharing, camera, muted, deafened, ...}
-let callMicStream = null; // your microphone as the others hear it (after noise suppression)
+let callMicStream = null; // your microphone (after noise suppression)
+let callSendStream = null; // what the others hear from you: your microphone with sound board sounds and PC sound mixed in (callplus.js)
 let callMicParts = null; // {raw, ctx, node}: the microphone itself, and the noise suppression in between
 let callCam = null; // your camera, when it's on
 let callScreen = null;
@@ -190,6 +193,8 @@ function callEntered(res) {
   for (const s of res.signals || []) callSignalAfter = Math.max(callSignalAfter, s.id);
   callPeopleChanged(r ? r.people || [] : []);
   callRedrawRoom();
+  callPttRun();
+  callLinesRun();
   pollCalls(800);
 }
 
@@ -230,13 +235,17 @@ function callFinish(note) {
   if (was.id) callIgnored.add(was.id);
   callRing(null);
   clearInterval(was.clock);
+  callRecStop(); // (a recording going on is saved)
   for (const name of [...callPeers.keys()]) callDropPeer(name);
+  callMixStop();
   callMicClose(callMicStream, callMicParts);
   for (const key of [...callSpeaking.keys()]) callStopWatching(key);
   if (callAudioCtx && callAudioCtx.state === "running") callAudioCtx.suspend().catch(() => {});  // (resumed by the next call)
   for (const stream of [callScreen, callCam]) if (stream) stream.getTracks().forEach((t) => t.stop());
-  callMicStream = callMicParts = callScreen = callCam = null;
+  callMicStream = callMicParts = callSendStream = callScreen = callCam = null;
   callWatching = "";
+  callPttRun();
+  callLinesRun();
   callPop(null);
   if (!note) { call = null; drawCall(); callRedrawRoom(); return; }
   call = { ...was, phase: "ended", status: note };
@@ -325,13 +334,22 @@ function callSetRemote(pc, desc) { return pc.setRemoteDescription({ type: desc.t
 // How much detail your voice gets to one person (it can change in the middle of a call). Your voice also
 // goes first when the internet is busy, before shared screens and cameras.
 function callAudioBitrate(p) {
+  // (one change at a time: two at once make the browser turn one down)
+  p.audioRate = (p.audioRate || Promise.resolve()).then(() => callAudioBitrateNow(p)).catch(() => {});
+}
+async function callAudioBitrateNow(p, again) {
   if (!p.audioTx) return;
   const params = p.audioTx.sender.getParameters();
   if (!params.encodings || !params.encodings[0]) return;
-  params.encodings[0].maxBitrate = callBitrate() * 1000;
+  // (when they lose a lot of what you send, less gets through better: at most 48 kbps until it's fine again)
+  params.encodings[0].maxBitrate = (p.weak ? Math.min(callBitrate(), 48) : callBitrate()) * 1000;
   params.encodings[0].priority = "high";
   params.encodings[0].networkPriority = "high";
-  p.audioTx.sender.setParameters(params).catch(() => {});
+  try {
+    await p.audioTx.sender.setParameters(params);
+  } catch (e) {
+    if (!again) return callAudioBitrateNow(p, true);
+  }
 }
 
 // Your microphone, cleaned up: {stream (to send), parts}. Throws if there's no microphone.
@@ -395,8 +413,11 @@ async function callGetMic() {
   if (call !== mine) { callMicClose(mic.stream, mic.parts); return false; }
   callMicStream = mic.stream;
   callMicParts = mic.parts;
-  callMicStream.getAudioTracks().forEach((t) => { t.enabled = !callMuted && !callDeafened; });
-  callWatchSpeaking("", callMicStream);
+  callSendStream = callMixStart(callMicStream);
+  callApplyGain();
+  callWatchSpeaking("", callSendStream);
+  callPttRun();
+  callLinesRun();
   return true;
 }
 
@@ -439,10 +460,14 @@ async function callReopenMic(problem) {
   const [oldStream, oldParts] = [callMicStream, callMicParts];
   callMicStream = mic.stream;
   callMicParts = mic.parts;
-  callMicStream.getAudioTracks().forEach((t) => { t.enabled = !callMuted && !callDeafened; });
-  for (const p of callPeers.values()) if (p.audioTx) p.audioTx.sender.replaceTrack(callMicStream.getAudioTracks()[0]).then(() => callAudioBitrate(p), () => {});
+  if (!callMixMic(callMicStream)) {
+    callSendStream = callMicStream;
+    for (const p of callPeers.values()) if (p.audioTx) p.audioTx.sender.replaceTrack(callSendStream.getAudioTracks()[0]).then(() => callAudioBitrate(p), () => {});
+    callWatchSpeaking("", callSendStream);
+    callRecAdd("", callSendStream);
+  }
+  callApplyGain();
   callMicClose(oldStream, oldParts);
-  callWatchSpeaking("", callMicStream);
 }
 
 function callUseSpeaker(id) {
@@ -464,11 +489,12 @@ function callMute() {
 // Deafen: you hear nobody, and nobody hears you.
 function callDeafen() {
   callDeafened = !callDeafened;
-  for (const p of callPeers.values()) p.audio.muted = callDeafened;
+  for (const p of callPeers.values()) callApplyVolume(p);
+  for (const s of callBoardPlaying.values()) if (s.localGain) s.localGain.gain.value = callDeafened ? 0 : callBoardVolume();
   callApplyMic();
 }
 function callApplyMic() {
-  if (callMicStream) callMicStream.getAudioTracks().forEach((t) => { t.enabled = !callMuted && !callDeafened; });
+  callApplyGain();
   for (const p of callPeers.values()) callSend(p, { muted: callMuted || callDeafened, deafened: callDeafened });
   drawCall();
 }
@@ -485,7 +511,8 @@ function callPeopleChanged(people) {
   for (const name of [...callPeers.keys()]) if (!inside.has(name)) callDropPeer(name);
   for (const name of inside) {
     const p = callPeers.get(name);
-    const failed = p && (p.pc.connectionState === "failed" || (p.offeredAt && !p.answered && Date.now() - p.offeredAt > 20000));
+    // (a connection that's been lost for 6 seconds starts over, instead of waiting half a minute for "failed")
+    const failed = p && (p.pc.connectionState === "failed" || (p.lostSince && Date.now() - p.lostSince > 6000) || (p.offeredAt && !p.answered && Date.now() - p.offeredAt > 20000));
     if (failed) callDropPeer(name);
     if ((!p || failed) && me < name) callOffer(people.find((x) => lower(x.username) === name).username);
   }
@@ -511,7 +538,9 @@ function callPeer(name) {
     if (e.track.kind === "audio") {
       audio.srcObject = stream;
       audio.play().catch(() => {});
-      audio.volume = 1; // (calls are as loud as they come, whatever the app's volume)
+      p.audioStream = stream;
+      callApplyVolume(p); // (calls are as loud as they come, whatever the app's volume, unless you turn a person down)
+      callRecAdd(key, stream);
       playedMedia.delete(audio);
       callWatchSpeaking(key, stream);
     } else if (callVideoLanes(pc).indexOf(e.transceiver) === 1) {
@@ -527,6 +556,8 @@ function callPeer(name) {
     if (callPeers.get(key) !== p) return;
     p.connected = pc.connectionState === "connected";
     if (p.connected) callAudioBitrate(p);
+    if (p.connected) p.lostSince = 0;
+    else if (pc.connectionState === "disconnected" && !p.lostSince) p.lostSince = Date.now();
     if (pc.connectionState === "failed" && !callPeers.size) callSay(CALL_NO_ROUTE);
     drawCall();
   };
@@ -540,6 +571,8 @@ function callDropPeer(key) {
   callPeers.delete(key);
   try { if (p.dc) p.dc.close(); } catch (e) { /* closed */ }
   try { p.pc.close(); } catch (e) { /* closed */ }
+  callVolumeDrop(p);
+  callRecRemove(key);
   p.audio.srcObject = null;
   callStopWatching(key);
   if (callWatching === key) callWatching = "";
@@ -548,7 +581,7 @@ function callDropPeer(key) {
 
 // Your sound, and your screen if you're sharing it, for one person.
 function callAddMyTracks(p, offering) {
-  const micTrack = callMicStream && callMicStream.getAudioTracks()[0];
+  const micTrack = callSendStream && callSendStream.getAudioTracks()[0];
   const screenTrack = callScreen && callScreen.getVideoTracks()[0];
   if (offering) {
     p.audioTx = p.pc.addTransceiver(micTrack || "audio", { direction: "sendrecv" });
@@ -660,7 +693,7 @@ async function callLaneSignal(p, desc) {
 // Small messages straight to one person: muted, deafened, sharing their screen, camera on, bye.
 function callChannel(p, dc) {
   p.dc = dc;
-  dc.onopen = () => callSend(p, { hello: CALL_VERSION, muted: callMuted || callDeafened, deafened: callDeafened, sharing: !!callScreen, camera: !!callCam });
+  dc.onopen = () => callSend(p, { hello: CALL_VERSION, muted: callMuted || callDeafened, deafened: callDeafened, sharing: !!callScreen, camera: !!callCam, recording: !!callRec });
   dc.onmessage = (e) => {
     if (callPeers.get(lower(p.name)) !== p) return;
     let msg = {};
@@ -671,6 +704,7 @@ function callChannel(p, dc) {
     if ("camera" in msg) p.camera = !!msg.camera;
     if ("muted" in msg) p.muted = !!msg.muted;
     if ("deafened" in msg) p.deafened = !!msg.deafened;
+    if ("recording" in msg) { p.recording = !!msg.recording; callDrawn = ""; }
     if ("sharing" in msg) {
       const started = !p.sharing && msg.sharing;
       p.sharing = !!msg.sharing;
@@ -742,7 +776,8 @@ async function callShare() {
   let stream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { height: { ideal: q.size, max: q.size }, frameRate: { ideal: q.fps, max: q.fps } }, audio: false,
+      video: { height: { ideal: q.size, max: q.size }, frameRate: { ideal: q.fps, max: q.fps } }, audio: callShareAudioOptions(),
+      systemAudio: "include", // (Windows asks: "Also share system audio")
     });
   } catch (e) {
     return; // (picked nothing)
@@ -753,6 +788,7 @@ async function callShare() {
   const old = callScreen;
   callScreen = stream;
   track.addEventListener("ended", () => { if (callScreen === stream) callStopShare(); });
+  callMixScreen(stream.getAudioTracks()[0] || null); // your PC's sound goes out with your voice
   for (const p of callPeers.values()) {
     if (p.videoTx) p.videoTx.sender.replaceTrack(track).catch(() => {});
     callShareBitrate(p);
@@ -790,6 +826,7 @@ function callStopShare() {
   if (!callScreen) return;
   callScreen.getTracks().forEach((t) => t.stop());
   callScreen = null;
+  callMixScreen(null);
   for (const p of callPeers.values()) {
     if (p.videoTx) p.videoTx.sender.replaceTrack(null).catch(() => {});
     callSend(p, { sharing: false });
@@ -951,9 +988,11 @@ function drawCallPeople() {
     const deafened = person.me ? callDeafened : p && p.deafened;
     const speaking = (callSpeaking.get(key) || {}).on && !muted;
     const waiting = !person.me && !(p && p.connected);
-    return { person, muted, deafened, speaking, waiting, sharing: person.me ? !!callScreen : p && p.sharing };
+    const bars = person.me ? 0 : p && p.connected ? p.bars || 3 : 0;
+    const quiet = !person.me && callVolumeOf(key) === 0;
+    return { person, key, muted, deafened, speaking, waiting, bars, quiet, rec: person.me ? !!callRec : p && p.recording, sharing: person.me ? !!callScreen : p && p.sharing };
   });
-  const sig = JSON.stringify(rows.map((r) => [r.person.username, r.person.avatarUrl, r.muted, r.deafened, r.speaking, r.waiting, r.sharing]));
+  const sig = JSON.stringify(rows.map((r) => [r.person.username, r.person.avatarUrl, r.muted, r.deafened, r.speaking, r.waiting, r.sharing, r.bars, r.quiet, r.rec]));
   if (sig === callPeopleDrawn) return;
   callPeopleDrawn = sig;
   box.replaceChildren(...rows.map((r) => {
@@ -961,8 +1000,16 @@ function drawCallPeople() {
     el.className = "call-person" + (r.speaking ? " speaking" : "") + (r.waiting ? " waiting" : "");
     el.title = (r.person.me ? "You" : r.person.username) + (r.deafened ? " (deafened)" : r.muted ? " (muted)" : "")
       + (r.sharing ? ", sharing their screen" : "") + (r.waiting ? ", connecting..." : "");
-    el.append(r.person.me ? avatarEl(r.person.avatarUrl, r.person.username) : profileLink(avatarEl(r.person.avatarUrl, r.person.username), r.person.username));
-    if (r.muted || r.deafened) el.append(Object.assign(document.createElement("i"), { className: "call-person-icon", innerHTML: r.deafened ? CALL_ICONS.deafened : CALL_ICONS.micOff }));
+    el.append(avatarEl(r.person.avatarUrl, r.person.username));
+    if (!r.person.me) {
+      // Click a friend: their volume, their connection, their profile.
+      el.classList.add("pick");
+      el.tabIndex = 0;
+      el.title += " · click for volume";
+      el.addEventListener("click", (e) => { e.stopPropagation(); callPop("person:" + r.key); });
+      if (r.bars) el.append(callBarsEl(r.bars));
+    }
+    if (r.muted || r.deafened || r.quiet) el.append(Object.assign(document.createElement("i"), { className: "call-person-icon", innerHTML: r.deafened || r.quiet ? CALL_ICONS.deafened : CALL_ICONS.micOff }));
     else if (r.sharing) el.append(Object.assign(document.createElement("i"), { className: "call-person-icon live", innerHTML: CALL_ICONS.screen }));
     return el;
   }));
@@ -977,7 +1024,7 @@ function drawCall() {
   drawCallStatus();
   drawCallPeople();
   drawCallStage();
-  const sig = JSON.stringify([call.phase, call.title, call.pictureUrl, callMuted, callDeafened, !!callScreen, !!callCam, call.status, !!call.group, callPopOpen]);
+  const sig = JSON.stringify([call.phase, call.title, call.pictureUrl, callMuted, callDeafened, !!callScreen, !!callCam, call.status, !!call.group, callPopOpen, callRecClock(), callPtt().on]);
   if (sig === callDrawn) return;
   callDrawn = sig;
   box.className = "call call-" + call.phase + (call.group ? " call-group" : "");
@@ -1007,12 +1054,18 @@ function drawCall() {
         callCam ? "Turn your camera off" : "Turn your camera on", callCamera));
       buttons.push(button((callScreen ? "on" : "") + (callPopOpen === "share" ? " open" : ""), CALL_ICONS.screen,
         callScreen ? "Your screen: quality, change it, or stop sharing" : "Share your screen", () => callPop("share")));
-      buttons.push(button(callPopOpen === "settings" ? "open" : "", CALL_ICONS.gear, "Microphone, noise suppression, speakers and camera", () => callPop("settings")));
+      buttons.push(button(callPopOpen === "board" ? "open" : "", CALL_ICONS.board, "Sound board: play Library sounds in the call", () => callPop("board")));
+      buttons.push(button(callRec ? "rec" : "", CALL_ICONS.rec, callRec ? "Stop recording and save it" : "Record the call (saved as an MP3)", callRecToggle, callRec ? callRecClock() : ""));
+      buttons.push(button(callPopOpen === "settings" ? "open" : "", CALL_ICONS.gear, "Microphone, sound quality, push-to-talk, speakers and camera", () => callPop("settings")));
     }
     buttons.push(button("red", CALL_ICONS.hangUp, call.phase === "in" && !callOthersIn().length && !call.group ? "Cancel" : "Hang up", () => callHangUp()));
   }
   $("callButtons").replaceChildren(...buttons);
   $("callSharing").hidden = !callScreen;
+  // Someone is recording: everyone sees it.
+  const recorders = [...callPeers.values()].filter((p) => p.recording).map((p) => p.name);
+  $("callRecNote").hidden = !recorders.length;
+  $("callRecNote").querySelector("span").textContent = recorders.length ? `${recorders.join(", ")} ${recorders.length > 1 ? "are" : "is"} recording this call` : "";
 }
 
 // The stage: someone's shared screen, and the cameras. A screen is big with the cameras in a row under it;
@@ -1140,7 +1193,11 @@ async function drawCallPop() {
     return row;
   };
   const els = [];
-  if (which === "share") {
+  if (which === "board") {
+    await drawCallBoard(els, title);
+  } else if (which.startsWith("person:")) {
+    drawCallPerson(els, title, which.slice(7));
+  } else if (which === "share") {
     const q = callQuality();
     els.push(title("Screen quality"));
     els.push(chips(SHARE_SIZES, q.size, (v) => v + "p", (v) => callSetQuality({ size: v })));
@@ -1151,6 +1208,16 @@ async function drawCallPop() {
       textContent: q.size >= 1080 || q.fps >= 60 ? "Sharper and smoother needs a faster internet connection" + (callOthersIn().length > 1 ? ", and more for every person watching." : ".")
         : "Lower is easier on slow internet.",
     }));
+    els.push(title("PC sound"));
+    els.push(chips(["off", "on"], callShareSound() ? "on" : "off", (v) => (v === "on" ? "Share it" : "Off"), (v) => { savePref("callShareSound", v === "on"); drawCallPop(); }));
+    const live = callScreen && callScreen.getAudioTracks().length;
+    els.push(Object.assign(document.createElement("p"), {
+      className: "call-pop-note",
+      textContent: !callShareSound() ? "Only your screen is shared, without sound."
+        : (live ? "Your PC's sound is going out with your screen. " : "Tick \u201cAlso share system audio\u201d when you pick a whole screen, so friends hear your game or music. ")
+          + (callShareSoundSafe() ? "Friends' voices are left out, so nobody hears themselves." : "Use headphones, or friends may hear themselves back."),
+    }));
+    if (callShareSound() && callScreen && !live) els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: "To add sound now, click Change screen." }));
     const actions = document.createElement("div");
     actions.className = "call-pop-actions";
     if (callScreen) {
@@ -1202,6 +1269,8 @@ async function drawCallPop() {
         max: "The strongest AI, for loud places. Your voice may sound a little less natural.",
       }[noise],
     }));
+    els.push(title("Push to talk"), callPttRows("call-chips"));
+    els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: PTT_NOTE }));
     els.push(title("Speakers or headphones"), select("audiooutput", "callSpeaker", "Speakers", callUseSpeaker));
     els.push(title("Camera"), select("videoinput", "callCam", "Camera", callUseCam));
   }
