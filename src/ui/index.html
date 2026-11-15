@@ -21,6 +21,7 @@
         <div class="lib-menu help-pop" id="helpPop" hidden>
           <button type="button" id="tourOpen">How to use</button>
           <button type="button" id="whatsNewOpen">What's new</button>
+          <button type="button" id="shortcutsOpen">Keyboard shortcuts</button>
         </div>
       </div>
       <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
@@ -74,6 +75,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/><path d="M15.5 10l-2 2 2 2"/></svg>
       </button>
     </div>
+    <button type="button" class="side-link side-search" id="quickOpen" title="Search everything (Ctrl+K)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+      <span>Search</span><kbd>Ctrl K</kbd>
+    </button>
     <nav class="tabs" id="tabs">
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
       <div class="tab-group">Convert</div>
@@ -1962,6 +1967,28 @@
   </div>
 </div>
 
+<div class="modal quick-modal" id="quickModal" hidden>
+  <div class="quick-box" role="dialog" aria-label="Search">
+    <label class="quick-field">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+      <input id="quickInput" placeholder="Search pages, documents, boards, games... or paste a link" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </label>
+    <div class="quick-list" id="quickList"></div>
+    <div class="quick-foot"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to open</span><span class="quick-tip"><kbd>Ctrl</kbd><kbd>/</kbd> all shortcuts</span></div>
+  </div>
+</div>
+
+<div class="modal" id="shortcutsModal" hidden>
+  <div class="dialog shortcuts-dialog" role="dialog" aria-labelledby="shortcutsHeading">
+    <div class="shortcuts-head">
+      <h2 id="shortcutsHeading">Keyboard shortcuts</h2>
+      <button type="button" class="icon-button" id="shortcutsClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="shortcuts-list" id="shortcutsList"></div>
+  </div>
+</div>
+
 <script src="motion.js"></script>
 <script src="volume.js"></script>
 <script src="player.js"></script>
@@ -1994,5 +2021,6 @@
 <script src="watch.js"></script>
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
+<script src="quick.js"></script>
 </body>
 </html>

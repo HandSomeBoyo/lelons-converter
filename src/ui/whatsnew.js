@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.27.0", items: [
+    "Search everything: press Ctrl+K (or click Search at the top of the side bar) to jump to any page, document, board or game. Paste a link in it to convert it right away.",
+    "Keyboard shortcuts: Ctrl+1 to 9 go to the pages in the side bar, Alt+Left and Alt+Right (or your mouse's side buttons) go back and forward, Ctrl+N makes something new on the page you're on, and Ctrl+, opens Settings.",
+    "Press Ctrl+/ (or find Keyboard shortcuts under the ? button) to see every shortcut in the app.",
+  ] },
   { version: "2.26.1", items: [
     "Library: the waveform in the player at the bottom shows again on smaller windows, and so do the small ones in the list.",
     "The player bar fits small windows now, so the volume slider no longer runs off the edge.",
