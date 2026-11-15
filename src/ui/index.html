@@ -1719,6 +1719,7 @@
     <i></i><span>You're sharing your screen</span>
     <button type="button" class="link" id="callStopShare">Stop</button>
   </div>
+  <div class="call-sharing call-rec-note" id="callRecNote" hidden><i></i><span></span></div>
 </div>
 <div class="call-stage" id="callStage" hidden>
   <video id="callVideo" data-call="1" autoplay playsinline muted></video>
@@ -2122,6 +2123,11 @@
           <div class="set-chips" id="setMusic"></div>
           <p class="set-mic-note" id="setMusicNote"></p>
         </div>
+        <div class="set-label">Push to talk</div>
+        <div class="set-group set-pad">
+          <div id="setPtt"></div>
+          <p class="set-mic-note" id="setPttNote"></p>
+        </div>
         <div class="set-label">Noise suppression</div>
         <div class="set-group set-pad">
           <div class="set-chips" id="setNoise"></div>
@@ -2209,6 +2215,7 @@
 <script src="feedback.js"></script>
 <script src="chat.js"></script>
 <script src="call.js"></script>
+<script src="callplus.js"></script>
 <script src="profile.js"></script>
 <script src="find.js"></script>
 <script src="home.js"></script>
