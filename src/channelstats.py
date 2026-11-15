@@ -34,6 +34,7 @@ GOOGLE_REFRESH = 15 * 60  # Google's numbers only change every few hours anyway
 RETRY = 60
 LISTED = 300  # videos (and Shorts) read from the channel's pages for the totals
 NEWEST = 12  # newest uploads shown
+UPLOADS = 200  # uploads asked from Google (newest first)
 DETAILS = 10  # newest videos and Shorts looked at one by one (exact views, likes, comments)
 SCOPES = "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -236,6 +237,9 @@ def refresh_now():
         if not _google["busy"]:
             _google["at"] = 0
         _reports.clear()
+        for entry in _compare.values():
+            if not entry["busy"]:
+                entry["at"] = 0
 
 
 # ---------------------------------------------------------------- Google sign-in
@@ -400,10 +404,13 @@ def _fetch_google():
         raise Error("That Google account has no YouTube channel.")
     sn, st = channel["snippet"], channel.get("statistics") or {}
     uploads = ((channel.get("contentDetails") or {}).get("relatedPlaylists") or {}).get("uploads")
-    ids = []
-    if uploads:
-        items = _get("playlistItems", part="contentDetails", playlistId=uploads, maxResults=50).get("items") or []
-        ids = [i["contentDetails"]["videoId"] for i in items if i.get("contentDetails")]
+    ids, page = [], ""
+    while uploads and len(ids) < UPLOADS:  # (the Compare picker can show older ones too)
+        result = _get("playlistItems", part="contentDetails", playlistId=uploads, maxResults=50, **({"pageToken": page} if page else {}))
+        ids += [i["contentDetails"]["videoId"] for i in result.get("items") or [] if i.get("contentDetails")]
+        page = result.get("nextPageToken")
+        if not page:
+            break
     videos = _videos_by_id(ids)
     today = datetime.date.today()
     rows = _report(startDate=(today - datetime.timedelta(days=200)).isoformat(), endDate=today.isoformat(),
@@ -606,3 +613,141 @@ def _google_page(days):
                        "watch": [[r["day"], round(r["minutes"] / 60, 1)] for r in now_rows]},
             "newest": _usual(data["videos"][:40])[:NEWEST], "top": extra["top"], "topNote": f"in {days} days",
             "sources": extra["sources"], "rangeError": extra.get("error", "")}
+
+
+# ---------------------------------------------------------------- comparing two videos
+
+
+COMPARE_REFRESH = 10 * 60
+FIRST_DAYS = 30  # the "first days" graph
+_compare = {}  # (video id, google?) -> {"at", "busy", "video", "error"}
+
+
+def video_id(text):
+    """A YouTube video's id from its link (or the id itself)."""
+    text = str(text or "").strip()
+    if re.fullmatch(r"[\w-]{11}", text):
+        return text
+    m = re.search(r"(?:[?&]v=|youtu\.be/|/shorts/|/live/|/embed/)([\w-]{11})(?![\w-])", text)
+    return m.group(1) if m else None
+
+
+def uploads():
+    """The picker's list: your uploads (videos and Shorts), newest first."""
+    c = _config()
+    with _lock:
+        if c["refresh"]:
+            data = _google["data"]
+            videos = list(data["videos"]) if data else []
+        else:
+            info = (_public.get(c["channel"]) or {}).get("info")
+            videos = info["videos"] + info["shorts"] if info else []
+    keys = ("id", "url", "title", "thumbnail", "when", "views", "short", "seconds")
+    return sorted(({k: v.get(k) for k in keys} for v in videos), key=lambda v: -(v["when"] or 0))
+
+
+def _known(vid):
+    """The video as the tab already knows it (from your channel's pages), if it's one of yours."""
+    with _lock:
+        lists = [(_google["data"] or {}).get("videos") or []]
+        for entry in _public.values():
+            if entry.get("info"):
+                lists += [entry["info"]["videos"], entry["info"]["shorts"]]
+    for videos in lists:
+        for v in videos:
+            if v["id"] == vid:
+                return dict(v)
+    return None
+
+
+def _public_video(vid):
+    """Any video's public numbers, with yt-dlp."""
+    import yt_dlp
+
+    options = {"quiet": True, "no_warnings": True, "socket_timeout": 20, "js_runtimes": downloader._js_runtimes()}
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info("https://www.youtube.com/watch?v=" + vid, download=False, process=False)
+    except Exception as e:
+        raise Error(downloader.friendly_error(e))
+    seconds = int(info.get("duration") or 0)
+    known = _known(vid) or {}
+    short = known.get("short", "/shorts/" in (info.get("webpage_url") or "") or (0 < seconds <= 60 and (info.get("height") or 0) > (info.get("width") or 1)))
+    return {
+        "id": vid, "url": f"https://www.youtube.com/{'shorts/' if short else 'watch?v='}{vid}",
+        "title": info.get("title") or known.get("title") or "Untitled video", "channel": info.get("channel") or info.get("uploader") or "",
+        "thumbnail": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg", "seconds": seconds, "short": bool(short),
+        "when": info.get("timestamp") or known.get("when"), "views": info.get("view_count"),
+        "likes": info.get("like_count"), "comments": info.get("comment_count"),
+    }
+
+
+def _google_video(vid):
+    """Your own video's numbers from YouTube itself: exact counts, watch time and its first days."""
+    found = _videos_by_id([vid]).get(vid)
+    if not found:
+        raise Error("YouTube can't find that video. It may be private or deleted.")
+    video = {**found, "channel": _config()["google_name"]}
+    if not video["when"]:
+        return video
+    start = datetime.datetime.fromtimestamp(video["when"], datetime.timezone.utc).date()
+    today = datetime.date.today()
+    try:
+        life = _report(startDate=start.isoformat(), endDate=today.isoformat(), filters="video==" + vid,
+                       metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost")
+        days = _report(startDate=start.isoformat(), endDate=min(start + datetime.timedelta(days=FIRST_DAYS - 1), today).isoformat(),
+                       filters="video==" + vid, metrics="views", dimensions="day", sort="day")
+    except Error:
+        return video  # not one of yours: just the public numbers
+    if life:
+        r = life[0]
+        video.update(hours=round((r.get("estimatedMinutesWatched") or 0) / 60, 1), avgSeconds=r.get("averageViewDuration"),
+                     avgPercent=r.get("averageViewPercentage"), subs=(r.get("subscribersGained") or 0) - (r.get("subscribersLost") or 0))
+    if days:
+        # Day 1, day 2, ... (days YouTube has no row for had no views)
+        by_day = {r["day"]: r.get("views") or 0 for r in days}
+        last = datetime.date.fromisoformat(days[-1]["day"])
+        video["firstDays"] = [by_day.get((start + datetime.timedelta(days=i)).isoformat(), 0)
+                              for i in range((last - start).days + 1)]
+    return video
+
+
+def _refresh_compare(key):
+    vid, google = key
+    try:
+        video, error = (_google_video if google else _public_video)(vid), ""
+    except Error as e:
+        video, error = None, str(e)
+    except Exception:
+        video, error = None, "Couldn't read that video. Try again in a bit."
+    with _lock:
+        entry = _compare[key]
+        entry.update(at=time.time(), busy=False, error=error if not video else "")
+        if video:
+            entry["video"] = video
+
+
+def compare(ids):
+    """Both videos' numbers. Each one loads in the background the first time (a few seconds)."""
+    google = bool(_config()["refresh"])
+    out = []
+    for raw in list(ids or [])[:2]:
+        vid = video_id(raw)
+        if not vid:
+            out.append(None)
+            continue
+        key = (vid, google)
+        with _lock:
+            entry = _compare.setdefault(key, {"at": 0, "busy": False, "video": None, "error": ""})
+            wait = COMPARE_REFRESH if entry["video"] and not entry["error"] else RETRY
+            if not entry["busy"] and time.time() - entry["at"] > wait:
+                entry["busy"] = True
+                threading.Thread(target=_refresh_compare, args=(key,), daemon=True).start()
+            entry = dict(entry)
+        video = entry["video"]
+        if not video:  # show what the tab already knows while it loads
+            known = _known(vid)
+            video = {**known, "partial": True} if known else None
+        out.append({"id": vid, "loading": entry["busy"] and not entry["video"], "error": "" if entry["video"] else entry["error"],
+                    "video": video})
+    return {"ok": True, "google": google, "items": out}
