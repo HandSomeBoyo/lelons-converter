@@ -8,6 +8,11 @@ const CHANGES = [
     "Pick Today, This week or the last 2 weeks, filter by Videos, POVs, Games, Sounds or Boards, and turn on Mine too to see your own stuff as well.",
     "The side bar shows how many new things your friends did. New videos from friends and games they start or finish recording also show up under the bell (turn it off in Settings > Notifications).",
     "On someone's profile, See activity opens the Friends page with only them. Friends' videos show up once they add their YouTube channel on their profile.",
+    "Calls sound much better: voice now goes at 128 kbps by default (about 4 times what calls used before), and your voice goes first when the internet is busy, ahead of shared screens and cameras.",
+    "Pick your own sound quality, from 32 to 510 kbps, in the call's sliders menu or Settings > Sound. It changes right away, even in the middle of a call.",
+    "New Music mode: stereo sound with no cleanup, for music, singing or game sound through your microphone. Use headphones with it.",
+    "New Titles & tags page (under Tools): type your title and get a score with tips, see how it looks on a phone and in search, get other ways to say it, and grab the tags and hashtags the top YouTube videos for your topic use.",
+    "Compare two videos: in Channel stats, put two of your videos (or any YouTube link) side by side and see views, views a day, likes and comments, with the better one lit up and a short summary. Signed in with Google you also get watch time, how much people watched, and their first 30 days as a graph.",
   ] },
   { version: "2.28.0", items: [
     "Notifications: a new bell at the top shows everything new in one place: messages and @mentions, invites to docs and boards, games on sale, new POVs from friends, finished downloads and app updates. Click one to go straight there.",
