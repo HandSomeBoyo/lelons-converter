@@ -161,7 +161,7 @@ function pvCardEl(f) {
   const title = pvEl("h3", "pv-title", f.sessionTitle);
   title.title = f.sessionTitle;
   const who = pvEl("div", "pv-who");
-  who.append(avatarEl(f.by_avatar, f.by), pvEl("span", "", `${f.mine ? "You" : f.by}  ·  ${pvSize(f.size)}  ·  ${sfxAgo(f.created * 1000)}`));
+  who.append(profileLink(avatarEl(f.by_avatar, f.by), f.by), pvEl("span", "", `${f.mine ? "You" : f.by}  ·  ${pvSize(f.size)}  ·  ${sfxAgo(f.created * 1000)}`));
   body.append(title, who);
   const act = pvEl("div", "pv-act");
   card.append(pic, body, act);

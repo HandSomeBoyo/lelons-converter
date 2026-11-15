@@ -80,7 +80,7 @@ function drawInbox() {
     el.className = "inbox-item" + (item.done ? " done" : "");
     el.innerHTML = `<div class="inbox-main"><div class="inbox-head"><b></b><span class="inbox-kind"></span><span class="inbox-when"></span></div>
       <p class="inbox-text"></p></div><div class="actions"></div>`;
-    el.prepend(avatarEl(item.avatarUrl, item.username));
+    el.prepend(profileLink(avatarEl(item.avatarUrl, item.username), item.username));
     el.querySelector("b").textContent = item.username;
     const kind = el.querySelector(".inbox-kind");
     kind.textContent = KIND_NAMES[item.kind] || "Other";

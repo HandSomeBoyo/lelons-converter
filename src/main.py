@@ -783,6 +783,32 @@ class Handler(BaseHTTPRequestHandler):
                 result = {}
             elif action == "profile":
                 result = {"profile": library.profile(data.get("username"))}
+            elif action == "profile-save":
+                result = {"profile": library.set_profile(data.get("profile"))}
+            elif action == "banner-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a banner picture", [
+                        ("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp"), ("All files", "*.*")])
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if not paths:
+                    return self.send_json({"ok": True, "profile": None})
+                if os.path.getsize(paths[0]) > 30 * 1024 * 1024:
+                    raise sfx.Error("That picture is too big.")
+                with open(paths[0], "rb") as f:
+                    result = {"profile": library.set_banner(f.read())}
+            elif action == "banner-remove":
+                result = {"profile": library.remove_banner()}
+            elif action == "profile-videos":  # someone's YouTube channel on their profile (looked at in the background)
+                url = home.normalize(data.get("url"))
+                found = home.channel(url, stats=False) if url else None
+                info = (found or {}).get("info") or {}
+                result = {"loading": bool(found and found["loading"]), "error": (found or {}).get("error") or "",
+                          "name": info.get("name") or "", "avatar": info.get("avatar") or "",
+                          "subscribers": info.get("subscribers"), "videos": (info.get("videos") or [])[:6]}
             elif action == "playlists":
                 result = library.playlists()
             elif action == "playlist":
@@ -1217,6 +1243,13 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't save the picture. Try again."})
             return self.send_json({"ok": True, "bg": bg})
+        if self.path == "/api/sfx-banner":  # the body is the new banner for your profile
+            if length > 30 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                return self.send_json({"ok": True, "profile": sfx.library.set_banner(self.rfile.read(length))})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/sfx-picture":  # the body is the new profile picture
             if length > 30 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})

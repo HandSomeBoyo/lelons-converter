@@ -10,6 +10,7 @@ function openAccount() {
   $("acctDeleteForm").hidden = true;
   $("acctDeleteOpen").hidden = false;
   drawAccountPage(true);
+  if (typeof loadProfileEditor === "function") loadProfileEditor();
   if (sfxUser() && sfxUser().isOwner) {
     if (typeof loadInbox === "function") loadInbox();
     if (!people.length) $("libPeopleList").textContent = "Loading...";
@@ -36,6 +37,7 @@ function drawAccountPage(fresh) {
   $("libPeople").hidden = !user.isOwner;
   $("acctInbox").hidden = !user.isOwner;
   $("acctDeleteBox").hidden = user.isOwner; // the owner's account can't be deleted
+  if (typeof drawProfileEditor === "function") drawProfileEditor();
 }
 
 function note(id, text, good) {

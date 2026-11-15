@@ -170,6 +170,15 @@ create table if not exists lelons.chat_reactions (
 );
 
 alter table lelons.accounts add column if not exists last_seen timestamptz;
+-- (2.26.0) Your profile: a short bio, a status line, a banner picture, your color, your YouTube
+-- channel and the parts of your profile you'd rather not show.
+alter table lelons.accounts add column if not exists bio text not null default '' check (length(bio) <= 300);
+alter table lelons.accounts add column if not exists status text not null default '' check (length(status) <= 60);
+alter table lelons.accounts add column if not exists banner text;
+alter table lelons.accounts add column if not exists accent text check (accent ~ '^#[0-9a-f]{6}$');
+alter table lelons.accounts add column if not exists youtube text not null default ''
+  check (youtube = '' or (youtube like 'https://www.youtube.com/%' and length(youtube) <= 200));
+alter table lelons.accounts add column if not exists hide text[] not null default '{}';
 
 alter table lelons.config enable row level security;
 alter table lelons.accounts enable row level security;
@@ -232,7 +241,7 @@ create or replace function lelons.ticket_ok(file text, wanted text) returns bool
 create or replace function lelons.listed(file text) returns boolean
   language sql stable security definer set search_path = '' as
   $$ select exists (select 1 from lelons.sounds where path = file)
-         or exists (select 1 from lelons.accounts where avatar = file)
+         or exists (select 1 from lelons.accounts where avatar = file or banner = file)
          or exists (select 1 from lelons.chat c where c.file = listed.file)
          or exists (select 1 from lelons.chat_groups g where g.picture = listed.file) $$;
 
@@ -653,22 +662,104 @@ returns json language plpgsql security definer set search_path = '' as $$
 declare
   me lelons.accounts := lelons.who(token);
   them lelons.accounts;
+  hid text[];
+  online boolean;
 begin
   select a.* into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(lelons_profile.username, '')));
   if them.id is null then
     raise exception 'nobody' using hint = 'nobody';
   end if;
+  -- (2.26.0) The parts they hid are left out, for everyone (you too: you see what your friends see).
+  hid := coalesce(them.hide, '{}');
+  online := not ('online' = any (hid)) and exists (select 1 from lelons.presence p where p.account_id = them.id and p.seen_at > now() - interval '150 seconds');
   return json_build_object(
     'username', them.username, 'avatar', them.avatar, 'role', them.role, 'created_at', them.created_at,
-    'last_seen', them.last_seen, 'me', them.id = me.id,
-    'online', exists (select 1 from lelons.presence p where p.account_id = them.id and p.seen_at > now() - interval '150 seconds'),
+    'last_seen', case when 'online' = any (hid) then null else them.last_seen end, 'me', them.id = me.id,
+    'online', online,
+    'in_call', online and exists (select 1 from lelons.room_people rp join lelons.rooms r on r.id = rp.room_id
+                                  where rp.account_id = them.id and rp.state = 'in' and r.ended_at is null
+                                    and rp.seen_at > now() - interval '30 seconds'),
+    'bio', them.bio, 'status', them.status, 'banner', them.banner, 'accent', them.accent,
+    'youtube', case when 'videos' = any (hid) and them.id <> me.id then '' else them.youtube end,
+    'hide', case when them.id = me.id then to_json(hid) else null end,
+    'show_stats', not ('stats' = any (hid)),
     'sounds', (select count(*) from lelons.sounds s where s.uploader_id = them.id),
     'messages', (select count(*) from lelons.chat c where c.account_id = them.id and c.to_id is null and c.group_id is null),
-    'recent', coalesce((select json_agg(json_build_object('id', s.id, 'name', s.name, 'category', s.category,
-                                                          'path', s.path, 'seconds', s.seconds, 'created_at', s.created_at)
-                                        order by s.created_at desc)
-                        from (select * from lelons.sounds s where s.uploader_id = them.id order by s.created_at desc limit 6) s),
-                       '[]'::json));
+    'votes', (select count(*) from lelons.game_votes v where v.account_id = them.id),
+    'recent', case when 'sounds' = any (hid) then '[]'::json else coalesce((
+      select json_agg(json_build_object('id', s.id, 'name', s.name, 'category', s.category,
+                                        'path', s.path, 'seconds', s.seconds, 'created_at', s.created_at)
+                      order by s.created_at desc)
+      from (select * from lelons.sounds s where s.uploader_id = them.id order by s.created_at desc limit 6) s), '[]'::json) end,
+    'povs', case when 'povs' = any (hid) then '[]'::json else coalesce((
+      select json_agg(json_build_object('id', f.id, 'session', x.id, 'title', x.title, 'game', x.game, 'name', f.name,
+                                        'seconds', f.seconds, 'thumb', f.thumb, 'created', extract(epoch from f.created_at))
+                      order by f.created_at desc)
+      from (select * from lelons.pov_files y where y.owner_id = them.id and (y.expires_at is null or y.expires_at > now())
+            order by y.created_at desc limit 4) f
+      join lelons.pov_sessions x on x.id = f.session_id), '[]'::json) end,
+    'games', case when 'games' = any (hid) then '[]'::json else coalesce((
+      select json_agg(json_build_object('id', g.id, 'name', g.info->>'name', 'header', g.info->>'header', 'status', g.status,
+                                        'posted', g.poster_id = them.id, 'voted', g.voted)
+                      order by g.at desc)
+      from (select y.*, exists (select 1 from lelons.game_votes v where v.game_id = y.id and v.account_id = them.id) voted,
+                   greatest(case when y.poster_id = them.id then y.created_at end,
+                            (select v.created_at from lelons.game_votes v where v.game_id = y.id and v.account_id = them.id)) at
+            from lelons.games y
+            where y.poster_id = them.id or exists (select 1 from lelons.game_votes v where v.game_id = y.id and v.account_id = them.id)
+            order by at desc limit 6) g), '[]'::json) end);
+end $$;
+
+-- (2.26.0) Change your profile: bio, status, color, YouTube channel and what's hidden.
+-- Only the keys that are there change.
+create or replace function public.lelons_set_profile(token text, info jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  hid text[];
+begin
+  if jsonb_typeof(info) is distinct from 'object' or length(info::text) > 4000 then
+    raise exception 'bad profile' using hint = 'bad_input';
+  end if;
+  if info ? 'hide' then
+    if jsonb_typeof(info->'hide') <> 'array' then
+      raise exception 'bad hide' using hint = 'bad_input';
+    end if;
+    select coalesce(array_agg(distinct h), '{}') into hid from jsonb_array_elements_text(info->'hide') h
+    where h in ('online', 'videos', 'sounds', 'povs', 'games', 'stats');
+  end if;
+  if info ? 'accent' and info->>'accent' is not null and info->>'accent' !~ '^#[0-9a-f]{6}$' then
+    raise exception 'bad color' using hint = 'bad_input';
+  end if;
+  if info ? 'youtube' and coalesce(info->>'youtube', '') <> '' and info->>'youtube' not like 'https://www.youtube.com/%' then
+    raise exception 'bad channel' using hint = 'bad_input';
+  end if;
+  update lelons.accounts a set
+    bio = case when info ? 'bio' then left(btrim(coalesce(info->>'bio', '')), 300) else a.bio end,
+    status = case when info ? 'status' then left(btrim(coalesce(info->>'status', '')), 60) else a.status end,
+    accent = case when info ? 'accent' then info->>'accent' else a.accent end,
+    youtube = case when info ? 'youtube' then left(coalesce(info->>'youtube', ''), 200) else a.youtube end,
+    hide = case when info ? 'hide' then hid else a.hide end
+  where a.id = me.id;
+end $$;
+
+-- (2.26.0) A new banner picture (a file uploaded with a 'banner' ticket), or null to take it off.
+-- Returns the old one, which the app then deletes.
+create or replace function public.lelons_set_banner(token text, file text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+begin
+  if file is not null and (file not like 'banners/%' or not exists
+      (select 1 from lelons.tickets t where t.path = file and t.kind = 'upload' and t.account_id = me.id)) then
+    raise exception 'wrong file';
+  end if;
+  update lelons.accounts set banner = file where id = me.id;
+  delete from lelons.tickets where path = file;
+  if me.banner is not null then
+    perform lelons.delete_ticket(me.banner);
+  end if;
+  return me.banner;
 end $$;
 
 -- Star or unstar a sound, just for you.
@@ -746,7 +837,7 @@ begin
   if kind = 'sound' and me.role not in ('owner', 'admin') then
     raise exception 'not allowed' using hint = 'denied';
   end if;
-  if kind not in ('sound', 'avatar', 'chat') then
+  if kind not in ('sound', 'avatar', 'chat', 'banner') then
     raise exception 'bad kind';
   end if;
   delete from lelons.tickets where expires_at < now();
@@ -755,6 +846,7 @@ begin
   end if;
   file := case when kind = 'sound' then 'sounds/' || gen_random_uuid() || '.mp3'
                when kind = 'chat' then 'chat/' || gen_random_uuid() || '.mp3'
+               when kind = 'banner' then 'banners/' || gen_random_uuid() || '.jpg'
                else 'avatars/' || gen_random_uuid() || '.jpg' end;
   insert into lelons.tickets (path, kind, account_id) values (file, 'upload', me.id);
   return file;
@@ -1609,6 +1701,7 @@ declare
   g record;
 begin
   select coalesce(array_agg(c.file), '{}') into files from lelons.chat c where c.account_id = acc and c.file is not null;
+  files := files || coalesce((select array[a.banner] from lelons.accounts a where a.id = acc and a.banner is not null), '{}');
   perform lelons.delete_ticket(f) from unnest(files) f;
   for g in select m.group_id from lelons.chat_group_members m where m.account_id = acc loop
     delete from lelons.chat_group_members m where m.group_id = g.group_id and m.account_id = acc;
@@ -2786,6 +2879,7 @@ begin
     'lelons_feedback_set(text, uuid, boolean, boolean)', 'lelons_ping(text, text)', 'lelons_bye(text)',
     'lelons_chat_send(text, text, text, uuid, text, text, real)', 'lelons_chat_list(text, bigint, text)',
     'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
+    'lelons_set_profile(text, jsonb)', 'lelons_set_banner(text, text)',
     'lelons_home(text)', 'lelons_set_channels(text, text[])',
     'lelons_edit_sound(text, uuid, text, text, text)', 'lelons_channel_log(text, text, bigint, int)',
     'lelons_channel_history(text, int)', 'lelons_chat_typing(text, text, boolean)',

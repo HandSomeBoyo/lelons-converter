@@ -639,12 +639,59 @@
           <span class="role" id="acctRole"></span>
           <span class="acct-since" id="acctSince"></span>
         </div>
-        <div class="acct-picture-buttons">
-          <button type="button" class="small-button" id="acctPicture">Change picture</button>
-          <button type="button" class="link" id="acctPictureRemove" hidden>Remove</button>
-        </div>
-        <input type="file" id="acctPictureInput" accept="image/*" hidden>
+        <button type="button" class="outline-button" id="acctSeeProfile">See my profile</button>
       </div>
+
+      <form class="acct-card pe" id="profileEditor">
+        <h2>Your profile</h2>
+        <p class="acct-help">This is what your friends see when they click your name or picture anywhere in VaultHub.</p>
+        <div class="pe-wrap">
+          <div class="pe-form">
+            <div class="pe-row">
+              <span class="pe-label">Picture</span>
+              <div class="pe-buttons">
+                <button type="button" class="small-button" id="acctPicture">Change picture</button>
+                <button type="button" class="link" id="acctPictureRemove" hidden>Remove</button>
+              </div>
+              <input type="file" id="acctPictureInput" accept="image/*" hidden>
+            </div>
+            <div class="pe-row">
+              <span class="pe-label">Banner</span>
+              <div class="pe-buttons">
+                <button type="button" class="ghost-button" id="peBanner">Add a banner</button>
+                <button type="button" class="link" id="peBannerRemove" hidden>Remove</button>
+              </div>
+              <input type="file" id="peBannerInput" accept="image/*" hidden>
+            </div>
+            <div class="pe-row pe-top">
+              <span class="pe-label">Your color</span>
+              <div class="pe-colors" id="peColors"></div>
+            </div>
+            <label class="lib-field"><span>Status</span><input id="peStatus" maxlength="60" placeholder="Like: Editing my next video" spellcheck="false"></label>
+            <label class="lib-field pe-bio"><span>About me <small id="peBioCount"></small></span><textarea id="peBio" maxlength="300" rows="3" placeholder="A few words about you"></textarea></label>
+            <label class="lib-field"><span>Your YouTube channel</span><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+            <div class="pe-label pe-show-label">Show on my profile</div>
+            <div class="pe-show" id="peShow"></div>
+            <div class="pe-save">
+              <button type="submit" class="small-button" id="peSave" disabled>Save profile</button>
+              <span class="acct-note" id="peNote"></span>
+            </div>
+          </div>
+          <div class="pe-preview-wrap">
+            <span class="pe-label">Preview</span>
+            <div class="pe-preview" id="pePreview">
+              <div class="pf-banner" id="peBannerView"></div>
+              <span class="pf-face"><span id="peFace"></span><i class="pf-dot"></i></span>
+              <div class="pe-preview-body">
+                <b id="peName"></b>
+                <p class="pf-status" id="peStatusView"></p>
+                <p class="pf-bio" id="peBioView"></p>
+                <span class="pf-btn pf-main">Message</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
 
       <form class="acct-card" id="acctNameForm">
         <h2>Username</h2>
@@ -1531,22 +1578,41 @@
 
 <div class="modal" id="profileModal" hidden>
   <div class="dialog profile-dialog" role="dialog" aria-labelledby="profileName">
-    <div class="profile-top">
-      <span id="profileAvatar"></span>
-      <div class="profile-text">
-        <h2 id="profileName"></h2>
-        <div class="profile-sub"><span class="role" id="profileRole"></span><span id="profileSeen"></span></div>
+    <div class="pf-banner" id="profileBanner"></div>
+    <button type="button" class="pf-x" id="profileX" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="pf-head">
+      <span class="pf-face" id="profileFace"><span id="profileAvatar"></span><i class="pf-dot" id="profileDot" hidden></i></span>
+      <div class="pf-actions" id="profileActions">
+        <button type="button" class="pf-btn pf-main" id="profileMessage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>Message</button>
+        <button type="button" class="pf-btn" id="profileCall" title="Voice call"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call</button>
+        <button type="button" class="pf-btn" id="profileInvite" title="Invite them to one of your team boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8.5 8v7M13 8v4"/></svg>Invite to board</button>
+        <button type="button" class="pf-btn pf-main" id="profileEdit" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit profile</button>
       </div>
     </div>
-    <div class="profile-stats" id="profileStats"></div>
-    <h3 class="profile-h" id="profileSoundsHead">Newest sounds</h3>
-    <div class="profile-sounds" id="profileSounds"></div>
-    <p class="acct-note" id="profileNote"></p>
-    <div class="dialog-actions">
-      <button type="button" class="ghost-button" id="profileAll">See all their sounds</button>
-      <span class="spacer"></span>
-      <button type="button" class="ghost-button" id="profileClose">Close</button>
-      <button type="button" class="small-button" id="profileMessage">Send a message</button>
+    <div class="pf-body">
+      <h2 id="profileName"></h2>
+      <div class="profile-sub"><span class="role" id="profileRole"></span><span id="profileSeen"></span></div>
+      <p class="pf-status" id="profileStatus" hidden></p>
+      <p class="pf-bio" id="profileBio" hidden></p>
+      <div class="profile-stats" id="profileStats"></div>
+      <div class="pf-part" id="profileVideosPart" hidden>
+        <h3 class="profile-h">Newest videos <button type="button" class="link pf-more" id="profileChannel"></button></h3>
+        <div class="pf-videos" id="profileVideos"></div>
+      </div>
+      <div class="pf-part" id="profileGamesPart" hidden>
+        <h3 class="profile-h">Games</h3>
+        <div class="pf-games" id="profileGames"></div>
+      </div>
+      <div class="pf-part" id="profilePovsPart" hidden>
+        <h3 class="profile-h">POVs they shared</h3>
+        <div class="pf-povs" id="profilePovs"></div>
+      </div>
+      <div class="pf-part" id="profileSoundsPart" hidden>
+        <h3 class="profile-h">Newest sounds <button type="button" class="link pf-more" id="profileAll">See all</button></h3>
+        <div class="profile-sounds" id="profileSounds"></div>
+      </div>
+      <p class="pf-hidden-note" id="profileHiddenNote" hidden></p>
+      <p class="acct-note" id="profileNote"></p>
     </div>
   </div>
 </div>

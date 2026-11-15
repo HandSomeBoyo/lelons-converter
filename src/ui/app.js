@@ -852,10 +852,28 @@ $("form").addEventListener("submit", async (e) => {
 });
 
 $("change").addEventListener("click", () => openSettings("save"));
+// "Check now" in Settings: when it finds an update, Settings closes so you see the update popup
+// (it was hidden behind Settings). Otherwise the line under it says you're up to date.
+let checkFromSettings = null;
 $("checkNow").addEventListener("click", () => {
   dismissedUpdate = null;
+  checkFromSettings = { at: Date.now(), seen: false };
+  $("setVersionLine").textContent = "Checking...";
   api("/api/check-updates", {}).then(refresh);
 });
+function settingsCheckDone(s) {
+  const c = checkFromSettings;
+  if (!c) return;
+  if (s.checking) c.seen = true;
+  if (!s.appUpdate && (s.checking || (!c.seen && Date.now() - c.at < 4000))) return;
+  checkFromSettings = null;
+  if (s.appUpdate) {
+    $("setVersionLine").textContent = `Version ${s.appUpdate.version} is ready to install.`;
+    if (typeof closeSettings === "function") closeSettings();
+  } else {
+    $("setVersionLine").textContent = `You have the newest version (${s.version}).`;
+  }
+}
 $("autoUpdate").addEventListener("change", async () => render(await api("/api/auto-update", { on: $("autoUpdate").checked })));
 $("clear").addEventListener("click", () => api("/api/clear", {}).then(refresh));
 $("updateInstall").addEventListener("click", async () => {
@@ -986,6 +1004,7 @@ function render(s) {
     shownQuality = key;
   }
   $("checkNow").disabled = s.checking;
+  settingsCheckDone(s);
   $("autoUpdate").checked = s.autoUpdate;
   $("normalize").checked = s.normalize;
   if (s.notice) {

@@ -553,8 +553,63 @@ class Library:
     def profile(self, username):
         result = _rpc("lelons_profile", token=self._token(), username=str(username or ""))
         result["avatarUrl"] = public_url(result["avatar"]) if result.get("avatar") else ""
+        result["bannerUrl"] = public_url(result["banner"]) if result.get("banner") else ""
         result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
         return result
+
+    def my_profile(self):
+        return self.profile(_rpc("lelons_me", token=self._token())["username"])
+
+    def set_profile(self, info):
+        """Your bio, status line, color, YouTube channel and the parts you hide. Only the keys given change."""
+        import home
+
+        info = info if isinstance(info, dict) else {}
+        out = {}
+        if "bio" in info:
+            out["bio"] = re.sub(r"\n{3,}", "\n\n", str(info["bio"] or "").replace("\r", "")).strip()[:300]
+        if "status" in info:
+            out["status"] = " ".join(str(info["status"] or "").split())[:60]
+        if "accent" in info:
+            accent = str(info["accent"] or "").lower()
+            out["accent"] = accent if re.fullmatch(r"#[0-9a-f]{6}", accent) else None
+        if "youtube" in info:
+            text = str(info["youtube"] or "").strip()
+            url = home.normalize(text) if text else ""
+            if url is None:
+                raise Error("That isn't a YouTube channel link. It looks like youtube.com/@yourname.")
+            out["youtube"] = url
+        if "hide" in info:
+            out["hide"] = [str(h) for h in info["hide"] or [] if h in ("online", "videos", "sounds", "povs", "games", "stats")]
+        _rpc("lelons_set_profile", token=self._token(), info=out)
+        return self.my_profile()
+
+    def set_banner(self, data):
+        """A new banner (the wide picture at the top of your profile) from an image file's bytes."""
+        import io
+
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im = ImageOps.fit(im, (1000, 360), Image.LANCZOS)
+                out = io.BytesIO()
+                im.save(out, "JPEG", quality=86)
+        except (OSError, ValueError, Image.DecompressionBombError):
+            raise Error("That isn't a picture the app can open.") from None
+        path = self._put_file("banner", out.getvalue(), "image/jpeg")
+        try:
+            old = _rpc("lelons_set_banner", token=self._token(), file=path)
+        except Error:
+            self._remove_file(path)
+            raise
+        self._remove_file(old)
+        return self.my_profile()
+
+    def remove_banner(self):
+        self._remove_file(_rpc("lelons_set_banner", token=self._token(), file=None))
+        return self.my_profile()
 
     # ---- the Home page
 
