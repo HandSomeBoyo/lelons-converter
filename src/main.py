@@ -86,7 +86,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -340,6 +340,29 @@ def save_folder(data, kind=None):
     if kind and root and os.path.normcase(folder) == os.path.normcase(root):
         return project.folder_for(kind, folder)
     return folder
+
+
+def feed_page(feed, days):
+    """Adds the newest YouTube uploads of everyone who put their channel on their profile (looked at in
+    the background, like on a profile: "loading" says to ask again in a moment)."""
+    since = time.time() - max(1, min(int(days or 7), 14)) * 86400
+    loading = False
+    for c in feed.get("channels") or []:
+        url = home.normalize(c.get("youtube"))
+        found = home.channel(url, stats=False) if url else None
+        if not found:
+            continue
+        loading = loading or found["loading"]
+        info = found.get("info") or {}
+        for v in (info.get("videos") or [])[:8]:
+            if v.get("when") and v["when"] > since:
+                feed["items"].append({"kind": "video", "at": v["when"], "id": v["id"], "title": v["title"], "url": v["url"],
+                                      "thumbnail": v["thumbnail"], "seconds": v.get("seconds") or 0, "views": v.get("views"),
+                                      "channel": info.get("name") or "", "username": c["username"],
+                                      "avatar": c.get("avatar"), "avatarUrl": c.get("avatarUrl") or "", "me": c.get("me")})
+    feed["items"].sort(key=lambda i: -(i.get("at") or 0))
+    feed["loading"] = loading
+    return feed
 
 
 def home_page():
@@ -832,6 +855,8 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "call-ringing":  # someone is calling: the app blinks in the taskbar
                 appwindow.flash()
                 result = {}
+            elif action == "feed":  # the Friends page
+                result = feed_page(library.feed(data.get("days")), data.get("days"))
             elif action == "profile":
                 result = {"profile": library.profile(data.get("username"))}
             elif action == "profile-save":

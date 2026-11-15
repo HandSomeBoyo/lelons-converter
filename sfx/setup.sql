@@ -2521,6 +2521,9 @@ create index if not exists game_comments_game on lelons.game_comments (game_id, 
 alter table lelons.games add column if not exists sale_at timestamptz;
 alter table lelons.games add column if not exists youtube jsonb check (youtube is null or length(youtube::text) <= 8000);
 alter table lelons.games add column if not exists youtube_at timestamptz;
+-- 2.29.0: who moved a game to Recording or Done, and when (for the Friends page).
+alter table lelons.games add column if not exists status_by uuid references lelons.accounts (id) on delete set null;
+alter table lelons.games add column if not exists status_at timestamptz;
 alter table lelons.games enable row level security;
 alter table lelons.game_votes enable row level security;
 alter table lelons.game_comments enable row level security;
@@ -2609,7 +2612,9 @@ begin
     if st not in ('idea', 'recording', 'done') then
       raise exception 'bad status' using hint = 'bad_input';
     end if;
-    update lelons.games x set status = st, video = left(btrim(coalesce(data->>'video', x.video)), 300)
+    update lelons.games x set status = st, video = left(btrim(coalesce(data->>'video', x.video)), 300),
+      status_by = case when st <> x.status then me.id else x.status_by end,
+      status_at = case when st <> x.status then now() else x.status_at end
     where x.id = g.id returning * into g;
     return lelons.game_json(g, me);
   elsif what = 'comments' then
@@ -2865,6 +2870,84 @@ begin
   raise exception 'what?' using hint = 'bad_input';
 end $$;
 
+-- ---- The Friends page (2.29.0): what everyone made, shared and did lately, newest first.
+-- Sounds, POVs, games (posted, voted, started recording, done, talked about), team board changes
+-- (only boards you're on) and new people. The parts someone hid on their profile stay out.
+-- Also everyone's YouTube channel, so the app can add their newest uploads.
+create or replace function public.lelons_feed(token text, days int default 7)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  since timestamptz := now() - make_interval(days => greatest(1, least(coalesce(lelons_feed.days, 7), 14)));
+begin
+  return json_build_object(
+    'me', me.username,
+    'items', coalesce((select json_agg(x.item order by x.at desc) from (
+      (select s.created_at as at, json_build_object('kind', 'sound', 'at', extract(epoch from s.created_at), 'id', s.id,
+                'name', s.name, 'category', s.category, 'genre', s.genre, 'path', s.path, 'seconds', s.seconds,
+                'username', coalesce(a.username, s.uploader), 'avatar', a.avatar, 'me', s.uploader_id is not distinct from me.id) as item
+       from lelons.sounds s left join lelons.accounts a on a.id = s.uploader_id
+       where s.created_at > since and not ('sounds' = any (coalesce(a.hide, '{}')))
+       order by s.created_at desc limit 80)
+      union all
+      (select f.created_at, json_build_object('kind', 'pov', 'at', extract(epoch from f.created_at), 'id', f.id,
+                'session', x.id, 'title', x.title, 'game', x.game, 'name', f.name, 'seconds', f.seconds, 'thumb', f.thumb,
+                'username', a.username, 'avatar', a.avatar, 'me', f.owner_id = me.id)
+       from lelons.pov_files f join lelons.pov_sessions x on x.id = f.session_id join lelons.accounts a on a.id = f.owner_id
+       where f.created_at > since and (f.expires_at is null or f.expires_at > now()) and not ('povs' = any (coalesce(a.hide, '{}')))
+       order by f.created_at desc limit 30)
+      union all
+      (select g.created_at, json_build_object('kind', 'game', 'what', 'posted', 'at', extract(epoch from g.created_at), 'id', g.id,
+                'name', g.info->>'name', 'header', g.info->>'header', 'status', g.status,
+                'username', a.username, 'avatar', a.avatar, 'me', g.poster_id = me.id)
+       from lelons.games g join lelons.accounts a on a.id = g.poster_id
+       where g.created_at > since and not ('games' = any (coalesce(a.hide, '{}')))
+       order by g.created_at desc limit 40)
+      union all
+      (select g.status_at, json_build_object('kind', 'game', 'what', g.status, 'at', extract(epoch from g.status_at), 'id', g.id,
+                'name', g.info->>'name', 'header', g.info->>'header', 'status', g.status, 'video', g.video,
+                'username', a.username, 'avatar', a.avatar, 'me', g.status_by = me.id)
+       from lelons.games g join lelons.accounts a on a.id = g.status_by
+       where g.status_at > since and g.status in ('recording', 'done') and not ('games' = any (coalesce(a.hide, '{}')))
+       order by g.status_at desc limit 40)
+      union all
+      (select v.created_at, json_build_object('kind', 'game', 'what', 'voted', 'at', extract(epoch from v.created_at), 'id', g.id,
+                'name', g.info->>'name', 'header', g.info->>'header', 'status', g.status,
+                'username', a.username, 'avatar', a.avatar, 'me', v.account_id = me.id)
+       from lelons.game_votes v join lelons.games g on g.id = v.game_id join lelons.accounts a on a.id = v.account_id
+       where v.created_at > since and v.account_id is distinct from g.poster_id and not ('games' = any (coalesce(a.hide, '{}')))
+       order by v.created_at desc limit 40)
+      union all
+      (select c.created_at, json_build_object('kind', 'game', 'what', 'comment', 'at', extract(epoch from c.created_at), 'id', g.id,
+                'name', g.info->>'name', 'header', g.info->>'header', 'status', g.status, 'text', left(c.text, 140),
+                'username', a.username, 'avatar', a.avatar, 'me', c.account_id = me.id)
+       from lelons.game_comments c join lelons.games g on g.id = c.game_id join lelons.accounts a on a.id = c.account_id
+       where c.created_at > since
+       order by c.created_at desc limit 40)
+      union all
+      (select to_timestamp(l.at / 1000), json_build_object('kind', 'board', 'at', l.at / 1000, 'id', l.board_id, 'title', l.title,
+                'bg', l.bg, 'text', left(l.text, 200), 'username', coalesce(a.username, l.who), 'avatar', a.avatar,
+                'me', lower(coalesce(l.who, '')) = lower(me.username))
+       from (select b.id as board_id, b.title, coalesce(b.data->>'bg', 'blue') as bg, e->>'who' as who, e->>'text' as text,
+                    (e->>'at')::numeric as at
+             from lelons.boards b
+             join lelons.board_members m on m.board_id = b.id and m.account_id = me.id and m.joined
+             cross join lateral jsonb_array_elements(case when jsonb_typeof(b.data->'log') = 'array' then b.data->'log' else '[]'::jsonb end) e
+             where b.updated_at > since and jsonb_typeof(e->'at') = 'number' and jsonb_typeof(e->'text') = 'string') l
+       left join lelons.accounts a on lower(a.username) = lower(l.who)
+       where l.at > extract(epoch from since) * 1000 and l.at < extract(epoch from now() + interval '1 day') * 1000
+       order by l.at desc limit 80)
+      union all
+      (select a.created_at, json_build_object('kind', 'joined', 'at', extract(epoch from a.created_at),
+                'username', a.username, 'avatar', a.avatar, 'me', a.id = me.id)
+       from lelons.accounts a where a.created_at > since order by a.created_at desc limit 10)
+    ) x), '[]'::json),
+    'channels', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'youtube', a.youtube,
+                                                            'me', a.id = me.id))
+                          from lelons.accounts a
+                          where coalesce(a.youtube, '') <> '' and not ('videos' = any (coalesce(a.hide, '{}')))), '[]'::json));
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -2892,7 +2975,7 @@ begin
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
-    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)'] loop
+    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

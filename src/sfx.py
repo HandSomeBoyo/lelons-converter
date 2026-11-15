@@ -557,6 +557,22 @@ class Library:
         result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
         return result
 
+    def feed(self, days=7):
+        """The Friends page: what everyone made, shared and did in the last few days, and their YouTube channels."""
+        result = _rpc("lelons_feed", token=self._token(), days=int(days or 7)) or {}
+
+        def pictured(picture):
+            return public_url(picture) if picture else ""
+
+        items = []
+        for item in result.get("items") or []:
+            item = {**item, "avatarUrl": pictured(item.get("avatar"))}
+            if item.get("kind") == "sound" and item.get("path"):
+                item.update(url=public_url(item["path"]), categoryName=CATEGORIES.get(item.get("category"), "SFX"))
+            items.append(item)
+        return {"me": result.get("me") or "", "items": items,
+                "channels": [{**c, "avatarUrl": pictured(c.get("avatar"))} for c in result.get("channels") or []]}
+
     def my_profile(self):
         return self.profile(_rpc("lelons_me", token=self._token())["username"])
 

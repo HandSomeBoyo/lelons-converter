@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.29.0", items: [
+    "New Friends page (right under Home): see what your friends made and did, newest first, by day. New YouTube uploads, POVs they shared, games they posted, want to record, started recording or finished, sounds they added to the Library and changes on your team boards.",
+    "Click a video to watch it (or Download to get it as MP3 or MP4), a game or board to open it, a sound to play it, and anyone's face to see their profile. Click a face at the top to see only what that person did.",
+    "Pick Today, This week or the last 2 weeks, filter by Videos, POVs, Games, Sounds or Boards, and turn on Mine too to see your own stuff as well.",
+    "The side bar shows how many new things your friends did. New videos from friends and games they start or finish recording also show up under the bell (turn it off in Settings > Notifications).",
+    "On someone's profile, See activity opens the Friends page with only them. Friends' videos show up once they add their YouTube channel on their profile.",
+  ] },
   { version: "2.28.0", items: [
     "Notifications: a new bell at the top shows everything new in one place: messages and @mentions, invites to docs and boards, games on sale, new POVs from friends, finished downloads and app updates. Click one to go straight there.",
     "New things also pop up as a little card in the bottom corner, and as a Windows notification when VaultHub is behind other windows or minimized. Click it to jump right in.",
