@@ -154,3 +154,46 @@ document.getElementById("sidebar").addEventListener("transitionend", (e) => {
   if (e.target.id === "sidebar" && e.propertyName === "width") { following = false; window.dispatchEvent(new Event("resize")); }
 });
 drawSideFold();
+
+// ---- side bar groups (Convert, Create, Tools): click a group's name to fold its pages away, and again to bring
+// them back. Remembered. The open page always stays in view, and a folded group shows a dot when a page in it has news.
+const sideGroupsShut = new Set(Array.isArray(loadPref("sideGroupsShut")) ? loadPref("sideGroupsShut") : []);
+function groupButtons(head) {
+  const out = [];
+  for (let el = head.nextElementSibling; el && !el.classList.contains("tab-group"); el = el.nextElementSibling) if (el.matches("button[data-tab]")) out.push(el);
+  return out;
+}
+function drawSideGroups() {
+  for (const head of document.querySelectorAll("#tabs .tab-group[data-group]")) {
+    const shut = sideGroupsShut.has(head.dataset.group);
+    head.classList.toggle("shut", shut);
+    head.setAttribute("aria-expanded", String(!shut));
+    let news = false;
+    for (const b of groupButtons(head)) {
+      const hide = shut && !b.classList.contains("active");
+      b.classList.toggle("group-shut", hide);
+      if (hide) b.tabIndex = -1; else b.removeAttribute("tabindex");
+      const badge = b.querySelector(".tab-badge");
+      if (hide && badge && !badge.hidden) news = true;
+    }
+    head.classList.toggle("news", news);
+  }
+}
+function toggleSideGroup(head) {
+  const g = head.dataset.group;
+  sideGroupsShut.has(g) ? sideGroupsShut.delete(g) : sideGroupsShut.add(g);
+  savePref("sideGroupsShut", [...sideGroupsShut]);
+  drawSideGroups();
+  followTabLine();
+}
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const head = e.target.closest(".tab-group[data-group]");
+  if (head && !document.documentElement.classList.contains("side-small")) toggleSideGroup(head);
+});
+document.getElementById("tabs").addEventListener("keydown", (e) => {
+  const head = e.target.closest(".tab-group[data-group]");
+  if (head && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleSideGroup(head); }
+});
+// A page opened (or a badge changed) while its group is folded: keep things right.
+new MutationObserver(() => drawSideGroups()).observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
+drawSideGroups();
