@@ -7,6 +7,9 @@ const CHANGES = [
     "Who's live right now shows at the top of Home, with the stream's picture, title and how many are watching. Their profile shows it too.",
     "Put your Twitch next to your YouTube channel in Account > Edit profile, so your friends get a ping when you go live.",
     "Don't want the pings? Turn off \"Friends going live\" in Settings > Notifications.",
+    "Home is yours now: click Customize to drag widgets around, make them wide or narrow, take them off, or add new ones: Calls, Game sales, Your channel, Recent docs, Due on your boards and Notifications. Each account keeps its own layout.",
+    "Files: drop a whole folder (or click \"choose a folder\") to convert everything inside it, subfolders too.",
+    "New Watched folders in Files: pick a folder, like where OBS saves recordings, and anything new in it gets converted by itself while VaultHub is open.",
   ] },
   { version: "2.31.0", items: [
     "New themes in Settings: Dim (a softer dark gray) and Warm (cozy brown tones), next to Dark, Black and Light.",

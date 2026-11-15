@@ -134,77 +134,132 @@
   </aside>
 
   <section class="tab-page" id="homeTab">
-    <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
-
-    <form class="row home-paste" id="homeForm">
-      <label class="input">
-        <input id="homeUrl" placeholder="Paste a link to convert it right away" autocomplete="off" spellcheck="false">
-      </label>
-      <button class="convert" type="submit">
-        <span>Convert</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    <div class="hw-top">
+      <h1 class="headline"><span id="homeHello">Hey there.</span><br><em>Here's what's up.</em></h1>
+      <button type="button" class="outline-button hw-customize" id="homeCustomize" title="Pick which widgets are on Home and move them around">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><path d="M17 13.5v7M13.5 17h7"/></svg>
+        <span>Customize</span>
       </button>
-    </form>
-
-    <div class="home-section live-section" id="homeLive" hidden>
-      <div class="home-head"><h2><i class="live-dot"></i>Live now</h2><span class="home-muted" id="homeLiveCount"></span></div>
-      <div class="live-grid" id="homeLiveList"></div>
     </div>
 
-    <div class="home-section">
-      <div class="home-head">
-        <h2>Our channels</h2>
-        <span class="home-head-links">
-          <button type="button" class="link" id="homeEditChannels" hidden>Change channels</button>
-          <button type="button" class="link" id="homeSeeStats">See stats</button>
-        </span>
-      </div>
-      <div class="home-total">
-        <span class="roll big" id="homeTotal"></span>
-        <span class="home-total-note" id="homeTotalNote">Looking at the channels...</span>
-      </div>
-      <div class="channel-grid" id="homeChannels"></div>
-      <h3 class="home-sub" id="homeUploadsHead" hidden>Newest uploads</h3>
-      <div class="upload-grid" id="homeUploads"></div>
+    <div class="hw-bar" id="hwBar" hidden>
+      <p><b>Customize Home.</b> Drag a widget by its handle to move it. Make it wide or narrow, or take it off with the X.</p>
+      <span class="hw-bar-buttons">
+        <button type="button" class="link" id="hwReset">Start over</button>
+        <button type="button" class="convert" id="hwDone">Done</button>
+      </span>
     </div>
 
-    <div class="home-section">
-      <div class="home-head"><h2>The crew</h2></div>
-      <div class="home-card home-out" id="homeCrewOut" hidden>
-        <p>Log in to see who's online, the newest sounds and what people are saying.</p>
+    <div class="hw-grid" id="homeWidgets">
+      <div class="hw hw-plain" data-w="live">
+        <div class="live-section" id="homeLive" hidden>
+          <div class="home-head"><h2><i class="live-dot"></i>Live now</h2><span class="home-muted" id="homeLiveCount"></span></div>
+          <div class="live-grid" id="homeLiveList"></div>
+        </div>
+      </div>
+
+      <div class="hw hw-plain" data-w="paste">
+        <form class="row home-paste" id="homeForm">
+          <label class="input">
+            <input id="homeUrl" placeholder="Paste a link to convert it right away" autocomplete="off" spellcheck="false">
+          </label>
+          <button class="convert" type="submit">
+            <span>Convert</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+      </div>
+
+      <div class="hw hw-plain" data-w="channels">
+        <div class="home-head">
+          <h2>Our channels</h2>
+          <span class="home-head-links">
+            <button type="button" class="link" id="homeEditChannels" hidden>Change channels</button>
+            <button type="button" class="link" id="homeSeeStats">See stats</button>
+          </span>
+        </div>
+        <div class="home-total">
+          <span class="roll big" id="homeTotal"></span>
+          <span class="home-total-note" id="homeTotalNote">Looking at the channels...</span>
+        </div>
+        <div class="channel-grid" id="homeChannels"></div>
+        <h3 class="home-sub" id="homeUploadsHead" hidden>Newest uploads</h3>
+        <div class="upload-grid" id="homeUploads"></div>
+      </div>
+
+      <div class="hw home-card home-out" data-w="login" id="homeCrewOut" hidden>
+        <p>Log in to see who's online, calls, game sales, the newest sounds and what people are saying.</p>
         <div class="lib-out-buttons">
           <button type="button" class="convert" id="homeLogin">Log in</button>
           <button type="button" class="small-button" id="homeSignup">Create account</button>
         </div>
       </div>
-      <div class="home-grid" id="homeCrewGrid" hidden>
-        <div class="home-card">
-          <div class="home-card-head"><h3><i class="online-dot"></i><span id="homeOnlineCount">Online</span></h3></div>
-          <div class="home-online" id="homeOnline"></div>
-          <p class="home-muted" id="homeOnlineMore" hidden></p>
-        </div>
-        <div class="home-card">
-          <div class="home-card-head"><h3>Activity</h3><button type="button" class="link" id="homeAllSounds">Library</button></div>
-          <p class="home-muted" id="homeSoundsEmpty" hidden>Nothing yet. Upload a sound to get things going!</p>
-          <div class="home-activity" id="homeSounds"></div>
-          <button type="button" class="link home-activity-more" id="homeActivityMore" hidden>Show more</button>
-        </div>
-        <div class="home-card wide">
-          <div class="home-card-head"><h3>Live chat</h3><button type="button" class="link" id="homeOpenChat">Open the chat</button></div>
-          <p class="home-muted" id="homeChatEmpty" hidden>Nobody said anything yet. Say hi!</p>
-          <div class="home-chat" id="homeChat"></div>
-        </div>
-      </div>
-    </div>
 
-    <div class="home-section">
-      <div class="home-head"><h2>You</h2></div>
-      <div class="home-stats" id="homeStats"></div>
-      <div class="home-card">
+      <div class="hw home-card" data-w="online">
+        <div class="home-card-head"><h3><i class="online-dot"></i><span id="homeOnlineCount">Online</span></h3></div>
+        <div class="home-online" id="homeOnline"></div>
+        <p class="home-muted" id="homeOnlineMore" hidden></p>
+      </div>
+
+      <div class="hw home-card" data-w="activity">
+        <div class="home-card-head"><h3>Activity</h3><button type="button" class="link" id="homeAllSounds">Library</button></div>
+        <p class="home-muted" id="homeSoundsEmpty" hidden>Nothing yet. Upload a sound to get things going!</p>
+        <div class="home-activity" id="homeSounds"></div>
+        <button type="button" class="link home-activity-more" id="homeActivityMore" hidden>Show more</button>
+      </div>
+
+      <div class="hw home-card" data-w="chat">
+        <div class="home-card-head"><h3>Live chat</h3><button type="button" class="link" id="homeOpenChat">Open the chat</button></div>
+        <p class="home-muted" id="homeChatEmpty" hidden>Nobody said anything yet. Say hi!</p>
+        <div class="home-chat" id="homeChat"></div>
+      </div>
+
+      <div class="hw home-card" data-w="calls">
+        <div class="home-card-head"><h3>Calls</h3><button type="button" class="link" id="hwCallsOpen">Open the chat</button></div>
+        <div class="hw-list" id="hwCalls"></div>
+      </div>
+
+      <div class="hw home-card" data-w="sales">
+        <div class="home-card-head"><h3>Game sales</h3><button type="button" class="link" id="hwSalesOpen">Games</button></div>
+        <div class="hw-list" id="hwSales"></div>
+      </div>
+
+      <div class="hw home-card" data-w="mychannel">
+        <div class="home-card-head"><h3>Your channel</h3><button type="button" class="link" id="hwChOpen">Channel stats</button></div>
+        <div id="hwChannel"></div>
+      </div>
+
+      <div class="hw home-card" data-w="docs">
+        <div class="home-card-head"><h3>Recent docs</h3><button type="button" class="link" id="hwDocsOpen">Docs</button></div>
+        <div class="hw-list" id="hwDocs"></div>
+      </div>
+
+      <div class="hw home-card" data-w="due">
+        <div class="home-card-head"><h3>Due on your boards</h3><button type="button" class="link" id="hwDueOpen">Boards</button></div>
+        <div class="hw-list" id="hwDue"></div>
+      </div>
+
+      <div class="hw home-card" data-w="notes">
+        <div class="home-card-head"><h3>Notifications</h3><button type="button" class="link" id="hwNotesOpen">See all</button></div>
+        <div class="hw-list" id="hwNotes"></div>
+      </div>
+
+      <div class="hw home-card" data-w="stats">
+        <div class="home-card-head"><h3>Your stats</h3><button type="button" class="link" id="hwStatsHistory">History</button></div>
+        <div class="home-stats" id="homeStats"></div>
+      </div>
+
+      <div class="hw home-card" data-w="recent">
         <div class="home-card-head"><h3>Recent downloads</h3><button type="button" class="link" id="homeAllHistory">See all</button></div>
         <p class="home-muted" id="homeRecentEmpty" hidden>Nothing yet. Paste a link above to get started.</p>
         <div class="home-files" id="homeRecent"></div>
       </div>
+    </div>
+
+    <div class="hw-tray" id="hwTray" hidden>
+      <h3 class="home-sub">Add a widget</h3>
+      <p class="home-muted" id="hwTrayEmpty" hidden>Every widget is on Home already.</p>
+      <div class="hw-tray-list" id="hwTrayList"></div>
     </div>
   </section>
 
@@ -2308,5 +2363,6 @@
 <script src="settings.js"></script>
 <script src="tutorial.js"></script>
 <script src="quick.js"></script>
+<script src="homewidgets.js"></script>
 </body>
 </html>

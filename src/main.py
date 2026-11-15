@@ -1054,6 +1054,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
             elif action == "list":
                 result = {"boards": boards.list_all()}
+            elif action == "due":  # the Home widget: cards due soon
+                result = {"cards": boards.due_cards()}
             elif action == "create":
                 result = {"board": boards.create(data.get("board"))}
             elif action == "open":
