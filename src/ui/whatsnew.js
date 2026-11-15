@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.26.1", items: [
+    "Library: the waveform in the player at the bottom shows again on smaller windows, and so do the small ones in the list.",
+    "The player bar fits small windows now, so the volume slider no longer runs off the edge.",
+    "The Library opens about 3 times faster, and a waveform that can't load stops blinking.",
+    "Popups and the tour fit better on short windows, and Docs scrolls a bit smoother.",
+  ] },
   { version: "2.26.0", items: [
     "Profiles: click anyone's name or picture (in the chat, Boards, Games, POVs, Docs, the Library and calls) to see their profile.",
     "A profile shows their banner, bio and status, whether they're online or in a call, their newest YouTube videos (they play right in the app), and the games, POVs and sounds they shared.",
