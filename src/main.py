@@ -86,7 +86,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "chCmp", "notes", "notesOn", "povsSeen", "sideGroupsShut")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -624,6 +624,15 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 return self.send_json(channelstats.page(data.get("days")))
+            elif action == "uploads":
+                return self.send_json({"ok": True, "videos": channelstats.uploads()})
+            elif action == "compare":
+                return self.send_json(channelstats.compare(data.get("ids")))
+            elif action == "video-id":
+                vid = channelstats.video_id(data.get("url"))
+                if not vid:
+                    raise channelstats.Error("That isn't a YouTube video link.")
+                return self.send_json({"ok": True, "id": vid})
             elif action == "set":
                 channelstats.set_channel(data.get("url"))
             elif action == "forget":
