@@ -141,6 +141,33 @@ def _rpc(name, **args):
     return _request("POST", f"/rest/v1/rpc/{name}", args)
 
 
+def _chat_messages(rows):
+    """Chat messages from the database, with the links the page needs (pictures, sounds, clips, GIFs)."""
+    out = []
+    for m in rows or []:
+        if not isinstance(m, dict):
+            continue
+        m = {**m}
+        if "username" in m:
+            m["avatarUrl"] = public_url(m["avatar"]) if m.get("avatar") else ""
+        if m.get("sound"):
+            m["sound"] = {**m["sound"], "url": public_url(m["sound"]["path"])}
+        if m.get("file"):
+            m["fileUrl"] = public_url(m["file"])
+        gif = m.get("gif")
+        if gif:
+            m["gifUrl"] = m.get("fileUrl", "") if gif == "@file" else gif if str(gif).startswith("https://") else ""
+        if isinstance(m.get("reply"), dict):
+            r = m["reply"]
+            m["reply"] = {**r, "avatarUrl": public_url(r["avatar"]) if r.get("avatar") else ""}
+        if isinstance(m.get("thread"), dict):
+            t = m["thread"]
+            m["thread"] = {**t, "faces": [{**f, "avatarUrl": public_url(f["avatar"]) if f.get("avatar") else ""}
+                                          for f in t.get("faces") or []]}
+        out.append(m)
+    return out
+
+
 # ---------------------------------------------------------------- the library
 
 def _peaks_of(path):
@@ -366,32 +393,32 @@ class Library:
 
     # ---- the live chat
 
-    def chat(self, after=0, with_user=None):
+    def chat(self, after=0, with_user=None, before=None):
         """One conversation: the chat with everyone, or the private chat with with_user.
-        Messages newer than after (0: the newest 100), recent reactions, your private chats, who's online."""
+        Messages newer than after (0: the newest 100), recent reactions, your private chats, who's online.
+        before: the 100 messages older than that one instead (scrolling up)."""
         try:
             after = max(0, int(after or 0))
         except (TypeError, ValueError):
             after = 0
+        extra = {}
+        try:
+            if before:
+                extra["before"] = int(before)
+        except (TypeError, ValueError):
+            pass
         result = _rpc("lelons_chat_list", token=self._token(), after=after,
-                      with_user=str(with_user) if with_user else None) or {}
+                      with_user=str(with_user) if with_user else None, **extra) or {}
 
         def pictured(row):
             return {**row, "avatarUrl": public_url(row["avatar"]) if row.get("avatar") else ""}
 
-        messages = []
-        for m in result.get("messages") or []:
-            m = pictured(m)
-            if m.get("sound"):
-                m["sound"] = {**m["sound"], "url": public_url(m["sound"]["path"])}
-            if m.get("file"):
-                m["fileUrl"] = public_url(m["file"])
-            messages.append(m)
         group = result.get("group")
         if group:
             group = {**group, "pictureUrl": public_url(group["picture"]) if group.get("picture") else "",
                      "members": [pictured(m) for m in group.get("members") or []]}
-        return {"messages": messages, "recent": result.get("recent") or [],
+        return {"messages": _chat_messages(result.get("messages")), "recent": _chat_messages(result.get("recent")),
+                "older": bool(result.get("older")), "pinCount": result.get("pin_count") or 0,
                 "private": [pictured(p) for p in result.get("private") or []],
                 "groups": [{**g, "pictureUrl": public_url(g["picture"]) if g.get("picture") else ""}
                            for g in result.get("groups") or []],
@@ -400,21 +427,37 @@ class Library:
                 "names": result.get("names"),  # (only on the first load of a chat)
                 "online": presence.remember(result.get("online"))}
 
-    def chat_send(self, message, to_user=None, sound_id=None, clip=None):
-        """clip: (path, name, seconds) of a trim editor clip to send along (its sound, as an MP3)."""
-        extra = {}
+    def chat_send(self, message, to_user=None, sound_id=None, clip=None, reply_to=None, thread_of=None,
+                  gif=None, sticker=None, poll=None, upload=None):
+        """clip: (path, name, seconds) of a trim editor clip to send along (its sound, as an MP3).
+        (2.31.0) reply_to / thread_of: message ids; gif: a GIF link; sticker: a sticker's name; poll:
+        {q, options, multi}; upload: what _chat_voice or _chat_gif uploaded (sent as it is)."""
+        extra = dict(upload or {})
         if clip:
             extra = self._chat_clip(*clip)
+        for key, value in (("reply_to", reply_to), ("thread_of", thread_of)):
+            try:
+                if value:
+                    extra[key] = int(value)
+            except (TypeError, ValueError):
+                pass
+        if gif:
+            extra["gif"] = str(gif)[:500]
+        if sticker:
+            extra["sticker"] = str(sticker)[:30]
+        if isinstance(poll, dict):
+            extra["poll"] = {"q": str(poll.get("q") or "")[:200], "multi": bool(poll.get("multi")),
+                             "options": [str(o)[:80] for o in (poll.get("options") or [])[:10]]}
         try:
             result = _rpc("lelons_chat_send", token=self._token(), message=str(message or ""),
                           to_user=str(to_user) if to_user else None, sound=str(sound_id) if sound_id else None,
                           **extra)
         except Exception:
-            if extra:
+            if extra.get("file"):
                 self._remove_file(extra["file"])
             raise
         if not result or not result.get("ok"):
-            if extra:
+            if extra.get("file"):
                 self._remove_file(extra["file"])
             raise Error({
                 "short": "Write something first.",
@@ -424,6 +467,9 @@ class Library:
                 "nobody": "That person doesn't have an account any more.",
                 "yourself": "You can't send a private message to yourself.",
                 "gone": "Someone deleted that sound.",
+                "poll": "A poll needs a question and at least 2 answers.",
+                "gif": "That GIF link can't go in the chat. Try a GIPHY or Tenor link.",
+                "thread": "That message was deleted, so its thread is gone.",
             }.get((result or {}).get("error"), "That didn't send. Try again."))
         for path in result.get("files") or []:  # clips of old messages that dropped off the end
             self._remove_file(path)
@@ -451,6 +497,106 @@ class Library:
             if os.path.exists(mp3):
                 os.remove(mp3)
         return {"file": file, "file_name": _clean_name(name, 120), "file_seconds": round(seconds, 2)}
+
+    def chat_voice(self, data, seconds=0, peaks=None):
+        """(2.31.0) A voice message recorded in the page (WebM/Opus bytes): made an MP3 and uploaded.
+        Returns the upload for chat_send."""
+        if not data or len(data) < 200:
+            raise Error("That voice message was empty. Check your microphone in Settings > Sound devices.")
+        os.makedirs(FOLDER, exist_ok=True)
+        stem = os.path.join(FOLDER, f"voice-{uuid.uuid4().hex[:8]}")
+        try:
+            with open(stem + ".webm", "wb") as f:
+                f.write(data)
+            done = subprocess.run([media.ffmpeg(), "-hide_banner", "-nostdin", "-y", "-i", stem + ".webm", "-vn", "-ac", "1",
+                                   "-ar", "48000", "-c:a", "libmp3lame", "-b:a", "64k", "-t", "600", stem + ".mp3"],
+                                  capture_output=True, timeout=300, creationflags=getattr(media, "NO_WINDOW", 0))
+            if done.returncode != 0 or not os.path.isfile(stem + ".mp3"):
+                raise Error("Couldn't make the voice message. Try again.")
+            if os.path.getsize(stem + ".mp3") > MAX_BYTES:
+                raise Error("That voice message is too long. Keep it under 10 minutes.")
+            try:
+                seconds = float(seconds) if seconds else media.probe(stem + ".mp3")["duration"]
+            except (TypeError, ValueError, KeyError, RuntimeError, OSError):
+                seconds = 0
+            with open(stem + ".mp3", "rb") as f:
+                file = self._put_file("chat", f.read(), "audio/mpeg")
+        except subprocess.TimeoutExpired:
+            raise Error("Couldn't make the voice message. Try again.") from None
+        except OSError as e:
+            raise Error("Couldn't send the voice message. Check your internet connection.") from e
+        finally:
+            for ext in (".webm", ".mp3"):
+                try:
+                    os.remove(stem + ext)
+                except OSError:
+                    pass
+        clean = []
+        for v in (peaks if isinstance(peaks, list) else [])[:64]:
+            try:
+                clean.append(max(0, min(100, round(float(v)))))
+            except (TypeError, ValueError):
+                pass
+        return {"file": file, "file_name": "Voice message", "file_seconds": round(min(seconds, 600), 2),
+                "voice": True, "peaks": clean or None}
+
+    def chat_gif(self, data, name="GIF"):
+        """(2.31.0) A GIF from your PC, uploaded for the chat. Returns the upload for chat_send."""
+        if not data or data[:4] != b"GIF8":
+            raise Error("That isn't a GIF.")
+        if len(data) > MAX_BYTES:
+            raise Error("That GIF is too big. GIFs can be up to 10 MB.")
+        path = self._put_file("gif", data, "image/gif")
+        return {"file": path, "file_name": _clean_name(name or "GIF", 120), "gif": "@file"}
+
+    def chat_edit(self, message_id, message):
+        result = _rpc("lelons_chat_edit", token=self._token(), message_id=int(message_id), message=str(message or "")) or {}
+        if not result.get("ok"):
+            raise Error({"long": "That's a bit long. Keep it under 500 letters.",
+                         "short": "Write something, or delete the message instead.",
+                         "gone": "That message is gone."}.get(result.get("error"), "Couldn't save that. Try again."))
+
+    def chat_pin(self, message_id, on):
+        result = _rpc("lelons_chat_pin", token=self._token(), message_id=int(message_id), on_off=bool(on)) or {}
+        if not result.get("ok"):
+            raise Error({"denied": "Only the owner and admins can pin messages in the chat with everyone.",
+                         "many": "There are 50 pins here already. Unpin one first.",
+                         "gone": "That message is gone."}.get(result.get("error"), "Couldn't pin that. Try again."))
+
+    def chat_poll(self, message_id, what, choices=None):
+        picked = []
+        for c in choices or []:
+            try:
+                picked.append(int(c))
+            except (TypeError, ValueError):
+                pass
+        result = _rpc("lelons_chat_poll", token=self._token(), message_id=int(message_id),
+                      what="end" if what == "end" else "vote", choices=picked[:10]) or {}
+        if not result.get("ok"):
+            raise Error({"closed": "That poll has ended.", "denied": "Only the person who made the poll can end it.",
+                         "gone": "That poll is gone."}.get(result.get("error"), "Couldn't vote. Try again."))
+
+    def chat_thread(self, message_id):
+        result = _rpc("lelons_chat_thread", token=self._token(), message_id=int(message_id)) or {}
+        if not result.get("ok"):
+            raise Error("That message was deleted, so its thread is gone.")
+        return {"parent": _chat_messages([result.get("parent")])[0], "messages": _chat_messages(result.get("messages"))}
+
+    def chat_search(self, with_user, q):
+        result = _rpc("lelons_chat_search", token=self._token(), with_user=str(with_user) if with_user else None,
+                      q=str(q or "")[:100]) or {}
+        return {"messages": _chat_messages(result.get("messages"))}
+
+    def chat_pins(self, with_user):
+        result = _rpc("lelons_chat_pins", token=self._token(), with_user=str(with_user) if with_user else None) or {}
+        return {"messages": _chat_messages(result.get("messages"))}
+
+    def set_mode(self, mode, status=None):
+        result = _rpc("lelons_set_mode", token=self._token(), mode=str(mode or ""),
+                      status=None if status is None else str(status)[:60]) or {}
+        if not result.get("ok"):
+            raise Error("Couldn't change that. Try again.")
+        presence.poke()
 
     def chat_group(self, what, group_id=None, name=None, usernames=None, picture=None):
         """Make a group chat, rename it, add or remove people, or leave it (see lelons_chat_group)."""
@@ -513,7 +659,9 @@ class Library:
         _rpc("lelons_chat_react", token=self._token(), message_id=int(message_id), emoji=str(emoji), on_off=bool(on))
 
     def chat_delete(self, message_id):
-        self._remove_file(_rpc("lelons_chat_delete", token=self._token(), message_id=int(message_id)))
+        """Your message (and the replies in its thread), with their clips and voice messages."""
+        for path in (_rpc("lelons_chat_remove", token=self._token(), message_id=int(message_id)) or {}).get("files") or []:
+            self._remove_file(path)
 
     def room(self, what, room_id=None, with_user=None, to_user=None, kind=None, sdp=None, after=0):
         """Calls (private and group): "check" (every few seconds), "start", "join", "signal" or "leave"

@@ -2,6 +2,20 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.31.0", items: [
+    "New themes in Settings: Dim (a softer dark gray) and Warm (cozy brown tones), next to Dark, Black and Light.",
+    "Pick any color you like for the buttons and highlights, not just the ready-made ones.",
+    "Put your own picture behind every page in Settings > Background. It sits under a soft shade so text stays easy to read.",
+    "Chat: answer a message with Reply (it shows what you answer, and a click on it jumps there), or start a thread under a message for a side talk that doesn't fill up the chat.",
+    "Pin important messages with the pin button. The pin at the top of a chat shows them all. In the chat with everyone the owner and admins can pin; in groups and private chats everyone can.",
+    "Voice messages: click the microphone, talk, and send. Play them at 1x, 1.5x or 2x, and click the waveform to skip ahead.",
+    "React with any emoji (there's a search), edit your own messages (or press the up arrow), and delete them like before.",
+    "GIFs and stickers: paste a GIPHY or Tenor link, send a GIF from your PC, or pick a sticker like GG, W or LET'S GO. Star GIFs to keep them for later.",
+    "Links show a card: YouTube videos and Steam trailers play right in the app, and other pages show their title and picture.",
+    "Search a chat for old messages (Ctrl+F), and scroll up to read further back than before.",
+    "Set your status at the bottom left: Away, Busy, Recording, Editing, Gaming or Streaming, plus a short line like \"Editing ep 4\". Friends see it next to your name.",
+    "Polls: click + next to the message box, ask a question, and everyone votes. You can let people pick more than one answer and end the poll when you're done.",
+  ] },
   { version: "2.30.0", items: [
     "New how-to-use tour: it now shows everything added lately, like the Resolve tab, calls, profiles, Boards and Games, POVs and Film assets, Channel stats, Titles & tags and Ctrl+K search. It pops up once after this update, and you can watch it again from the question mark at the top (turn the voice on for a friendly walkthrough).",
     "Calls: click a friend's picture in a call to turn them down or up (to 200%). It's remembered for next time, and you also see how good their connection is.",

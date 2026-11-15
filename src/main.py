@@ -48,6 +48,7 @@ import history  # noqa: E402
 import home  # noqa: E402
 import images  # noqa: E402
 import jobs  # noqa: E402
+import linkpreview  # noqa: E402
 import media  # noqa: E402
 import names  # noqa: E402
 import settings  # noqa: E402
@@ -87,7 +88,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -869,15 +870,41 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "feedback-set":
                 result = {"feedback": library.set_feedback(data.get("id"), data.get("done"), data.get("remove"))}
             elif action == "chat":
-                result = library.chat(data.get("after"), data.get("with"))
+                result = library.chat(data.get("after"), data.get("with"), data.get("before"))
             elif action == "chat-send":
                 clip = None
                 if data.get("clip"):
                     clip = clip_maker.for_sending(data["clip"])
                     if not clip:
                         raise sfx.Error("Make the clip first.")
-                library.chat_send(data.get("message"), data.get("with"), data.get("sound"), clip)
-                result = library.chat(data.get("after"), data.get("with"))
+                gif = data.get("gif")
+                if gif:
+                    gif = linkpreview.gif_link(gif)
+                    if not gif:
+                        raise sfx.Error("That GIF link didn't work. Try a GIPHY or Tenor link.")
+                library.chat_send(data.get("message"), data.get("with"), data.get("sound"), clip, data.get("reply"),
+                                  data.get("thread"), gif, data.get("sticker"), data.get("poll"))
+                result = {} if data.get("thread") else library.chat(data.get("after"), data.get("with"))
+            elif action == "chat-edit":
+                library.chat_edit(data.get("id"), data.get("message"))
+                result = {}
+            elif action == "chat-pin":
+                library.chat_pin(data.get("id"), data.get("on"))
+                result = {}
+            elif action == "chat-poll":
+                library.chat_poll(data.get("id"), data.get("what"), data.get("choices"))
+                result = {}
+            elif action == "chat-thread":
+                result = library.chat_thread(data.get("id"))
+            elif action == "chat-search":
+                result = library.chat_search(data.get("with"), data.get("q"))
+            elif action == "chat-pins":
+                result = library.chat_pins(data.get("with"))
+            elif action == "chat-mode":
+                library.set_mode(data.get("mode"), data.get("status"))
+                result = {}
+            elif action == "chat-link":
+                result = {"card": linkpreview.preview(data.get("url"))}
             elif action == "chat-group":
                 result = library.chat_group(data.get("what"), data.get("group"), data.get("name"), data.get("usernames"))
             elif action == "group-picture-pick":
@@ -1338,6 +1365,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path in ("/api/chat-voice", "/api/chat-gif"):  # (2.31.0) the body is a voice message (WebM) or a GIF
+            if length > 40 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That's too big to send."})
+            h = self.headers
+            try:
+                body = self.rfile.read(length)
+                if self.path == "/api/chat-voice":
+                    upload = sfx.library.chat_voice(body, h.get("X-Seconds"), json.loads(urllib.parse.unquote(h.get("X-Peaks") or "[]")))
+                else:
+                    upload = sfx.library.chat_gif(body, urllib.parse.unquote(h.get("X-File-Name") or "GIF"))
+                to = urllib.parse.unquote(h.get("X-With") or "") or None
+                sfx.library.chat_send("", to, reply_to=h.get("X-Reply") or None, thread_of=h.get("X-Thread") or None, upload=upload)
+                return self.send_json({"ok": True})
+            except ValueError:
+                return self.send_json({"ok": False, "error": "That didn't send. Try again."})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/call-record":  # the body is a call recording (WebM); saved as an MP3
             return self.send_json(save_call_recording(urllib.parse.unquote(self.headers.get("X-File-Name") or "Call"), self.rfile, length))
         if self.path == "/api/sfx-add":  # the body is the sound itself
@@ -1749,8 +1793,8 @@ class Handler(BaseHTTPRequestHandler):
                 media.use_gpu(changes["hardware"])
             if data.get("theme") in settings.THEMES:
                 changes["theme"] = data["theme"]
-            if data.get("accent") in settings.ACCENTS:
-                changes["accent"] = data["accent"]
+            if settings.is_accent(data.get("accent")):
+                changes["accent"] = data["accent"].lower()
             if isinstance(data.get("zoom"), (int, float)):
                 changes["zoom"] = round(min(2.0, max(0.5, float(data["zoom"]))), 2)
                 appwindow.set_zoom(changes["zoom"])

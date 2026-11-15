@@ -3,6 +3,7 @@
 import json
 import time
 import os
+import re
 import threading
 
 import windows
@@ -27,9 +28,14 @@ QUALITIES = {
 DEFAULT_QUALITY = {"mp3": "320", "m4a": "256", "wav": "lossless", "flac": "lossless", "mp4": "1080", "gif": "480"}
 
 
-THEMES = ("dark", "black", "light")
+THEMES = ("dark", "black", "dim", "warm", "light")
 SAVE_MODES = ("ask", "folder")
 ACCENTS = ("yellow", "orange", "red", "pink", "purple", "blue", "teal", "green")
+
+
+def is_accent(value):
+    """One of the ready-made colors, or your own as #rrggbb."""
+    return value in ACCENTS or (isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value) is not None)
 
 
 def is_valid_quality(fmt, quality):
@@ -97,7 +103,7 @@ def load():
         settings["last_asked"] = settings["folder"]
     if settings.get("theme") not in THEMES:
         settings["theme"] = "dark"
-    if settings.get("accent") not in ACCENTS:
+    if not is_accent(settings.get("accent")):
         settings["accent"] = "yellow"
     for fmt in QUALITIES:
         if not is_valid_quality(fmt, settings.get(f"quality_{fmt}")):
