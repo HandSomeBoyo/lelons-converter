@@ -5666,9 +5666,9 @@ html.side-small .side-search kbd { opacity: 0; }
 .note-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 38px 30px 42px; color: var(--muted); font-size: 13px; }
 .note-empty svg { width: 34px; height: 34px; opacity: .5; margin-bottom: 4px; }
 .note-empty b { color: var(--text); font-size: 14.5px; }
-.note-foot { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px 10px; border-top: 1px solid var(--line); }
+.note-foot { display: flex; justify-content: center; padding: 9px 0 10px; border-top: 1px solid var(--line); }
 .note-foot .link { font-size: 12.5px; color: var(--muted); }
-#noteFeed { color: var(--accent); font-weight: 600; }
+.note-foot:has(.link[hidden]) { display: none; }
 
 /* the little cards in the corner */
 .note-pop { position: fixed; right: 18px; bottom: 18px; z-index: 900; display: flex; flex-direction: column; gap: 8px; width: 340px; max-width: calc(100vw - 36px); pointer-events: none; }

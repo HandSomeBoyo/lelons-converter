@@ -342,7 +342,7 @@ $("profileModal").addEventListener("click", (e) => {
   if (!e.target.closest(".pf-invite, #profileInvite")) closeProfileInvite();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("profileModal").hidden && $("watchModal").hidden) closeProfile(); });
-$("profileFeed").addEventListener("click", () => {
+$("profileFeed")?.addEventListener("click", () => {
   const p = profileShown;
   if (!p || !p.username) return;
   closeProfile();

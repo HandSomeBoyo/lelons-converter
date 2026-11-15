@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.29.1", items: [
+    "The Friends page is taken out for now, so the side bar is back to how it was (Ctrl+1 to 9 go to the same pages as before 2.29.0).",
+  ] },
   { version: "2.29.0", items: [
     "New Friends page (right under Home): see what your friends made and did, newest first, by day. New YouTube uploads, POVs they shared, games they posted, want to record, started recording or finished, sounds they added to the Library and changes on your team boards.",
     "Click a video to watch it (or Download to get it as MP3 or MP4), a game or board to open it, a sound to play it, and anyone's face to see their profile. Click a face at the top to see only what that person did.",
