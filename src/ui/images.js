@@ -19,8 +19,19 @@ function saveImageOptions() {
 
 // The side bar has 8 places. Some hold a few pages, picked with the bar at the top of the page.
 const TAB_SECTIONS = { convert: ["video", "files", "images", "history"], library: ["sfx", "fx"],
-  recording: ["games", "povs"], youtube: ["channel", "titles", "copyright"] };
-const sectionOf = (tab) => Object.keys(TAB_SECTIONS).find((k) => TAB_SECTIONS[k].includes(tab)) || "";
+  recording: ["games", "povs"], youtube: ["channel", "comments", "titles", "copyright"] };
+const sectionOf = (tab) => Object.keys(TAB_SECTIONS).find((k) => TAB_SECTIONS[k].includes(tab) && document.querySelector(`.sub-tabs button[data-tab="${tab}"]`)) || "";
+// A page that belongs in a place but still sits in the side bar (like Comments) moves into that place's bar.
+for (const [section, tabs] of Object.entries(TAB_SECTIONS)) {
+  const bar = document.querySelector(`.sub-tabs[data-section="${section}"]`);
+  tabs.forEach((t, i) => {
+    const b = document.querySelector(`#tabs button[data-tab="${t}"]:not([data-section])`);
+    if (!b || !bar) return;
+    b.type = "button"; b.setAttribute("role", "tab");
+    const next = tabs.slice(i + 1).map((n) => bar.querySelector(`button[data-tab="${n}"]`)).find(Boolean);
+    bar.insertBefore(b, next || null);
+  });
+}
 
 function showTab(tab) {
   const section = sectionOf(tab);
