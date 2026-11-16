@@ -3,7 +3,18 @@
 
 const CHANGES = [
   { version: "2.33.0", items: [
-    "New Comments page (under Channel stats): every comment on your YouTube channel, split into just Unread and Read. The number on the side bar shows how many wait for you.",
+    "A cleaner app: the side bar now has just 8 places. Convert, Library, Recording (Games and POVs) and YouTube each hold their pages in a bar at the top, so nothing feels like a maze. Ctrl+K still finds every page.",
+    "Home has four start buttons for the things you do most.",
+    "The Account page is all new: your profile is the page. Click the banner or your picture to change them, and type your status and bio right on it.",
+    "Ready-made banners (Galaxy, Sunset, Ocean, Grass, Plain), a colored, glowing or rainbow ring around your picture, and any color you like.",
+    "Showcase: pin up to 3 of your videos, sounds or games to the top of your profile.",
+    "The Account page has tabs now: Profile, Account, Invites and People. The Save button only shows up when you changed something.",
+    "Invite codes: new accounts need a code. The owner and admins make them in Account > Invites and pick how long they work and how many people can use them.",
+    "Your devices: see every PC you're logged in on, and log one out (or all the others) in Account > Account.",
+    "Safer passwords: new ones need at least 8 characters and can't be a common one. Too many wrong tries lock the login for longer each time.",
+    "Your Google and Library sign-ins saved on this PC are now locked with Windows, so other programs can't read them.",
+    "Outside web pages now open in your browser, and only VaultHub itself can use your mic and camera.",
+    "New Comments page (in YouTube): every comment on your YouTube channel, split into just Unread and Read. The number on the side bar shows how many wait for you.",
     "Answer right there: click Answer, type, and press Send (or Ctrl+Enter). The next comment opens by itself, so you can go down the list fast.",
     "Quick answers: save answers you use a lot, like \"Thanks for watching!\", and add them with one click.",
     "When someone answers you back, the comment goes back to Unread. Press \"Mark as read\" on ones you don't want to answer.",
