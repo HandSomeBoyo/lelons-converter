@@ -36,6 +36,10 @@ import pagecache  # noqa: E402
 import boards  # noqa: E402
 import channelstats  # noqa: E402
 import comments  # noqa: E402
+import streamlive  # noqa: E402
+import streamtwitch  # noqa: E402
+import streampreview  # noqa: E402
+import obsctl  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -90,7 +94,8 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg")  # what the page may remember
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -631,6 +636,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(state.snapshot())
         if self.path == "/api/history":
             return self.send_json({"items": history.items(), "version": history.version})
+        if url.path == "/live-hls":  # (2.34.0) the stream preview in the Live console, passed through
+            try:
+                body, kind = streampreview.fetch(urllib.parse.parse_qs(url.query).get("u", [""])[0])
+            except (streampreview.Error, OSError, ValueError):
+                return self.send_error(404)
+            return self.send_body(body, kind)
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -665,7 +676,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/icon.png":
             icon = next((p for p in ICON_CANDIDATES if os.path.isfile(p)), None)
             return self.send_file(icon) if icon else self.send_error(404)
-        name = "index.html" if self.path == "/" else self.path.lstrip("/")
+        name = "index.html" if self.path == "/" else url.path.lstrip("/")
         path = os.path.normpath(os.path.join(UI_DIR, name))
         if path.startswith(UI_DIR + os.sep) and os.path.isfile(path):
             return self.send_file(path)
@@ -736,6 +747,87 @@ class Handler(BaseHTTPRequestHandler):
                     webbrowser.open(url)
             else:
                 return self.send_error(404)
+        except channelstats.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True})
+
+    def handle_live(self, action, data):
+        """The Live console (chat, viewers, OBS, alerts, stream stats)."""
+        try:
+            if action == "state":
+                return self.send_json(streamlive.state(int(data.get("since") or 0)))
+            elif action == "config":
+                return self.send_json({"ok": True, "config": streamlive.config()})
+            elif action == "setup":
+                streamlive.setup(data)
+                return self.send_json({"ok": True, "config": streamlive.config()})
+            elif action == "send":
+                return self.send_json({"ok": True, **streamlive.send(str(data.get("text") or ""), str(data.get("to") or "both"))})
+            elif action == "mod":
+                streamlive.moderate(str(data.get("p") or ""), str(data.get("action") or ""), str(data.get("id") or ""),
+                                    str(data.get("userId") or ""), str(data.get("login") or ""), str(data.get("channelId") or ""))
+            elif action == "twitch-signin":
+                return self.send_json({"ok": True, **streamlive.twitch().begin_sign_in(data.get("clientId"))})
+            elif action == "twitch-check":
+                return self.send_json({"ok": True, "done": streamlive.twitch().check_sign_in()})
+            elif action == "obs":  # (2.34.0) the OBS card: live picture, scenes, sound, recording
+                return self.send_json({"ok": True, "obs": obsctl.state()})
+            elif action == "obs-do":
+                try:
+                    return self.send_json({"ok": True, "obs": obsctl.do(str(data.get("what") or ""), data)})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "obs-shot":
+                try:
+                    return self.send_json({"ok": True, "image": obsctl.picture(data.get("width") or 640)})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "tw-clip":
+                return self.send_json({"ok": True, "clip": streamlive.clip()})
+            elif action == "tw-modes":
+                return self.send_json({"ok": True, "modes": streamlive.twitch().chat_modes()})
+            elif action == "tw-modes-set":
+                return self.send_json({"ok": True, "modes": streamlive.twitch().set_chat_modes(data.get("change") or {})})
+            elif action == "tw-info":  # (2.34.0) the Twitch title, game and tags
+                return self.send_json({"ok": True, "info": streamlive.twitch().info()})
+            elif action == "tw-games":
+                return self.send_json({"ok": True, "games": streamlive.twitch().games(data.get("q"))})
+            elif action == "tw-set":
+                tags = data.get("tags")
+                return self.send_json({"ok": True, "info": streamlive.twitch().set_info(
+                    data.get("title"), data.get("gameId"), tags if isinstance(tags, list) else None)})
+            elif action == "twitch-signout":
+                streamlive.twitch().sign_out()
+            elif action == "streams":
+                return self.send_json({"ok": True, "streams": streamlive.streams()})
+            elif action == "stream":
+                found = streamlive.stream(data.get("id"))
+                return self.send_json({"ok": bool(found), **(found or {"error": "That stream is gone."})})
+            elif action == "forget":
+                streamlive.forget(data.get("id"))
+            elif action == "hotkeys":
+                return self.send_json({"ok": True, "taken": appwindow.set_hotkeys(data.get("keys") or [])})
+            elif action == "popout":
+                top, see = bool(data.get("onTop", True)), max(30, min(100, int(data.get("see") or 100)))
+                ok = appwindow.popout(f"http://127.0.0.1:{self.server.server_port}/livechat.html?top={int(top)}&see={see}",
+                                      os.path.join(settings.DATA_DIR, "webview"), WINDOW_ICON,
+                                      on_top=top, see=see, close=bool(data.get("close")),
+                                      placement=settings.load().get("lv_popout_at"),
+                                      on_closed=lambda at: at and settings.save(lv_popout_at=at))
+                return self.send_json({"ok": ok, "error": "" if ok else "The pop-out chat needs the app's own window."})
+            elif action == "preview":
+                try:
+                    return self.send_json({"ok": True, "url": streampreview.source(str(data.get("p") or ""), str(data.get("name") or ""))})
+                except streampreview.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "open":
+                url = str(data.get("url") or "")
+                if re.match(r"^https://(www\.twitch\.tv|clips\.twitch\.tv|dashboard\.twitch\.tv|dev\.twitch\.tv|www\.youtube\.com|studio\.youtube\.com|obsproject\.com)/", url):
+                    webbrowser.open(url)
+            else:
+                return self.send_error(404)
+        except (streamtwitch.Error, streamlive.streamyt.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
         except channelstats.Error as e:
             return self.send_json({"ok": False, "error": str(e)})
         self.send_json({"ok": True})
@@ -1708,6 +1800,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_channel(self.path[len("/api/ch-"):], data)
         elif self.path.startswith("/api/cm-"):
             self.handle_comments(self.path[len("/api/cm-"):], data)
+        elif self.path.startswith("/api/live-"):
+            self.handle_live(self.path[len("/api/live-"):], data)
         elif self.path == "/api/titles-look":  # the Titles & tags tab looks up a topic on YouTube
             try:
                 self.send_json(titles.look_up(data.get("topic")))
@@ -1889,7 +1983,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
             key, value = data.get("key"), data.get("value")
-            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < (40000 if key == "notes" else 4000):
+            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < (40000 if key in ("notes", "lvPads") else 4000):
                 with page_pref_lock:
                     saved = settings.load().get("page") or {}
                     settings.save(page={**saved, key: value})

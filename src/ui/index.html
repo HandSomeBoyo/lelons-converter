@@ -113,6 +113,7 @@
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
       <button data-section="recording" data-tab="games" title="Recording"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg><span>Recording</span><b class="tab-dot" hidden></b></button>
       <button data-section="youtube" data-tab="channel" title="YouTube"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>YouTube</span><b class="tab-dot" hidden></b></button>
+      <button data-section="live" data-tab="live" title="Live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/></svg><span>Live</span><i class="lv-onair" id="lvOnAir" hidden>LIVE</i><b class="tab-dot" hidden></b></button>
       <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
     </nav>
     <div id="subTabsHome" hidden>
@@ -135,6 +136,12 @@
       <button type="button" role="tab" data-tab="comments" title="Comments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-11.2 6.5L4 19.5l1.5-4.3A7.5 7.5 0 1 1 20 11.5z"/><path d="M9 10h6M9 13.5h3.5"/></svg><span>Comments</span><b class="tab-badge" id="commentsTabBadge" hidden></b></button>
       <button type="button" role="tab" data-tab="titles" title="Titles &amp; tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h11M4 11h7"/><path d="M13.5 20.5 12 21l.5-1.5 6.2-6.2a1.06 1.06 0 0 1 1.5 1.5z"/><path d="M4.5 15.5h3"/></svg><span>Titles &amp; tags</span></button>
       <button type="button" role="tab" data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
+</div>
+<div class="sub-tabs" data-section="live" role="tablist">
+      <button type="button" role="tab" data-tab="live" title="Console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/></svg><span>Console</span></button>
+      <button type="button" role="tab" data-tab="lvboard" title="Soundboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg><span>Soundboard</span></button>
+      <button type="button" role="tab" data-tab="lvalerts" title="Alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Alerts</span></button>
+      <button type="button" role="tab" data-tab="lvstats" title="Stream stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/></svg><span>Stream stats</span></button>
 </div>
     </div>
     <div class="side-foot">
@@ -357,6 +364,25 @@
         <p class="fd-tip">Tip: friends' YouTube videos show up once they add their channel on their profile (Account page).</p>
       </div>
     </div>
+  </section>
+
+  <section class="tab-page lv-page" id="liveTab" hidden>
+    <div class="lv-top" id="lvTop"></div>
+    <div id="lvBody"></div>
+  </section>
+
+  <section class="tab-page lv-page" id="lvboardTab" hidden>
+    <div class="lv-head"><h1 class="headline">Soundboard.<br><em>Press a key, chat hears it.</em></h1></div>
+    <div id="lvBoard"></div>
+  </section>
+
+  <section class="tab-page lv-page" id="lvalertsTab" hidden>
+    <div class="lv-head"><h1 class="headline">Alerts.<br><em>Hear it when something happens.</em></h1></div>
+    <div id="lvAlerts"></div>
+  </section>
+
+  <section class="tab-page lv-page" id="lvstatsTab" hidden>
+    <div id="lvStats"></div>
   </section>
 
   <section class="tab-page" id="channelTab" hidden>
@@ -1725,6 +1751,22 @@
   </div>
 </div>
 
+<div class="lv-toasts" id="lvToasts" aria-live="polite"></div>
+
+<div class="modal" id="lvSetupModal" hidden>
+  <div class="dialog lv-setup" role="dialog" aria-labelledby="lvSetupHeading">
+    <h2 id="lvSetupHeading">Set up the Live console</h2>
+    <p class="sub">Fill in what you stream on. Everything here is free, and you can change it any time.</p>
+    <div id="lvSetupBody"></div>
+    <p class="sfx-error" id="lvSetupError"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="lvSetupCancel">Close</button>
+      <button type="button" class="small-button" id="lvSetupSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="chSetupModal" hidden>
   <div class="dialog ch-setup" role="dialog" aria-labelledby="chSetupHeading">
     <h2 id="chSetupHeading">Sign in with Google (set up once)</h2>
@@ -2476,5 +2518,13 @@
 <script src="tutorial.js"></script>
 <script src="quick.js"></script>
 <script src="homewidgets.js"></script>
+<script src="liveui.js"></script>
+<script src="livecon.js"></script>
+<script src="vendor/hls.light.min.js"></script>
+<script src="lvpreview.js"></script>
+<script src="lvinfo.js"></script>
+<script src="lvlayout.js"></script>
+<script src="lvtwitch.js"></script>
+<script src="lvobs.js"></script>
 </body>
 </html>

@@ -44,7 +44,7 @@ def is_valid_quality(fmt, quality):
 
 # (2.33.0) Sign-ins are saved locked with Windows' own lock (DPAPI): only your Windows account on this PC
 # can open them, so a copied settings.json (a backup, a virus sending files away) has no use.
-SECRET_KEYS = ("library_token", "ch_refresh", "ch_client_secret")
+SECRET_KEYS = ("library_token", "ch_refresh", "ch_client_secret", "lv_tw_refresh", "lv_obs_password")
 LOCKED = "dpapi:"
 _ENTROPY = b"VaultHub sign-in"
 _opened = {}  # locked text -> what it says (opening it every time settings load would be wasted work)

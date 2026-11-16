@@ -2,6 +2,24 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.34.0", items: [
+    "New Live place in the side bar: a streaming console for Twitch and YouTube. It lights up red with LIVE while you stream.",
+    "Console: how many people watch on each site, time live, new followers, subs and Super Chats, and how fast chat is going, all on one page.",
+    "A live graph of viewers with marks where raids came in, and your goals for the stream with progress bars.",
+    "Stream health from OBS: upload speed, dropped frames, FPS, CPU, graphics card load and plain-word warnings when something goes wrong. It also checks that OBS is recording and how much disk space is left.",
+    "Make the Console yours: press Customize to drag cards around, make them wider or narrower, change the chat's height, or take cards off and add them back.",
+    "OBS card: see OBS's live picture right in VaultHub, switch scenes with buttons or hotkeys (even in a game), watch and mute your sound sources, start or stop recording, and save replays. OBS can stay minimized.",
+    "Clips: clip your Twitch stream with one big button or a hotkey that works even in a game, then copy the link or edit it on Twitch.",
+    "Chat modes: turn on slow mode, followers-only, subs-only, emote-only, no repeats or Shield Mode with one click.",
+    "New chatters: people chatting in your channel for the very first time get their own list, with a Say hi button so nobody gets missed.",
+    "Change your Twitch title, game and tags right from the Console, with a game search and your recent games one click away (sign in to Twitch in Set up).",
+    "Preview: watch your own stream right in the Console, with sound, the way viewers see it. It starts muted, so your stream doesn't echo (wear headphones if you turn the sound on).",
+    "Twitch and YouTube chat in one box. Write back, delete messages, time out or ban people, and pop the chat out into a small window that stays on top of your game.",
+    "Soundboard: put sounds from the Library on buttons and play them with a key, even while you're in a game.",
+    "Alerts: a sound and a pop-up for new followers, subs, raids, Super Chats and when someone says your name.",
+    "Stream stats: after each stream, see how it went, compared to last time, with the best moments to cut clips from.",
+    "All free: no paid services. Set it up with the button at the top right of the Live page.",
+  ] },
   { version: "2.33.0", items: [
     "A cleaner app: the side bar now has just 8 places. Convert, Library, Recording (Games and POVs) and YouTube each hold their pages in a bar at the top, so nothing feels like a maze. Ctrl+K still finds every page.",
     "Home has four start buttons for the things you do most.",
