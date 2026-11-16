@@ -125,27 +125,18 @@ function lvDrawWelcome() {
 }
 
 function lvBuildConsole() {
+  // Every card is its own piece of one grid, so you can move and size it (Customize, lvlayout.js).
   $("lvBody").innerHTML = `
-    <div class="lv-card lv-info" id="lvInfo" hidden></div>
-    <div class="lv-nums" id="lvNums"></div>
-    <div class="lv-grid" id="lvGrid">
-      <div class="lv-col">
-        <div class="lv-card lv-prev" id="lvPrevCard"></div>
-        <div class="lv-card">
-          <h3>Watching<span class="sp"></span><span class="lv-legend"><span><i class="tw"></i>Twitch</span><span><i class="yt"></i>YouTube</span></span></h3>
-          <div class="lv-chart" id="lvGraph"></div>
-        </div>
-        <div class="lv-card" id="lvHealthCard">
-          <h3>Stream health<span class="sp"></span><span class="lv-health-pill" id="lvHealthPill"></span></h3>
-          <div id="lvHealth"></div>
-          <div class="lv-rec" id="lvRecBox"></div>
-        </div>
-        <div class="lv-two">
-          <div class="lv-card"><h3>Goals<span class="sp"></span><button type="button" class="link" id="lvGoalsEdit">Edit</button></h3><div id="lvGoals"></div></div>
-          <div class="lv-card"><h3>What happened</h3><div class="lv-events" id="lvEvents"></div></div>
-        </div>
-      </div>
-      <div class="lv-card lv-chatbox">
+    <div class="lv-cbar" id="lvCbar" hidden>
+      <p><b>Make it yours.</b> Drag a card by its dots, make it wider or narrower, or take it off.</p>
+      <span class="sp"></span><button type="button" class="link" id="lvcReset">Start over</button>
+      <button type="button" class="small-button" id="lvcDone">Done</button>
+    </div>
+    <div class="lv-board" id="lvGrid">
+      <div class="lv-card lv-info" id="lvInfo" data-c="info" hidden></div>
+      <div class="lv-nums" id="lvNums" data-c="nums"></div>
+      <div class="lv-card lv-prev" id="lvPrevCard" data-c="preview"></div>
+      <div class="lv-card lv-chatbox" data-c="chat">
         <div class="lv-chat-head">
           <h3>Chat</h3><span class="lv-speed" id="lvSpeed"></span><span class="sp"></span>
           <span class="lv-seg" id="lvFilter"><button data-f="both">Both</button><button data-f="tw">${LV_ICONS.tw}Twitch</button><button data-f="yt">${LV_ICONS.yt}YouTube</button></span>
@@ -158,7 +149,19 @@ function lvBuildConsole() {
         </form>
         <p class="lv-send-note" id="lvSendNote"></p>
       </div>
+      <div class="lv-card" data-c="graph">
+        <h3>Watching<span class="sp"></span><span class="lv-legend"><span><i class="tw"></i>Twitch</span><span><i class="yt"></i>YouTube</span></span></h3>
+        <div class="lv-chart" id="lvGraph"></div>
+      </div>
+      <div class="lv-card" id="lvHealthCard" data-c="health">
+        <h3>Stream health<span class="sp"></span><span class="lv-health-pill" id="lvHealthPill"></span></h3>
+        <div id="lvHealth"></div>
+        <div class="lv-rec" id="lvRecBox"></div>
+      </div>
+      <div class="lv-card" data-c="goals"><h3>Goals<span class="sp"></span><button type="button" class="link" id="lvGoalsEdit">Edit</button></h3><div id="lvGoals"></div></div>
+      <div class="lv-card" data-c="events"><h3>What happened</h3><div class="lv-events" id="lvEvents"></div></div>
     </div>`;
+  if (typeof lvLayoutInit === "function") lvLayoutInit();
   LV.drawn = new Set();
   $("lvFilter").addEventListener("click", (e) => {
     const b = e.target.closest("button");
@@ -191,9 +194,11 @@ function lvDrawTopBar() {
     ${c.youtube ? chip("yt", yt.live, yt.viewers, "Offline") : ""}
     ${c.obsOn ? `<span class="lv-pill ${obs.connected ? "" : "dim"}" title="${lvEsc(obs.error || "")}"><i class="lv-obs-dot ${obs.connected ? (obs.streaming ? "on" : "ok") : ""}"></i>OBS ${obs.connected ? (obs.streaming ? "streaming" : "connected") : "not connected"}</span>` : ""}
     <span class="sp"></span>
+    <button type="button" class="lv-ghost" id="lvCustomize" title="Move, size and pick the cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.5"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Customize</button>
     <button type="button" class="lv-ghost" id="lvPop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10M19.5 4.5 12 12"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></svg>Pop out chat</button>
     <button type="button" class="icon-button" id="lvSetupOpen" title="Set up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>`;
   $("lvPop").addEventListener("click", lvPopOut);
+  $("lvCustomize").addEventListener("click", () => lvLayoutEdit(true));
   $("lvSetupOpen").addEventListener("click", lvOpenSetup);
 }
 
