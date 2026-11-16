@@ -31,10 +31,16 @@ WM_DRAG = WM_APP + 2  # "drag this file out of the window", from another thread
 WM_ZOOM = WM_APP + 3  # "show the page at this size", from another thread
 WM_TOAST = WM_APP + 4  # "show a Windows notification", from another thread
 WM_TRAY = WM_APP + 5  # the little icon by the clock (it's there for the notifications) was clicked
+WM_HOTKEYS = WM_APP + 6  # "use these keys", from another thread (the Live soundboard)
+WM_POPSET = WM_APP + 7  # the pop-out chat: on top or not, how see-through
+WM_HOTKEY = 0x0312
 NIN_BALLOONUSERCLICK = 0x0405
 
 _lock = threading.Lock()
 _window = None  # the open Window, if there is one
+_pop = None  # the Live chat's pop-out window, if it's open
+_hotkeys = []  # [(id, modifiers, key code)] the soundboard wants
+_hotkeys_taken = []  # ids another program already uses
 _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
 
@@ -262,6 +268,51 @@ _handlers = []
 
 
 @WNDPROC
+def set_hotkeys(keys):
+    """Keys that work everywhere, even in a game (the Live soundboard). keys: [{id, mods, vk}],
+    mods: 1 Alt, 2 Ctrl, 4 Shift, 8 Windows. Returns the ids another program already uses."""
+    global _hotkeys
+    clean = []
+    for k in keys or []:
+        try:
+            kid, mods, vk = int(k["id"]), int(k.get("mods") or 0) & 0xF, int(k["vk"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 1 <= kid <= 0xBFFF and 0 < vk < 256:
+            clean.append((kid, mods, vk))
+    _hotkeys = clean[:40]
+    window = _window
+    if window and window.alive and window.hwnd:
+        window.user32.SendMessageW(window.hwnd, WM_HOTKEYS, 0, 0)  # waits until the window's thread did it
+    return list(_hotkeys_taken)
+
+
+def popout(url, data_folder, icon, on_top=True, see=100, close=False, on_closed=None, placement=None):
+    """The Live chat in its own small window, on top of everything (a game too) if wanted.
+    see: 100 = solid, lower = see-through. Returns False when there's no window of our own."""
+    global _pop
+    if not available():
+        return False
+    with _lock:
+        pop = _pop if _pop and _pop.alive else None
+        if close:
+            if pop:
+                pop.cancel()
+            return True
+        if pop:
+            pop.pop_on_top, pop.pop_see = bool(on_top), max(30, min(100, int(see or 100)))
+            pop.user32.PostMessageW(pop.hwnd, WM_POPSET, 0, 0)
+            pop.show()
+            return True
+        pop = _pop = Window(url, data_folder, icon, on_closed or (lambda placement: None), placement,
+                            popout=True, on_top=bool(on_top), see=see)
+    pop.thread.start()
+    if not pop.started.wait(30):
+        pop.cancel()
+        return False
+    return pop.ok
+
+
 def _window_procedure(hwnd, message, wparam, lparam):
     window = _windows.get(hwnd)
     if window:
@@ -273,8 +324,9 @@ def _window_procedure(hwnd, message, wparam, lparam):
 
 
 class Window:
-    def __init__(self, url, data_folder, icon, on_closed, placement=None):
+    def __init__(self, url, data_folder, icon, on_closed, placement=None, popout=False, on_top=False, see=100):
         self.url, self.data_folder, self.icon, self.on_closed = url, data_folder, icon, on_closed
+        self.popout, self.pop_on_top, self.pop_see = popout, on_top, max(30, min(100, int(see or 100)))
         self.placement = placement
         self.cancelled = False
         self.webview = None
@@ -385,9 +437,10 @@ class Window:
         self.small_icon = small
         user32.RegisterClassExW(ctypes.byref(cls))  # fails harmlessly when already registered
 
-        width, height = (int(n * scale) for n in SIZE)
+        width, height = (int(n * scale) for n in ((360, 560) if self.popout else SIZE))
         self.closed_at = None
-        self.hwnd = user32.CreateWindowExW(0, "LelonsConverterWindow", TITLE, 0x00CF0000 | 0x02000000,
+        self.hwnd = user32.CreateWindowExW(0x8 if self.popout and self.pop_on_top else 0,  # WS_EX_TOPMOST
+                                           "LelonsConverterWindow", TITLE + (" chat" if self.popout else ""), 0x00CF0000 | 0x02000000,
                                            # WS_OVERLAPPEDWINDOW, and WS_CLIPCHILDREN so the window
                                            # doesn't paint its background over the page
                                            -0x80000000, -0x80000000, width, height,  # CW_USEDEFAULT: Windows picks the spot
@@ -481,6 +534,10 @@ class Window:
         _method(controller, 4, wintypes.BOOL)(True)  # put_IsVisible
         _method(controller, 12, ctypes.c_int)(0)  # MoveFocus: typing goes to the page
         self.ok = self.alive = True
+        if self.popout:
+            self._pop_style(self.hwnd)
+        elif _hotkeys:
+            self._use_hotkeys(self.hwnd)
         self.started.set()
         return S_OK
 
@@ -503,7 +560,7 @@ class Window:
         except (TypeError, ValueError):
             return
         rect = wintypes.RECT(left, top, right, bottom)
-        if right - left < 400 or bottom - top < 300:
+        if right - left < (200 if self.popout else 400) or bottom - top < 200:
             return
         monitor = ctypes.windll.user32.MonitorFromRect
         monitor.restype = wintypes.HANDLE
@@ -591,6 +648,39 @@ class Window:
         data.dwInfoFlags = 0x10 if quiet else 0  # NIIF_NOSOUND (the app plays its own ding)
         shell.Shell_NotifyIconW(1, ctypes.byref(data))  # NIM_MODIFY
 
+    def _use_hotkeys(self, hwnd):
+        global _hotkeys_taken
+        user32 = ctypes.windll.user32
+        user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
+        user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+        for kid in getattr(self, "hotkeys_on", []):
+            user32.UnregisterHotKey(hwnd, kid)
+        self.hotkeys_on, taken = [], []
+        for kid, mods, vk in _hotkeys:
+            if user32.RegisterHotKey(hwnd, kid, mods | 0x4000, vk):  # MOD_NOREPEAT: holding the key plays it once
+                self.hotkeys_on.append(kid)
+            else:
+                taken.append(kid)
+        _hotkeys_taken = taken
+
+    def _pop_style(self, hwnd):
+        user32 = ctypes.windll.user32
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos(hwnd, wintypes.HWND(-1 if self.pop_on_top else -2), 0, 0, 0, 0, 0x1 | 0x2 | 0x10)  # (NO)TOPMOST; NOSIZE|NOMOVE|NOACTIVATE
+        get = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+        put = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+        get.restype = ctypes.c_ssize_t
+        get.argtypes = [wintypes.HWND, ctypes.c_int]
+        put.restype = ctypes.c_ssize_t
+        put.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        style = get(hwnd, -20)  # GWL_EXSTYLE
+        if self.pop_see < 100:
+            put(hwnd, -20, style | 0x80000)  # WS_EX_LAYERED
+            user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_ubyte, wintypes.DWORD]
+            user32.SetLayeredWindowAttributes(hwnd, 0, int(255 * self.pop_see / 100), 0x2)  # LWA_ALPHA
+        elif style & 0x80000:
+            put(hwnd, -20, style & ~0x80000)
+
     def _fit(self):
         if self.controller:
             rect = wintypes.RECT()
@@ -630,6 +720,16 @@ class Window:
                     self._toast(hwnd, *wanted)
                 except Exception:
                     pass
+            return 0
+        elif message == WM_HOTKEYS:
+            self._use_hotkeys(hwnd)
+            return 0
+        elif message == WM_HOTKEY:
+            if self.webview:
+                _method(self.webview, 33, wintypes.LPCWSTR)("hotkey:%d" % wparam)  # PostWebMessageAsString
+            return 0
+        elif message == WM_POPSET:
+            self._pop_style(hwnd)
             return 0
         elif message == WM_TRAY:
             event = lparam & 0xFFFF

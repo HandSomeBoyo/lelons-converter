@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">
+<title>VaultHub chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body class="lv-popbody">
+<div class="lv-pop">
+  <div class="lv-pop-bar">
+    <span class="lv-live-pill" id="popLive" hidden>LIVE</span>
+    <span class="lv-pop-viewers" id="popViewers">Chat</span>
+    <span class="sp"></span>
+    <span class="lv-seg" id="popFilter"><button data-f="both" class="on">Both</button><button data-f="tw" title="Twitch only"></button><button data-f="yt" title="YouTube only"></button></span>
+    <button type="button" class="lv-pop-ic" id="popPin" title="Stay on top of other windows"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z"/><path d="M12 14v6"/></svg></button>
+  </div>
+  <div class="lv-msgs" id="popMsgs"><p class="lv-chat-empty">Connecting...</p></div>
+  <button type="button" class="lv-more" id="popMore" hidden>New messages</button>
+  <div class="lv-pop-foot">
+    <form id="popSend" autocomplete="off"><input id="popText" maxlength="500" placeholder="Say something..."></form>
+    <label class="lv-pop-see" title="See-through"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg><input type="range" id="popSee" min="30" max="100" step="5"></label>
+  </div>
+</div>
+<script src="liveui.js"></script>
+<script src="livechat.js"></script>
+</body>
+</html>

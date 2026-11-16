@@ -2,6 +2,17 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.34.0", items: [
+    "New Live place in the side bar: a streaming console for Twitch and YouTube. It lights up red with LIVE while you stream.",
+    "Console: how many people watch on each site, time live, new followers, subs and Super Chats, and how fast chat is going, all on one page.",
+    "A live graph of viewers with marks where raids came in, and your goals for the stream with progress bars.",
+    "Stream health from OBS: upload speed, dropped frames, FPS, CPU, graphics card load and plain-word warnings when something goes wrong. It also checks that OBS is recording and how much disk space is left.",
+    "Twitch and YouTube chat in one box. Write back, delete messages, time out or ban people, and pop the chat out into a small window that stays on top of your game.",
+    "Soundboard: put sounds from the Library on buttons and play them with a key, even while you're in a game.",
+    "Alerts: a sound and a pop-up for new followers, subs, raids, Super Chats and when someone says your name.",
+    "Stream stats: after each stream, see how it went, compared to last time, with the best moments to cut clips from.",
+    "All free: no paid services. Set it up with the button at the top right of the Live page.",
+  ] },
   { version: "2.33.0", items: [
     "A cleaner app: the side bar now has just 8 places. Convert, Library, Recording (Games and POVs) and YouTube each hold their pages in a bar at the top, so nothing feels like a maze. Ctrl+K still finds every page.",
     "Home has four start buttons for the things you do most.",
