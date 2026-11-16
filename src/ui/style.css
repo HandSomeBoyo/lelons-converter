@@ -740,6 +740,18 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .lib-login-submit:disabled { opacity: .5; }
 .lib-login-hint { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
 /* The Account page */
+/* (2.33.0) Your devices */
+.dev { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.dev:first-child { border-top: 0; padding-top: 2px; }
+.dev-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--panel2, rgba(255,255,255,.06)); color: var(--muted); }
+.dev-icon svg { width: 22px; height: 22px; }
+.dev.this .dev-icon { color: var(--accent); }
+.dev-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dev-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-info small { font-size: 12.5px; color: var(--muted); }
+.dev-here { margin-left: 8px; padding: 2px 8px; border-radius: 99px; font: 600 11px var(--head); letter-spacing: .5px; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); vertical-align: 2px; }
+.dev .small-button { height: 34px; padding: 0 12px; }
+#devOutOthers { margin-top: 12px; }
 /* (2.33.0) Invite codes */
 .inv-make { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .inv-pick { display: flex; flex-direction: column; gap: 6px; }

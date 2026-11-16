@@ -170,7 +170,7 @@ function setLoginMode(mode) {
   $("libLoginButton").textContent = loginMode === "login" ? "Log in" : "Create account";
   $("libPassword").autocomplete = loginMode === "login" ? "current-password" : "new-password";
   $("libLoginHint").textContent = loginMode === "login" ? "Log in to hear everyone's sounds."
-    : "You need an invite code from the owner or an admin. Then pick a username and a password (at least 6 characters).";
+    : "You need an invite code from the owner or an admin. Then pick a username and a password (at least 8 characters).";
   $("libInviteField").hidden = loginMode !== "signup";
   $("libLoginError").textContent = "";
   (loginMode === "signup" && !$("libInvite").value ? $("libInvite") : $("libUsername")).focus();

@@ -11,6 +11,7 @@ function openAccount() {
   $("acctDeleteOpen").hidden = false;
   drawAccountPage(true);
   if (typeof loadProfileEditor === "function") loadProfileEditor();
+  if (sfxUser()) loadDevices({ what: "list" });
   if (sfxUser() && sfxUser().canUpload) loadInviteCodes({ what: "list" });
   if (sfxUser() && sfxUser().isOwner) {
     if (typeof loadInbox === "function") loadInbox();
@@ -123,6 +124,7 @@ $("acctPasswordForm").addEventListener("submit", async (e) => {
   if (!res.ok) return note("acctPasswordNote", res.error);
   $("acctOldPassword").value = $("acctNewPassword").value = "";
   note("acctPasswordNote", "Password changed.", true);
+  loadDevices({ what: "list" }); // (the others were logged out)
 });
 
 // ---- delete my account
@@ -291,4 +293,49 @@ $("invMake").addEventListener("click", async () => {
   $("invMake").disabled = true;
   await loadInviteCodes({ what: "make", hours: $("invHours").value || null, uses: $("invUses").value || null });
   $("invMake").disabled = false;
+});
+
+// ---- your devices: the computers logged in to your account (2.33.0)
+
+let acctDevices = [];
+const DEV_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+
+async function loadDevices(body) {
+  const res = await api("/api/sfx-devices", body).catch(() => ({ ok: false, error: "Couldn't load your devices." }));
+  if (sfxLoggedOut(res)) return;
+  note("devNote", res.ok ? "" : res.error);
+  if (res.ok) acctDevices = res.devices;
+  drawDevices();
+}
+
+function drawDevices() {
+  setChildren($("devList"), acctDevices.map((d) => {
+    const el = document.createElement("div");
+    el.className = "dev" + (d.this ? " this" : "");
+    el.innerHTML = `<span class="dev-icon">${DEV_ICON}</span><div class="dev-info"><b></b><small></small></div>`;
+    el.querySelector("b").textContent = d.device || "A computer (logged in before devices were shown)";
+    if (d.this) el.querySelector("b").append(Object.assign(document.createElement("span"), { className: "dev-here", textContent: "This PC" }));
+    el.querySelector("small").textContent = [
+      d.version ? "VaultHub " + d.version : "",
+      d.this ? "using it now" : "last used " + sfxAgo(d.used * 1000),
+      d.device ? "logged in " + sfxAgo(d.since * 1000) : "",
+    ].filter(Boolean).join(" · ");
+    if (!d.this) {
+      const out = Object.assign(document.createElement("button"), { type: "button", className: "small-button acct-logout", textContent: "Log out" });
+      out.onclick = () => {
+        acctDevices = acctDevices.filter((x) => x !== d);
+        drawDevices();
+        loadDevices({ what: "out", id: d.id });
+      };
+      el.append(out);
+    }
+    return el;
+  }));
+  $("devOutOthers").hidden = acctDevices.filter((d) => !d.this).length < 2;
+}
+
+$("devOutOthers").addEventListener("click", () => {
+  acctDevices = acctDevices.filter((d) => d.this);
+  drawDevices();
+  loadDevices({ what: "out_others" }).then(() => note("devNote", "Logged out everywhere else.", true));
 });

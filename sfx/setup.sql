@@ -59,6 +59,13 @@ create table if not exists lelons.sessions (
   account_id uuid not null references lelons.accounts (id) on delete cascade,
   last_used timestamptz not null default now()
 );
+-- (2.33.0) Your devices: which PC each login is on, so you can see them and log them out.
+alter table lelons.sessions add column if not exists id uuid not null default gen_random_uuid();
+alter table lelons.sessions add column if not exists created_at timestamptz not null default now();
+alter table lelons.sessions add column if not exists device text;
+alter table lelons.sessions add column if not exists app_version text;
+-- (2.33.0) Each lockout after wrong passwords lasts longer (2 min, 10 min, 50 min... up to a day).
+alter table lelons.accounts add column if not exists lockouts int not null default 0;
 
 -- A ticket lets the app put one file in storage (or delete one), once.
 create table if not exists lelons.tickets (
@@ -258,15 +265,32 @@ create or replace function lelons.account_json(a lelons.accounts) returns json
                              'open_feedback', case when a.role = 'owner'
                                then (select count(*) from lelons.feedback f where not f.done) end) $$;
 
-create or replace function lelons.new_session(account uuid) returns text
-  language plpgsql security definer set search_path = '' as $$
+drop function if exists lelons.new_session(uuid);
+create or replace function lelons.new_session(account uuid, device text default null, app_version text default null)
+returns text language plpgsql security definer set search_path = '' as $$
 declare
   token text := encode(extensions.gen_random_bytes(24), 'hex');
 begin
   delete from lelons.sessions where last_used < now() - interval '90 days';
-  insert into lelons.sessions (token_hash, account_id) values (lelons.hash(token), account);
+  insert into lelons.sessions (token_hash, account_id, device, app_version)
+  values (lelons.hash(token), account, nullif(left(btrim(coalesce(device, '')), 60), ''), nullif(left(btrim(coalesce(app_version, '')), 20), ''));
   return token;
 end $$;
+
+-- (2.33.0) A new password: at least 8 characters, and not one of the passwords everyone tries first.
+-- Returns the error, or null when it's fine. (Passwords made before keep working.)
+create or replace function lelons.password_problem(password text, username text) returns text
+  language sql immutable set search_path = '' as $$
+  select case
+    when length(coalesce(password, '')) < 8 then 'password'
+    when lower(password) = lower(coalesce(username, '')) then 'password_name'
+    when lower(password) in ('password', 'password1', 'password12', 'password123', '12345678', '123456789', '1234567890',
+      '87654321', '11111111', '00000000', '12341234', 'qwertyui', 'qwerty123', 'qwertyuiop', 'asdfghjk', 'iloveyou',
+      'abc12345', 'abcd1234', 'aaaaaaaa', 'letmein1', 'welcome1', 'football', 'baseball', 'sunshine', 'princess',
+      'superman', 'trustno1', 'whatever', 'starwars', 'minecraft', 'fortnite', 'pokemon1', 'monkey12', 'dragon12',
+      'vaulthub', 'vaulthub1', 'vaulthub123', 'youtube1', 'youtube123', 'passord1', 'passord123')
+      or password ~ '^(.)\1+$' then 'password_common'
+    end $$;
 
 create or replace function lelons.ticket_ok(file text, wanted text) returns boolean
   language sql stable security definer set search_path = '' as
@@ -321,8 +345,10 @@ alter table lelons.accounts add column if not exists invited_by uuid references 
 
 -- Old apps signed up without a code: that way in is gone.
 drop function if exists public.lelons_signup(text, text);
+drop function if exists public.lelons_signup(text, text, text);
 
-create or replace function public.lelons_signup(username text, password text, invite text)
+create or replace function public.lelons_signup(username text, password text, invite text,
+                                                device text default null, app_version text default null)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   name text := btrim(coalesce(username, ''));
@@ -334,8 +360,8 @@ begin
   if name !~ '^[A-Za-z0-9_.-]{3,20}$' then
     return json_build_object('ok', false, 'error', 'username');
   end if;
-  if length(coalesce(password, '')) < 6 then
-    return json_build_object('ok', false, 'error', 'password');
+  if lelons.password_problem(password, name) is not null then
+    return json_build_object('ok', false, 'error', lelons.password_problem(password, name));
   end if;
   if not is_owner then
     -- The code, still good, made by someone who is still the owner or an admin. Locked while it's checked,
@@ -362,7 +388,32 @@ begin
   if inv.code is not null then
     update lelons.invites i set uses = i.uses + 1 where i.code = inv.code;
   end if;
-  return json_build_object('ok', true, 'token', lelons.new_session(made.id), 'account', lelons.account_json(made));
+  return json_build_object('ok', true, 'token', lelons.new_session(made.id, device, app_version), 'account', lelons.account_json(made));
+end $$;
+
+-- (2.33.0) Your devices: the PCs logged in to your account.
+--   'list'           them (newest use first); 'this' is the one asking
+--   'out'  id        log that one out (it has to log in again)
+--   'out_others'     log out everywhere but here
+create or replace function public.lelons_devices(token text, what text, id uuid default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  here text := lelons.hash(token);
+begin
+  if what = 'out' then
+    delete from lelons.sessions s where s.account_id = me.id and s.id = lelons_devices.id and s.token_hash <> here;
+  elsif what = 'out_others' then
+    delete from lelons.sessions s where s.account_id = me.id and s.token_hash <> here;
+  elsif what <> 'list' then
+    raise exception 'unknown' using hint = 'bad_input';
+  end if;
+  return json_build_object('ok', true, 'devices', coalesce((
+    select json_agg(json_build_object('id', s.id, 'device', s.device, 'version', s.app_version,
+                                      'since', extract(epoch from s.created_at), 'used', extract(epoch from s.last_used),
+                                      'this', s.token_hash = here)
+                    order by s.token_hash = here desc, s.last_used desc)
+    from lelons.sessions s where s.account_id = me.id and s.last_used > now() - interval '90 days'), '[]'::json));
 end $$;
 
 -- (2.33.0) The owner and admins make and remove invite codes.
@@ -423,29 +474,37 @@ begin
     where me.role = 'owner' or i.made_by = me.id), '[]'::json));
 end $$;
 
-create or replace function public.lelons_login(username text, password text)
+drop function if exists public.lelons_login(text, text);
+create or replace function public.lelons_login(username text, password text, device text default null, app_version text default null)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   found lelons.accounts;
 begin
   select * into found from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(lelons_login.username, '')));
   if found.id is null then
+    perform pg_sleep(0.3);  -- (answers as slowly as a wrong password, so names can't be found by timing)
     return json_build_object('ok', false, 'error', 'wrong');
   end if;
   if found.locked_until > now() then
-    return json_build_object('ok', false, 'error', 'locked');
+    return json_build_object('ok', false, 'error', 'locked', 'minutes', ceil(extract(epoch from found.locked_until - now()) / 60));
   end if;
   if extensions.crypt(coalesce(password, ''), found.pass_hash) <> found.pass_hash then
-    -- Five wrong passwords in a row: wait two minutes.
+    -- Five wrong passwords in a row: wait. 2 minutes the first time, then 5 times longer each time (up to a day),
+    -- until the right password is typed.
     update lelons.accounts set failed = case when failed >= 4 then 0 else failed + 1 end,
-      locked_until = case when failed >= 4 then now() + interval '2 minutes' else locked_until end
-    where id = found.id;
+      lockouts = case when failed >= 4 then lockouts + 1 else lockouts end,
+      locked_until = case when failed >= 4 then now() + least(interval '1 day', interval '2 minutes' * power(5, least(lockouts, 6)))
+                          else locked_until end
+    where id = found.id returning * into found;
+    if found.locked_until > now() then
+      return json_build_object('ok', false, 'error', 'locked', 'minutes', ceil(extract(epoch from found.locked_until - now()) / 60));
+    end if;
     return json_build_object('ok', false, 'error', 'wrong');
   end if;
-  update lelons.accounts set failed = 0, locked_until = null,
+  update lelons.accounts set failed = 0, lockouts = 0, locked_until = null,
     role = case when lower(accounts.username) = (select c.owner_username from lelons.config c) then 'owner' else accounts.role end
   where id = found.id returning * into found;
-  return json_build_object('ok', true, 'token', lelons.new_session(found.id), 'account', lelons.account_json(found));
+  return json_build_object('ok', true, 'token', lelons.new_session(found.id, device, app_version), 'account', lelons.account_json(found));
 end $$;
 
 create or replace function public.lelons_logout(token text)
@@ -466,8 +525,8 @@ begin
   if extensions.crypt(coalesce(old_password, ''), me.pass_hash) <> me.pass_hash then
     return json_build_object('ok', false, 'error', 'wrong');
   end if;
-  if length(coalesce(new_password, '')) < 6 then
-    return json_build_object('ok', false, 'error', 'password');
+  if lelons.password_problem(new_password, me.username) is not null then
+    return json_build_object('ok', false, 'error', lelons.password_problem(new_password, me.username));
   end if;
   update lelons.accounts set pass_hash = extensions.crypt(new_password, extensions.gen_salt('bf', 10)) where id = me.id;
   -- Logged out everywhere else.
@@ -3412,7 +3471,7 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['lelons_signup(text, text, text)', 'lelons_invites(text, text, text, int, int)', 'lelons_login(text, text)', 'lelons_logout(text)',
+  foreach f in array array['lelons_signup(text, text, text, text, text)', 'lelons_invites(text, text, text, int, int)', 'lelons_devices(text, text, uuid)', 'lelons_login(text, text, text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
     'lelons_add(text, text, text, text, real, int, text, text, jsonb)', 'lelons_claim_check(text, uuid)', 'lelons_set_peaks(text, text, jsonb)', 'lelons_sound_check(text, text, text)', 'lelons_set_copyright(text, uuid, jsonb)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',

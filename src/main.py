@@ -523,8 +523,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_body(self, body, content_type, cookie=False, tag=None):
+    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None):
         self.send_response(200)
+        if nonce:
+            # (2.33.0) A safety net: the page only runs the app's own scripts. Even if something someone sent
+            # (a chat message, a shared doc) ever got past the cleaning, it couldn't run code here.
+            self.send_header("Content-Security-Policy", f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; "
+                             "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
         if cookie:
             port = self.server.server_port
             self.send_header("Set-Cookie", f"lelons{port}={TOKEN}; Path=/; HttpOnly; SameSite=Strict")
@@ -568,9 +573,10 @@ class Handler(BaseHTTPRequestHandler):
                      "zoom": state.zoom, "nativeZoom": appwindow.active()}
             text = json.dumps(saved).replace("<", "\\u003c")
             cache = json.dumps(pagecache.get(), separators=(",", ":")).replace("<", "\\u003c")
-            body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};\nconst LELONS_CACHE = {cache};</script>".encode())
+            nonce = secrets.token_urlsafe(16)
+            body = body.replace(b"<!--SAVED-->", f"<script nonce=\"{nonce}\">const LELONS_SAVED = {text};\nconst LELONS_CACHE = {cache};</script>".encode())
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
-        self.send_body(body, content_type, cookie)
+        self.send_body(body, content_type, cookie, nonce=nonce if os.path.basename(path) == "index.html" else None)
 
     def send_media(self, path, kind=None):
         """Audio for the trim editor. Supports byte ranges so the player can jump around."""
@@ -884,6 +890,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"account": library.remove_picture()}
             elif action == "people":
                 result = {"people": library.people()}
+            elif action == "devices":
+                result = library.devices(str(data.get("what") or "list"), data.get("id"))
             elif action == "invites":
                 result = library.invites(str(data.get("what") or "list"), data.get("code"), data.get("hours"), data.get("uses"))
             elif action == "role":

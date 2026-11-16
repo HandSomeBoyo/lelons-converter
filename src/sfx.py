@@ -110,7 +110,9 @@ FRIENDLY = {
     "same_file": "That sound is already in the Library.",
     # what log in and create account can answer
     "username": "Usernames are 3 to 20 letters or numbers (dots, dashes and _ are fine too).",
-    "password": "Passwords need at least 6 characters.",
+    "password": "Passwords need at least 8 characters.",
+    "password_name": "Your password can't be the same as your username.",
+    "password_common": "That password is one of the first ones people try. Pick something harder to guess.",
     "taken": "That username is taken. Pick another one.",
     "wrong": "Wrong username or password.",
     "wrong_password": "That's not your current password.",
@@ -328,6 +330,15 @@ def _clean_name(text, limit=80):
     return re.sub(r"\s+", " ", str(text or "")).strip()[:limit]
 
 
+def _device():
+    """What this PC is called, for the Your devices list on the Account page."""
+    name = os.environ.get("COMPUTERNAME") or ""
+    if not name:
+        import platform
+        name = platform.node()
+    return {"device": name[:60], "app_version": version.VERSION}
+
+
 class Library:
     def __init__(self):
         self.lock = threading.Lock()
@@ -366,17 +377,23 @@ class Library:
 
     def _logged_in(self, result):
         if not result or not result.get("ok"):
-            raise Error(FRIENDLY.get((result or {}).get("error"), "That didn't work. Try again."))
+            error = (result or {}).get("error")
+            if error == "locked" and result.get("minutes"):
+                minutes = int(result["minutes"])
+                wait = f"{minutes} minute{'s' if minutes != 1 else ''}" if minutes < 90 else f"{round(minutes / 60)} hours"
+                raise Error(f"Too many wrong tries. Wait {wait} and try again.")
+            raise Error(FRIENDLY.get(error, "That didn't work. Try again."))
         settings.save(library_token=result["token"])
         presence.poke()
         return self.account()
 
     def signup(self, username, password, invite=""):
         return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or ""),
-                                    invite=str(invite or "").strip()[:40]))
+                                    invite=str(invite or "").strip()[:40], **_device()))
 
     def login(self, username, password):
-        return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or "")))
+        return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or ""),
+                                    **_device()))
 
     def logout(self):
         token = settings.load().get("library_token")
@@ -973,6 +990,15 @@ class Library:
         return [{**self._user(person), "created_at": person["created_at"], "last_seen": person["last_seen"],
                  "sounds": person["sounds"], "me": person["me"]}
                 for person in _rpc("lelons_accounts", token=self._token()) or []]
+
+    # ---- your devices: the PCs logged in to your account
+
+    def devices(self, what="list", device_id=None):
+        args = {"token": self._token(), "what": what if what in ("list", "out", "out_others") else "list"}
+        if what == "out":
+            args["id"] = str(device_id or "")
+        result = _rpc("lelons_devices", **args) or {}
+        return {"devices": result.get("devices") or []}
 
     # ---- invite codes (the owner and admins)
 

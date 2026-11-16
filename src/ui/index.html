@@ -1117,12 +1117,19 @@
       </form>
       <form class="acct-card" id="acctPasswordForm">
         <h2>Password</h2>
-        <p class="acct-help">At least 6 characters. Other computers you're logged in on get logged out.</p>
+        <p class="acct-help">At least 8 characters, and not one people often use. Your other devices get logged out.</p>
         <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
         <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password"></label>
         <button type="submit" class="small-button">Change password</button>
         <p class="acct-note" id="acctPasswordNote"></p>
       </form>
+      <div class="acct-card" id="acctDevices">
+        <h2>Your devices</h2>
+        <p class="acct-help">The computers logged in to your account. If you see one you don't know, log it out and change your password.</p>
+        <div id="devList"></div>
+        <p class="acct-note" id="devNote"></p>
+        <button type="button" class="small-button acct-danger" id="devOutOthers" hidden>Log out everywhere else</button>
+      </div>
       <div class="acct-card acct-end">
         <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
         <div id="acctDeleteBox">
