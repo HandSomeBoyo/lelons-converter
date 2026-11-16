@@ -4142,6 +4142,44 @@ label.set-row, .set-choice-label { cursor: pointer; }
 .set2 .theme-picks button { width: auto; }
 .set2 .volume-row, .set2 .size-row { padding: 0; background: none; margin: 0; }
 .set2 .accent-picks { margin: 0; }
+/* (2.35.0) Settings > Trash */
+.trash-link { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; margin: 22px 0 8px; font-size: 13px; color: var(--muted); }
+.trash-link:hover { color: var(--text); }
+.trash-link svg { width: 15px; height: 15px; }
+.trash-intro { margin: -8px 4px 16px; font-size: 13px; line-height: 1.45; }
+.trash-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.trash-filters { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--text) 5%, transparent); }
+.trash-filters button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 7px; font: 600 12.5px var(--head); color: var(--muted); }
+.trash-filters button:hover { color: var(--text); }
+.trash-filters button.active { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+:root[data-theme="light"] .trash-filters button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .1); }
+.trash-filters button[hidden] { display: none; }
+.trash-empty.small-button { margin-left: auto; height: 32px; padding: 0 14px; font-size: 13px; background: transparent; color: var(--red);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); }
+.trash-empty.small-button.sure { background: var(--red); color: #fff; }
+.trash-empty.small-button:disabled { opacity: .4; cursor: default; filter: none; }
+.trash-row { gap: 12px; }
+.trash-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.trash-icon.k-board { background: color-mix(in srgb, #5aa0ff 16%, transparent); color: #5aa0ff; }
+.trash-icon.k-sound { background: color-mix(in srgb, #b07cff 16%, transparent); color: #b07cff; }
+:root[data-theme="light"] .trash-icon.k-doc { color: #a77a00; }
+.trash-icon svg { width: 17px; height: 17px; }
+.trash-row .set-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trash-acts { flex: none; display: flex; gap: 6px; }
+.trash-acts button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
+  border-radius: 8px; font: 600 12.5px var(--head); color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.trash-acts button:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.trash-acts button:disabled { opacity: .5; cursor: default; }
+.trash-acts svg { width: 14px; height: 14px; }
+.trash-acts .trash-kill { min-width: 104px; justify-content: center; color: var(--muted); background: transparent; }
+.trash-acts .trash-kill:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.trash-acts .trash-kill.sure { color: #fff; background: var(--red); }
+.trash-none { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+.trash-none b { color: var(--text); font: 600 15px var(--head); }
+.trash-none-icon { width: 34px; height: 34px; margin-bottom: 4px; opacity: .7; }
+@container page (max-width: 560px) { .trash-acts .trash-back span { display: none; } }
+@media (max-width: 640px) { .trash-acts .trash-back span { display: none; } }
 @media (max-width: 640px) {
   .settings-dialog.set2 { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .set-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--gl-line); padding: 12px; }
@@ -7608,3 +7646,5 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lvo-btn.dim { color: var(--muted); }
 .lvo-btn:hover { filter: brightness(1.15); }
 #lvoRecTime { font-variant-numeric: tabular-nums; }
+
+.note-face.k-calls > svg { color: var(--green, #4caf50); } .note-face.k-boards > svg { color: #5aa9ff; } .note-face.k-comments > svg { color: #ff6b6b; }

@@ -105,6 +105,22 @@ create index if not exists sounds_created on lelons.sounds (created_at);
 create index if not exists sounds_uploader on lelons.sounds (uploader_id);
 create index if not exists sounds_name on lelons.sounds (lower(btrim(name)));
 create index if not exists sessions_account on lelons.sessions (account_id);
+-- (2.35.0) The Trash bin: a deleted sound waits here for 30 days (its file stays online), with who had
+-- it starred and in which playlists, so putting it back brings all that back too.
+create table if not exists lelons.sound_trash (
+  id uuid primary key,
+  sound jsonb not null,
+  path text not null,
+  name text not null default '',
+  bytes int not null default 0,
+  favorites uuid[] not null default '{}',
+  playlists uuid[] not null default '{}',
+  deleted_by uuid references lelons.accounts (id) on delete set null,
+  deleted_at timestamptz not null default now()
+);
+create index if not exists sound_trash_path on lelons.sound_trash (path);
+alter table lelons.sound_trash enable row level security;
+revoke all on lelons.sound_trash from anon, authenticated;
 
 -- Bug reports and wishes people send to the owner.
 create table if not exists lelons.feedback (
@@ -300,6 +316,7 @@ create or replace function lelons.ticket_ok(file text, wanted text) returns bool
 create or replace function lelons.listed(file text) returns boolean
   language sql stable security definer set search_path = '' as
   $$ select exists (select 1 from lelons.sounds where path = file)
+         or exists (select 1 from lelons.sound_trash t where t.path = file)
          or exists (select 1 from lelons.accounts where avatar = file or banner = file)
          or exists (select 1 from lelons.chat c where c.file = listed.file)
          or exists (select 1 from lelons.chat_groups g where g.picture = listed.file) $$;
@@ -1424,7 +1441,8 @@ begin
   if (select count(*) from lelons.sounds s where s.uploader_id = me.id and s.created_at > now() - interval '1 day') >= 100 then
     raise exception 'too many uploads today' using hint = 'daily';
   end if;
-  if (select coalesce(sum(s.bytes), 0) from lelons.sounds s) + sound_bytes > 950 * 1024 * 1024 then
+  if (select coalesce(sum(s.bytes), 0) from lelons.sounds s) + (select coalesce(sum(t.bytes), 0) from lelons.sound_trash t)
+     + sound_bytes > 950 * 1024 * 1024 then
     raise exception 'storage full' using hint = 'full';
   end if;
   if btrim(coalesce(sound_name, '')) = '' then
@@ -1823,6 +1841,7 @@ create table if not exists lelons.docs (
   updated_by uuid references lelons.accounts (id) on delete set null
 );
 alter table lelons.docs add column if not exists settings jsonb not null default '{}'::jsonb;  -- page size, font... (1.36.0)
+alter table lelons.docs add column if not exists deleted_at timestamptz;  -- (2.35.0) in the Trash since then
 -- A document is a list of blocks (paragraphs, headings, lists...), each saved on its own,
 -- so people can write in different parts at the same time.
 create table if not exists lelons.doc_blocks (
@@ -1867,7 +1886,7 @@ language plpgsql stable security definer set search_path = '' as $$
 declare
   found lelons.docs;
 begin
-  select d.* into found from lelons.docs d where d.id = doc
+  select d.* into found from lelons.docs d where d.id = doc and d.deleted_at is null
     and (d.owner_id = me or exists (select 1 from lelons.doc_members m where m.doc_id = d.id and m.account_id = me and m.joined));
   if found.id is null then
     raise exception 'no such document' using hint = 'doc_gone';
@@ -1906,15 +1925,15 @@ begin
                                         'people', lelons.doc_people(d), 'preview', lelons.doc_preview(d.id), 'settings', d.settings)
                                       order by d.updated_at desc)
                       from lelons.docs d
-                      where d.owner_id = me.id
-                         or exists (select 1 from lelons.doc_members m where m.doc_id = d.id and m.account_id = me.id and m.joined)),
+                      where d.deleted_at is null and (d.owner_id = me.id
+                         or exists (select 1 from lelons.doc_members m where m.doc_id = d.id and m.account_id = me.id and m.joined))),
                      '[]'::json),
     'invites', coalesce((select json_agg(json_build_object('id', d.id, 'title', d.title, 'kind', d.kind, 'at', m.invited_at,
                                            'from', coalesce(a.username, '?'), 'avatar', a.avatar)
                                          order by m.invited_at desc)
                          from lelons.doc_members m join lelons.docs d on d.id = m.doc_id
                          left join lelons.accounts a on a.id = m.invited_by
-                         where m.account_id = me.id and not m.joined),
+                         where m.account_id = me.id and not m.joined and d.deleted_at is null),
                         '[]'::json));
 end $$;
 
@@ -2089,7 +2108,7 @@ declare
   them uuid;
 begin
   select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(lelons_doc_remove.username));
-  select d.* into doc from lelons.docs d where d.id = lelons_doc_remove.doc_id;
+  select d.* into doc from lelons.docs d where d.id = lelons_doc_remove.doc_id and d.deleted_at is null;
   if doc.id is null or them is null or them = doc.owner_id or (doc.owner_id <> me.id and them <> me.id) then
     raise exception 'not allowed' using hint = 'denied';
   end if;
@@ -2725,6 +2744,7 @@ create table if not exists lelons.boards (
 );
 create index if not exists boards_owner on lelons.boards (owner_id);
 -- Who's on a board (the one who made it too): invited (joined = false) until they say yes.
+alter table lelons.boards add column if not exists deleted_at timestamptz;  -- (2.35.0) in the Trash since then
 create table if not exists lelons.board_members (
   board_id uuid not null references lelons.boards (id) on delete cascade,
   account_id uuid not null references lelons.accounts (id) on delete cascade,
@@ -2781,14 +2801,15 @@ begin
                                             'opened', extract(epoch from m.seen_at), 'created', extract(epoch from x.created_at),
                                             'cards', lelons.board_cards(x.data), 'people', lelons.board_people(x.id, x.owner_id))
                                           order by x.created_at)
-                          from lelons.boards x join lelons.board_members m on m.board_id = x.id and m.account_id = me.id and m.joined),
+                          from lelons.boards x join lelons.board_members m on m.board_id = x.id and m.account_id = me.id and m.joined
+                          where x.deleted_at is null),
                          '[]'::json),
       'invites', coalesce((select json_agg(json_build_object('id', x.id, 'title', x.title, 'bg', coalesce(x.data->>'bg', 'blue'),
                                              'from', coalesce(a.username, '?'), 'avatar', a.avatar, 'at', m.invited_at)
                                            order by m.invited_at desc)
                            from lelons.board_members m join lelons.boards x on x.id = m.board_id
                            left join lelons.accounts a on a.id = m.invited_by
-                           where m.account_id = me.id and not m.joined),
+                           where m.account_id = me.id and not m.joined and x.deleted_at is null),
                           '[]'::json));
   elsif what = 'people' then
     return coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar) order by lower(a.username))
@@ -2806,7 +2827,8 @@ begin
     return json_build_object('id', new_id, 'rev', 1);
   elsif what = 'answer' then
     if coalesce((data #>> '{}')::boolean, false) then
-      update lelons.board_members m set joined = true where m.board_id = lelons_board.board_id and m.account_id = me.id;
+      update lelons.board_members m set joined = true where m.board_id = lelons_board.board_id and m.account_id = me.id
+        and exists (select 1 from lelons.boards x where x.id = m.board_id and x.deleted_at is null);
     else
       delete from lelons.board_members m where m.board_id = lelons_board.board_id and m.account_id = me.id and not m.joined;
     end if;
@@ -2817,7 +2839,7 @@ begin
   end if;
 
   -- Everything else needs a board you're on.
-  select x.* into b from lelons.boards x where x.id = lelons_board.board_id;
+  select x.* into b from lelons.boards x where x.id = lelons_board.board_id and x.deleted_at is null;
   select m.* into member from lelons.board_members m where m.board_id = b.id and m.account_id = me.id and m.joined;
   if b.id is null or member.account_id is null then
     raise exception 'no such board' using hint = 'board_gone';
@@ -2870,6 +2892,97 @@ begin
     return '{}'::json;
   end if;
   raise exception 'what?' using hint = 'bad_input';
+end $$;
+
+-- ---- (2.35.0) The Trash bin. Deleted shared documents, team boards and Library sounds wait 30 days,
+-- then go for good. Only the one who made a document or board sees it there (and can put it back);
+-- sounds in the Trash are for the owner and admins (the ones who may delete sounds).
+-- Answers {"items": [...], "files": [...]}: files are sound files gone for good, for the app to delete.
+create or replace function public.lelons_trash(token text, what text, kind text default null, item_id uuid default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  boss boolean := me.role in ('owner', 'admin');
+  t lelons.sound_trash;
+  s lelons.sounds;
+  gone text[] := '{}';
+begin
+  -- Anything that has been in the Trash for 30 days goes for good (whoever asks; it's the same for everyone).
+  delete from lelons.docs d where d.deleted_at < now() - interval '30 days';
+  delete from lelons.boards b where b.deleted_at < now() - interval '30 days';
+  with old as (delete from lelons.sound_trash x where x.deleted_at < now() - interval '30 days' returning x.path)
+  select coalesce(array_agg(path), '{}') into gone from old;
+
+  if what = 'put' then
+    if kind = 'doc' then
+      update lelons.docs d set deleted_at = now() where d.id = item_id and d.owner_id = me.id and d.deleted_at is null;
+      if not found then raise exception 'not yours' using hint = 'denied'; end if;
+      delete from lelons.doc_here h where h.doc_id = item_id;
+    elsif kind = 'board' then
+      update lelons.boards b set deleted_at = now() where b.id = item_id and b.owner_id = me.id and b.deleted_at is null;
+      if not found then raise exception 'not yours' using hint = 'denied'; end if;
+    elsif kind = 'sound' then
+      if not boss then raise exception 'not allowed' using hint = 'denied'; end if;
+      select x.* into s from lelons.sounds x where x.id = item_id;
+      if s.id is null then raise exception 'already gone' using hint = 'gone'; end if;
+      insert into lelons.sound_trash (id, sound, path, name, bytes, favorites, playlists, deleted_by)
+      values (s.id, to_jsonb(s), s.path, s.name, s.bytes,
+              coalesce((select array_agg(f.account_id) from lelons.favorites f where f.sound_id = s.id), '{}'),
+              coalesce((select array_agg(p.playlist_id) from lelons.playlist_sounds p where p.sound_id = s.id), '{}'),
+              me.id)
+      on conflict (id) do nothing;
+      delete from lelons.sounds x where x.id = s.id;
+    else
+      raise exception 'what?' using hint = 'bad_input';
+    end if;
+  elsif what = 'restore' then
+    if kind = 'doc' then
+      update lelons.docs d set deleted_at = null where d.id = item_id and d.owner_id = me.id and d.deleted_at is not null;
+    elsif kind = 'board' then
+      update lelons.boards b set deleted_at = null where b.id = item_id and b.owner_id = me.id and b.deleted_at is not null;
+    elsif kind = 'sound' and boss then
+      delete from lelons.sound_trash x where x.id = item_id returning x.* into t;
+      if t.id is not null then
+        insert into lelons.sounds select r.* from jsonb_populate_record(null::lelons.sounds,
+          t.sound || case when exists (select 1 from lelons.accounts a where a.id::text = t.sound->>'uploader_id') then '{}'::jsonb
+                          else '{"uploader_id": null}'::jsonb end) r
+        on conflict do nothing;
+        insert into lelons.favorites (account_id, sound_id)
+          select a.id, t.id from lelons.accounts a where a.id = any (t.favorites) on conflict do nothing;
+        insert into lelons.playlist_sounds (playlist_id, sound_id)
+          select p.id, t.id from lelons.playlists p where p.id = any (t.playlists) on conflict do nothing;
+      end if;
+    else
+      raise exception 'not allowed' using hint = 'denied';
+    end if;
+    if not found and t.id is null then raise exception 'not in the trash' using hint = 'trash_gone'; end if;
+  elsif what in ('purge', 'empty') then
+    if what = 'empty' or kind = 'doc' then
+      delete from lelons.docs d where d.owner_id = me.id and d.deleted_at is not null and (what = 'empty' or d.id = item_id);
+    end if;
+    if what = 'empty' or kind = 'board' then
+      delete from lelons.boards b where b.owner_id = me.id and b.deleted_at is not null and (what = 'empty' or b.id = item_id);
+    end if;
+    if boss and (what = 'empty' or kind = 'sound') then
+      with old as (delete from lelons.sound_trash x where what = 'empty' or x.id = item_id returning x.path)
+      select gone || coalesce(array_agg(path), '{}') into gone from old;
+    end if;
+  elsif what <> 'list' then
+    raise exception 'what?' using hint = 'bad_input';
+  end if;
+
+  -- Files that aren't used any more may be deleted by the app now.
+  perform lelons.delete_ticket(f) from unnest(gone) f where not lelons.listed(f);
+  return json_build_object('files', to_json(gone), 'items', coalesce((select json_agg(i order by i.deleted desc) from (
+      select 'doc' as kind, d.id, d.title, d.kind as sort, extract(epoch from d.deleted_at) as deleted, me.username as who, 0 as bytes
+        from lelons.docs d where d.owner_id = me.id and d.deleted_at is not null
+      union all
+      select 'board', b.id, b.title, coalesce(b.data->>'bg', 'blue'), extract(epoch from b.deleted_at), me.username, 0
+        from lelons.boards b where b.owner_id = me.id and b.deleted_at is not null
+      union all
+      select 'sound', x.id, x.name, coalesce(x.sound->>'category', 'sfx'), extract(epoch from x.deleted_at),
+             coalesce(a.username, '?'), x.bytes
+        from lelons.sound_trash x left join lelons.accounts a on a.id = x.deleted_by where boss) i), '[]'::json));
 end $$;
 
 -- ---- Film assets (2.15.0): packs of VFX clips (explosions, fire, smoke...) like ActionVFX.
@@ -3451,7 +3564,7 @@ begin
              from lelons.boards b
              join lelons.board_members m on m.board_id = b.id and m.account_id = me.id and m.joined
              cross join lateral jsonb_array_elements(case when jsonb_typeof(b.data->'log') = 'array' then b.data->'log' else '[]'::jsonb end) e
-             where b.updated_at > since and jsonb_typeof(e->'at') = 'number' and jsonb_typeof(e->'text') = 'string') l
+             where b.updated_at > since and b.deleted_at is null and jsonb_typeof(e->'at') = 'number' and jsonb_typeof(e->'text') = 'string') l
        left join lelons.accounts a on lower(a.username) = lower(l.who)
        where l.at > extract(epoch from since) * 1000 and l.at < extract(epoch from now() + interval '1 day') * 1000
        order by l.at desc limit 80)
@@ -3496,7 +3609,7 @@ begin
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
-    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)'] loop
+    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

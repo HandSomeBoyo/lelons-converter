@@ -43,6 +43,7 @@ import obsctl  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
+import trash  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
@@ -97,6 +98,18 @@ if sys.stderr is None:
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
               "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
+
+def live_or_recording():
+    """True while you're streaming or OBS is recording (then notifications keep quiet)."""
+    try:
+        if streamlive._session:
+            return True
+        import obsstats
+        obs = obsstats.state() if obsstats._cfg.get("on") else {}
+        return bool(obs.get("streaming") or (obs.get("recording") or {}).get("active"))
+    except Exception:
+        return False
+
 
 class State:
     """Everything the window shows. The page polls it a few times a second."""
@@ -528,8 +541,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None):
+    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None, sandbox=False):
         self.send_response(200)
+        if sandbox:  # (2.34.1) something fetched from outside: never treated as a page of the app
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "sandbox; default-src 'none'")
         if nonce:
             # (2.33.0) A safety net: the page only runs the app's own scripts. Even if something someone sent
             # (a chat message, a shared doc) ever got past the cleaning, it couldn't run code here.
@@ -641,7 +657,7 @@ class Handler(BaseHTTPRequestHandler):
                 body, kind = streampreview.fetch(urllib.parse.parse_qs(url.query).get("u", [""])[0])
             except (streampreview.Error, OSError, ValueError):
                 return self.send_error(404)
-            return self.send_body(body, kind)
+            return self.send_body(body, kind, sandbox=True)
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -1123,8 +1139,11 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "edit":
                 library.edit(data.get("id"), data.get("name"), data.get("category"), data.get("genre"))
                 result = {"sounds": library.sounds()}
-            elif action == "delete":
-                library.delete(data.get("id"))
+            elif action == "delete":  # into the Trash (30 days), or for good from the Trash's own page
+                if data.get("forGood"):
+                    library.delete(data.get("id"))
+                else:
+                    trash.put_shared("sound", data.get("id"))
                 result = {}
             elif action == "download":
                 path = library.download(str(data.get("url") or ""), data.get("name"), save_folder(data, "sfx"))
@@ -1179,7 +1198,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if action.startswith("team-"):  # team boards, shared through the accounts
                 try:
-                    result = boards.team(action[5:], data)
+                    if action == "team-delete" and not data.get("forGood"):  # into the Trash (30 days)
+                        trash.put_shared("board", board_id)
+                        result = {}
+                    else:
+                        result = boards.team(action[5:], data)
                 except sfx.LoggedOut as e:
                     return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
             elif action == "list":
@@ -1197,12 +1220,17 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "star":
                 boards.star(board_id, data.get("starred"))
                 result = {}
-            elif action == "delete":
-                boards.delete(board_id)
+            elif action == "delete":  # into the Trash (30 days)
+                if data.get("forGood"):
+                    boards.delete(board_id)
+                else:
+                    trash.put_local("board", board_id, boards._title(boards.get(board_id).get("title")))
                 result = {}
             else:
                 return self.send_error(404)
-        except boards.Error as e:
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (boards.Error, sfx.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         except OSError:
             return self.send_json({"ok": False, "error": "Couldn't save the board. Try again."})
@@ -1403,6 +1431,31 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_trash(self, action, data):
+        """The Trash bin (Settings > Trash). Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        kind, item_id, where = str(data.get("kind") or ""), data.get("id"), str(data.get("where") or "")
+        try:
+            if action == "list":
+                result = trash.list_all()
+            elif action == "restore":
+                trash.restore(kind, item_id, where)
+                result = {}
+            elif action == "purge":
+                trash.purge(kind, item_id, where)
+                result = {}
+            elif action == "empty":
+                trash.empty()
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (trash.Error, sfx.Error, docs.Error, boards.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't do that. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_docs(self, action, data):
         """The Docs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         doc_id = data.get("id")
@@ -1432,8 +1485,15 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "close":
                 docs.collab_close(doc_id)
                 result = {}
-            elif action == "delete":
-                docs.collab_delete(doc_id) if collab else docs.local_delete(doc_id)
+            elif action == "delete":  # into the Trash (30 days); a new doc that was never saved goes for good
+                if data.get("forGood"):
+                    docs.collab_delete(doc_id) if collab else docs.local_delete(doc_id)
+                elif collab:
+                    trash.put_shared("doc", doc_id)
+                else:
+                    folder = docs.folders_get()["local"]["place"].get(str(doc_id))
+                    trash.put_local("doc", doc_id, docs._title(docs.local_open(doc_id).get("title")),
+                                    {"folder": folder} if folder else None)
                 result = {}
             elif action == "people":
                 result = {"people": docs.collab_people()}
@@ -1794,6 +1854,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_docs(self.path[len("/api/docs-"):], data)
         elif self.path.startswith("/api/boards-"):
             self.handle_boards(self.path[len("/api/boards-"):], data)
+        elif self.path.startswith("/api/trash-"):
+            self.handle_trash(self.path[len("/api/trash-"):], data)
         elif self.path.startswith("/api/fx-"):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/ch-"):
@@ -1975,10 +2037,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/notify":  # the bell got something new: a Windows notification, if the app isn't in front
             shown = False
-            if appwindow.active() and not appwindow.in_front():
-                shown = appwindow.toast(data.get("title"), data.get("text"), data.get("quiet"))
+            busy = bool(data.get("quietBusy")) and live_or_recording()
+            if not busy and data.get("desktop") and appwindow.active() and not appwindow.in_front():
+                shown = appwindow.toast(data.get("title"), data.get("text"), data.get("quiet"), data.get("key"))
                 appwindow.flash()
-            self.send_json({"ok": True, "shown": shown})
+            self.send_json({"ok": True, "shown": shown, "busy": busy})
         elif self.path == "/api/notify-clicked":  # did they click one of those? (then the page opens it)
             self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
@@ -2210,6 +2273,10 @@ def main():
         sfx.clean_drag_copies()  # left behind if the app was killed last time (dragged ones are kept)
         resolve.uninstall()  # the old test buttons in Resolve's Scripts menu (the free Resolve 21 can't run them)
         updater.tidy_yt_dlp()  # before the update check can start downloading a new one
+        try:
+            trash.tidy()  # local things that have been in the Trash for 30 days go for good
+        except OSError:
+            pass
         if state.auto_update:
             start_background(check_for_updates)
         warm_up()

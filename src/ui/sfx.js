@@ -664,7 +664,7 @@ function sfxRow(sound) {
     const bin = add(SFX_ICONS.trash, "Delete this sound for everyone", async () => {
       if (!sfxSure.has(sound.id)) {
         sfxSure.add(sound.id);
-        sfxNotes.set(sound.id, { text: "Click the bin again to delete it for everyone.", kind: "bad" });
+        sfxNotes.set(sound.id, { text: "Click the bin again to delete it for everyone. It waits in the Trash for 30 days.", kind: "bad" });
         drawSfx();
         setTimeout(() => {
           if (!sfxSure.delete(sound.id)) return;

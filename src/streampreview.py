@@ -98,4 +98,8 @@ def fetch(url):
         final = r.geturl()
     if body[:7] == b"#EXTM3U":
         return _rewrite(body.decode("utf-8", "replace"), final).encode(), "application/vnd.apple.mpegurl"
+    # (2.34.1) Only video pieces come back through here, never a web page that could act as part of the app.
+    kind = kind.split(";")[0].strip().lower()
+    if not (kind.startswith(("video/", "audio/")) or kind in ("application/octet-stream", "application/mp4")):
+        kind = "application/octet-stream"
     return body, kind

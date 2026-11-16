@@ -211,6 +211,9 @@ function callIncoming(r) {
   call.status = r.group ? `${r.started_by} started a call` : "is calling you";
   callRing("in");
   api("/api/sfx-call-ringing", {}).catch(() => {});
+  if (typeof notifyAdd === "function") notifyAdd({ key: "call:" + r.id, stamp: 1, kind: "calls", now: true, quiet: true,
+    title: r.group ? `${r.started_by} started a call` : `${r.started_by} is calling you`,
+    text: r.group ? `In ${r.group.name}. Click to join.` : "Click to answer.", pic: call.pictureUrl, open: { chat: key } });
   drawCall();
 }
 

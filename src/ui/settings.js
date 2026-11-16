@@ -108,6 +108,7 @@ function showSettingsPage(page) {
   document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
   document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
   if (page === "notes") drawNoteSettings();
+  if (page === "trash" && typeof loadTrash === "function") loadTrash();
   if (page === "sound") listSoundDevices();
   else if (typeof stopMicTest === "function") stopMicTest();
 }
@@ -116,38 +117,15 @@ document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("c
   savePref("settingsPage", b.dataset.set);
 }));
 
-// Settings > Notifications: what may notify you.
+// Settings > Notifications: desktop notifications on or off (the only choice, for now).
 function drawNoteSettings() {
-  if (typeof noteOn !== "function") return;
-  const rows = [["windows", "Windows notifications", "A pop-up in the corner of your screen when the app is behind other windows or minimized."]]
-    .concat(Object.entries(NOTE_KINDS).map(([k, v]) => [k, v.name, {
-      chat: "Private messages, group chats, and when someone @mentions you.",
-      invite: "When a friend invites you to a document or a team board.",
-      games: "When a game on your Games list goes on sale or becomes free.",
-      live: "When a friend goes live on YouTube or Twitch (from the channels on their profile).",
-      povs: "When a friend shares a new recording in POVs.",
-      downloads: "When a download finishes while you're doing something else.",
-      updates: "When a new version of VaultHub is ready.",
-    }[k]]));
-  const box = $("setNoteKinds");
-  box.replaceChildren(...rows.slice(1).map(([k, name, help]) => {
-    const row = document.createElement("label");
-    row.className = "check set-row";
-    row.innerHTML = `<span class="set-text"><b></b><small></small></span><input type="checkbox">`;
-    row.querySelector("b").textContent = name;
-    row.querySelector("small").textContent = help;
-    const input = row.querySelector("input");
-    input.checked = noteOn(k);
-    input.addEventListener("change", () => noteSetOn(k, input.checked));
-    return row;
-  }));
-  $("setNoteWindows").checked = noteOn("windows");
+  if (typeof noteOn === "function") $("setNoteWindows").checked = noteOn("windows");
 }
 $("setNoteWindows").addEventListener("change", () => noteSetOn("windows", $("setNoteWindows").checked));
 
 function openSettings(part) {
   drawSettings();
-  showSettingsPage(part === "save" ? "general" : part === "notes" ? "notes" : loadPref("settingsPage") || "general");
+  showSettingsPage(part === "save" ? "general" : part === "notes" ? "notes" : part === "trash" ? "trash" : loadPref("settingsPage") || "general");
   $("settingsModal").hidden = false;
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);

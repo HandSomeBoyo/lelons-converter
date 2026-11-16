@@ -405,10 +405,10 @@ function bdTile(b) {
     onclick: (e) => { e.stopPropagation(); bdDeletePop(e.currentTarget, b); } }) : null);
 }
 
-// Deleting a board for good (archiving only hides it), from its tile or its menu.
+// Deleting a board (into the Trash for 30 days; archiving only hides it), from its tile or its menu.
 function bdDeletePop(anchor, b) {
   bdPop(anchor, "Delete board?", (box) => {
-    box.append(bdEl("p", { class: "bd-pop-note", text: `"${b.title}" and all its lists and cards will be gone for good${b.team ? ", for everyone on it" : ""}. There is no undo.` }),
+    box.append(bdEl("p", { class: "bd-pop-note", text: `"${b.title}" and all its lists and cards go to the Trash${b.team ? " (and away for everyone on it)" : ""}. You can put it back from Settings > Trash for 30 days.` }),
       bdEl("button", { type: "button", class: "small-button bd-wide bd-danger", text: "Delete board", onclick: async (e) => {
         e.currentTarget.disabled = true;
         const open = bd && bd.id === b.id;

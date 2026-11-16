@@ -607,7 +607,8 @@ async function docCardRemove(d, collab) {
   const leave = collab && !d.mine;
   const yes = await docAsk(leave ? "Leave this document?" : "Delete this document?",
     leave ? `You won't see "${d.title}" any more, unless you're invited again.`
-      : collab ? `"${d.title}" is deleted for everyone in it. This can't be undone.` : `"${d.title}" is deleted from this computer. This can't be undone.`,
+      : collab ? `"${d.title}" goes away for everyone in it. It waits in the Trash (Settings > Trash) for 30 days, so you can put it back.`
+        : `"${d.title}" goes to the Trash (Settings > Trash) for 30 days, so you can put it back.`,
     leave ? "Leave" : "Delete");
   if (!yes) return;
   const res = leave
@@ -1849,7 +1850,7 @@ async function docLeave() {
 
 // A new document that was never saved isn't kept.
 async function docForgetFresh(d) {
-  await api("/api/docs-delete", { id: d.id, where: d.where }).catch(() => null);
+  await api("/api/docs-delete", { id: d.id, where: d.where, forGood: true }).catch(() => null);
 }
 
 // ---------------------------------------------------------------- keeping the blocks in order
@@ -2053,7 +2054,7 @@ window.addEventListener("pagehide", () => {
   if (!doc) return;
   const send = (path, data) => navigator.sendBeacon(path, new Blob([JSON.stringify(data)], { type: "application/json" }));
   if (doc.where === "collab") send("/api/docs-close", { id: doc.id });
-  if (doc.fresh) send("/api/docs-delete", { id: doc.id, where: doc.where }); // a new document that was never saved
+  if (doc.fresh) send("/api/docs-delete", { id: doc.id, where: doc.where, forGood: true }); // a new document that was never saved
 });
 
 // The little line under the title, and the Save button.
@@ -4417,7 +4418,7 @@ async function docNewFromMenu() {
 
 async function docDeleteOpen() {
   const d = doc;
-  const yes = await docAsk("Delete this document?", d.where === "collab" ? `"${$("docTitle").value}" is deleted for everyone in it. This can't be undone.` : `"${$("docTitle").value}" is deleted from this computer. This can't be undone.`, "Delete");
+  const yes = await docAsk("Delete this document?", d.where === "collab" ? `"${$("docTitle").value}" goes away for everyone in it. It waits in the Trash (Settings > Trash) for 30 days, so you can put it back.` : `"${$("docTitle").value}" goes to the Trash (Settings > Trash) for 30 days, so you can put it back.`, "Delete");
   if (!yes || doc !== d) return;
   const res = await api("/api/docs-delete", { id: d.id, where: d.where }).catch(() => null);
   if (!res || !res.ok) return docToast((res && res.error) || "That didn't work. Try again.");
