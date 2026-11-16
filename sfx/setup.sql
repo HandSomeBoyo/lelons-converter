@@ -299,10 +299,32 @@ grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lel
 
 -- ---- what the app calls
 
-create or replace function public.lelons_signup(username text, password text)
+-- (2.33.0) Invite codes: a new account needs a code from the owner or an admin, so only friends can join.
+-- A code works until it runs out (expires_at; null: never) or is used up (max_uses; null: no limit).
+-- The owner's own account (the name in line 1) never needs one, so a brand new setup can start.
+create table if not exists lelons.invites (
+  code text primary key,
+  made_by uuid not null references lelons.accounts (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz,
+  max_uses int check (max_uses is null or max_uses > 0),
+  uses int not null default 0
+);
+alter table lelons.invites enable row level security;
+revoke all on lelons.invites from anon, authenticated;
+alter table lelons.accounts add column if not exists invite_code text;  -- the code they joined with
+alter table lelons.accounts add column if not exists invited_by uuid references lelons.accounts (id) on delete set null;
+
+-- Old apps signed up without a code: that way in is gone.
+drop function if exists public.lelons_signup(text, text);
+
+create or replace function public.lelons_signup(username text, password text, invite text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   name text := btrim(coalesce(username, ''));
+  code_in text := upper(regexp_replace(coalesce(invite, ''), '[^A-Za-z0-9]', '', 'g'));
+  is_owner boolean := lower(btrim(coalesce(username, ''))) = (select owner_username from lelons.config);
+  inv lelons.invites;
   made lelons.accounts;
 begin
   if name !~ '^[A-Za-z0-9_.-]{3,20}$' then
@@ -311,17 +333,90 @@ begin
   if length(coalesce(password, '')) < 6 then
     return json_build_object('ok', false, 'error', 'password');
   end if;
+  if not is_owner then
+    -- The code, still good, made by someone who is still the owner or an admin. Locked while it's checked,
+    -- so two people can't both take a code's last use.
+    select i.* into inv from lelons.invites i join lelons.accounts a on a.id = i.made_by
+    where i.code = code_in and a.role in ('owner', 'admin')
+      and (i.expires_at is null or i.expires_at > now()) and (i.max_uses is null or i.uses < i.max_uses)
+    for update of i;
+    if inv.code is null then
+      perform pg_sleep(0.5);  -- (slows down guessing)
+      return json_build_object('ok', false, 'error', case when code_in = '' then 'no_invite' else 'bad_invite' end);
+    end if;
+  end if;
   if exists (select 1 from lelons.accounts a where lower(a.username) = lower(name)) then
     return json_build_object('ok', false, 'error', 'taken');
   end if;
   if (select count(*) from lelons.accounts) >= 500 then
     return json_build_object('ok', false, 'error', 'too_many');
   end if;
-  insert into lelons.accounts (username, pass_hash, role)
+  insert into lelons.accounts (username, pass_hash, role, invite_code, invited_by)
   values (name, extensions.crypt(password, extensions.gen_salt('bf', 10)),
-          case when lower(name) = (select owner_username from lelons.config) then 'owner' else 'viewer' end)
+          case when is_owner then 'owner' else 'viewer' end, inv.code, inv.made_by)
   returning * into made;
+  if inv.code is not null then
+    update lelons.invites i set uses = i.uses + 1 where i.code = inv.code;
+  end if;
   return json_build_object('ok', true, 'token', lelons.new_session(made.id), 'account', lelons.account_json(made));
+end $$;
+
+-- (2.33.0) The owner and admins make and remove invite codes.
+--   'list'                  the codes (the owner sees everyone's, an admin their own), with who joined with each
+--   'make'  hours, uses     a new code; hours: how long it works (null: always), uses: how many people (null: any)
+--   'delete' code           (your own, or any for the owner)
+create or replace function public.lelons_invites(token text, what text, code text default null,
+                                                 hours int default null, uses int default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  letters text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';  -- (no 0/O or 1/I, easy to read out)
+  bytes bytea;
+  made text;
+  n int;
+begin
+  if me.role not in ('owner', 'admin') then
+    raise exception 'not allowed' using hint = 'denied';
+  end if;
+  if what = 'make' then
+    if hours is not null and (hours < 1 or hours > 24 * 366) then
+      raise exception 'bad hours' using hint = 'bad_input';
+    end if;
+    if uses is not null and (uses < 1 or uses > 500) then
+      raise exception 'bad uses' using hint = 'bad_input';
+    end if;
+    if (select count(*) from lelons.invites i where i.made_by = me.id
+        and (i.expires_at is null or i.expires_at > now()) and (i.max_uses is null or i.uses < i.max_uses)) >= 30 then
+      return json_build_object('ok', false, 'error', 'many_invites');
+    end if;
+    loop
+      bytes := extensions.gen_random_bytes(10);
+      made := '';
+      for n in 0..9 loop
+        made := made || substr(letters, get_byte(bytes, n) % 32 + 1, 1);
+      end loop;
+      exit when not exists (select 1 from lelons.invites i where i.code = made);
+    end loop;
+    insert into lelons.invites (code, made_by, expires_at, max_uses)
+    values (made, me.id, case when hours is null then null else now() + make_interval(hours => hours) end, uses);
+  elsif what = 'delete' then
+    delete from lelons.invites i where i.code = upper(btrim(coalesce(lelons_invites.code, '')))
+      and (i.made_by = me.id or me.role = 'owner');
+  elsif what <> 'list' then
+    raise exception 'unknown' using hint = 'bad_input';
+  end if;
+  -- Codes that ran out more than a week ago go (who joined with them still shows on People).
+  delete from lelons.invites i where (i.expires_at < now() - interval '7 days')
+    or (i.max_uses is not null and i.uses >= i.max_uses and i.created_at < now() - interval '7 days');
+  return json_build_object('ok', true, 'made', made, 'invites', coalesce((
+    select json_agg(json_build_object(
+      'code', i.code, 'by', a.username, 'mine', i.made_by = me.id, 'created', extract(epoch from i.created_at),
+      'expires', extract(epoch from i.expires_at), 'max_uses', i.max_uses, 'uses', i.uses,
+      'working', (i.expires_at is null or i.expires_at > now()) and (i.max_uses is null or i.uses < i.max_uses),
+      'joined', coalesce((select json_agg(j.username order by j.created_at) from lelons.accounts j where j.invite_code = i.code), '[]'::json))
+      order by i.created_at desc)
+    from lelons.invites i join lelons.accounts a on a.id = i.made_by
+    where me.role = 'owner' or i.made_by = me.id), '[]'::json));
 end $$;
 
 create or replace function public.lelons_login(username text, password text)
@@ -3285,7 +3380,7 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['lelons_signup(text, text)', 'lelons_login(text, text)', 'lelons_logout(text)',
+  foreach f in array array['lelons_signup(text, text, text)', 'lelons_invites(text, text, text, int, int)', 'lelons_login(text, text)', 'lelons_logout(text)',
     'lelons_me(text)', 'lelons_password(text, text, text)', 'lelons_list(text)', 'lelons_ticket(text, text)',
     'lelons_add(text, text, text, text, real, int, text, text, jsonb)', 'lelons_claim_check(text, uuid)', 'lelons_set_peaks(text, text, jsonb)', 'lelons_sound_check(text, text, text)', 'lelons_set_copyright(text, uuid, jsonb)', 'lelons_set_avatar(text, text)', 'lelons_delete(text, uuid)',
     'lelons_accounts(text)', 'lelons_set_role(text, uuid, text)', 'lelons_remove_account(text, uuid)',

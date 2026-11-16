@@ -94,6 +94,9 @@ FRIENDLY = {
     "many": "A group can have up to 50 people.",
     "noplaylist": "That playlist is gone, or you're not in it any more.",
     "many_people": "A playlist can have up to 50 people.",
+    "no_invite": "You need an invite code to make an account. Ask the owner or an admin for one.",
+    "bad_invite": "That invite code doesn't work. It may have run out. Ask for a new one.",
+    "many_invites": "You have 30 codes that still work. Delete some first.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
@@ -340,8 +343,9 @@ class Library:
         presence.poke()
         return self.account()
 
-    def signup(self, username, password):
-        return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or "")))
+    def signup(self, username, password, invite=""):
+        return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or ""),
+                                    invite=str(invite or "").strip()[:40]))
 
     def login(self, username, password):
         return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or "")))
@@ -930,6 +934,23 @@ class Library:
         return [{**self._user(person), "created_at": person["created_at"], "last_seen": person["last_seen"],
                  "sounds": person["sounds"], "me": person["me"]}
                 for person in _rpc("lelons_accounts", token=self._token()) or []]
+
+    # ---- invite codes (the owner and admins)
+
+    def invites(self, what="list", code=None, hours=None, uses=None):
+        args = {"token": self._token(), "what": what}
+        if what == "make":
+            hours = int(hours) if hours else None
+            uses = int(uses) if uses else None
+            if (hours is not None and not 1 <= hours <= 24 * 366) or (uses is not None and not 1 <= uses <= 500):
+                raise Error("Pick how long the code works and how many people can use it.")
+            args.update(hours=hours, uses=uses)
+        elif what == "delete":
+            args["code"] = str(code or "")[:40]
+        result = _rpc("lelons_invites", **args) or {}
+        if not result.get("ok"):
+            raise Error(FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
+        return {"invites": result.get("invites") or [], "made": result.get("made")}
 
     def set_role(self, account_id, role):
         if role not in ("admin", "viewer"):
