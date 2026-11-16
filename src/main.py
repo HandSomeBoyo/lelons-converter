@@ -528,8 +528,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None):
+    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None, sandbox=False):
         self.send_response(200)
+        if sandbox:  # (2.34.1) something fetched from outside: never treated as a page of the app
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "sandbox; default-src 'none'")
         if nonce:
             # (2.33.0) A safety net: the page only runs the app's own scripts. Even if something someone sent
             # (a chat message, a shared doc) ever got past the cleaning, it couldn't run code here.
@@ -641,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
                 body, kind = streampreview.fetch(urllib.parse.parse_qs(url.query).get("u", [""])[0])
             except (streampreview.Error, OSError, ValueError):
                 return self.send_error(404)
-            return self.send_body(body, kind)
+            return self.send_body(body, kind, sandbox=True)
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
