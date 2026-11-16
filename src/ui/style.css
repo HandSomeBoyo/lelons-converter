@@ -7574,3 +7574,37 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 #lvNewbies .lv-tool { width: 28px; height: 28px; font-weight: 700; color: var(--muted); }
 #lvClips .small-button, #lvModes .small-button { height: 32px; padding: 0 14px; font-size: 13px; }
 #lvClips .lvi-ghost, #lvModes .lvi-ghost, #lvNewbies .lvi-ghost { background: var(--panel2); color: var(--text); margin-top: 10px; }
+
+/* 2.34.0 Live console: the OBS card (lvobs.js) */
+.lvo-scene-now { font: 600 12px var(--head); padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--red) 20%, transparent); color: #ff8a80; }
+.lvo-scene-now:empty { display: none; }
+.lvo-pic { position: relative; aspect-ratio: 16 / 9; border-radius: calc(var(--r) - 6px); overflow: hidden; background: #000; margin-bottom: 14px; }
+.lvo-pic video, .lvo-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.lvo-pic [hidden] { display: none; }
+.lvo-badge { position: absolute; left: 10px; top: 10px; font: 600 11.5px var(--head); padding: 3px 9px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; }
+.lvo-sub { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font: 600 12.5px var(--head); color: var(--muted); }
+.lvo-sub .sp { flex: 1; }
+.lvo-sub .link { font-size: 12.5px; }
+.lvo-scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.lvo-scene { all: unset; box-sizing: border-box; cursor: pointer; min-height: 52px; padding: 8px 12px; border-radius: 10px; background: var(--panel2); display: grid; align-content: center; gap: 2px;
+  font: 600 13.5px var(--head); text-align: center; transition: background-color .15s, box-shadow .15s; }
+.lvo-scene:hover { background: color-mix(in srgb, var(--panel2) 80%, var(--text) 8%); }
+.lvo-scene.on { background: color-mix(in srgb, var(--red) 22%, var(--panel2)); box-shadow: inset 0 0 0 2px var(--red); }
+.lvo-scene.keying { box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), .6); }
+.lvo-scene small { font: 500 11px var(--head); color: var(--muted); }
+.lvo-mixer { display: grid; gap: 6px; margin-bottom: 14px; }
+.lvo-input { display: grid; grid-template-columns: 30px minmax(70px, 140px) 1fr; align-items: center; gap: 10px; }
+.lvo-mute { all: unset; cursor: pointer; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--panel2); color: var(--text); }
+.lvo-mute svg { width: 16px; height: 16px; }
+.lvo-input.muted .lvo-mute { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
+.lvo-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvo-input.muted .lvo-name { color: var(--muted); text-decoration: line-through; }
+.lvo-meter { position: relative; height: 8px; border-radius: 99px; overflow: hidden; background: linear-gradient(90deg, #3ecf6e 0 62%, #f5c518 78%, #ff4d4d 94%); }
+.lvo-meter i { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: var(--panel2); transition: width .1s linear; }
+.lvo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lvo-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; background: var(--panel2); font: 600 13px var(--head); }
+.lvo-btn svg { width: 15px; height: 15px; }
+.lvo-btn.rec { background: color-mix(in srgb, var(--red) 20%, var(--panel2)); color: #ff8a80; }
+.lvo-btn.dim { color: var(--muted); }
+.lvo-btn:hover { filter: brightness(1.15); }
+#lvoRecTime { font-variant-numeric: tabular-nums; }

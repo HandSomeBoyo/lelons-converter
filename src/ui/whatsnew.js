@@ -8,6 +8,7 @@ const CHANGES = [
     "A live graph of viewers with marks where raids came in, and your goals for the stream with progress bars.",
     "Stream health from OBS: upload speed, dropped frames, FPS, CPU, graphics card load and plain-word warnings when something goes wrong. It also checks that OBS is recording and how much disk space is left.",
     "Make the Console yours: press Customize to drag cards around, make them wider or narrower, change the chat's height, or take cards off and add them back.",
+    "OBS card: see OBS's live picture right in VaultHub, switch scenes with buttons or hotkeys (even in a game), watch and mute your sound sources, start or stop recording, and save replays. OBS can stay minimized.",
     "Clips: clip your Twitch stream with one big button or a hotkey that works even in a game, then copy the link or edit it on Twitch.",
     "Chat modes: turn on slow mode, followers-only, subs-only, emote-only, no repeats or Shield Mode with one click.",
     "New chatters: people chatting in your channel for the very first time get their own list, with a Say hi button so nobody gets missed.",

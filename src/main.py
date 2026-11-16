@@ -39,6 +39,7 @@ import comments  # noqa: E402
 import streamlive  # noqa: E402
 import streamtwitch  # noqa: E402
 import streampreview  # noqa: E402
+import obsctl  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -94,7 +95,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvWelcomed")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -769,6 +770,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **streamlive.twitch().begin_sign_in(data.get("clientId"))})
             elif action == "twitch-check":
                 return self.send_json({"ok": True, "done": streamlive.twitch().check_sign_in()})
+            elif action == "obs":  # (2.34.0) the OBS card: live picture, scenes, sound, recording
+                return self.send_json({"ok": True, "obs": obsctl.state()})
+            elif action == "obs-do":
+                try:
+                    return self.send_json({"ok": True, "obs": obsctl.do(str(data.get("what") or ""), data)})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "obs-shot":
+                try:
+                    return self.send_json({"ok": True, "image": obsctl.picture(data.get("width") or 640)})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "tw-clip":
                 return self.send_json({"ok": True, "clip": streamlive.clip()})
             elif action == "tw-modes":

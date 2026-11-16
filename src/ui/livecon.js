@@ -101,6 +101,7 @@ function lvDrawConsole(fresh) {
   if (typeof lvDrawPreview === "function") lvDrawPreview();
   if (typeof lvDrawInfo === "function") lvDrawInfo();
   if (typeof lvDrawTwitchCards === "function") lvDrawTwitchCards();
+  if (typeof lvDrawObs === "function") lvDrawObs();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
 
@@ -161,6 +162,7 @@ function lvBuildConsole() {
       </div>
       <div class="lv-card" data-c="goals"><h3>Goals<span class="sp"></span><button type="button" class="link" id="lvGoalsEdit">Edit</button></h3><div id="lvGoals"></div></div>
       <div class="lv-card" data-c="events"><h3>What happened</h3><div class="lv-events" id="lvEvents"></div></div>
+      <div class="lv-card lvo" data-c="obs" id="lvObsCard"></div>
       <div class="lv-card" data-c="clips" id="lvClips"></div>
       <div class="lv-card" data-c="modes" id="lvModes"></div>
       <div class="lv-card" data-c="newbies" id="lvNewbies"></div>
@@ -801,6 +803,7 @@ function lvSendHotkeys() {
   const keys = lvPads().map((p, i) => ({ id: i + 1, mods: p.mods || 0, vk: p.vk || 0 })).filter((k) => k.vk);
   const clip = loadPref("lvClipKey");
   if (clip && clip.vk) keys.push({ id: 100, mods: clip.mods || 0, vk: clip.vk });  // (the Clip key, lvtwitch.js)
+  if (typeof lvoKeyList === "function") lvoKeyList().forEach(([, k], n) => keys.push({ id: 200 + n, mods: k.mods || 0, vk: k.vk }));  // (OBS scenes, lvobs.js)
   api("/api/live-hotkeys", { keys }).then((res) => { LV.taken = new Set((res && res.taken) || []); if (!$("lvboardTab").hidden) lvDrawBoard(); }).catch(() => {});
 }
 function lvPlayPad(i) {
@@ -967,7 +970,8 @@ function lvVk(e) {
 if (window.chrome && window.chrome.webview) {
   window.chrome.webview.addEventListener("message", (e) => {
     const m = /^hotkey:(\d+)$/.exec(String(e.data || ""));
-    if (m && +m[1] === 100) lvClipNow();
+    if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
+    else if (m && +m[1] === 100) lvClipNow();
     else if (m) lvPlayPad(+m[1] - 1);
   });
 } else {
@@ -977,6 +981,8 @@ if (window.chrome && window.chrome.webview) {
     const vk = lvVk(e), mods = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.shiftKey ? 4 : 0);
     const clip = loadPref("lvClipKey");
     if (clip && clip.vk === vk && (clip.mods || 0) === mods) { e.preventDefault(); return lvClipNow(); }
+    const scene = lvoKeyList().findIndex(([, k]) => k.vk === vk && (k.mods || 0) === mods);
+    if (scene >= 0) { e.preventDefault(); return lvoSceneKey(200 + scene); }
     const i = lvPads().findIndex((p) => p.vk && p.vk === vk && (p.mods || 0) === mods);
     if (i >= 0) { e.preventDefault(); lvPlayPad(i); }
   });
@@ -1060,6 +1066,7 @@ function liveTabChanged(tab) {
   } else {
     clearInterval(LV.clock);
     if (typeof lvStopPreview === "function") lvStopPreview();  // (no video in the background: it would use your internet)
+    if (typeof lvStopObs === "function") lvStopObs();
   }
   if (tab === "lvboard") lvDrawBoard();
   if (tab === "lvalerts") {
@@ -1071,7 +1078,7 @@ function liveTabChanged(tab) {
 
 lvLoadConfig().then((c) => {
   if (c && c.set) lvPoll();
-  if (lvPads().length || (loadPref("lvClipKey") || {}).vk) lvSendHotkeys();
+  if (lvPads().length || (loadPref("lvClipKey") || {}).vk || lvoKeyList().length) lvSendHotkeys();
   const t = loadPref("tab");
   if (["live", "lvboard", "lvalerts", "lvstats"].includes(t) && !$(t + "Tab").hidden) liveTabChanged(t);
 });
