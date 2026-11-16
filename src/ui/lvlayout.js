@@ -12,6 +12,9 @@ const LV_CARDS = [
   { id: "health", name: "Stream health", desc: "Upload speed, dropped frames, CPU, graphics card and recording.", w: 8 },
   { id: "goals", name: "Goals", desc: "Goals for this stream, with progress bars.", w: 4 },
   { id: "events", name: "What happened", desc: "Follows, subs, raids and Super Chats as they come in.", w: 4 },
+  { id: "clips", name: "Clips", desc: "Clip the last moments with one button or a hotkey, even in a game.", w: 4 },
+  { id: "modes", name: "Chat modes", desc: "Slow mode, followers-only, emote-only, subs-only and Shield Mode.", w: 4 },
+  { id: "newbies", name: "New chatters", desc: "People chatting for the very first time, so you can welcome them.", w: 4 },
 ];
 const LV_CARD = Object.fromEntries(LV_CARDS.map((c) => [c.id, c]));
 const LV_WIDTHS = [3, 4, 5, 6, 7, 8, 9, 12];

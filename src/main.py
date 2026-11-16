@@ -94,7 +94,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -769,6 +769,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **streamlive.twitch().begin_sign_in(data.get("clientId"))})
             elif action == "twitch-check":
                 return self.send_json({"ok": True, "done": streamlive.twitch().check_sign_in()})
+            elif action == "tw-clip":
+                return self.send_json({"ok": True, "clip": streamlive.clip()})
+            elif action == "tw-modes":
+                return self.send_json({"ok": True, "modes": streamlive.twitch().chat_modes()})
+            elif action == "tw-modes-set":
+                return self.send_json({"ok": True, "modes": streamlive.twitch().set_chat_modes(data.get("change") or {})})
             elif action == "tw-info":  # (2.34.0) the Twitch title, game and tags
                 return self.send_json({"ok": True, "info": streamlive.twitch().info()})
             elif action == "tw-games":
@@ -803,7 +809,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": False, "error": str(e)})
             elif action == "open":
                 url = str(data.get("url") or "")
-                if re.match(r"^https://(www\.twitch\.tv|dev\.twitch\.tv|www\.youtube\.com|studio\.youtube\.com|obsproject\.com)/", url):
+                if re.match(r"^https://(www\.twitch\.tv|clips\.twitch\.tv|dashboard\.twitch\.tv|dev\.twitch\.tv|www\.youtube\.com|studio\.youtube\.com|obsproject\.com)/", url):
                     webbrowser.open(url)
             else:
                 return self.send_error(404)

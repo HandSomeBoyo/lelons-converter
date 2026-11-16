@@ -27,7 +27,8 @@ IRC = ("irc.chat.twitch.tv", 6697)
 HELIX = "https://api.twitch.tv/helix/"
 ID = "https://id.twitch.tv/oauth2/"
 SCOPES = ("chat:read chat:edit moderator:read:followers moderator:manage:chat_messages "
-          "moderator:manage:banned_users channel:read:subscriptions bits:read channel:manage:broadcast")
+          "moderator:manage:banned_users channel:read:subscriptions bits:read channel:manage:broadcast "
+          "clips:edit moderator:manage:chat_settings moderator:manage:shield_mode")
 LOOK_EVERY = 30  # seconds between looks at viewers and followers
 
 
@@ -374,6 +375,63 @@ class Twitch:
                 raise Error("Sign in to Twitch again (Set up > Twitch) so the app may change your title and game.")
             raise
         return self.info()
+
+    # ---- clips and chat modes (2.34.0)
+
+    def _needs(self, call, what):
+        try:
+            return call()
+        except Error as e:
+            if "scope" in str(e).lower() or isinstance(e, SignedOut):
+                raise Error(f"Sign in to Twitch again (Set up > Twitch) so the app may {what}.")
+            raise
+
+    def clip(self):
+        """Clips the last 30 seconds or so of the stream."""
+        broadcaster, _ = self._ids()
+        try:
+            r = self._needs(lambda: self._helix("clips", method="POST", body={}, broadcaster_id=broadcaster), "make clips")
+        except Error as e:
+            if "not live" in str(e).lower() or "offline" in str(e).lower():
+                raise Error("You can only clip while you're live.")
+            raise
+        d = (r.get("data") or [{}])[0]
+        if not d.get("id"):
+            raise Error("Twitch didn't make the clip. Try again in a moment.")
+        return {"id": d["id"], "url": "https://clips.twitch.tv/" + d["id"], "edit": d.get("edit_url") or ""}
+
+    def chat_modes(self):
+        broadcaster, me = self._ids()
+        d = (self._needs(lambda: self._helix("chat/settings", broadcaster_id=broadcaster, moderator_id=me), "change chat modes").get("data") or [{}])[0]
+        try:
+            shield = (self._helix("moderation/shield_mode", broadcaster_id=broadcaster, moderator_id=me).get("data") or [{}])[0].get("is_active")
+        except Error:
+            shield = None  # (an old sign-in without that permission)
+        return {"slow": bool(d.get("slow_mode")), "slowWait": d.get("slow_mode_wait_time") or 30,
+                "followers": bool(d.get("follower_mode")), "followersFor": d.get("follower_mode_duration") or 0,
+                "emotes": bool(d.get("emote_mode")), "subs": bool(d.get("subscriber_mode")),
+                "unique": bool(d.get("unique_chat_mode")), "shield": shield}
+
+    def set_chat_modes(self, change):
+        broadcaster, me = self._ids()
+        body = {}
+        if "slow" in change:
+            body["slow_mode"] = bool(change["slow"])
+            if change["slow"]:
+                body["slow_mode_wait_time"] = max(3, min(120, int(change.get("slowWait") or 30)))
+        if "followers" in change:
+            body["follower_mode"] = bool(change["followers"])
+            if change["followers"]:
+                body["follower_mode_duration"] = max(0, min(129600, int(change.get("followersFor") or 0)))
+        for key, name in (("emotes", "emote_mode"), ("subs", "subscriber_mode"), ("unique", "unique_chat_mode")):
+            if key in change:
+                body[name] = bool(change[key])
+        if body:
+            self._needs(lambda: self._helix("chat/settings", method="PATCH", body=body, broadcaster_id=broadcaster, moderator_id=me), "change chat modes")
+        if "shield" in change:
+            self._needs(lambda: self._helix("moderation/shield_mode", method="PUT", body={"is_active": bool(change["shield"])},
+                                            broadcaster_id=broadcaster, moderator_id=me), "turn on Shield Mode")
+        return self.chat_modes()
 
     # ---- the chat
 

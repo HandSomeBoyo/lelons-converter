@@ -68,6 +68,9 @@ def emit(items):
                     s["chatters"].append(who)
                     if len(s["chatters"]) > 5000:
                         s["chatters"] = s["chatters"][-5000:]
+                if item.get("first"):  # (their very first message in your Twitch chat)
+                    s["first"].append({k: item.get(k) for k in ("p", "user", "login", "text", "at")})
+                    del s["first"][:-300]
             elif item.get("type") == "event" and item.get("kind") in EVENT_KINDS:
                 ev = {k: item.get(k) for k in ("kind", "p", "user", "amount", "money", "months", "text", "to") if item.get(k) not in (None, "")}
                 ev["at"] = item.get("at") or now
@@ -315,7 +318,8 @@ def state(since=0):
             series.append({"t": round(now - s["start"]), "tw": tw.get("viewers") or 0, "yt": yt.get("viewers") or 0,
                            "chat": s["minute"]["chat"], "now": True})
             session = {"id": s["id"], "start": s["start"], "title": s["title"], "series": series[-360:],
-                       "events": s["events"][-60:], "totals": _totals(s, tw.get("viewers"), yt.get("viewers"))}
+                       "events": s["events"][-60:], "first": s.get("first", [])[-100:],
+                       "clips": s.get("clips", [])[-30:], "totals": _totals(s, tw.get("viewers"), yt.get("viewers"))}
         seq = _seq
     return {"ok": True, "config": config(), "twitch": tw, "youtube": yt, "obs": obsstats.state(), "chat": chat,
             "removed": removed, "seq": seq, "speed": speed, "session": session}
@@ -347,6 +351,17 @@ def moderate(p, action, message_id="", user_id="", login="", channel_id=""):
         if action == "delete":
             raise streamtwitch.Error("Remove YouTube messages in YouTube Studio's chat for now.")
         _youtube.moderate(action, channel_id)
+
+
+def clip():
+    """Make a Twitch clip and remember it with this stream."""
+    c = _twitch.clip()
+    c["at"] = time.time()
+    with _lock:
+        if _session is not None:
+            _session.setdefault("clips", []).append(c)
+            del _session["clips"][:-200]
+    return c
 
 
 def twitch():

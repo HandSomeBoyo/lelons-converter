@@ -7334,7 +7334,7 @@ html.side-small .sidebar .tabs .lv-onair { position: absolute; top: 4px; right: 
 .lv-code b { font: 800 22px var(--head); letter-spacing: .12em; color: var(--accent); }
 
 /* corner cards (alerts) */
-.lv-toasts { position: fixed; right: 18px; top: 74px; z-index: 900; display: flex; flex-direction: column; gap: 10px; width: 330px; pointer-events: none; }
+.lv-toasts { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); flex-direction: column-reverse; z-index: 900; display: flex; gap: 10px; width: 330px; pointer-events: none; }
 .lv-toast { pointer-events: auto; cursor: pointer; border-radius: 14px; background: var(--panel2); border: 1px solid var(--line2); padding: 12px 14px; display: flex; gap: 12px; align-items: center;
   box-shadow: 0 14px 40px rgba(0, 0, 0, .45); animation: lv-in .35s var(--ease-out) both; }
 .lv-toast.out { opacity: 0; transform: translateX(30px); transition: opacity .35s, transform .35s; }
@@ -7533,3 +7533,44 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lv-send .input { flex: 1; min-width: 0; }
 .lv-send select { flex: none; }
 @container (max-width: 330px) { .lv-send select { width: 64px; } }
+
+/* 2.34.0 Live console: Twitch cards (clips, chat modes, new chatters) */
+.lvt-count { font: 500 12.5px var(--head); }
+.lvt-on { font: 600 12px var(--head); padding: 3px 9px; border-radius: 999px; background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+.lvt-clip { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; height: 54px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  border-radius: 12px; background: #9146ff; color: #fff; font: 700 16px var(--head); transition: transform .12s var(--ease), filter .2s; }
+.lvt-clip svg { width: 20px; height: 20px; }
+.lvt-clip:hover:not(:disabled) { filter: brightness(1.12); }
+.lvt-clip:active:not(:disabled) { transform: scale(.98); }
+.lvt-clip:disabled { background: var(--panel2); color: var(--muted); cursor: default; }
+.lvt-key { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.lvt-key b { color: var(--text); font: 600 12.5px var(--head); padding: 2px 8px; border-radius: 6px; background: var(--panel2); }
+.lvt-key em { color: var(--red); font-style: normal; font-size: 12px; }
+.lvt-key .sp { flex: 1; }
+.lvt-clips { display: grid; gap: 2px; margin-top: 10px; }
+.lvt-clips:empty { display: none; }
+.lvt-cliprow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.lvt-cliprow small { color: var(--muted); margin-left: 4px; }
+.lvt-cliprow .sp { flex: 1; }
+.lvt-cliprow .link { font-size: 12.5px; }
+.lvt-hint { margin-top: 10px; font-size: 12.5px; }
+.lvt-modes { display: grid; gap: 6px; }
+.lvt-mode { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--panel2); transition: background-color .2s; }
+.lvt-mode.on { background: rgba(var(--accent-rgb), .12); }
+.lvt-mode.shield.on { background: color-mix(in srgb, var(--red) 18%, transparent); }
+.lvt-mode-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.lvt-mode-text b { font: 600 13.5px var(--head); }
+.lvt-mode-text small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvt-mode select { height: 28px; border: 0; border-radius: 7px; background: var(--panel); color: var(--text); font: 600 12px var(--head); padding: 0 6px; }
+.lvt-new { display: grid; gap: 2px; }
+.lvt-newrow { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
+.lvt-newrow:first-child { border-top: 0; }
+.lvt-newrow.done { opacity: .55; }
+.lvt-newtext { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.lvt-newtext b { font: 600 13.5px var(--head); color: #bf94ff; }
+.lvt-newtext small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvt-hi { height: 28px; padding: 0 12px; font-size: 12.5px; }
+.lvt-welcomed { font: 600 12px var(--head); color: var(--green); }
+#lvNewbies .lv-tool { width: 28px; height: 28px; font-weight: 700; color: var(--muted); }
+#lvClips .small-button, #lvModes .small-button { height: 32px; padding: 0 14px; font-size: 13px; }
+#lvClips .lvi-ghost, #lvModes .lvi-ghost, #lvNewbies .lvi-ghost { background: var(--panel2); color: var(--text); margin-top: 10px; }
