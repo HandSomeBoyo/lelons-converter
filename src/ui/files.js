@@ -663,8 +663,8 @@ function watchRow(w) {
 function drawWatches() {
   const list = $("watchList");
   const key = JSON.stringify([watchList, [...watchOpen], Math.floor(Date.now() / 60000)]);
-  $("watchError").hidden = !watchError;
-  $("watchError").textContent = watchError;
+  $("filesWatchError").hidden = !watchError;
+  $("filesWatchError").textContent = watchError;
   if (list.dataset.key === key) return;
   list.dataset.key = key;
   list.innerHTML = "";
