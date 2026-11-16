@@ -284,7 +284,7 @@ def count():
     if not data:
         return 0
     done = _load()["done"]
-    return sum(1 for t in data["threads"] if _status(t, data["channelId"], done)[0] == "needs")
+    return sum(1 for t in data["threads"] if _status(t, data["channelId"], done)[0] in ("needs", "held"))
 
 
 # ---------------------------------------------------------------- answering

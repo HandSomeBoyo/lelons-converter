@@ -6,7 +6,10 @@ let cmData = null;
 let cmTimer = null;
 let cmRun = 0;
 let cmSig = "";
-let cmFilter = ["needs", "answered", "done", "held", "all"].includes(loadPref("cmFilter")) ? loadPref("cmFilter") : "needs";
+// Two lists: Unread (needs an answer, or held back by YouTube) and Read (answered, done, your own).
+let cmFilter = loadPref("cmFilter") === "read" ? "read" : "unread";
+const CM_UNREAD = ["needs", "held"];
+const cmIsUnread = (t) => CM_UNREAD.includes(t.status);
 let cmVideo = "";
 let cmOpen = ""; // the comment whose reply box is open
 let cmWaitGoogle = 0;
@@ -54,7 +57,7 @@ function cmBadge(n) {
 // The number on the side bar, also when the tab is closed (every 10 minutes, cheap).
 async function cmCheckCount() {
   try {
-    const res = cmTabOpen() && cmData && cmData.counts ? { ok: true, count: cmData.counts.needs || 0 } : await api("/api/cm-count", {});
+    const res = cmTabOpen() && cmData && cmData.counts ? { ok: true, count: (cmData.counts.needs || 0) + (cmData.counts.held || 0) } : await api("/api/cm-count", {});
     if (res.ok) cmBadge(res.count);
   } catch (e) { /* closing */ }
 }
@@ -77,14 +80,12 @@ function drawComments() {
   $("cmAllow").hidden = d.google.canReply;
   $("cmRefresh").classList.toggle("spinning", !!d.busy);
   const counts = d.counts || {};
-  cmBadge(counts.needs || 0);
-  if (cmFilter === "held" && !counts.held) cmFilter = "needs";
+  const unread = (counts.needs || 0) + (counts.held || 0);
+  cmBadge(unread);
   document.querySelectorAll("#cmFilters button").forEach((b) => {
-    const f = b.dataset.f;
-    b.classList.toggle("active", f === cmFilter);
-    if (f === "held") b.hidden = !counts.held;
+    b.classList.toggle("active", b.dataset.f === cmFilter);
     const n = b.querySelector("b");
-    if (n) n.textContent = counts[f] ? counts[f] : "";
+    if (n) n.textContent = unread || "";
   });
 
   const notes = [];
@@ -120,11 +121,11 @@ function drawCmVideos(d) {
 function cmShown(d) {
   const q = $("cmSearch").value.trim().toLowerCase();
   return d.threads.filter((t) => {
-    if (cmFilter === "all" ? t.status === "held" : t.status !== cmFilter && !cmGone.has(t.id)) return false;
+    if (cmIsUnread(t) !== (cmFilter === "unread") && !cmGone.has(t.id)) return false;
     if (cmVideo && t.videoId !== cmVideo) return false;
     if (q && ![t.top.text, t.top.author, ...t.replies.map((r) => r.text)].join(" ").toLowerCase().includes(q)) return false;
     return true;
-  }).sort((a, b) => cmFilter === "needs" ? cmLatest(b) - cmLatest(a) : (b.top.when || 0) - (a.top.when || 0));
+  }).sort((a, b) => cmFilter === "unread" ? cmLatest(b) - cmLatest(a) : (b.top.when || 0) - (a.top.when || 0));
 }
 // Newest first, counting a "they answered you back" by when they did.
 const cmLatest = (t) => t.why === "back" ? (t.replies[t.replies.length - 1].when || 0) : (t.top.when || 0);
@@ -136,9 +137,8 @@ function drawCmList(d) {
     empty.className = "home-card cm-empty";
     const words = d.loading ? ["Looking at your comments...", "The first time takes a few seconds."]
       : $("cmSearch").value.trim() ? ["Nothing found", "Try other words, or pick All videos."]
-      : cmFilter === "needs" ? ["You're all caught up", "Every comment has an answer. New ones show up here by themselves."]
-      : cmFilter === "done" ? ["Nothing marked done", "Press Done on a comment you don't want to answer, and it moves here."]
-      : ["No comments here yet", ""];
+      : cmFilter === "unread" ? ["You're all caught up", "Every comment has an answer. New ones show up here by themselves."]
+      : ["Nothing here yet", "Comments you answer or mark as read move here."];
     empty.append(Object.assign(document.createElement("b"), { textContent: words[0] }));
     if (words[1]) empty.append(Object.assign(document.createElement("span"), { textContent: words[1] }));
     setChildren($("cmList"), [empty]);
@@ -241,8 +241,8 @@ function cmActions(t, d) {
     if (t.canReply && cmOpen !== t.id) {
       row.append(cmButton(t.status === "needs" ? "Answer" : "Answer again", t.status === "needs" ? "small-button" : "ghost-button", () => cmOpenBox(t.id)));
     }
-    if (t.status === "needs") row.append(cmButton("Done", "ghost-button", () => cmDone(t, true), "Mark it done without answering"));
-    if (t.status === "done") row.append(cmButton("Back to the list", "ghost-button", () => cmDone(t, false)));
+    if (t.status === "needs") row.append(cmButton("Mark as read", "ghost-button", () => cmDone(t, true), "Move it to Read without answering"));
+    if (t.status === "done") row.append(cmButton("Mark as unread", "ghost-button", () => cmDone(t, false)));
   }
   row.append(Object.assign(document.createElement("span"), { className: "spacer" }));
   row.append(cmButton("Open on YouTube", "link", () => api("/api/ch-open", {
@@ -313,7 +313,7 @@ function cmOpenBox(id) {
 // After answering, the next comment that needs you opens, so you can go down the list.
 function cmNext(id) {
   const list = cmShown(cmData).filter((t) => t.id !== id && !cmGone.has(t.id) && t.status === "needs" && t.canReply);
-  cmOpen = cmFilter === "needs" && list.length ? list[0].id : "";
+  cmOpen = cmFilter === "unread" && list.length ? list[0].id : "";
 }
 
 function cmSlideAway(t) {
@@ -345,7 +345,7 @@ async function cmSend(t, text, send, note) {
   if (cmData.counts && wasNeeds) { cmData.counts.needs = Math.max(0, (cmData.counts.needs || 0) - 1); cmData.counts.answered = (cmData.counts.answered || 0) + 1; }
   cmSig = "";
   drawComments();
-  if (wasNeeds && cmFilter === "needs") cmSlideAway(t);
+  if (wasNeeds && cmFilter === "unread") cmSlideAway(t);
   else { cmOpen = ""; cmRedraw(); }
 }
 
