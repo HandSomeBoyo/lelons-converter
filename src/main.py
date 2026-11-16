@@ -907,6 +907,11 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "chat-mode":
                 library.set_mode(data.get("mode"), data.get("status"))
                 result = {}
+            elif action == "gif-search":
+                result = library.gif_search(data.get("q"), data.get("pos"), data.get("locale"))
+            elif action == "gif-key":
+                library.set_gif_key(data.get("provider"), data.get("key"))
+                result = {}
             elif action == "chat-link":
                 result = {"card": linkpreview.preview(data.get("url"))}
             elif action == "chat-group":

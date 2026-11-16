@@ -21,6 +21,7 @@ import urllib.request
 import uuid
 
 import copycheck
+import gifsearch
 import media
 import names
 import settings
@@ -468,7 +469,7 @@ class Library:
                 "yourself": "You can't send a private message to yourself.",
                 "gone": "Someone deleted that sound.",
                 "poll": "A poll needs a question and at least 2 answers.",
-                "gif": "That GIF link can't go in the chat. Try a GIPHY or Tenor link.",
+                "gif": "That GIF link can't go in the chat. Try a GIPHY or KLIPY link.",
                 "thread": "That message was deleted, so its thread is gone.",
             }.get((result or {}).get("error"), "That didn't send. Try again."))
         for path in result.get("files") or []:  # clips of old messages that dropped off the end
@@ -597,6 +598,48 @@ class Library:
         if not result.get("ok"):
             raise Error("Couldn't change that. Try again.")
         presence.poke()
+
+    # ---- GIF search (the owner's free KLIPY or GIPHY key, kept in Supabase)
+
+    def gif_key(self, fresh=False):
+        """{provider, key, can_set, owner}; asked again every 10 minutes."""
+        got = getattr(self, "_gif_key", None)
+        if fresh or not got or not got[1].get("key") or time.time() - got[0] > 600:  # (no key yet: ask each time)
+            got = (time.time(), _rpc("lelons_gif_key", token=self._token()) or {})
+            self._gif_key = got
+        return got[1]
+
+    def gif_search(self, q="", pos=None, locale="en_US"):
+        info = self.gif_key()
+        if not info.get("key"):
+            return {"gifs": [], "next": None, "nokey": True, "canSet": bool(info.get("can_set")),
+                    "owner": info.get("owner") or ""}
+        try:
+            result = gifsearch.search(info.get("provider"), info["key"], q, pos, locale)
+        except gifsearch.Error as e:
+            if str(e) == "key":
+                self.gif_key(fresh=True)
+                raise Error("GIF search isn't working: the key was turned down. The owner can add a new one.") from None
+            if str(e) == "busy":
+                raise Error("Too many GIF searches right now. Wait a minute and try again.") from None
+            raise Error("Couldn't reach the GIF site. Check your internet connection.") from None
+        return {**result, "provider": info.get("provider"), "canSet": bool(info.get("can_set"))}
+
+    def set_gif_key(self, provider, key):
+        """The owner turns GIF search on (or off, with no key). The key is tried first."""
+        provider = str(provider or "klipy")
+        key = str(key or "").strip()
+        if key:
+            try:
+                gifsearch.search(provider, key)
+            except gifsearch.Error as e:
+                if str(e) in ("key", "nokey"):
+                    raise Error("That key didn't work. Check that you copied all of it.") from None
+                # (couldn't check it right now: save it anyway)
+        result = _rpc("lelons_gif_key", token=self._token(), provider=provider, key=key) or {}
+        if not result.get("ok"):
+            raise Error("That doesn't look like a key. Copy it again from the site.")
+        self.gif_key(fresh=True)
 
     def chat_group(self, what, group_id=None, name=None, usernames=None, picture=None):
         """Make a group chat, rename it, add or remove people, or leave it (see lelons_chat_group)."""

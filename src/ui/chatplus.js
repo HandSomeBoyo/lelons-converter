@@ -5,6 +5,7 @@
 // openWatch() from watch.js, gmLoadHls() from games.js and EMOJI_GROUPS from emojidata.js.
 
 const CP_ICONS = {
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
   reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8 5 12.5 10 17"/><path d="M5.5 12.5H14a5 5 0 0 1 5 5V19"/></svg>',
   thread: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10H9.5L5 19.5v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 5 3.5 3.5v1.5h-11v-1.5L10 9z"/><path d="M12 14v6"/></svg>',
@@ -932,14 +933,218 @@ function toggleSavedGif(url, show) {
   const has = list.some((g) => g.url === url);
   savePref("chatGifs", has ? list.filter((g) => g.url !== url) : [{ url, show: show || url }, ...list].slice(0, 60));
 }
-function rememberGif(url) {
+function rememberGif(url, show) {
   if (!url) return;
   const list = (loadPref("chatGifs") || []).filter((g) => g.url !== url);
-  savePref("chatGifs", [{ url, show: url }, ...list].slice(0, 60));
+  savePref("chatGifs", [{ url, show: show || url }, ...list].slice(0, 60));
 }
 
 $("chatGifBtn").innerHTML = CP_ICONS.gif;
-$("chatGifBtn").addEventListener("click", (e) => { e.stopPropagation(); openGifPicker("gifs"); });
+$("chatGifBtn").addEventListener("click", (e) => { e.stopPropagation(); openGifPicker("search"); });
+
+// GIF search: trending GIFs first, then whatever you type. From KLIPY (or GIPHY), with the owner's free key.
+const gifLocale = () => { const l = (navigator.language || "en-US").split("-"); return `${(l[0] || "en").toLowerCase()}_${(l[1] || "US").toUpperCase()}`; };
+let gifSearchRun = 0;
+
+function gifCell(preview, url, title, onPick) {
+  const b = cpEl("button", "gif-cell");
+  b.type = "button";
+  b.title = title || "Send it";
+  const img = cpEl("img");
+  img.src = preview;
+  img.loading = "lazy";
+  img.alt = title || "GIF";
+  img.addEventListener("load", () => b.classList.add("ready"), { once: true });
+  b.append(img);
+  b.addEventListener("click", async (ev) => { ev.stopPropagation(); onPick(url, preview); });
+  return b;
+}
+
+async function sendPickedGif(url, preview) {
+  closePop();
+  if (await sendExtra({ gif: url })) rememberGif(url, preview);
+}
+
+function drawGifSearch(body) {
+  const top = cpEl("div", "gif-search");
+  const field = cpEl("label", "gif-find");
+  field.innerHTML = CP_ICONS.search || "";
+  const input = cpEl("input");
+  input.placeholder = "Search GIFs";
+  input.spellcheck = false;
+  const clear = cpButton("gif-clear", CP_ICONS.x, "Clear", () => { input.value = ""; run(); input.focus(); });
+  clear.hidden = true;
+  field.append(input, clear);
+  const chips = cpEl("div", "gif-chips");
+  for (const word of ["gg", "lol", "hype", "rage", "sad", "clutch", "facepalm", "let's go", "bruh", "dance"]) {
+    const c = cpEl("button", "gif-chip", word);
+    c.type = "button";
+    c.addEventListener("click", (ev) => { ev.stopPropagation(); input.value = word; run(); });
+    chips.append(c);
+  }
+  top.append(field, chips);
+  const head = cpEl("h5", "", "Trending");
+  const grid = cpEl("div", "gif-grid gif-masonry");
+  const cols = [cpEl("div", "gif-col"), cpEl("div", "gif-col")];
+  grid.append(...cols);
+  const more = cpEl("div", "gif-more");
+  const credit = cpEl("div", "gif-credit");
+  body.append(top, head, grid, more);
+  body.parentNode.append(credit);
+  let next = null, busy = false, q = "", heights = [0, 0];
+
+  const add = (gifs) => {
+    for (const g of gifs) {
+      const i = heights[0] <= heights[1] ? 0 : 1;
+      const cell = gifCell(g.preview, g.url, g.title, sendPickedGif);
+      const ratio = g.w && g.h ? g.h / g.w : 1;
+      cell.style.aspectRatio = g.w && g.h ? `${g.w} / ${g.h}` : "1";
+      heights[i] += ratio;
+      cols[i].append(cell);
+    }
+  };
+  const load = async (fresh) => {
+    if (busy && !fresh) return;
+    const run = ++gifSearchRun;
+    busy = true;
+    if (fresh) { cols.forEach((c) => c.replaceChildren()); heights = [0, 0]; next = null; more.textContent = ""; }
+    more.className = "gif-more loading";
+    const res = await api("/api/sfx-gif-search", { q, pos: fresh ? null : next, locale: gifLocale() })
+      .catch(() => ({ ok: false, error: "Couldn't reach the GIF site. Check your internet connection." }));
+    if (run !== gifSearchRun || !body.isConnected) return;
+    busy = false;
+    more.className = "gif-more";
+    if (sfxLoggedOut(res)) { closePop(); return drawChatUser(); }
+    if (!res.ok) { more.textContent = res.error; return; }
+    if (res.nokey) { body.replaceChildren(); credit.remove(); drawGifSetup(body, res); return; }
+    credit.replaceChildren(cpEl("span", "", res.provider === "giphy" ? "Powered by GIPHY" : "Powered by KLIPY"));
+    if (res.canSet) {
+      const change = cpEl("button", "gif-change", "Change key");
+      change.type = "button";
+      change.addEventListener("click", (ev) => { ev.stopPropagation(); gifSearchRun++; body.replaceChildren(); credit.remove(); drawGifSetup(body, { canSet: true, change: true }); });
+      credit.prepend(change);
+    }
+    add(res.gifs || []);
+    next = res.next;
+    if (fresh && !(res.gifs || []).length) more.textContent = q ? `No GIFs for "${q}". Try other words.` : "No GIFs right now.";
+  };
+  let timer = 0;
+  const run = () => {
+    q = input.value.trim();
+    clear.hidden = !q;
+    head.textContent = q ? `GIFs for "${q}"` : "Trending";
+    chips.hidden = !!q;
+    body.scrollTop = 0;
+    load(true);
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 350); });
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Escape") { if (input.value) { input.value = ""; run(); } else closePop(); }
+    if (ev.key === "Enter") { ev.preventDefault(); clearTimeout(timer); run(); }
+  });
+  body.addEventListener("scroll", () => { if (next && body.scrollTop + body.clientHeight > body.scrollHeight - 240) load(false); });
+  load(true);
+  setTimeout(() => input.focus(), 0);
+}
+
+// No key yet: the owner adds one (free, a minute to make); everyone else is told who can.
+function drawGifSetup(body, info) {
+  const box = cpEl("div", "gif-setup");
+  box.innerHTML = CP_ICONS.gif;
+  if (!info.canSet) {
+    box.append(cpEl("b", "", "GIF search isn't on yet"),
+      cpEl("p", "", `${info.owner || "The owner"} can turn it on in a minute (it's free). Until then, paste a GIF link or send one from your PC.`));
+    body.append(box);
+    drawSavedGifs(body, () => { body.replaceChildren(); drawGifSetup(body, info); });
+    return;
+  }
+  box.append(cpEl("b", "", "Turn on GIF search"),
+    cpEl("p", "", "GIF search needs a free key from KLIPY, a big GIF site (Tenor's search was shut down). You add it once here and it works for everyone."));
+  const steps = cpEl("ol", "gif-steps");
+  const site = cpEl("a", "", "partner.klipy.com");
+  site.href = "#";
+  site.addEventListener("click", (ev) => { ev.preventDefault(); api("/api/games-open", { url: "https://partner.klipy.com/api-keys" }); });
+  const s1 = cpEl("li");
+  s1.append("Go to ", site, " and sign up (free).");
+  steps.append(s1, cpEl("li", "", "Click Add Platform, pick Web or Desktop, then Create API Key."), cpEl("li", "", "Copy the key and paste it here."));
+  const form = cpEl("form", "gif-link");
+  const input = cpEl("input");
+  input.placeholder = "Paste your KLIPY key";
+  input.spellcheck = false;
+  const go = cpEl("button", "small-button", "Turn on");
+  go.type = "submit";
+  form.append(input, go);
+  const err = cpEl("p", "gif-error");
+  const alt = cpEl("label", "gif-alt");
+  const giphy = cpEl("input");
+  giphy.type = "checkbox";
+  alt.append(giphy, " It's a GIPHY key instead");
+  giphy.addEventListener("change", () => { input.placeholder = giphy.checked ? "Paste your GIPHY key" : "Paste your KLIPY key"; });
+  input.addEventListener("keydown", (ev) => { ev.stopPropagation(); if (ev.key === "Escape") closePop(); });
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const key = input.value.trim();
+    if (!key) return input.focus();
+    go.disabled = true;
+    go.textContent = "Checking...";
+    err.textContent = "";
+    const res = await api("/api/sfx-gif-key", { provider: giphy.checked ? "giphy" : "klipy", key })
+      .catch(() => ({ ok: false, error: "That didn't work. Check your internet connection." }));
+    go.disabled = false;
+    go.textContent = "Turn on";
+    if (!res.ok) { err.textContent = res.error; return; }
+    const tab = body.parentNode.querySelector('.gif-tabs button[data-tab="search"]');
+    if (tab) tab.click();
+  });
+  box.append(steps, form, alt, err);
+  if (info.change) {
+    const off = cpEl("button", "gif-change", "Turn GIF search off");
+    off.type = "button";
+    off.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const res = await api("/api/sfx-gif-key", { provider: "klipy", key: "" }).catch(() => ({ ok: false }));
+      if (res.ok) { body.replaceChildren(); drawGifSetup(body, { canSet: true }); }
+    });
+    box.append(off);
+  }
+  body.append(box);
+  setTimeout(() => input.focus(), 0);
+}
+
+function drawSavedGifs(body, redraw) {
+  const row = cpEl("form", "gif-link");
+  const input = cpEl("input");
+  input.placeholder = "Paste a GIF link (GIPHY, KLIPY, Tenor...)";
+  input.spellcheck = false;
+  const go = cpEl("button", "small-button", "Send");
+  go.type = "submit";
+  row.append(input, go);
+  row.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const url = input.value.trim();
+    if (!url) return input.focus();
+    go.disabled = true;
+    const ok = await sendExtra({ gif: url });
+    go.disabled = false;
+    if (ok) { rememberGif(url); closePop(); }
+  });
+  input.addEventListener("keydown", (ev) => { ev.stopPropagation(); if (ev.key === "Escape") closePop(); });
+  const pc = cpButton("outline-button gif-pc", CP_ICONS.file, null, () => { closePop(); $("chatGifFile").click(); });
+  pc.append(document.createTextNode("Pick a GIF from your PC"));
+  body.append(row, pc);
+  const list = loadPref("chatGifs") || [];
+  body.append(cpEl("h5", "", list.length ? "Your GIFs" : "Your GIFs show up here"));
+  if (!list.length) body.append(cpEl("p", "gif-empty", "GIFs you send, and ones you star in the chat, are kept here so you can send them again."));
+  const grid = cpEl("div", "gif-grid");
+  for (const g of list) {
+    const b = gifCell(g.show, g.url, "Send it", sendPickedGif);
+    b.addEventListener("contextmenu", (ev) => { ev.preventDefault(); toggleSavedGif(g.url); redraw(); });
+    grid.append(b);
+  }
+  body.append(grid);
+  if (list.length) body.append(cpEl("p", "gif-empty", "Right-click a GIF to take it out."));
+}
 
 function openGifPicker(tab) {
   const pop = openPop($("chatGifBtn"), "gif-pop");
@@ -949,6 +1154,9 @@ function openGifPicker(tab) {
   const draw = (which) => {
     tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.tab === which));
     body.replaceChildren();
+    body.scrollTop = 0;
+    pop.querySelectorAll(".gif-credit").forEach((c) => c.remove());
+    gifSearchRun++;
     if (which === "stickers") {
       const grid = cpEl("div", "sticker-grid");
       for (const s of STICKERS) {
@@ -962,48 +1170,10 @@ function openGifPicker(tab) {
       body.append(grid);
       return;
     }
-    const row = cpEl("form", "gif-link");
-    const input = cpEl("input");
-    input.placeholder = "Paste a GIPHY or Tenor link";
-    input.spellcheck = false;
-    const go = cpEl("button", "small-button", "Send");
-    go.type = "submit";
-    row.append(input, go);
-    row.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      const url = input.value.trim();
-      if (!url) return input.focus();
-      go.disabled = true;
-      const ok = await sendExtra({ gif: url });
-      go.disabled = false;
-      if (ok) { rememberGif(url); closePop(); }
-    });
-    input.addEventListener("keydown", (ev) => { ev.stopPropagation(); if (ev.key === "Escape") closePop(); });
-    const pc = cpButton("outline-button gif-pc", CP_ICONS.file, null, () => { closePop(); $("chatGifFile").click(); });
-    pc.append(document.createTextNode("Pick a GIF from your PC"));
-    body.append(row, pc);
-    const list = loadPref("chatGifs") || [];
-    body.append(cpEl("h5", "", list.length ? "Your GIFs" : "Your GIFs show up here"));
-    if (!list.length) body.append(cpEl("p", "gif-empty", "GIFs you send, and ones you star in the chat, are kept here so you can send them again."));
-    const grid = cpEl("div", "gif-grid");
-    for (const g of list) {
-      const b = cpEl("button", "gif-cell");
-      b.type = "button";
-      const img = cpEl("img");
-      img.src = g.show;
-      img.loading = "lazy";
-      img.alt = "GIF";
-      b.append(img);
-      b.title = "Send it";
-      b.addEventListener("click", async (ev) => { ev.stopPropagation(); closePop(); if (await sendExtra({ gif: g.url })) rememberGif(g.url); });
-      b.addEventListener("contextmenu", (ev) => { ev.preventDefault(); toggleSavedGif(g.url); draw("gifs"); });
-      grid.append(b);
-    }
-    body.append(grid);
-    if (list.length) body.append(cpEl("p", "gif-empty", "Right-click a GIF to take it out."));
-    setTimeout(() => input.focus(), 0);
+    if (which === "saved") return drawSavedGifs(body, () => draw("saved"));
+    drawGifSearch(body);
   };
-  for (const [key, label] of [["gifs", "GIFs"], ["stickers", "Stickers"]]) {
+  for (const [key, label] of [["search", "GIFs"], ["saved", "Saved"], ["stickers", "Stickers"]]) {
     const b = cpEl("button", "", label);
     b.type = "button";
     b.dataset.tab = key;
@@ -1011,7 +1181,7 @@ function openGifPicker(tab) {
     tabs.append(b);
   }
   pop.append(tabs, body);
-  draw(tab);
+  draw(tab === "gifs" ? "search" : tab);
 }
 
 async function sendGifFile(file, where = "main") {

@@ -22,7 +22,7 @@ _lock = threading.Lock()
 
 YOUTUBE = re.compile(r"^(?:https?://)?(?:[\w-]+\.)*(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)([\w-]{11})", re.I)
 GIPHY_PAGE = re.compile(r"^https?://(?:www\.)?giphy\.com/(?:gifs|stickers)/(?:[\w-]*-)?([A-Za-z0-9]{8,40})/?(?:[?#].*)?$", re.I)
-GIF_MEDIA = re.compile(r"^https://(media[0-9]*\.giphy\.com|i\.giphy\.com|media[0-9]*\.tenor\.com|c\.tenor\.com|i\.imgur\.com)/[^\s\"'<>\\]+$", re.I)
+GIF_MEDIA = re.compile(r"^https://(media[0-9]*\.giphy\.com|i\.giphy\.com|media[0-9]*\.tenor\.com|c\.tenor\.com|i\.imgur\.com|(?:[a-z0-9-]+\.)+klipy\.com)/[^\s\"'<>\\]+$", re.I)
 
 
 class Error(Exception):

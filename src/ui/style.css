@@ -6469,11 +6469,11 @@ html.side-small .tab-group[data-group] { cursor: default; }
 .mode-pop > .link { margin: 4px 8px 6px; font-size: 12.5px; }
 
 /* GIFs and stickers */
-.gif-pop { width: 380px; padding: 10px; }
+.gif-pop { width: 400px; padding: 10px; display: flex; flex-direction: column; }
 .gif-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 11px; background: var(--panel2); margin-bottom: 10px; }
 .gif-tabs button { all: unset; cursor: pointer; flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; font: 600 13px var(--head); color: var(--muted); }
 .gif-tabs button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
-.gif-body { max-height: 360px; overflow-y: auto; scrollbar-width: thin; }
+.gif-body { height: 400px; max-height: calc(100vh - 220px); overflow-y: auto; scrollbar-width: thin; }
 .gif-link { display: flex; gap: 6px; }
 .gif-link input { all: unset; flex: 1; min-width: 0; box-sizing: border-box; height: 36px; padding: 0 12px; border-radius: 10px; background: var(--panel2); font-size: 13px; color: var(--text); }
 .gif-link input:focus { box-shadow: inset 0 0 0 1px var(--accent); }
@@ -6485,6 +6485,44 @@ html.side-small .tab-group[data-group] { cursor: default; }
 .gif-cell { all: unset; cursor: pointer; display: block; margin-bottom: 6px; border-radius: 10px; overflow: hidden; break-inside: avoid; background: var(--panel2); }
 .gif-cell img { display: block; width: 100%; }
 .gif-cell:hover { box-shadow: 0 0 0 2px var(--accent); }
+.gif-cell img { opacity: 0; transition: opacity .2s; }
+.gif-cell.ready img, .gif-grid:not(.gif-masonry) .gif-cell img { opacity: 1; }
+/* GIF search */
+.gif-search { position: sticky; top: 0; z-index: 1; background: var(--panel); padding-bottom: 8px; }
+.gif-find { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; border-radius: 10px; background: var(--panel2); cursor: text; }
+.gif-find:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+.gif-find > svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.gif-find input { all: unset; flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); }
+.gif-clear { all: unset; cursor: pointer; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: var(--muted); }
+.gif-clear:hover { background: var(--panel); color: var(--text); }
+.gif-clear svg { width: 15px; height: 15px; }
+.gif-clear[hidden] { display: none; }
+.gif-chips { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; margin-top: 8px; }
+.gif-chips[hidden] { display: none; }
+.gif-chip { all: unset; cursor: pointer; flex: none; padding: 4px 10px; border-radius: 999px; background: var(--panel2); font-size: 12.5px; color: var(--muted); }
+.gif-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--line2); }
+.gif-body h5 { margin: 2px 4px 8px; }
+.gif-masonry { columns: auto; display: flex; gap: 6px; align-items: flex-start; }
+.gif-col { flex: 1; min-width: 0; }
+.gif-masonry .gif-cell { width: 100%; }
+.gif-masonry .gif-cell img { height: 100%; object-fit: cover; }
+.gif-more { min-height: 18px; padding: 6px 4px 10px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.gif-more.loading::after { content: ""; display: inline-block; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.gif-credit { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px 0; border-top: 1px solid var(--line); margin-top: 6px; font: 700 10.5px var(--head); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.gif-setup { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 18px 10px 6px; }
+.gif-setup > svg { width: 34px; height: 34px; color: var(--accent); margin-bottom: 8px; }
+.gif-setup b { font: 700 15px var(--head); color: var(--text); }
+.gif-setup p { margin: 6px 0 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.gif-steps { text-align: left; align-self: stretch; margin: 0 0 12px; padding-left: 22px; font-size: 13px; line-height: 1.7; color: var(--text); }
+.gif-steps a { color: var(--accent); }
+.gif-setup .gif-link { align-self: stretch; }
+.gif-alt { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.gif-credit > span { margin-left: auto; }
+.gif-change { all: unset; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.gif-change:hover { color: var(--text); text-decoration: underline; }
+.gif-setup .gif-change { margin-top: 12px; }
+.gif-setup + .gif-link { margin-top: 14px; }
+.gif-error { min-height: 0; margin: 6px 0 0 !important; color: var(--danger, #ff6b6b) !important; }
 .sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .sticker-pick { all: unset; cursor: pointer; display: grid; place-items: center; height: 78px; border-radius: 12px; }
 .sticker-pick:hover { background: var(--panel2); }

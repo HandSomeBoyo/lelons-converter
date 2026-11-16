@@ -582,7 +582,7 @@ begin
     raise exception 'wrong file';
   end if;
   if gif_in is not null and not ((gif_in = '@file' and file like 'chat/%.gif')
-      or gif_in ~ '^https://(media[0-9]*\.giphy\.com|i\.giphy\.com|media[0-9]*\.tenor\.com|c\.tenor\.com|i\.imgur\.com)/[^\s"''<>\\]+$') then
+      or gif_in ~ '^https://(media[0-9]*\.giphy\.com|i\.giphy\.com|media[0-9]*\.tenor\.com|c\.tenor\.com|i\.imgur\.com|([a-z0-9-]+\.)+klipy\.com)/[^\s"''<>\\]+$') then
     return json_build_object('ok', false, 'error', 'gif');
   end if;
   if sticker_in is not null and sticker_in !~ '^[a-z0-9-]{1,30}$' then
@@ -918,6 +918,35 @@ end $$;
 
 -- (2.31.0) What you're up to: '' (just online), away, busy, recording, editing, gaming or streaming,
 -- and (when given) the short line under your name.
+-- GIF search in the chat. The owner pastes a free KLIPY (or GIPHY) key once in the app; everyone who is
+-- logged in gets it, because the app asks KLIPY itself (their keys aren't secret: every app gets a copy).
+alter table lelons.config add column if not exists gif_key jsonb;
+
+-- With no provider: the key (for anyone logged in). With one: the owner sets it ('' takes it out).
+create or replace function public.lelons_gif_key(token text, provider text default null, key text default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  k jsonb := (select c.gif_key from lelons.config c where c.id = 1);
+begin
+  if provider is null then
+    return json_build_object('provider', k->>'provider', 'key', k->>'key', 'can_set', me.role = 'owner',
+      'owner', (select a.username from lelons.accounts a where a.role = 'owner' order by a.created_at limit 1));
+  end if;
+  if me.role <> 'owner' then
+    raise exception 'owner only' using hint = 'denied';
+  end if;
+  if coalesce(btrim(key), '') = '' then
+    update lelons.config set gif_key = null where id = 1;
+    return json_build_object('ok', true);
+  end if;
+  if provider not in ('klipy', 'giphy') or btrim(key) !~ '^[A-Za-z0-9_-]{8,200}$' then
+    return json_build_object('ok', false, 'error', 'key');
+  end if;
+  update lelons.config set gif_key = jsonb_build_object('provider', provider, 'key', btrim(key)) where id = 1;
+  return json_build_object('ok', true);
+end $$;
+
 create or replace function public.lelons_set_mode(token text, mode text, status text default null)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -3295,7 +3324,7 @@ begin
     'lelons_chat_send(text, text, text, uuid, text, text, real, bigint, bigint, boolean, jsonb, text, text, jsonb)',
     'lelons_chat_list(text, bigint, text, bigint)', 'lelons_chat_thread(text, bigint)', 'lelons_chat_search(text, text, text)',
     'lelons_chat_pins(text, text)', 'lelons_chat_pin(text, bigint, boolean)', 'lelons_chat_edit(text, bigint, text)',
-    'lelons_chat_poll(text, bigint, text, int[])', 'lelons_set_mode(text, text, text)', 'lelons_chat_remove(text, bigint)',
+    'lelons_chat_poll(text, bigint, text, int[])', 'lelons_set_mode(text, text, text)', 'lelons_gif_key(text, text, text)', 'lelons_chat_remove(text, bigint)',
     'lelons_chat_delete(text, bigint)', 'lelons_chat_react(text, bigint, text, boolean)', 'lelons_profile(text, text)',
     'lelons_set_profile(text, jsonb)', 'lelons_set_banner(text, text)',
     'lelons_home(text)', 'lelons_set_channels(text, text[])',
