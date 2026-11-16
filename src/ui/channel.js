@@ -287,14 +287,15 @@ async function startGoogle() {
 }
 
 const chSetupHelp = $("chSetupNote").innerHTML;
-function openChSetup(error) {
+let chAfterSetup = null; // the Comments tab: sign in its own way once the Client ID is saved
+function openChSetup(error, help) {
   $("chSetupModal").hidden = false;
   $("chSetupNote").classList.toggle("bad", !!error);
   if (error) $("chSetupNote").textContent = error;
-  else $("chSetupNote").innerHTML = chSetupHelp;
+  else $("chSetupNote").innerHTML = help || chSetupHelp;
   setTimeout(() => $("chClientId").focus(), 50);
 }
-const closeChSetup = () => { $("chSetupModal").hidden = true; };
+const closeChSetup = () => { $("chSetupModal").hidden = true; chAfterSetup = null; };
 
 $("chSetupGo").addEventListener("click", async () => {
   const res = await api("/api/ch-client", { clientId: $("chClientId").value, clientSecret: $("chClientSecret").value });
@@ -303,8 +304,13 @@ $("chSetupGo").addEventListener("click", async () => {
     $("chSetupNote").classList.add("bad");
     return;
   }
+  const next = chAfterSetup;
   closeChSetup();
   if (chData) chData.google.setUp = true;
+  if (next) {
+    if (typeof cmData !== "undefined" && cmData) cmData.google.setUp = true;
+    return next();
+  }
   startGoogle();
 });
 $("chSetupCancel").addEventListener("click", closeChSetup);

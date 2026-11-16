@@ -2,6 +2,14 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.33.0", items: [
+    "New Comments page (under Channel stats): every comment on your YouTube channel, split into just Unread and Read. The number on the side bar shows how many wait for you.",
+    "Answer right there: click Answer, type, and press Send (or Ctrl+Enter). The next comment opens by itself, so you can go down the list fast.",
+    "Quick answers: save answers you use a lot, like \"Thanks for watching!\", and add them with one click.",
+    "When someone answers you back, the comment goes back to Unread. Press \"Mark as read\" on ones you don't want to answer.",
+    "Pick one video, search the comments, let through comments YouTube held back, or hide spam from your channel.",
+    "It uses the same Google sign-in as Channel stats. The first time, Google asks one more time so VaultHub can post your answers. It's free.",
+  ] },
   { version: "2.32.1", items: [
     "Fixed Customize on Home: the widgets, their buttons and the \"Add a widget\" list look right again (they showed up as big gray boxes).",
     "Customize is tidier: each card gets a small set of buttons in its corner instead of a second title.",

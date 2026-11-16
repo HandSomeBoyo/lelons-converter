@@ -45,7 +45,7 @@ function showTab(tab) {
     b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab));
     if (b.closest(".sub-tabs")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   });
-  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
@@ -60,6 +60,7 @@ function showTab(tab) {
   if (typeof povsTabChanged === "function") povsTabChanged(tab);
   if (typeof feedTabChanged === "function") feedTabChanged(tab);
   if (typeof channelTabChanged === "function") channelTabChanged(tab);
+  if (typeof commentsTabChanged === "function") commentsTabChanged(tab);
   if (typeof titlesTabChanged === "function") titlesTabChanged(tab);
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
@@ -69,7 +70,7 @@ document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => b.add
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // A page inside a place has news (like a game on sale): a dot on the place's side bar button too.

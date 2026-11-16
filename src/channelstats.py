@@ -37,6 +37,7 @@ NEWEST = 12  # newest uploads shown
 UPLOADS = 200  # uploads asked from Google (newest first)
 DETAILS = 10  # newest videos and Shorts looked at one by one (exact views, likes, comments)
 SCOPES = "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly"
+REPLY_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl"  # the Comments tab: answer and hide comments
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 DATA_API = "https://www.googleapis.com/youtube/v3/"
@@ -74,7 +75,12 @@ def _config():
     s = settings.load()
     return {"channel": s.get("ch_channel") or "", "client_id": s.get("ch_client_id") or "",
             "client_secret": s.get("ch_client_secret") or "", "refresh": s.get("ch_refresh") or "",
-            "google_name": s.get("ch_google_name") or ""}
+            "google_name": s.get("ch_google_name") or "", "scopes": s.get("ch_scopes") or ""}
+
+
+def can_reply():
+    """Did Google let the app answer comments (the Comments tab asks for this the first time)?"""
+    return REPLY_SCOPE in _config()["scopes"].split()
 
 
 def set_channel(url):
@@ -97,7 +103,7 @@ def set_client(client_id, client_secret):
 
 def disconnect(forget_client=False):
     refresh = _config()["refresh"]
-    changes = {"ch_refresh": "", "ch_google_name": ""}
+    changes = {"ch_refresh": "", "ch_google_name": "", "ch_scopes": ""}
     if forget_client:
         changes.update(ch_client_id="", ch_client_secret="")
     settings.save(**changes)
@@ -245,8 +251,13 @@ def refresh_now():
 # ---------------------------------------------------------------- Google sign-in
 
 
-def _http(url, data=None, token=None):
-    request = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode() if data is not None else None)
+def _http(url, data=None, token=None, body=None, method=None):
+    """A Google call. data is sent as a form, body as JSON."""
+    if body is not None:
+        request = urllib.request.Request(url, data=json.dumps(body).encode(), method=method or "POST")
+        request.add_header("Content-Type", "application/json")
+    else:
+        request = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode() if data is not None else None, method=method)
     if token:
         request.add_header("Authorization", "Bearer " + token)
     try:
@@ -279,8 +290,9 @@ class SignedOut(Error):
     pass
 
 
-def connect_url(port):
-    """The Google page to open in the browser. Google sends you back to the app afterwards."""
+def connect_url(port, replies=False):
+    """The Google page to open in the browser. Google sends you back to the app afterwards.
+    replies: also ask to answer comments (the Comments tab). Once given, it stays."""
     c = _config()
     if not c["client_id"]:
         raise Error("Follow the setup guide first.")
@@ -293,7 +305,8 @@ def connect_url(port):
             del _pending[old]
         _pending[state] = (verifier, redirect, time.time())
     return AUTH_URL + "?" + urllib.parse.urlencode({
-        "client_id": c["client_id"], "redirect_uri": redirect, "response_type": "code", "scope": SCOPES,
+        "client_id": c["client_id"], "redirect_uri": redirect, "response_type": "code",
+        "scope": SCOPES + (" " + REPLY_SCOPE if replies or can_reply() else ""), "include_granted_scopes": "true",
         "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
         "access_type": "offline", "prompt": "consent",
     })
@@ -319,7 +332,7 @@ def finish(query):
         if not result.get("refresh_token"):
             return False, "Google didn't give a lasting sign-in. Go back to VaultHub and press Connect again."
         _access.update(token=result.get("access_token") or "", until=time.time() + int(result.get("expires_in") or 0) - 60)
-        settings.save(ch_refresh=result["refresh_token"])
+        settings.save(ch_refresh=result["refresh_token"], ch_scopes=result.get("scope") or SCOPES)
         mine = _http(DATA_API + "channels?part=snippet&mine=true", token=_access["token"]).get("items") or []
         if not mine:
             disconnect()

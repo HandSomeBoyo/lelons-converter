@@ -35,6 +35,7 @@ import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import boards  # noqa: E402
 import channelstats  # noqa: E402
+import comments  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -720,7 +721,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "client":
                 channelstats.set_client(data.get("clientId"), data.get("clientSecret"))
             elif action == "connect":
-                webbrowser.open(channelstats.connect_url(self.server.server_port))
+                webbrowser.open(channelstats.connect_url(self.server.server_port, bool(data.get("replies"))))
             elif action == "disconnect":
                 channelstats.disconnect(bool(data.get("forgetClient")))
             elif action == "open":
@@ -730,6 +731,33 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self.send_error(404)
         except channelstats.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True})
+
+    def handle_comments(self, action, data):
+        """The Comments tab (your channel's comments, answer them fast)."""
+        try:
+            if action == "page":
+                return self.send_json(comments.page())
+            elif action == "count":
+                return self.send_json({"ok": True, "count": comments.count()})
+            elif action == "refresh":
+                comments.refresh_now()
+            elif action == "done":
+                comments.set_done(data.get("id"), bool(data.get("done")))
+            elif action == "saved":
+                return self.send_json({"ok": True, "saved": comments.set_saved(data.get("saved"))})
+            elif action == "reply":
+                return self.send_json({"ok": True, "reply": comments.reply(data.get("id"), data.get("text"))})
+            elif action == "hide":
+                comments.moderate(data.get("id"), "rejected")
+            elif action == "approve":
+                comments.moderate(data.get("id"), "published")
+            elif action == "unreply":
+                comments.delete_reply(data.get("id"))
+            else:
+                return self.send_error(404)
+        except (comments.Error, channelstats.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         self.send_json({"ok": True})
 
@@ -1668,6 +1696,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/ch-"):
             self.handle_channel(self.path[len("/api/ch-"):], data)
+        elif self.path.startswith("/api/cm-"):
+            self.handle_comments(self.path[len("/api/cm-"):], data)
         elif self.path == "/api/titles-look":  # the Titles & tags tab looks up a topic on YouTube
             try:
                 self.send_json(titles.look_up(data.get("topic")))
