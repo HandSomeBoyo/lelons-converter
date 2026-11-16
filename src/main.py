@@ -38,6 +38,7 @@ import channelstats  # noqa: E402
 import comments  # noqa: E402
 import streamlive  # noqa: E402
 import streamtwitch  # noqa: E402
+import streampreview  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -93,7 +94,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -634,6 +635,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(state.snapshot())
         if self.path == "/api/history":
             return self.send_json({"items": history.items(), "version": history.version})
+        if url.path == "/live-hls":  # (2.34.0) the stream preview in the Live console, passed through
+            try:
+                body, kind = streampreview.fetch(urllib.parse.parse_qs(url.query).get("u", [""])[0])
+            except (streampreview.Error, OSError, ValueError):
+                return self.send_error(404)
+            return self.send_body(body, kind)
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -781,6 +788,11 @@ class Handler(BaseHTTPRequestHandler):
                                       placement=settings.load().get("lv_popout_at"),
                                       on_closed=lambda at: at and settings.save(lv_popout_at=at))
                 return self.send_json({"ok": ok, "error": "" if ok else "The pop-out chat needs the app's own window."})
+            elif action == "preview":
+                try:
+                    return self.send_json({"ok": True, "url": streampreview.source(str(data.get("p") or ""), str(data.get("name") or ""))})
+                except streampreview.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "open":
                 url = str(data.get("url") or "")
                 if re.match(r"^https://(www\.twitch\.tv|dev\.twitch\.tv|www\.youtube\.com|studio\.youtube\.com|obsproject\.com)/", url):

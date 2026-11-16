@@ -98,6 +98,7 @@ function lvDrawConsole(fresh) {
   lvDrawEvents();
   lvAppendChat(fresh || []);
   lvDrawSendState();
+  if (typeof lvDrawPreview === "function") lvDrawPreview();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
 
@@ -127,6 +128,7 @@ function lvBuildConsole() {
     <div class="lv-nums" id="lvNums"></div>
     <div class="lv-grid" id="lvGrid">
       <div class="lv-col">
+        <div class="lv-card lv-prev" id="lvPrevCard"></div>
         <div class="lv-card">
           <h3>Watching<span class="sp"></span><span class="lv-legend"><span><i class="tw"></i>Twitch</span><span><i class="yt"></i>YouTube</span></span></h3>
           <div class="lv-chart" id="lvGraph"></div>
@@ -1039,7 +1041,10 @@ function liveTabChanged(tab) {
       const c = $("lvClock"), s = LV.state && LV.state.session;
       if (c && s) c.textContent = lvClock(Date.now() / 1000 - s.start);
     }, 1000);
-  } else clearInterval(LV.clock);
+  } else {
+    clearInterval(LV.clock);
+    if (typeof lvStopPreview === "function") lvStopPreview();  // (no video in the background: it would use your internet)
+  }
   if (tab === "lvboard") lvDrawBoard();
   if (tab === "lvalerts") {
     lvDrawAlerts();

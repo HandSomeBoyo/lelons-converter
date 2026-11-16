@@ -7,6 +7,7 @@ const CHANGES = [
     "Console: how many people watch on each site, time live, new followers, subs and Super Chats, and how fast chat is going, all on one page.",
     "A live graph of viewers with marks where raids came in, and your goals for the stream with progress bars.",
     "Stream health from OBS: upload speed, dropped frames, FPS, CPU, graphics card load and plain-word warnings when something goes wrong. It also checks that OBS is recording and how much disk space is left.",
+    "Preview: watch your own stream right in the Console, with sound, the way viewers see it. It starts muted, so your stream doesn't echo (wear headphones if you turn the sound on).",
     "Twitch and YouTube chat in one box. Write back, delete messages, time out or ban people, and pop the chat out into a small window that stays on top of your game.",
     "Soundboard: put sounds from the Library on buttons and play them with a key, even while you're in a game.",
     "Alerts: a sound and a pop-up for new followers, subs, raids, Super Chats and when someone says your name.",
