@@ -32,7 +32,8 @@ function noteOn(what) {
   return on[what] !== false;
 }
 // A Windows notification for this kind? (the main switch, and the one for the kind)
-function noteDesk(kind) { return noteOn("windows") && noteOn("win:" + kind); }
+// (Settings has just one switch for now: desktop notifications on or off. Everything goes in the bell.)
+function noteDesk() { return noteOn("windows"); }
 function noteSetOn(what, value) {
   savePref("notesOn", { ...(loadPref("notesOn") || {}), [what]: value });
 }
@@ -59,7 +60,6 @@ function notifyAdd(n) {
   const stamp = String(n.stamp ?? "");
   if (noteData.stamps[n.key] === stamp) return;
   noteData.stamps[n.key] = stamp;
-  if (!noteOn(n.kind)) return noteSave();
   const note = { key: n.key, stamp, kind: n.kind, title: String(n.title || "").slice(0, 80), text: String(n.text || "").slice(0, 160),
     pic: n.pic || "", open: n.open || null, at: n.at || Date.now(), read: false };
   noteData.list = [note, ...noteData.list.filter((x) => x.key !== n.key)].slice(0, NOTE_MAX);
@@ -68,8 +68,8 @@ function notifyAdd(n) {
   // Just opened: what was waiting goes in the list without popping up.
   // While you're live or recording, nothing pops up (it could show on stream or ding in the recording).
   if ((Date.now() - noteStarted > 12000 || n.now) && !noteDnd()) {
-    api("/api/notify", { title: note.title, text: note.text, quiet: !!n.quiet, key: note.key, desktop: noteDesk(n.kind),
-      quietBusy: noteOn("busyQuiet") })
+    api("/api/notify", { title: note.title, text: note.text, quiet: !!n.quiet, key: note.key, desktop: noteDesk(),
+      quietBusy: true })
       .then((res) => { if (!(res && res.busy)) notePop(note); })
       .catch(() => notePop(note));
   }
@@ -279,7 +279,7 @@ setInterval(notifyCheckPovs, 180000);
 
 // Cards on your boards that are due within a day (or overdue), looked at every 15 minutes.
 async function notifyCheckDue() {
-  if (document.hidden || !noteOn("boards")) return;
+  if (document.hidden) return;
   const res = await api("/api/boards-due", {}).catch(() => null);
   if (!res || !res.ok) return;
   const date = (s) => new Date(s.length > 10 ? s : s + "T23:59");
