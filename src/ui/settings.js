@@ -108,6 +108,7 @@ function showSettingsPage(page) {
   document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
   document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
   if (page === "notes") drawNoteSettings();
+  if (page === "trash" && typeof loadTrash === "function") loadTrash();
   if (page === "sound") listSoundDevices();
   else if (typeof stopMicTest === "function") stopMicTest();
 }
@@ -147,7 +148,7 @@ $("setNoteWindows").addEventListener("change", () => noteSetOn("windows", $("set
 
 function openSettings(part) {
   drawSettings();
-  showSettingsPage(part === "save" ? "general" : part === "notes" ? "notes" : loadPref("settingsPage") || "general");
+  showSettingsPage(part === "save" ? "general" : part === "notes" ? "notes" : part === "trash" ? "trash" : loadPref("settingsPage") || "general");
   $("settingsModal").hidden = false;
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);

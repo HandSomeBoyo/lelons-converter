@@ -1235,6 +1235,7 @@
         <div class="docs-list-head">
           <h3 class="docs-label" id="docsListTitle">Your documents</h3>
           <span class="spacer"></span>
+          <button type="button" class="docs-sort" id="docsTrash" title="Deleted documents wait here for 30 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span>Trash</span></button>
           <button type="button" class="docs-sort" id="docsSort" title="Sort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M14 6h7M14 12h5M14 18h3"/></svg><span>Newest first</span></button>
           <label class="input docs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="docsSearch" placeholder="Search" autocomplete="off" spellcheck="false"></label>
         </div>
@@ -1332,6 +1333,7 @@
     <div class="bd-home" id="bdHome">
       <h1 class="headline">Plan it out.<br><em>Boards for anything.</em></h1>
       <div id="bdHomeLists"></div>
+      <button type="button" class="trash-link" id="bdTrash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>Deleted a board? It waits in the Trash for 30 days</button>
     </div>
     <div class="bd-board" id="bdBoard" hidden></div>
   </section>
@@ -2296,6 +2298,7 @@
       <button type="button" data-set="look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg><span>Appearance</span></button>
       <button type="button" data-set="sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span></button>
       <button type="button" data-set="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Notifications</span></button>
+      <button type="button" data-set="trash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span>Trash</span></button>
       <button type="button" data-set="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5L5.5 13.5H12L11 20.5L18.5 10.5H12z"/></svg><span>Performance</span></button>
       <div class="set-about"><b>VaultHub</b><span id="version"></span></div>
     </nav>
@@ -2427,6 +2430,22 @@
         <p class="set-help">Everything you turn on shows up under the bell at the top. The moon button there turns everything quiet for an hour.</p>
       </section>
 
+      <section class="set-page" data-set="trash" hidden>
+        <h3 class="set-title">Trash</h3>
+        <p class="set-help trash-intro">Deleted documents, boards and sounds wait here for 30 days. Put them back any time before that, then they're gone for good.</p>
+        <div class="trash-bar">
+          <div class="trash-filters" id="trashFilters">
+            <button type="button" data-kind="" class="active">All</button>
+            <button type="button" data-kind="doc">Documents</button>
+            <button type="button" data-kind="board">Boards</button>
+            <button type="button" data-kind="sound" id="trashSoundsFilter" hidden>Sounds</button>
+          </div>
+          <button type="button" class="small-button trash-empty" id="trashEmpty" disabled>Empty Trash</button>
+        </div>
+        <div class="set-group trash-list" id="trashList"></div>
+        <p class="set-help" id="trashNote" hidden></p>
+      </section>
+
       <section class="set-page" data-set="speed" hidden>
         <h3 class="set-title">Performance</h3>
         <div class="set-label">Hardware acceleration</div>
@@ -2515,6 +2534,7 @@
 <script src="resolve.js"></script>
 <script src="watch.js"></script>
 <script src="settings.js"></script>
+<script src="trash.js"></script>
 <script src="tutorial.js"></script>
 <script src="quick.js"></script>
 <script src="homewidgets.js"></script>
