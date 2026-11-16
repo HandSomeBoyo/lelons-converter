@@ -27,7 +27,7 @@ IRC = ("irc.chat.twitch.tv", 6697)
 HELIX = "https://api.twitch.tv/helix/"
 ID = "https://id.twitch.tv/oauth2/"
 SCOPES = ("chat:read chat:edit moderator:read:followers moderator:manage:chat_messages "
-          "moderator:manage:banned_users channel:read:subscriptions bits:read")
+          "moderator:manage:banned_users channel:read:subscriptions bits:read channel:manage:broadcast")
 LOOK_EVERY = 30  # seconds between looks at viewers and followers
 
 
@@ -318,6 +318,62 @@ class Twitch:
         if not self.me_id:
             self.me_id = (_http(ID + "validate", token=self.token()) or {}).get("user_id") or ""
         return self.user_id, self.me_id
+
+    # ---- title and game (2.34.0)
+
+    def info(self):
+        """The channel's title and game as they are set now (live or not)."""
+        broadcaster, _ = self._ids()
+        d = (self._helix("channels", broadcaster_id=broadcaster).get("data") or [{}])[0]
+        art = ""
+        if d.get("game_id"):
+            g = (self._helix("games", id=d["game_id"]).get("data") or [{}])[0]
+            art = (g.get("box_art_url") or "").replace("{width}", "104").replace("{height}", "144")
+        info = {"title": d.get("title") or "", "game": d.get("game_name") or "", "gameId": d.get("game_id") or "",
+                "art": art, "tags": list(d.get("tags") or [])}
+        self.status["info"] = info
+        return info
+
+    def games(self, query):
+        """Twitch categories (games) that match what was typed."""
+        query = str(query or "").strip()[:100]
+        if not query:
+            return []
+        data = self._helix("search/categories", query=query, first=8).get("data") or []
+        return [{"id": g.get("id") or "", "name": g.get("name") or "",
+                 "art": (g.get("box_art_url") or "").replace("52x72", "104x144")} for g in data if g.get("id")]
+
+    def set_info(self, title=None, game_id=None, tags=None):
+        c = self.config()
+        if c["login"] and c["login"] != self.channel:
+            raise Error(f"You're signed in as {c['login']}, but the console shows {self.channel}. Only the channel's owner can change its title.")
+        body = {}
+        if title is not None:
+            title = re.sub(r"\s+", " ", str(title)).strip()
+            if not title:
+                raise Error("The title can't be empty.")
+            body["title"] = title[:140]
+        if game_id is not None:
+            if not re.fullmatch(r"\d{1,20}", str(game_id)):
+                raise Error("Pick a game from the list.")
+            body["game_id"] = str(game_id)
+        if tags is not None:
+            clean = []
+            for t in list(tags)[:10]:
+                t = re.sub(r"[^\w]", "", str(t), flags=re.UNICODE)[:25]
+                if t and t.lower() not in [x.lower() for x in clean]:
+                    clean.append(t)
+            body["tags"] = clean
+        if not body:
+            return self.info()
+        broadcaster, _ = self._ids()
+        try:
+            self._helix("channels", method="PATCH", body=body, broadcaster_id=broadcaster)
+        except Error as e:
+            if "scope" in str(e).lower() or isinstance(e, SignedOut):
+                raise Error("Sign in to Twitch again (Set up > Twitch) so the app may change your title and game.")
+            raise
+        return self.info()
 
     # ---- the chat
 

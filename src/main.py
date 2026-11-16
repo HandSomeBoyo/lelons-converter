@@ -94,7 +94,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 class State:
@@ -769,6 +769,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **streamlive.twitch().begin_sign_in(data.get("clientId"))})
             elif action == "twitch-check":
                 return self.send_json({"ok": True, "done": streamlive.twitch().check_sign_in()})
+            elif action == "tw-info":  # (2.34.0) the Twitch title, game and tags
+                return self.send_json({"ok": True, "info": streamlive.twitch().info()})
+            elif action == "tw-games":
+                return self.send_json({"ok": True, "games": streamlive.twitch().games(data.get("q"))})
+            elif action == "tw-set":
+                tags = data.get("tags")
+                return self.send_json({"ok": True, "info": streamlive.twitch().set_info(
+                    data.get("title"), data.get("gameId"), tags if isinstance(tags, list) else None)})
             elif action == "twitch-signout":
                 streamlive.twitch().sign_out()
             elif action == "streams":

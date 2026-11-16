@@ -99,6 +99,7 @@ function lvDrawConsole(fresh) {
   lvAppendChat(fresh || []);
   lvDrawSendState();
   if (typeof lvDrawPreview === "function") lvDrawPreview();
+  if (typeof lvDrawInfo === "function") lvDrawInfo();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
 
@@ -125,6 +126,7 @@ function lvDrawWelcome() {
 
 function lvBuildConsole() {
   $("lvBody").innerHTML = `
+    <div class="lv-card lv-info" id="lvInfo" hidden></div>
     <div class="lv-nums" id="lvNums"></div>
     <div class="lv-grid" id="lvGrid">
       <div class="lv-col">
@@ -509,9 +511,9 @@ function lvOpenSetup() {
 function lvTwitchSignHtml() {
   const c = LV.cfg || {};
   if (c.twitchSignedIn) {
-    return `<p class="lv-muted">Signed in as <b style="color:var(--text)">${lvEsc(c.twitchLogin)}</b>. You get followers, exact viewers, writing in chat and time-outs. <button type="button" class="link" id="lvTwOut">Sign out</button></p>`;
+    return `<p class="lv-muted">Signed in as <b style="color:var(--text)">${lvEsc(c.twitchLogin)}</b>. You get followers, exact viewers, writing in chat, time-outs and changing your title and game. <button type="button" class="link" id="lvTwOut">Sign out</button></p>`;
   }
-  return `<details class="lv-more-box"><summary>Sign in for followers, writing in chat and time-outs (optional, free)</summary>
+  return `<details class="lv-more-box"><summary>Sign in for followers, writing in chat, time-outs and changing your title (optional, free)</summary>
     <ol class="lv-steps">
       <li>Open <button type="button" class="link" data-open="https://dev.twitch.tv/console/apps/create">dev.twitch.tv</button> and log in. (Twitch asks you to turn on two-step login first.)</li>
       <li>Name it <i>VaultHub ${Math.floor(Math.random() * 9000 + 1000)}</i>, type <i>http://localhost</i> as the OAuth Redirect URL, pick <b>Chat Bot</b> as the category and <b>Public</b> as the client type, then press <b>Create</b>.</li>

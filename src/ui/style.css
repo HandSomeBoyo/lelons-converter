@@ -7450,3 +7450,39 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lvp-note { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(var(--accent-rgb), .12); color: var(--text); font-size: 12.5px; line-height: 1.4; }
 .lvp-box:fullscreen { border-radius: 0; }
 #lvpSite button:first-child svg { display: inline-block; }
+
+/* 2.34.0 Live console: Twitch title, game and tags */
+.lv-info { padding: 12px 14px; margin-bottom: 16px; }
+.lvi-row { display: flex; align-items: center; gap: 14px; }
+.lvi-art { width: 39px; height: 54px; border-radius: 6px; object-fit: cover; flex: none; background: var(--panel2); }
+.lvi-empty { display: grid; place-items: center; color: #9146ff; }
+.lvi-empty svg { width: 18px; height: 18px; }
+.lvi-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.lvi-text b { font: 600 14.5px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvi-text > span { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lvi-tags { display: inline-flex; gap: 5px; flex-wrap: wrap; }
+.lvi-tags i, .lvi-tag { font-style: normal; font: 500 11.5px var(--head); padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--text); }
+.lvi-err { color: var(--red); font-size: 12.5px; font-style: normal; margin: 6px 0 0; }
+.lv-info .small-button { height: 34px; padding: 0 14px; font-size: 13px; }
+.lv-info .lvi-ghost { background: var(--panel2); color: var(--text); }
+.lvi-edit .lv-label:first-child { margin-top: 2px; }
+.lvi-edit .lv-label small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+.lvi-gamepick { position: relative; display: flex; gap: 10px; align-items: center; }
+.lvi-gamepick .input { flex: 1; }
+.lvi-picked { display: flex; align-items: center; gap: 8px; flex: none; max-width: 45%; font-size: 13.5px; }
+.lvi-picked img { width: 26px; height: 36px; border-radius: 4px; object-fit: cover; }
+.lvi-picked b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvi-results { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: min(420px, 100%); max-height: 320px; overflow: auto; padding: 6px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line2); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.lvi-results button { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; width: calc(100% - 12px); padding: 6px; border-radius: 8px; font: 500 13.5px var(--head); }
+.lvi-results button:hover, .lvi-results button:focus-visible { background: var(--panel2); }
+.lvi-results img { width: 30px; height: 40px; border-radius: 4px; object-fit: cover; }
+.lvi-none { margin: 8px; color: var(--muted); font-size: 13px; }
+.lvi-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; }
+.lvi-recent[hidden] { display: none; }
+.lvi-chip { all: unset; cursor: pointer; padding: 3px 10px; border-radius: 999px; background: var(--panel2); font: 500 12px var(--head); }
+.lvi-chip:hover { background: rgba(var(--accent-rgb), .18); }
+.lvi-tagbox { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; padding: 6px 10px; border-radius: 10px; background: var(--panel2); }
+.lvi-tag { all: unset; cursor: pointer; font: 500 12px var(--head); padding: 3px 9px; border-radius: 999px; background: var(--panel); }
+.lvi-tagbox input { all: unset; flex: 1; min-width: 120px; font-size: 13.5px; color: var(--text); }
+.lvi-actions { display: flex; gap: 8px; margin-top: 14px; }
+.lvi-actions .sp { flex: 1; }
