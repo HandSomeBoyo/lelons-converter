@@ -269,7 +269,6 @@ _windows = {}  # hwnd -> Window, for the one window procedure all windows share
 _handlers = []
 
 
-@WNDPROC
 def set_hotkeys(keys):
     """Keys that work everywhere, even in a game (the Live soundboard). keys: [{id, mods, vk}],
     mods: 1 Alt, 2 Ctrl, 4 Shift, 8 Windows. Returns the ids another program already uses."""
@@ -315,6 +314,7 @@ def popout(url, data_folder, icon, on_top=True, see=100, close=False, on_closed=
     return pop.ok
 
 
+@WNDPROC  # (it must sit right on this: Windows calls it for every window message)
 def _window_procedure(hwnd, message, wparam, lparam):
     window = _windows.get(hwnd)
     if window:
