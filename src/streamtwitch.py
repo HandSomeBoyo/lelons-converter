@@ -156,6 +156,13 @@ def to_item(line, own_login=""):
 
 # ---------------------------------------------------------------- Twitch's web API
 
+def _revoke(client, token):
+    try:
+        _http(ID + "revoke", {"client_id": client, "token": token})
+    except Exception:  # noqa: BLE001 (it's only a courtesy: the token is forgotten here anyway)
+        pass
+
+
 def _http(url, data=None, token=None, client=None, method=None, body=None):
     if body is not None:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), method=method or "POST")
@@ -283,9 +290,12 @@ class Twitch:
         return True
 
     def sign_out(self):
+        token, client = self.access.get("token") or "", self.config()["client"]
         settings.save(lv_tw_refresh="", lv_tw_login="")
         self.access.update(token="", until=0)
         self.restart()
+        if token and client:  # (2.34.1) tell Twitch too, so the sign-in stops working everywhere
+            threading.Thread(target=_revoke, args=(client, token), daemon=True).start()
 
     def token(self):
         if self.access["token"] and time.time() < self.access["until"]:
