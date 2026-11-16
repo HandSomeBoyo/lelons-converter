@@ -42,6 +42,77 @@ def is_valid_quality(fmt, quality):
     return fmt in QUALITIES and quality in [value for value, _ in QUALITIES[fmt]]
 
 
+# (2.33.0) Sign-ins are saved locked with Windows' own lock (DPAPI): only your Windows account on this PC
+# can open them, so a copied settings.json (a backup, a virus sending files away) has no use.
+SECRET_KEYS = ("library_token", "ch_refresh", "ch_client_secret")
+LOCKED = "dpapi:"
+_ENTROPY = b"VaultHub sign-in"
+_opened = {}  # locked text -> what it says (opening it every time settings load would be wasted work)
+
+
+def _dpapi(data, lock):
+    import ctypes
+    from ctypes import wintypes
+
+    class Blob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    def blob(b):
+        buf = ctypes.create_string_buffer(b, len(b))
+        return Blob(len(b), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), buf
+
+    crypt32, kernel32 = ctypes.windll.crypt32, ctypes.windll.kernel32
+    src, keep1 = blob(data)
+    extra, keep2 = blob(_ENTROPY)
+    out = Blob()
+    call = crypt32.CryptProtectData if lock else crypt32.CryptUnprotectData
+    # CRYPTPROTECT_UI_FORBIDDEN: never show a window
+    if not call(ctypes.byref(src), None, ctypes.byref(extra), None, None, 0x1, ctypes.byref(out)):
+        raise OSError("DPAPI")
+    try:
+        return ctypes.string_at(out.pbData, out.cbData)
+    finally:
+        kernel32.LocalFree(out.pbData)
+
+
+def lock_secret(value):
+    """A sign-in as it's saved: locked on Windows (elsewhere, where the app only runs for tests, as it is)."""
+    if not value or not isinstance(value, str) or os.name != "nt":
+        return value
+    import base64
+    try:
+        return LOCKED + base64.b64encode(_dpapi(value.encode(), True)).decode()
+    except (OSError, AttributeError):
+        return value
+
+
+def open_secret(value):
+    """A saved sign-in as it was. A locked one from another PC or Windows account can't be opened: ""."""
+    if not isinstance(value, str) or not value.startswith(LOCKED):
+        return value
+    if value in _opened:
+        return _opened[value]
+    import base64
+    try:
+        opened = _dpapi(base64.b64decode(value[len(LOCKED):]), False).decode()
+    except (OSError, AttributeError, ValueError):
+        opened = ""
+    if len(_opened) > 20:
+        _opened.clear()
+    _opened[value] = opened
+    return opened
+
+
+def lock_old_secrets():
+    """Sign-ins saved before 2.33.0 were plain text: lock them (once, at start)."""
+    if os.name != "nt":
+        return
+    raw = _raw()
+    plain = {k: raw[k] for k in SECRET_KEYS if isinstance(raw.get(k), str) and raw[k] and not raw[k].startswith(LOCKED)}
+    if plain:
+        save(**plain)
+
+
 _read_cache = {"stamp": None, "text": ""}
 
 
@@ -88,6 +159,9 @@ def _is_dir(path):
 
 def load():
     settings = _raw()
+    for key in SECRET_KEYS:
+        if key in settings:
+            settings[key] = open_secret(settings[key])
     if not _is_dir(settings.get("folder") or ""):
         settings["folder"] = DEFAULT_FOLDER
     settings["auto_update"] = settings.get("auto_update") is not False  # on unless turned off
@@ -116,7 +190,7 @@ def save(**changes):
         # Only what's really saved plus the changes: a save folder on a drive that's unplugged right
         # now must not be swapped for Downloads for good.
         settings = _raw()
-        settings.update(changes)
+        settings.update({k: lock_secret(v) if k in SECRET_KEYS else v for k, v in changes.items()})
         _dir_cache.clear()
         os.makedirs(DATA_DIR, exist_ok=True)
         # Written to a new file first, so a crash halfway can't leave a broken settings file.

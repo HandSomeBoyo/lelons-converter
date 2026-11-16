@@ -824,7 +824,7 @@ class Handler(BaseHTTPRequestHandler):
                     pagecache.forget()
                 pagecache.put("account", result["account"])
             elif action == "signup":
-                result = {"account": library.signup(data.get("username"), data.get("password"))}
+                result = {"account": library.signup(data.get("username"), data.get("password"), data.get("invite"))}
             elif action == "login":
                 result = {"account": library.login(data.get("username"), data.get("password"))}
             elif action == "logout":
@@ -856,6 +856,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"account": library.remove_picture()}
             elif action == "people":
                 result = {"people": library.people()}
+            elif action == "invites":
+                result = library.invites(str(data.get("what") or "list"), data.get("code"), data.get("hours"), data.get("uses"))
             elif action == "role":
                 library.set_role(data.get("id"), data.get("role"))
                 result = {"people": library.people()}
@@ -2044,6 +2046,10 @@ def main():
     # Left over from a time the app didn't close properly (the PC turned off, say).
     clean_up()
     check_window_crash()
+    try:
+        settings.lock_old_secrets()  # (2.33.0) sign-ins saved before were plain text
+    except OSError:
+        pass
 
     started = time.time()  # half-made files older than this are leftovers from last time
     names.FOLDERS_FILE = os.path.join(settings.DATA_DIR, "making-in.json")

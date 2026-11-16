@@ -153,6 +153,7 @@ function drawSfxAccount() {
   $("libMeRole").textContent = user.roleName;
   $("libMeRole").className = "role role-" + user.role;
   $("libPeopleOpen").hidden = !user.isOwner;
+  $("libInvitesOpen").hidden = !user.canUpload; // (owner and admins)
   $("libInboxOpen").hidden = !user.isOwner;
   $("libInboxCount").textContent = user.open_feedback || "";
   $("libMeButton").classList.toggle("has-news", !!(user.isOwner && user.open_feedback));
@@ -169,9 +170,10 @@ function setLoginMode(mode) {
   $("libLoginButton").textContent = loginMode === "login" ? "Log in" : "Create account";
   $("libPassword").autocomplete = loginMode === "login" ? "current-password" : "new-password";
   $("libLoginHint").textContent = loginMode === "login" ? "Log in to hear everyone's sounds."
-    : "Pick a username and a password (at least 6 characters). New accounts can listen and download; the owner can let you upload.";
+    : "You need an invite code from the owner or an admin. Then pick a username and a password (at least 6 characters).";
+  $("libInviteField").hidden = loginMode !== "signup";
   $("libLoginError").textContent = "";
-  $("libUsername").focus();
+  (loginMode === "signup" && !$("libInvite").value ? $("libInvite") : $("libUsername")).focus();
 }
 
 // The buttons on the Library tab when you're logged out open the account panel.
@@ -186,7 +188,8 @@ $("libLoginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("libLoginButton").disabled = true;
   $("libLoginError").textContent = "";
-  const res = await api("/api/sfx-" + loginMode, { username: $("libUsername").value, password: $("libPassword").value })
+  const res = await api("/api/sfx-" + loginMode, { username: $("libUsername").value, password: $("libPassword").value,
+                                                   invite: loginMode === "signup" ? $("libInvite").value : undefined })
     .catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
   $("libLoginButton").disabled = false;
   if (!res.ok) {
@@ -194,6 +197,7 @@ $("libLoginForm").addEventListener("submit", async (e) => {
     return;
   }
   $("libPassword").value = "";
+  $("libInvite").value = "";
   closeMenu();
   setSfxAccount(res.account);
   if (sfxTabOpen()) loadSfx();

@@ -11,6 +11,7 @@ function openAccount() {
   $("acctDeleteOpen").hidden = false;
   drawAccountPage(true);
   if (typeof loadProfileEditor === "function") loadProfileEditor();
+  if (sfxUser() && sfxUser().canUpload) loadInviteCodes({ what: "list" });
   if (sfxUser() && sfxUser().isOwner) {
     if (typeof loadInbox === "function") loadInbox();
     if (!people.length) $("libPeopleList").textContent = "Loading...";
@@ -35,6 +36,7 @@ function drawAccountPage(fresh) {
   $("acctPictureRemove").hidden = !user.avatar;
   if (fresh || document.activeElement !== $("acctUsername")) $("acctUsername").value = user.username;
   $("libPeople").hidden = !user.isOwner;
+  $("acctInvites").hidden = !user.canUpload;
   $("acctInbox").hidden = !user.isOwner;
   $("acctDeleteBox").hidden = user.isOwner; // the owner's account can't be deleted
   if (typeof drawProfileEditor === "function") drawProfileEditor();
@@ -50,6 +52,10 @@ $("libAccountOpen").addEventListener("click", () => showTab("account"));
 $("libPeopleOpen").addEventListener("click", () => {
   showTab("account");
   setTimeout(() => $("libPeople").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+});
+$("libInvitesOpen").addEventListener("click", () => {
+  showTab("account");
+  setTimeout(() => $("acctInvites").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 });
 $("acctOutLogin").addEventListener("click", (e) => { e.stopPropagation(); openLogin("login"); });
 $("acctOutSignup").addEventListener("click", (e) => { e.stopPropagation(); openLogin("signup"); });
@@ -202,3 +208,79 @@ function drawPeople() {
 }
 
 if (!$("accountTab").hidden) openAccount();
+
+// ---- invite codes (owner and admins): new accounts need one
+
+let inviteCodes = [], inviteCodeNew = "";
+
+function inviteCodeLeft(seconds) {
+  const left = seconds - Date.now() / 1000;
+  if (left < 3600) return `${Math.max(1, Math.round(left / 60))} min`;
+  if (left < 48 * 3600) return `${Math.round(left / 3600)} hour${Math.round(left / 3600) === 1 ? "" : "s"}`;
+  return `${Math.round(left / 86400)} days`;
+}
+
+async function loadInviteCodes(body) {
+  const res = await api("/api/sfx-invites", body).catch(() => ({ ok: false, error: "Couldn't load the invite codes." }));
+  if (sfxLoggedOut(res)) return;
+  note("invNote", res.ok ? "" : res.error);
+  if (res.ok) {
+    inviteCodes = res.invites;
+    if (res.made) inviteCodeNew = res.made;
+  }
+  drawInviteCodes();
+}
+
+function drawInviteCodes() {
+  const list = $("invList");
+  if (!inviteCodes.length) {
+    setChildren(list, [Object.assign(document.createElement("p"), { className: "inv-empty", textContent: "No codes yet." })]);
+    return;
+  }
+  setChildren(list, inviteCodes.map((inv) => {
+    const el = document.createElement("div");
+    el.className = "inv" + (inv.working ? "" : " ran-out") + (inv.code === inviteCodeNew ? " is-new" : "");
+    el.innerHTML = '<div class="inv-info"><span class="inv-code"></span><small></small><small class="inv-joined" hidden></small></div><div class="actions"></div>';
+    el.querySelector(".inv-code").textContent = inv.code.slice(0, 5) + "-" + inv.code.slice(5);
+    const used = inv.max_uses ? `used ${inv.uses} of ${inv.max_uses}` : `used ${inv.uses} time${inv.uses === 1 ? "" : "s"}`;
+    el.querySelector("small").textContent = [
+      !inv.working ? "Ran out" : inv.expires ? "Works for " + inviteCodeLeft(inv.expires) : "Works until you delete it",
+      used,
+      inv.mine ? "" : "made by " + inv.by,
+    ].filter(Boolean).join(" · ");
+    if (inv.joined.length) {
+      const joined = el.querySelector(".inv-joined");
+      joined.hidden = false;
+      joined.textContent = "Joined with it: " + inv.joined.join(", ");
+    }
+    const actions = el.querySelector(".actions");
+    if (inv.working) {
+      const copy = Object.assign(document.createElement("button"), { type: "button", className: "small-button", textContent: "Copy" });
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(el.querySelector(".inv-code").textContent);
+          copy.textContent = "Copied!";
+        } catch { copy.textContent = "Couldn't copy"; }
+        setTimeout(() => { copy.textContent = "Copy"; }, 1600);
+      };
+      actions.append(copy);
+    }
+    if (inv.mine || sfxUser().isOwner) {
+      const del = Object.assign(document.createElement("button"), { type: "button", className: "small-button acct-danger",
+        textContent: "Delete", title: "The code stops working. People who already joined keep their accounts." });
+      del.onclick = () => {
+        inviteCodes = inviteCodes.filter((x) => x !== inv);
+        drawInviteCodes();
+        loadInviteCodes({ what: "delete", code: inv.code });
+      };
+      actions.append(del);
+    }
+    return el;
+  }));
+}
+
+$("invMake").addEventListener("click", async () => {
+  $("invMake").disabled = true;
+  await loadInviteCodes({ what: "make", hours: $("invHours").value || null, uses: $("invUses").value || null });
+  $("invMake").disabled = false;
+});

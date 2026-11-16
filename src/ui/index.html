@@ -67,6 +67,7 @@
           </div>
           <div class="lib-menu" id="libMenuItems" hidden>
             <button type="button" id="libAccountOpen">Manage account</button>
+            <button type="button" id="libInvitesOpen" hidden>Invite friends</button>
             <button type="button" id="libPeopleOpen" hidden>People and roles</button>
             <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
             <button type="button" id="libFeedbackOpen">Send feedback</button>
@@ -78,6 +79,7 @@
               <button type="button" data-mode="signup">Create account</button>
             </div>
             <form id="libLoginForm">
+              <label class="lib-field" id="libInviteField" hidden><span>Invite code</span><input id="libInvite" maxlength="20" autocomplete="off" spellcheck="false" placeholder="From the owner or an admin"></label>
               <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
               <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
               <p class="sfx-error" id="libLoginError"></p>
@@ -1052,6 +1054,26 @@
         <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
         <p class="sfx-error" id="inboxError"></p>
         <div id="inboxList"></div>
+      </div>
+
+      <div class="acct-card" id="acctInvites" hidden>
+        <h2>Invite friends</h2>
+        <p class="acct-help">New accounts need an invite code. Make one, send it to a friend, and they type it in when they press Create account.</p>
+        <div class="inv-make">
+          <div class="inv-pick"><span>Works for</span>
+            <label class="quality"><select id="invHours">
+              <option value="1">1 hour</option><option value="24" selected>1 day</option><option value="168">7 days</option><option value="720">30 days</option><option value="">Until I delete it</option>
+            </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
+          </div>
+          <div class="inv-pick"><span>How many people</span>
+            <label class="quality"><select id="invUses">
+              <option value="1" selected>1 person</option><option value="5">Up to 5</option><option value="20">Up to 20</option><option value="">Anyone with the code</option>
+            </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
+          </div>
+          <button type="button" class="convert inv-make-button" id="invMake">Make a code</button>
+        </div>
+        <p class="acct-note" id="invNote"></p>
+        <div id="invList"></div>
       </div>
 
       <div class="acct-card" id="libPeople" hidden>
