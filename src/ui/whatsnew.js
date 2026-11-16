@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.35.0", items: [
+    "New Trash bin in Settings > Trash: deleted documents, boards and Library sounds wait there for 30 days. Put them back with one click, or delete them for good. After 30 days they go away on their own.",
+    "Shared documents and team boards you delete go to your Trash too, and sounds deleted from the Library go to the owner's and admins' Trash (with their stars and playlists, if you put them back).",
+    "Desktop notifications: Windows pop-ups for messages, calls, invites, board cards due soon, new comments on your channel, game sales, friends going live and finished downloads. Click one to jump straight there. They stay quiet while you're live or recording, and Settings > Notifications turns them on or off.",
+    "VaultHub opens in its own window again, where you left it, and clicking it again brings that window to the front.",
+    "Signing out of Twitch now cancels the login on Twitch too.",
+  ] },
   { version: "2.34.0", items: [
     "New Live place in the side bar: a streaming console for Twitch and YouTube. It lights up red with LIVE while you stream.",
     "Console: how many people watch on each site, time live, new followers, subs and Super Chats, and how fast chat is going, all on one page.",
