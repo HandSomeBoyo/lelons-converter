@@ -6837,3 +6837,35 @@ html.hw-grabbing, html.hw-grabbing * { cursor: grabbing !important; user-select:
 .hw-ghost.home-card { padding-top: 16px; }
 .hw-ghost.home-card .hw-tools { left: auto; right: 10px; top: 10px; height: 32px; padding: 0 3px; }
 .hw-ghost.home-card .hw-tools .hw-name, .hw-ghost.home-card .home-card-head > :not(h3) { display: none; }
+
+/* ================================================================ 2.33.0: a calmer side bar. 8 places; the pages inside a place
+   (like Files inside Convert) are picked with a small bar at the top of the page. */
+.sub-tabs { display: flex; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; box-sizing: border-box;
+  padding: 4px; margin: 0 0 22px; border-radius: 12px; background: var(--panel); }
+.sub-tabs button { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 0; border-radius: 9px;
+  background: none; color: var(--muted); font: 500 13.5px/1.2 var(--head); cursor: pointer; white-space: nowrap;
+  transition: color .15s ease-out, background-color .15s ease-out; }
+.sub-tabs button svg { width: 16px; height: 16px; flex: none; }
+.sub-tabs button:hover { color: var(--text); }
+.sub-tabs button.active { color: var(--text); font-weight: 600; background: var(--panel2); }
+.sub-tabs button.active svg { color: var(--accent); }
+:root[data-theme="light"] .sub-tabs button.active svg { color: var(--text); }
+.sub-tabs .beta-tag { display: none; }
+.sub-tabs .tab-badge { position: static; margin: 0; }
+/* a place with news inside shows a small dot */
+.sidebar .tabs .tab-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--accent); flex: none; }
+.sidebar .tabs .tab-dot[hidden] { display: none; }
+html.side-small .sidebar .tabs .tab-dot { position: absolute; top: 6px; right: 8px; margin: 0; }
+/* fewer buttons up top: Refresh is F5, feedback is in the Help menu */
+.head-button[hidden] { display: none; }
+/* Home: four big start buttons under the hello */
+.home-start { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 24px; }
+.home-start button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px; border: 0; border-radius: var(--r);
+  background: var(--panel); color: var(--text); text-align: left; cursor: pointer; transition: background-color .15s ease-out, transform .15s var(--ease); }
+.home-start button:hover { background: var(--panel2); }
+.home-start button:active { transform: scale(.98); }
+.home-start svg { width: 22px; height: 22px; margin-bottom: 6px; color: var(--accent); }
+:root[data-theme="light"] .home-start svg { color: var(--accent-text, var(--accent)); }
+.home-start b { font: 600 15px var(--head); }
+.home-start small { color: var(--muted); font-size: 12.5px; }
+@container page (max-width: 620px) { .home-start { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

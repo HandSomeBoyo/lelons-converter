@@ -17,8 +17,23 @@ function saveImageOptions() {
 
 // ---- tabs
 
+// The side bar has 8 places. Some hold a few pages, picked with the bar at the top of the page.
+const TAB_SECTIONS = { convert: ["video", "files", "images", "history"], library: ["sfx", "fx"],
+  recording: ["games", "povs"], youtube: ["channel", "titles", "copyright"] };
+const sectionOf = (tab) => Object.keys(TAB_SECTIONS).find((k) => TAB_SECTIONS[k].includes(tab)) || "";
+
 function showTab(tab) {
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab)));
+  const section = sectionOf(tab);
+  if (section) {
+    // The side bar button opens the page of this place you used last; the bar sits on top of the page.
+    document.querySelector(`#tabs button[data-section="${section}"]`).dataset.tab = tab;
+    const bar = document.querySelector(`.sub-tabs[data-section="${section}"]`);
+    if (bar.parentElement !== $(tab + "Tab")) $(tab + "Tab").prepend(bar);
+  }
+  document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab));
+    if (b.closest(".sub-tabs")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  });
   for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history", "account"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
@@ -38,13 +53,24 @@ function showTab(tab) {
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
-document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => b.addEventListener("click", () => {
   if (typeof chatIsOpen === "function" && chatIsOpen()) closeChat(); // (the chat sits next to the side bar: picking a page leaves it)
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
 if (["video", "files", "images", "resolve", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "titles", "copyright", "history"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
+
+// A page inside a place has news (like a game on sale): a dot on the place's side bar button too.
+function drawSectionDots() {
+  for (const [section, tabs] of Object.entries(TAB_SECTIONS)) {
+    const news = tabs.some((t) => { const b = document.querySelector(`.sub-tabs button[data-tab="${t}"] .tab-badge`); return b && !b.hidden; });
+    const dot = document.querySelector(`#tabs button[data-section="${section}"] .tab-dot`);
+    if (dot && dot.hidden === news) dot.hidden = !news;
+  }
+}
+document.querySelectorAll(".sub-tabs .tab-badge").forEach((b) => new MutationObserver(drawSectionDots).observe(b, { attributes: true, attributeFilter: ["hidden"] }));
+drawSectionDots();
 
 // ---- adding pictures (drop anywhere in the window, or choose files)
 
@@ -300,3 +326,6 @@ function renderImages() {
 }
 
 renderImages();
+
+// Home's start buttons: straight to the place.
+document.querySelectorAll("#homeStart button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.go)));
