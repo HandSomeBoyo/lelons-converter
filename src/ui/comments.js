@@ -58,7 +58,7 @@ function cmBadge(n) {
 async function cmCheckCount() {
   try {
     const res = cmTabOpen() && cmData && cmData.counts ? { ok: true, count: (cmData.counts.needs || 0) + (cmData.counts.held || 0) } : await api("/api/cm-count", {});
-    if (res.ok) cmBadge(res.count);
+    if (res.ok) { cmBadge(res.count); if (typeof notifyComments === "function") notifyComments(res.count); }
   } catch (e) { /* closing */ }
 }
 setTimeout(cmCheckCount, 8000);

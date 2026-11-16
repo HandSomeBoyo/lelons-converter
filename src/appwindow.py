@@ -142,23 +142,25 @@ def in_front():
         return False
 
 
-def toast(title, text, quiet=False):
+def toast(title, text, quiet=False, key=""):
     """A Windows notification in the corner of the screen (the kind other apps show).
     Clicking it brings the app to the front. Returns False when there's no window to show it from."""
     window = _window
     if not (window and window.alive and window.hwnd):
         return False
     window.toast_next = (str(title or "VaultHub")[:63], str(text or "")[:255], bool(quiet))
+    window.toast_key = str(key or "")[:200]
     window.user32.PostMessageW(window.hwnd, WM_TOAST, 0, 0)
     return True
 
 
 def take_clicked():
-    """True once after the person clicked one of the app's Windows notifications."""
+    """Once after the person clicked one of the app's Windows notifications: the key of the one they
+    clicked (the newest one shown), or True when there's no key. Otherwise False."""
     window = _window
     if window and window.toast_clicked:
         window.toast_clicked = False
-        return True
+        return window.toast_key or True
     return False
 
 
@@ -334,6 +336,7 @@ class Window:
         self.drag_path = None
         self.toast_next = None
         self.toast_clicked = False
+        self.toast_key = ""
         self.tray = False  # the icon by the clock is there
         self.small_icon = None
         self.controller = None

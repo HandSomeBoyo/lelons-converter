@@ -98,6 +98,18 @@ PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chat
               "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
 
+def live_or_recording():
+    """True while you're streaming or OBS is recording (then notifications keep quiet)."""
+    try:
+        if streamlive._session:
+            return True
+        import obsstats
+        obs = obsstats.state() if obsstats._cfg.get("on") else {}
+        return bool(obs.get("streaming") or (obs.get("recording") or {}).get("active"))
+    except Exception:
+        return False
+
+
 class State:
     """Everything the window shows. The page polls it a few times a second."""
 
@@ -1975,10 +1987,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/notify":  # the bell got something new: a Windows notification, if the app isn't in front
             shown = False
-            if appwindow.active() and not appwindow.in_front():
-                shown = appwindow.toast(data.get("title"), data.get("text"), data.get("quiet"))
+            busy = bool(data.get("quietBusy")) and live_or_recording()
+            if not busy and data.get("desktop") and appwindow.active() and not appwindow.in_front():
+                shown = appwindow.toast(data.get("title"), data.get("text"), data.get("quiet"), data.get("key"))
                 appwindow.flash()
-            self.send_json({"ok": True, "shown": shown})
+            self.send_json({"ok": True, "shown": shown, "busy": busy})
         elif self.path == "/api/notify-clicked":  # did they click one of those? (then the page opens it)
             self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)

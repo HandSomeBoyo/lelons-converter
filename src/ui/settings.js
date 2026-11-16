@@ -116,34 +116,44 @@ document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("c
   savePref("settingsPage", b.dataset.set);
 }));
 
-// Settings > Notifications: what may notify you.
+// Settings > Notifications: what may notify you, in the bell and on the desktop.
+const NOTE_HELP = {
+  chat: "Private messages, group chats, and when someone @mentions you.",
+  calls: "When a friend calls you or starts a group call.",
+  invite: "When a friend invites you to a document or a team board.",
+  boards: "When a card on your boards is due within a day, or overdue.",
+  comments: "When new comments on your YouTube channel wait for an answer.",
+  games: "When a game on your Games list goes on sale or becomes free.",
+  live: "When a friend goes live on YouTube or Twitch (from the channels on their profile).",
+  povs: "When a friend shares a new recording in POVs.",
+  downloads: "When a download finishes while you're doing something else.",
+  updates: "When a new version of VaultHub is ready.",
+};
 function drawNoteSettings() {
   if (typeof noteOn !== "function") return;
-  const rows = [["windows", "Windows notifications", "A pop-up in the corner of your screen when the app is behind other windows or minimized."]]
-    .concat(Object.entries(NOTE_KINDS).map(([k, v]) => [k, v.name, {
-      chat: "Private messages, group chats, and when someone @mentions you.",
-      invite: "When a friend invites you to a document or a team board.",
-      games: "When a game on your Games list goes on sale or becomes free.",
-      live: "When a friend goes live on YouTube or Twitch (from the channels on their profile).",
-      povs: "When a friend shares a new recording in POVs.",
-      downloads: "When a download finishes while you're doing something else.",
-      updates: "When a new version of VaultHub is ready.",
-    }[k]]));
-  const box = $("setNoteKinds");
-  box.replaceChildren(...rows.slice(1).map(([k, name, help]) => {
-    const row = document.createElement("label");
-    row.className = "check set-row";
-    row.innerHTML = `<span class="set-text"><b></b><small></small></span><input type="checkbox">`;
-    row.querySelector("b").textContent = name;
-    row.querySelector("small").textContent = help;
-    const input = row.querySelector("input");
-    input.checked = noteOn(k);
-    input.addEventListener("change", () => noteSetOn(k, input.checked));
+  const desk = noteOn("windows");
+  const sw = (on, title, change, off) => {
+    const input = Object.assign(document.createElement("input"), { type: "checkbox", checked: on, title, disabled: !!off });
+    input.addEventListener("change", () => { change(input.checked); drawNoteSettings(); });
+    return input;
+  };
+  $("setNoteKinds").replaceChildren(...Object.entries(NOTE_KINDS).map(([k, v]) => {
+    const row = document.createElement("div");
+    row.className = "check set-row set-note-row";
+    row.innerHTML = `<span class="set-text"><b></b><small></small></span><span class="set-note-sw"></span>`;
+    row.querySelector("b").textContent = v.name;
+    row.querySelector("small").textContent = NOTE_HELP[k] || "";
+    const bell = noteOn(k);
+    row.querySelector(".set-note-sw").append(
+      sw(bell, "Show it under the bell", (on) => noteSetOn(k, on)),
+      sw(bell && desk && noteOn("win:" + k), desk ? "Also pop up in Windows" : "Desktop notifications are off (switch at the top)", (on) => noteSetOn("win:" + k, on), !bell || !desk));
     return row;
   }));
-  $("setNoteWindows").checked = noteOn("windows");
+  $("setNoteWindows").checked = desk;
+  $("setNoteBusy").checked = noteOn("busyQuiet");
 }
-$("setNoteWindows").addEventListener("change", () => noteSetOn("windows", $("setNoteWindows").checked));
+$("setNoteWindows").addEventListener("change", () => { noteSetOn("windows", $("setNoteWindows").checked); drawNoteSettings(); });
+$("setNoteBusy").addEventListener("change", () => noteSetOn("busyQuiet", $("setNoteBusy").checked));
 
 function openSettings(part) {
   drawSettings();

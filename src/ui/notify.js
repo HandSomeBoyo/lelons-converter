@@ -5,7 +5,10 @@
 
 const NOTE_KINDS = {
   chat: { name: "Messages", icon: '<path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1v2.5L16 17h-4a1 1 0 0 1-1-1v-.5"/>' },
+  calls: { name: "Calls", icon: '<path d="M5 4.5h3.2l1.6 4-2 1.3a10 10 0 0 0 4.4 4.4l1.3-2 4 1.6V17a2 2 0 0 1-2 2A14.5 14.5 0 0 1 3 6.5a2 2 0 0 1 2-2z"/>' },
   invite: { name: "Invitations", icon: '<path d="M4 7.5h16v11H4z"/><path d="m4 8 8 6 8-6"/>' },
+  boards: { name: "Board cards due", icon: '<rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/>' },
+  comments: { name: "Comments on your channel", icon: '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/>' },
   games: { name: "Games on sale", icon: '<path d="M20.5 13.5 13.5 20.5a1.8 1.8 0 0 1-2.5 0L3.5 13V3.5H13l7.5 7.5a1.8 1.8 0 0 1 0 2.5z"/><circle cx="8" cy="8" r="1.4"/>' },
   live: { name: "Friends going live", icon: '<circle cx="12" cy="12" r="2.2"/><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 18.6a9.4 9.4 0 0 1 0-13.2M18.6 5.4a9.4 9.4 0 0 1 0 13.2"/>' },
   povs: { name: "New POVs", icon: '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>' },
@@ -28,6 +31,8 @@ function noteOn(what) {
   const on = loadPref("notesOn") || {};
   return on[what] !== false;
 }
+// A Windows notification for this kind? (the main switch, and the one for the kind)
+function noteDesk(kind) { return noteOn("windows") && noteOn("win:" + kind); }
 function noteSetOn(what, value) {
   savePref("notesOn", { ...(loadPref("notesOn") || {}), [what]: value });
 }
@@ -61,9 +66,12 @@ function notifyAdd(n) {
   noteSave();
   noteDraw();
   // Just opened: what was waiting goes in the list without popping up.
-  if (Date.now() - noteStarted > 12000 && !noteDnd()) {
-    notePop(note);
-    if (noteOn("windows")) api("/api/notify", { title: note.title, text: note.text, quiet: !!n.quiet }).catch(() => {});
+  // While you're live or recording, nothing pops up (it could show on stream or ding in the recording).
+  if ((Date.now() - noteStarted > 12000 || n.now) && !noteDnd()) {
+    api("/api/notify", { title: note.title, text: note.text, quiet: !!n.quiet, key: note.key, desktop: noteDesk(n.kind),
+      quietBusy: noteOn("busyQuiet") })
+      .then((res) => { if (!(res && res.busy)) notePop(note); })
+      .catch(() => notePop(note));
   }
 }
 
@@ -93,6 +101,7 @@ async function noteOpen(n) {
   const o = n.open || {};
   if (o.chat !== undefined && typeof openChat === "function") return openChat(o.chat);
   if (o.live && typeof liveWatch === "function") return liveWatch(o.live);
+  if (o.board && typeof qkOpenBoard === "function") return qkOpenBoard(o.board, false);
   if (o.tab) showTab(o.tab);
   if (o.tab === "docs" && typeof docsSwitchTo === "function") {
     if (typeof doc !== "undefined" && doc && !(await docLeave())) return;
@@ -213,11 +222,11 @@ function notePop(n) {
   setTimeout(() => { card.classList.add("leaving"); setTimeout(() => card.remove(), 300); }, 6500);
 }
 
-// Clicked a Windows notification: the app comes to the front, then opens the newest one.
+// Clicked a Windows notification: the app comes to the front, then opens the one you clicked.
 window.addEventListener("focus", async () => {
   const res = await api("/api/notify-clicked", {}).catch(() => null);
   if (res && res.clicked) {
-    const n = noteData.list.find((x) => !x.read) || noteData.list[0];
+    const n = noteData.list.find((x) => x.key === res.clicked) || noteData.list.find((x) => !x.read) || noteData.list[0];
     if (n) { n.read = true; noteSave(); noteDraw(); noteOpen(n); }
   }
 });
@@ -267,5 +276,33 @@ function notifyPovs(sessions, looking) {
 }
 setTimeout(notifyCheckPovs, 20000);
 setInterval(notifyCheckPovs, 180000);
+
+// Cards on your boards that are due within a day (or overdue), looked at every 15 minutes.
+async function notifyCheckDue() {
+  if (document.hidden || !noteOn("boards")) return;
+  const res = await api("/api/boards-due", {}).catch(() => null);
+  if (!res || !res.ok) return;
+  const date = (s) => new Date(s.length > 10 ? s : s + "T23:59");
+  for (const c of res.cards || []) {
+    const left = date(c.due) - Date.now();
+    if (left > 86400000 || left < -3 * 86400000) continue;
+    notifyAdd({ key: `due:${c.board}:${c.card}`, stamp: c.due + (left < 0 ? ":late" : ""), kind: "boards",
+      title: left < 0 ? `"${c.title || "A card"}" is overdue` : `"${c.title || "A card"}" is due soon`,
+      text: `${c.boardTitle} · ${c.list}`, open: { board: c.board } });
+  }
+}
+setTimeout(notifyCheckDue, 30000);
+setInterval(notifyCheckDue, 15 * 60 * 1000);
+
+// New comments on your channel (the Comments tab tells the bell when its number goes up).
+let noteCmCount = null;
+function notifyComments(count) {
+  const before = noteCmCount;
+  noteCmCount = count;
+  if (before === null || count <= before) return;
+  const n = count - before;
+  notifyAdd({ key: "comments", stamp: Date.now(), kind: "comments", title: n === 1 ? "A new comment on your channel" : `${n} new comments on your channel`,
+    text: count === 1 ? "It's waiting for your answer." : `${count} comments are waiting for your answer.`, open: { tab: "comments" } });
+}
 
 noteDraw();

@@ -7608,3 +7608,12 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lvo-btn.dim { color: var(--muted); }
 .lvo-btn:hover { filter: brightness(1.15); }
 #lvoRecTime { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- 2.35.0: desktop notifications per kind */
+.set-note-head { display: flex; align-items: flex-end; justify-content: space-between; }
+.set-note-cols { display: flex; gap: 10px; padding-right: 14px; }
+.set-note-cols i { font-style: normal; width: 44px; text-align: center; }
+.set-note-sw { display: flex; gap: 10px; flex: none; }
+.set-note-sw input { margin: 0 3px; }
+.set-note-sw input:disabled { opacity: .35; cursor: default; }
+.note-face.k-calls > svg { color: var(--green, #4caf50); } .note-face.k-boards > svg { color: #5aa9ff; } .note-face.k-comments > svg { color: #ff6b6b; }

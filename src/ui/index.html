@@ -2418,13 +2418,14 @@
 
       <section class="set-page" data-set="notes" hidden>
         <h3 class="set-title">Notifications</h3>
-        <div class="set-label">Pop-ups</div>
+        <div class="set-label">Desktop notifications</div>
         <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Windows notifications</b><small>A pop-up in the corner of your screen when VaultHub is behind other windows or minimized. Click it to jump straight there.</small></span><input type="checkbox" id="setNoteWindows"></label>
+          <label class="check set-row"><span class="set-text"><b>Show desktop notifications</b><small>A Windows pop-up in the corner of your screen when VaultHub is behind other windows or minimized. Click it to jump straight there. Turn this off and you get none at all.</small></span><input type="checkbox" id="setNoteWindows"></label>
+          <label class="check set-row"><span class="set-text"><b>Keep quiet while I'm live or recording</b><small>No pop-ups and no cards while you stream or OBS records, so nothing shows up on stream. Everything still waits under the bell.</small></span><input type="checkbox" id="setNoteBusy"></label>
         </div>
-        <div class="set-label">Tell me about</div>
+        <div class="set-label set-note-head"><span>Tell me about</span><span class="set-note-cols"><i>Bell</i><i>Desktop</i></span></div>
         <div class="set-group" id="setNoteKinds"></div>
-        <p class="set-help">Everything you turn on shows up under the bell at the top. The moon button there turns everything quiet for an hour.</p>
+        <p class="set-help">Bell: it shows up under the bell at the top and as a little card in the app. Desktop: it also pops up in Windows. The moon button under the bell turns everything quiet for an hour.</p>
       </section>
 
       <section class="set-page" data-set="speed" hidden>
