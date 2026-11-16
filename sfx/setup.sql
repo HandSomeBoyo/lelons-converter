@@ -210,6 +210,10 @@ alter table lelons.accounts add column if not exists youtube text not null defau
 alter table lelons.accounts add column if not exists hide text[] not null default '{}';
 -- (2.32.0) Your Twitch name, so friends get a ping when you go live.
 alter table lelons.accounts add column if not exists twitch text not null default '' check (twitch ~ '^[a-z0-9_]{0,25}$');
+-- (2.33.0) How your profile looks: a ready-made banner, a ring around your picture and up to
+-- 3 pinned things (a video, a sound or a game). Like {"banner": "galaxy", "ring": "glow", "show": [...]}.
+alter table lelons.accounts add column if not exists look jsonb not null default '{}'
+  check (jsonb_typeof(look) = 'object' and length(look::text) <= 1500);
 
 alter table lelons.config enable row level security;
 alter table lelons.accounts enable row level security;
@@ -1101,6 +1105,20 @@ begin
                                   where rp.account_id = them.id and rp.state = 'in' and r.ended_at is null
                                     and rp.seen_at > now() - interval '30 seconds'),
     'bio', them.bio, 'status', them.status, 'banner', them.banner, 'accent', them.accent,
+    'look', coalesce(them.look, '{}'::jsonb),
+    -- (2.33.0) The pinned things, filled in (gone ones come back as null and are left out by the app).
+    'showcase', coalesce((
+      select json_agg(case x.item->>'kind'
+          when 'sound' then (select json_build_object('kind', 'sound', 'id', d.id, 'name', d.name, 'category', d.category,
+                                                      'path', d.path, 'seconds', d.seconds)
+                             from lelons.sounds d where d.id::text = x.item->>'id')
+          when 'game' then (select json_build_object('kind', 'game', 'id', g.id, 'name', g.info->>'name',
+                                                     'header', g.info->>'header', 'status', g.status)
+                            from lelons.games g where g.id::text = x.item->>'id')
+          when 'video' then json_build_object('kind', 'video', 'id', x.item->>'id', 'title', x.item->>'title')
+        end order by x.n)
+      from jsonb_array_elements(case when jsonb_typeof(them.look->'show') = 'array' then them.look->'show' else '[]'::jsonb end)
+           with ordinality x(item, n)), '[]'::json),
     'youtube', case when 'videos' = any (hid) and them.id <> me.id then '' else them.youtube end,
     'twitch', case when 'videos' = any (hid) and them.id <> me.id then '' else them.twitch end,
     'hide', case when them.id = me.id then to_json(hid) else null end,
@@ -1159,13 +1177,27 @@ begin
   if info ? 'twitch' and coalesce(info->>'twitch', '') !~ '^[a-z0-9_]{0,25}$' then
     raise exception 'bad twitch' using hint = 'bad_input';
   end if;
+  -- (2.33.0) How it looks: checked piece by piece.
+  if info ? 'look' then
+    if jsonb_typeof(info->'look') <> 'object' or length((info->'look')::text) > 1500
+       or coalesce(info->'look'->>'banner', '') not in ('', 'galaxy', 'sunset', 'ocean', 'plain', 'grass')
+       or coalesce(info->'look'->>'ring', '') not in ('', 'color', 'glow', 'rainbow')
+       or (info->'look' ? 'show' and (jsonb_typeof(info->'look'->'show') <> 'array' or jsonb_array_length(info->'look'->'show') > 3))
+       or exists (select 1 from jsonb_array_elements(case when jsonb_typeof(info->'look'->'show') = 'array'
+                                                        then info->'look'->'show' else '[]'::jsonb end) i
+                  where jsonb_typeof(i) <> 'object' or coalesce(i->>'kind', '') not in ('video', 'sound', 'game')
+                     or coalesce(i->>'id', '') !~ '^[A-Za-z0-9_-]{1,40}$' or length(coalesce(i->>'title', '')) > 100) then
+      raise exception 'bad look' using hint = 'bad_input';
+    end if;
+  end if;
   update lelons.accounts a set
     twitch = case when info ? 'twitch' then coalesce(info->>'twitch', '') else a.twitch end,
     bio = case when info ? 'bio' then left(btrim(coalesce(info->>'bio', '')), 300) else a.bio end,
     status = case when info ? 'status' then left(btrim(coalesce(info->>'status', '')), 60) else a.status end,
     accent = case when info ? 'accent' then info->>'accent' else a.accent end,
     youtube = case when info ? 'youtube' then left(coalesce(info->>'youtube', ''), 200) else a.youtube end,
-    hide = case when info ? 'hide' then hid else a.hide end
+    hide = case when info ? 'hide' then hid else a.hide end,
+    look = case when info ? 'look' then info->'look' else a.look end
   where a.id = me.id;
 end $$;
 

@@ -84,6 +84,7 @@ async function openProfile(username) {
   const dialog = $("profileModal").querySelector(".dialog");
   pfPaint(dialog, null);
   pfBanner($("profileBanner"), "");
+  pfLook($("profileBanner"), $("profileFace"), {});
   $("profileName").textContent = username;
   $("profileAvatar").replaceChildren(avatarEl("", username, "huge"));
   $("profileDot").hidden = true;
@@ -91,7 +92,7 @@ async function openProfile(username) {
   $("profileSeen").textContent = "Loading...";
   $("profileSeen").className = "";
   for (const id of ["profileStatus", "profileBio", "profileVideosPart", "profileGamesPart", "profilePovsPart",
-    "profileSoundsPart", "profileHiddenNote", "profileActions"]) $(id).hidden = true;
+    "profileSoundsPart", "profileHiddenNote", "profileActions", "profileShowPart"]) $(id).hidden = true;
   $("profileStats").replaceChildren();
   $("profileNote").textContent = "";
   $("profileModal").hidden = false;
@@ -112,6 +113,7 @@ function drawProfile(p) {
   const dialog = $("profileModal").querySelector(".dialog");
   pfPaint(dialog, p.accent);
   pfBanner($("profileBanner"), p.bannerUrl);
+  pfLook($("profileBanner"), $("profileFace"), { ...(p.look || {}), banner: p.bannerUrl ? "" : (p.look || {}).banner });
   $("profileName").textContent = p.username;
   $("profileAvatar").replaceChildren(avatarEl(p.avatarUrl, p.username, "huge"));
   $("profileRole").textContent = ROLE_NAMES[p.role] || p.role;
@@ -155,6 +157,7 @@ function drawProfile(p) {
   const hidden = p.hide || [];
   $("profileVideosPart").hidden = true;
   if (p.youtube && !(p.me && hidden.includes("videos"))) loadProfileVideos(p);
+  drawProfileShowcase();
   drawProfileGames();
   drawProfilePovs();
   $("profileSoundsPart").hidden = !p.recent.length;
@@ -364,7 +367,7 @@ $("profileEdit").addEventListener("click", () => {
   closeProfile();
   if (typeof chatIsOpen === "function" && chatIsOpen()) closeChat();
   showTab("account");
-  setTimeout(() => $("profileEditor").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  if (typeof acctPane === "function") acctPane("profile");
 });
 $("profileAll").addEventListener("click", () => {
   const name = profileShown.username;
@@ -376,9 +379,68 @@ $("profileAll").addEventListener("click", () => {
 
 // ---------------------------------------------------------------- your own profile (Account page)
 
+// (2.33.0) Ready-made banners (used when there's no banner picture) and rings around your picture.
+const PF_BANNERS = [["", "None"], ["galaxy", "Galaxy"], ["sunset", "Sunset"], ["ocean", "Ocean"], ["grass", "Grass"], ["plain", "Plain"]];
+const PF_RINGS = [["", "No ring"], ["color", "Colored"], ["glow", "Glowing"], ["rainbow", "Rainbow"]];
+
+// Puts a ready-made banner and a ring on a profile (the viewer or the editor).
+function pfLook(banner, face, look) {
+  look = look || {};
+  for (const [key] of PF_BANNERS) if (key) banner.classList.toggle("bn-" + key, look.banner === key);
+  for (const [key] of PF_RINGS) if (key) face.classList.toggle("ring-" + key, look.ring === key);
+}
+
+// One pinned thing (a video, a sound or a game) as a tile.
+function pfShowTile(item, onRemove) {
+  const el = pfEl(onRemove ? "div" : "button", "pf-show-tile kind-" + item.kind);
+  if (!onRemove) el.type = "button";
+  const pic = pfEl("span", "pf-show-pic");
+  const pictureUrl = item.kind === "video" ? `https://i.ytimg.com/vi/${encodeURIComponent(item.id)}/mqdefault.jpg` : item.kind === "game" ? item.header : "";
+  if (pictureUrl) {
+    const img = pfEl("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.src = pictureUrl;
+    pic.append(img);
+  } else {
+    pic.innerHTML = SFX_ICONS.play;
+  }
+  const kind = { video: "Video", sound: "Sound", game: "Game" }[item.kind];
+  el.append(pic, pfEl("b", "", item.name || item.title || kind), pfEl("span", "", kind));
+  if (onRemove) {
+    const x = pfEl("button", "pf-show-x");
+    x.type = "button";
+    x.title = "Take it off";
+    x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    x.onclick = onRemove;
+    el.append(x);
+  }
+  return el;
+}
+
+function drawProfileShowcase() {
+  const p = profileShown;
+  const items = (p.showcase || []).filter(Boolean);
+  $("profileShowPart").hidden = !items.length;
+  $("profileShow").replaceChildren(...items.map((item) => {
+    const el = pfShowTile(item);
+    el.onclick = () => {
+      if (item.kind === "video") return openWatch("https://www.youtube.com/watch?v=" + item.id, { title: item.title || "", sub: p.username });
+      if (item.kind === "sound") return playProfileSound(item);
+      closeProfile();
+      if (typeof chatIsOpen === "function" && chatIsOpen()) closeChat();
+      showTab("games");
+      if (typeof openGame === "function") openGame(item.id);
+    };
+    return el;
+  }));
+}
+
 let peSaved = null;   // your profile as it's saved
 let peAccent = null;  // the color picked (not saved yet)
 let peHide = [];
+let peLookNow = {};   // banner, ring and pinned things picked (not saved yet)
+let pePickFrom = null; // what you can pin: { videos, sounds, games }
 
 async function loadProfileEditor() {
   const user = sfxUser();
@@ -392,6 +454,9 @@ function peFill(p) {
   peSaved = p;
   peAccent = p.accent || null;
   peHide = [...(p.hide || [])];
+  peLookNow = peLookFrom(p);
+  pePickFrom = null;
+  $("pePick").hidden = true;
   $("peStatus").value = p.status || "";
   $("peBio").value = p.bio || "";
   $("peYoutube").value = p.youtube ? p.youtube.replace("https://www.", "") : "";
@@ -400,91 +465,240 @@ function peFill(p) {
   drawProfileEditor();
 }
 
+// The look as saved, with the pinned things filled in (names, pictures) for drawing.
+function peLookFrom(p) {
+  const look = p.look || {};
+  return { banner: look.banner || "", ring: look.ring || "", show: (p.showcase || []).filter(Boolean).map((x) => ({ ...x })) };
+}
+
+const peLookKey = (look) => JSON.stringify([look.banner || "", look.ring || "", (look.show || []).map((x) => x.kind + ":" + x.id)]);
+
 function peChanged() {
   if (!peSaved) return false;
   const yt = $("peYoutube").value.trim().replace(/^(https?:\/\/)?(www\.)?/, "");
   return $("peStatus").value.trim() !== (peSaved.status || "") || $("peBio").value.trim() !== (peSaved.bio || "")
     || (peAccent || null) !== (peSaved.accent || null) || yt !== (peSaved.youtube || "").replace("https://www.", "")
     || $("peTwitch").value.trim().replace(/^(https?:\/\/)?(www\.)?(twitch\.tv\/)?@?/i, "").replace(/\/$/, "").toLowerCase() !== (peSaved.twitch || "")
-    || [...peHide].sort().join() !== [...(peSaved.hide || [])].sort().join();
+    || [...peHide].sort().join() !== [...(peSaved.hide || [])].sort().join()
+    || peLookKey(peLookNow) !== peLookKey(peLookFrom(peSaved));
+}
+
+function peSwatch(cls, title, on, paint, onclick) {
+  const b = pfEl("button", cls + (on ? " on" : ""));
+  b.type = "button";
+  b.title = title;
+  b.setAttribute("aria-pressed", on);
+  if (paint) paint(b);
+  b.onclick = onclick;
+  return b;
 }
 
 function drawProfileEditor() {
   const user = sfxUser();
   if (!user || !peSaved) return;
-  // Colors
-  $("peColors").replaceChildren(...PF_COLORS.map((c) => {
-    const b = pfEl("button", "pe-color" + ((peAccent || null) === c ? " on" : "") + (c ? "" : " app"));
-    b.type = "button";
-    b.title = c ? c : "The app's color";
-    if (c) b.style.background = c;
-    b.onclick = () => { peAccent = c; drawProfileEditor(); };
+  const accent = peAccent || null;
+  // Colors: the ready ones, then "any color" (the color picker)
+  const own = accent && !PF_COLORS.includes(accent);
+  const colors = PF_COLORS.map((c) => peSwatch("pe-color" + (c ? "" : " app"), c || "The app's color", accent === c,
+    (b) => { if (c) b.style.background = c; }, () => { peAccent = c; drawProfileEditor(); }));
+  const any = pfEl("label", "pe-color pe-any" + (own ? " on" : ""));
+  any.title = "Pick any color";
+  if (own) any.style.background = accent;
+  const picker = pfEl("input");
+  picker.type = "color";
+  picker.value = own ? accent : "#ff8a3d";
+  picker.oninput = () => { peAccent = picker.value.toLowerCase(); drawProfileEditor(); };
+  any.append(picker);
+  $("peColors").replaceChildren(...colors, any);
+  // Ring (shown in your color)
+  pfPaint($("peRings"), peAccent);
+  $("peRings").replaceChildren(...PF_RINGS.map(([key, label]) => {
+    const b = peSwatch("ap-ring-pick", label, (peLookNow.ring || "") === key, null, () => { peLookNow.ring = key; drawProfileEditor(); });
+    const face = pfEl("span", "pf-face" + (key ? " ring-" + key : ""));
+    face.append(avatarEl(user.avatarUrl, user.username, "big"));
+    b.append(face, pfEl("span", "", label));
     return b;
   }));
+  // Ready-made banners (in the banner menu)
+  $("pePresets").replaceChildren(...PF_BANNERS.map(([key, label]) => {
+    const pictureShown = peSaved.banner && !peLookNow.dropPicture;
+    const b = peSwatch("ap-preset" + (key ? " bn-" + key : " none"), label, !pictureShown && (peLookNow.banner || "") === key, null, () => {
+      peLookNow.banner = key;
+      peLookNow.dropPicture = !!peSaved.banner; // a ready-made banner takes your picture's place when you save
+      drawProfileEditor();
+    });
+    b.append(pfEl("span", "", label));
+    return b;
+  }));
+  $("peBannerRemove").hidden = !peSaved.banner || !!peLookNow.dropPicture;
   // What shows
   $("peShow").replaceChildren(...PF_PARTS.map(([key, label]) => {
     const on = !peHide.includes(key);
-    const b = pfEl("button", "pe-chip" + (on ? " on" : ""));
-    b.type = "button";
-    b.setAttribute("aria-pressed", on);
-    b.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : "";
-    b.append(label);
-    b.onclick = () => {
+    const b = peSwatch("pe-chip", label, on, (x) => {
+      x.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : "";
+      x.append(label);
+    }, () => {
       peHide = on ? [...peHide, key] : peHide.filter((h) => h !== key);
       drawProfileEditor();
-    };
+    });
     return b;
   }));
-  $("peBannerRemove").hidden = !peSaved.banner;
-  $("peBanner").textContent = peSaved.banner ? "Change banner" : "Add a banner";
+  // Showcase
+  const show = peLookNow.show || [];
+  const tiles = show.map((item) => pfShowTile(item, () => {
+    peLookNow.show = show.filter((x) => x !== item);
+    drawProfileEditor();
+  }));
+  if (show.length < 3) {
+    const add = pfEl("button", "pf-show-tile ap-show-add");
+    add.type = "button";
+    add.innerHTML = '<span class="pf-show-pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>';
+    add.append(pfEl("b", "", "Pin something"), pfEl("span", "", `${3 - show.length} spot${show.length === 2 ? "" : "s"} left`));
+    add.onclick = openShowPick;
+    tiles.push(add);
+  }
+  $("peShowcase").replaceChildren(...tiles);
+  if (!$("pePick").hidden) drawShowPick();
   $("peBioCount").textContent = `${$("peBio").value.length}/300`;
-  // Preview
-  pfPaint($("pePreview"), peAccent);
-  pfBanner($("peBannerView"), peSaved.bannerUrl);
+  // The hero (it's the profile itself)
+  const hero = $("pePreview");
+  pfPaint(hero, peAccent);
+  const picture = peLookNow.dropPicture ? "" : peSaved.bannerUrl;
+  pfBanner($("peBannerView"), picture);
+  pfLook($("peBannerView"), $("acctPicture"), { banner: picture ? "" : peLookNow.banner, ring: peLookNow.ring });
+  $("peBanner").querySelector("span").textContent = picture || peLookNow.banner ? "Change banner" : "Add a banner";
   $("peFace").replaceChildren(avatarEl(user.avatarUrl, user.username, "huge"));
   $("peName").textContent = user.username;
-  $("peStatusView").textContent = $("peStatus").value.trim();
-  $("peStatusView").hidden = !$("peStatus").value.trim();
-  $("peBioView").textContent = $("peBio").value.trim() || "A few words about you show up here.";
-  $("peBioView").classList.toggle("empty", !$("peBio").value.trim());
-  $("pePreview").querySelector(".pf-dot").hidden = peHide.includes("online");
-  $("peSave").disabled = !peChanged();
+  hero.querySelector(".pf-dot").hidden = peHide.includes("online");
+  const since = user.created_at ? new Date(user.created_at).toLocaleDateString([], { month: "short", year: "numeric" }) : "";
+  $("peStats").replaceChildren(...[
+    [peSaved.sounds || 0, peSaved.sounds === 1 ? "sound" : "sounds"],
+    [peSaved.votes || 0, peSaved.votes === 1 ? "game vote" : "game votes"],
+    since ? [since, "joined"] : null,
+  ].filter(Boolean).map(([value, label]) => {
+    const box = pfEl("div");
+    box.append(pfEl("b", "", value), pfEl("span", "", label));
+    return box;
+  }));
+  $("peStats").classList.toggle("hidden-stats", peHide.includes("stats"));
+  $("peStats").title = peHide.includes("stats") ? "Friends don't see your numbers (you hid them below)" : "";
+  // Save bar: only when something changed
+  const changed = peChanged();
+  const saved = $("peNote").classList.contains("good") && !!$("peNote").textContent;
+  if (changed && saved) note("peNote", "");
+  if (changed && !$("peNote").textContent) $("peNote").textContent = "You have changes that aren't saved yet.";
+  if (!changed && $("peNote").textContent === "You have changes that aren't saved yet.") $("peNote").textContent = "";
+  $("peSave").disabled = !changed;
+  $("peUndo").hidden = !changed;
+  $("peSaveBar").classList.toggle("show", changed || !!$("peNote").textContent);
 }
 
 for (const id of ["peStatus", "peBio", "peYoutube", "peTwitch"]) $(id).addEventListener("input", drawProfileEditor);
+
+// ---- pin something: your newest videos, sounds and games
+async function openShowPick() {
+  $("pePick").hidden = false;
+  drawShowPick();
+  if (pePickFrom) return;
+  pePickFrom = { videos: null, sounds: peSaved.recent || [], games: peSaved.games || [] };
+  drawShowPick();
+  if (!peSaved.youtube) return (pePickFrom.videos = []), drawShowPick();
+  for (let tries = 0; tries < 15; tries++) {
+    const res = await api("/api/sfx-profile-videos", { url: peSaved.youtube }).catch(() => ({ ok: false }));
+    if (!pePickFrom) return;
+    if (res.ok && res.loading) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+    pePickFrom.videos = res.ok ? res.videos || [] : [];
+    break;
+  }
+  if (pePickFrom.videos == null) pePickFrom.videos = [];
+  drawShowPick();
+}
+
+function drawShowPick() {
+  const from = pePickFrom || { videos: null, sounds: [], games: [] };
+  const show = peLookNow.show || [];
+  const pinned = (kind, id) => show.some((x) => x.kind === kind && String(x.id) === String(id));
+  const row = (title, items, empty) => {
+    const box = pfEl("div", "ap-pick-row");
+    box.append(pfEl("h3", "", title));
+    const list = pfEl("div", "ap-pick-list");
+    if (items == null) list.append(pfEl("p", "pf-empty", "Loading..."));
+    else if (!items.length) list.append(pfEl("p", "pf-empty", empty));
+    else list.append(...items.map((item) => {
+      const el = pfShowTile(item);
+      const on = pinned(item.kind, item.id);
+      el.classList.toggle("on", on);
+      el.disabled = on || show.length >= 3;
+      el.onclick = () => {
+        peLookNow.show = [...show, item];
+        if (peLookNow.show.length >= 3) $("pePick").hidden = true;
+        drawProfileEditor();
+      };
+      return el;
+    }));
+    box.append(list);
+    return box;
+  };
+  const videoId = (url) => (/[?&]v=([\w-]{11})/.exec(url || "") || /youtu\.be\/([\w-]{11})|shorts\/([\w-]{11})/.exec(url || "") || [])
+    .slice(1).find(Boolean);
+  const videos = from.videos && from.videos.map((v) => ({ kind: "video", id: videoId(v.url), title: v.title })).filter((v) => v.id);
+  const close = pfEl("button", "link ap-pick-close", "Done");
+  close.type = "button";
+  close.onclick = () => { $("pePick").hidden = true; };
+  $("pePick").replaceChildren(close,
+    row("Your videos", videos, peSaved.youtube ? "No videos found on your channel." : "Add your YouTube channel up top to pin a video."),
+    row("Your sounds", from.sounds.map((s) => ({ ...s, kind: "sound" })), "Sounds you upload to the Library show up here."),
+    row("Your games", from.games.map((g) => ({ kind: "game", id: g.id, name: g.name, header: g.header })), "Games you post or vote for show up here."));
+}
 
 $("profileEditor").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("peSave").disabled = true;
   $("peSave").textContent = "Saving...";
+  if (peLookNow.dropPicture && peSaved.banner) await api("/api/sfx-banner-remove", {}).catch(() => {});
   const res = await api("/api/sfx-profile-save", { profile: {
     status: $("peStatus").value, bio: $("peBio").value, accent: peAccent, youtube: $("peYoutube").value, twitch: $("peTwitch").value, hide: peHide,
+    look: { banner: peLookNow.banner || "", ring: peLookNow.ring || "", show: (peLookNow.show || []).map((x) => ({ kind: x.kind, id: String(x.id), title: x.title || "" })) },
   } }).catch(() => ({ ok: false, error: "Couldn't save. Try again." }));
-  $("peSave").textContent = "Save profile";
+  $("peSave").textContent = "Save";
   if (sfxLoggedOut(res)) return;
   if (!res.ok) {
     note("peNote", res.error);
     return drawProfileEditor();
   }
   peFill(res.profile);
-  note("peNote", "Saved!", true);
+  note("peNote", "Saved! Your friends see it now.", true);
+  drawProfileEditor();
+  setTimeout(() => { if ($("peNote").classList.contains("good")) { note("peNote", ""); drawProfileEditor(); } }, 2500);
 });
 
+$("peUndo").addEventListener("click", () => peSaved && peFill(peSaved));
+
 async function sendBanner(promise) {
-  $("peBanner").disabled = true;
-  $("peBanner").textContent = "Saving...";
+  const label = $("peBanner").querySelector("span");
+  $("peBannerView").disabled = true;
+  label.textContent = "Saving...";
   const res = await promise.catch(() => ({ ok: false, error: "Couldn't save the banner." }));
-  $("peBanner").disabled = false;
+  $("peBannerView").disabled = false;
   if (sfxLoggedOut(res)) return;
   if (res.ok && res.profile) {
     // Keep what you typed but haven't saved yet.
     peSaved = { ...peSaved, banner: res.profile.banner, bannerUrl: res.profile.bannerUrl };
+    peLookNow.dropPicture = false;
   }
   drawProfileEditor();
   if (!res.ok) note("peNote", res.error);
 }
 
-$("peBanner").addEventListener("click", async () => {
+// Click the banner: a little menu with the ready-made ones and "use my own picture".
+$("peBannerView").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("peBannerMenu").hidden = !$("peBannerMenu").hidden;
+});
+$("peBannerMenu").addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", () => { $("peBannerMenu").hidden = true; });
+$("peBannerOwn").addEventListener("click", async () => {
+  $("peBannerMenu").hidden = true;
   const res = await api("/api/sfx-banner-pick", {}).catch(() => ({ ok: false, fallback: true }));
   if (res.fallback) return $("peBannerInput").click(); // not on Windows: the browser's own picker
   sendBanner(Promise.resolve(res));
@@ -494,5 +708,5 @@ $("peBannerInput").addEventListener("change", () => {
   $("peBannerInput").value = "";
   if (file) sendBanner(fetch("/api/sfx-banner", { method: "POST", body: file }).then((r) => r.json()));
 });
-$("peBannerRemove").addEventListener("click", () => sendBanner(api("/api/sfx-banner-remove", {})));
+$("peBannerRemove").addEventListener("click", () => { $("peBannerMenu").hidden = true; sendBanner(api("/api/sfx-banner-remove", {})); });
 $("acctSeeProfile").addEventListener("click", () => sfxUser() && openProfile(sfxUser().username));

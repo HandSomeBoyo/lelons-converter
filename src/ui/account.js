@@ -38,6 +38,10 @@ function drawAccountPage(fresh) {
   $("libPeople").hidden = !user.isOwner;
   $("acctInvites").hidden = !user.canUpload;
   $("acctInbox").hidden = !user.isOwner;
+  $("acctTabInvites").hidden = !user.canUpload;
+  $("acctTabPeople").hidden = !user.isOwner;
+  const open = $("acctTabs").querySelector("button.active");
+  if (open && open.hidden) acctPane("profile");
   $("acctDeleteBox").hidden = user.isOwner; // the owner's account can't be deleted
   if (typeof drawProfileEditor === "function") drawProfileEditor();
 }
@@ -49,13 +53,17 @@ function note(id, text, good) {
 
 // From the account button's menu
 $("libAccountOpen").addEventListener("click", () => showTab("account"));
-$("libPeopleOpen").addEventListener("click", () => {
-  showTab("account");
-  setTimeout(() => $("libPeople").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-});
-$("libInvitesOpen").addEventListener("click", () => {
-  showTab("account");
-  setTimeout(() => $("acctInvites").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+$("libPeopleOpen").addEventListener("click", () => { showTab("account"); acctPane("people"); });
+$("libInvitesOpen").addEventListener("click", () => { showTab("account"); acctPane("invites"); });
+
+// (2.33.0) The page's tabs: Profile, Account, Invites, People.
+function acctPane(name) {
+  for (const b of $("acctTabs").querySelectorAll("button")) b.classList.toggle("active", b.dataset.pane === name);
+  for (const pane of $("acctMain").querySelectorAll(".acct-pane")) pane.hidden = pane.dataset.pane !== name;
+}
+$("acctTabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-pane]");
+  if (b) acctPane(b.dataset.pane);
 });
 $("acctOutLogin").addEventListener("click", (e) => { e.stopPropagation(); openLogin("login"); });
 $("acctOutSignup").addEventListener("click", (e) => { e.stopPropagation(); openLogin("signup"); });
@@ -66,10 +74,10 @@ $("acctLogout").addEventListener("click", logOut);
 async function sendPicture(promise) {
   $("libMeButton").classList.add("saving");
   $("acctPicture").disabled = true;
-  $("acctPicture").textContent = "Saving...";
+  $("acctPicture").classList.add("saving");
   const res = await promise.catch(() => ({ ok: false, error: "Couldn't save the picture." }));
   $("acctPicture").disabled = false;
-  $("acctPicture").textContent = "Change picture";
+  $("acctPicture").classList.remove("saving");
   if (sfxLoggedOut(res)) return;
   if (res.ok && res.account) setSfxAccount(res.account);
   else drawSfxAccount();

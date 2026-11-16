@@ -1021,71 +1021,91 @@
     </div>
 
     <div class="acct" id="acctMain" hidden>
-      <div class="acct-card acct-profile">
-        <span class="avatar huge" id="acctAvatar"></span>
-        <div class="acct-who">
-          <b id="acctName"></b>
-          <span class="role" id="acctRole"></span>
-          <span class="acct-since" id="acctSince"></span>
-        </div>
-        <button type="button" class="outline-button" id="acctSeeProfile">See my profile</button>
+      <div class="acct-tabs" id="acctTabs" role="tablist">
+        <button type="button" data-pane="profile" class="active">Profile</button>
+        <button type="button" data-pane="account">Account</button>
+        <button type="button" data-pane="invites" id="acctTabInvites" hidden>Invites</button>
+        <button type="button" data-pane="people" id="acctTabPeople" hidden>People</button>
       </div>
 
-      <form class="acct-card pe" id="profileEditor">
-        <h2>Your profile</h2>
-        <p class="acct-help">This is what your friends see when they click your name or picture anywhere in VaultHub.</p>
-        <div class="pe-wrap">
-          <div class="pe-form">
-            <div class="pe-row">
-              <span class="pe-label">Picture</span>
-              <div class="pe-buttons">
-                <button type="button" class="small-button" id="acctPicture">Change picture</button>
-                <button type="button" class="link" id="acctPictureRemove" hidden>Remove</button>
-              </div>
-              <input type="file" id="acctPictureInput" accept="image/*" hidden>
-            </div>
-            <div class="pe-row">
-              <span class="pe-label">Banner</span>
-              <div class="pe-buttons">
-                <button type="button" class="ghost-button" id="peBanner">Add a banner</button>
-                <button type="button" class="link" id="peBannerRemove" hidden>Remove</button>
-              </div>
-              <input type="file" id="peBannerInput" accept="image/*" hidden>
-            </div>
-            <div class="pe-row pe-top">
-              <span class="pe-label">Your color</span>
-              <div class="pe-colors" id="peColors"></div>
-            </div>
-            <label class="lib-field"><span>Status</span><input id="peStatus" maxlength="60" placeholder="Like: Editing my next video" spellcheck="false"></label>
-            <label class="lib-field pe-bio"><span>About me <small id="peBioCount"></small></span><textarea id="peBio" maxlength="300" rows="3" placeholder="A few words about you"></textarea></label>
-            <div class="pe-channels">
-              <label class="lib-field"><span>YouTube channel</span><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
-              <label class="lib-field"><span>Twitch</span><input id="peTwitch" maxlength="60" placeholder="twitch.tv/yourname" spellcheck="false"></label>
-            </div>
-            <p class="pe-hint">Friends get a ping when you go live on one of these.</p>
-            <div class="pe-label pe-show-label">Show on my profile</div>
-            <div class="pe-show" id="peShow"></div>
-            <div class="pe-save">
-              <button type="submit" class="small-button" id="peSave" disabled>Save profile</button>
-              <span class="acct-note" id="peNote"></span>
+      <div class="acct-pane" data-pane="profile">
+      <form class="pe" id="profileEditor" autocomplete="off">
+        <div class="ap-hero pe-preview" id="pePreview">
+          <button type="button" class="pf-banner ap-banner" id="peBannerView" title="Change your banner">
+            <span class="ap-edit" id="peBanner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Change banner</span></span>
+          </button>
+          <div class="ap-banner-menu" id="peBannerMenu" hidden>
+            <div class="ap-presets" id="pePresets"></div>
+            <div class="ap-banner-own">
+              <button type="button" class="small-button" id="peBannerOwn">Use my own picture</button>
+              <button type="button" class="link" id="peBannerRemove" hidden>Remove picture</button>
             </div>
           </div>
-          <div class="pe-preview-wrap">
-            <span class="pe-label">Preview</span>
-            <div class="pe-preview" id="pePreview">
-              <div class="pf-banner" id="peBannerView"></div>
-              <span class="pf-face"><span id="peFace"></span><i class="pf-dot"></i></span>
-              <div class="pe-preview-body">
-                <b id="peName"></b>
-                <p class="pf-status" id="peStatusView"></p>
-                <p class="pf-bio" id="peBioView"></p>
-                <span class="pf-btn pf-main">Message</span>
+          <input type="file" id="peBannerInput" accept="image/*" hidden>
+          <button type="button" class="pf-face ap-face" id="acctPicture" title="Change your picture"><span id="peFace"></span><span class="ap-cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg></span><i class="pf-dot"></i></button>
+          <input type="file" id="acctPictureInput" accept="image/*" hidden>
+          <div class="ap-body">
+            <div class="ap-main">
+              <div class="ap-name"><b id="peName"></b><span class="role" id="acctRole"></span>
+                <button type="button" class="link" id="acctPictureRemove" hidden>Remove picture</button></div>
+              <label class="ap-status"><i class="ap-online"></i><input id="peStatus" maxlength="60" placeholder="Set a status, like: Editing my next video" spellcheck="false"></label>
+              <label class="ap-bio"><textarea id="peBio" maxlength="300" rows="2" placeholder="Write a few words about you"></textarea><small id="peBioCount"></small></label>
+              <div class="ap-links">
+                <label class="ap-link"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#ff3d3d"/><path d="M10 9v6l5-3z" fill="#fff"/></svg><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+                <label class="ap-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 3.5 6.5V19h4v2.5h2.5l2.5-2.5h3.5l5-5V3z" fill="#a970ff"/><path d="M11 7.5v5M15.5 7.5v5" stroke="#fff" stroke-width="2"/></svg><input id="peTwitch" maxlength="60" placeholder="twitch.tv/yourname" spellcheck="false"></label>
               </div>
+              <p class="pe-hint">Friends get a ping when you go live on one of these.</p>
             </div>
+            <div class="ap-side">
+              <div class="ap-stats" id="peStats"></div>
+              <button type="button" class="outline-button" id="acctSeeProfile">See how friends see it</button>
+            </div>
+          </div>
+          <p class="pf-status" id="peStatusView" hidden></p><p class="pf-bio" id="peBioView" hidden></p>
+        </div>
+
+        <div class="ap-grid">
+          <div class="acct-card ap-card">
+            <h2>Picture ring</h2>
+            <p class="acct-help">A ring around your picture on your profile. It uses your color.</p>
+            <div class="ap-rings" id="peRings"></div>
+          </div>
+          <div class="acct-card ap-card">
+            <h2>Your color</h2>
+            <p class="acct-help">For your name, buttons and ring on your profile.</p>
+            <div class="pe-colors" id="peColors"></div>
           </div>
         </div>
-      </form>
 
+        <div class="acct-card ap-card">
+          <h2>Showcase</h2>
+          <p class="acct-help">Pin up to 3 things to the top of your profile: a video, a sound or a game.</p>
+          <div class="ap-show" id="peShowcase"></div>
+          <div class="ap-pick" id="pePick" hidden></div>
+        </div>
+
+        <div class="acct-card ap-card">
+          <h2>Show on my profile</h2>
+          <p class="acct-help">Pick what your friends see.</p>
+          <div class="pe-show" id="peShow"></div>
+        </div>
+
+        <div class="ap-savebar" id="peSaveBar">
+          <span class="acct-note" id="peNote"></span>
+          <span class="ap-save-buttons"><button type="button" class="link" id="peUndo" hidden>Undo</button>
+          <button type="submit" class="convert" id="peSave" disabled>Save</button></span>
+        </div>
+      </form>
+      </div>
+
+      <div class="acct-pane" data-pane="account" hidden>
+        <div class="acct-card acct-profile">
+          <span class="avatar huge" id="acctAvatar"></span>
+          <div class="acct-who">
+            <b id="acctName"></b>
+            <span class="acct-since" id="acctSince"></span>
+          </div>
+        </div>
       <form class="acct-card" id="acctNameForm">
         <h2>Username</h2>
         <p class="acct-help">This is the name everyone sees next to your sounds. 3 to 20 letters or numbers.</p>
@@ -1095,7 +1115,6 @@
         </div>
         <p class="acct-note" id="acctNameNote"></p>
       </form>
-
       <form class="acct-card" id="acctPasswordForm">
         <h2>Password</h2>
         <p class="acct-help">At least 6 characters. Other computers you're logged in on get logged out.</p>
@@ -1104,14 +1123,23 @@
         <button type="submit" class="small-button">Change password</button>
         <p class="acct-note" id="acctPasswordNote"></p>
       </form>
-
-      <div class="acct-card" id="acctInbox" hidden>
-        <h2>Feedback inbox</h2>
-        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
-        <p class="sfx-error" id="inboxError"></p>
-        <div id="inboxList"></div>
+      <div class="acct-card acct-end">
+        <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+        <div id="acctDeleteBox">
+          <button type="button" class="link acct-delete-open" id="acctDeleteOpen">Delete my account</button>
+          <form id="acctDeleteForm" hidden>
+            <p class="acct-help">This deletes your account for good. Your sounds stay in the library. Type your password to be sure.</p>
+            <div class="acct-row">
+              <label class="lib-field"><input id="acctDeletePassword" type="password" autocomplete="current-password" placeholder="Your password"></label>
+              <button type="submit" class="small-button acct-danger">Delete</button>
+            </div>
+            <p class="acct-note" id="acctDeleteNote"></p>
+          </form>
+        </div>
+      </div>
       </div>
 
+      <div class="acct-pane" data-pane="invites" hidden>
       <div class="acct-card" id="acctInvites" hidden>
         <h2>Invite friends</h2>
         <p class="acct-help">New accounts need an invite code. Make one, send it to a friend, and they type it in when they press Create account.</p>
@@ -1131,27 +1159,21 @@
         <p class="acct-note" id="invNote"></p>
         <div id="invList"></div>
       </div>
+      </div>
 
+      <div class="acct-pane" data-pane="people" hidden>
       <div class="acct-card" id="libPeople" hidden>
         <h2>People and roles</h2>
         <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
         <p class="sfx-error" id="libPeopleError"></p>
         <div id="libPeopleList"></div>
       </div>
-
-      <div class="acct-card acct-end">
-        <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
-        <div id="acctDeleteBox">
-          <button type="button" class="link acct-delete-open" id="acctDeleteOpen">Delete my account</button>
-          <form id="acctDeleteForm" hidden>
-            <p class="acct-help">This deletes your account for good. Your sounds stay in the library. Type your password to be sure.</p>
-            <div class="acct-row">
-              <label class="lib-field"><input id="acctDeletePassword" type="password" autocomplete="current-password" placeholder="Your password"></label>
-              <button type="submit" class="small-button acct-danger">Delete</button>
-            </div>
-            <p class="acct-note" id="acctDeleteNote"></p>
-          </form>
-        </div>
+      <div class="acct-card" id="acctInbox" hidden>
+        <h2>Feedback inbox</h2>
+        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
+        <p class="sfx-error" id="inboxError"></p>
+        <div id="inboxList"></div>
+      </div>
       </div>
     </div>
   </section>
@@ -2095,6 +2117,10 @@
       <p class="pf-status" id="profileStatus" hidden></p>
       <p class="pf-bio" id="profileBio" hidden></p>
       <div class="profile-stats" id="profileStats"></div>
+      <div class="pf-part" id="profileShowPart" hidden>
+        <h3 class="profile-h">Showcase</h3>
+        <div class="pf-show" id="profileShow"></div>
+      </div>
       <div class="pf-live" id="profileLive" hidden></div>
       <button type="button" class="link pf-twitch" id="profileTwitch" hidden></button>
       <div class="pf-part" id="profileVideosPart" hidden>

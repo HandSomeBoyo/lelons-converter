@@ -54,6 +54,34 @@ UPLOAD_KINDS = [
 ]
 
 
+
+LOOK_BANNERS = ("galaxy", "sunset", "ocean", "plain", "grass")
+LOOK_RINGS = ("color", "glow", "rainbow")
+
+
+def clean_look(look):
+    """How a profile looks (ready-made banner, picture ring, up to 3 pinned things), with anything odd left out."""
+    look = look if isinstance(look, dict) else {}
+    out = {}
+    if look.get("banner") in LOOK_BANNERS:
+        out["banner"] = look["banner"]
+    if look.get("ring") in LOOK_RINGS:
+        out["ring"] = look["ring"]
+    show = []
+    for item in look.get("show") or []:
+        if not isinstance(item, dict) or item.get("kind") not in ("video", "sound", "game"):
+            continue
+        ident = str(item.get("id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", ident) or any(x["kind"] == item["kind"] and x["id"] == ident for x in show):
+            continue
+        entry = {"kind": item["kind"], "id": ident}
+        if item["kind"] == "video":
+            entry["title"] = " ".join(str(item.get("title") or "").split())[:100]
+        show.append(entry)
+    if show:
+        out["show"] = show[:3]
+    return out
+
 class Error(Exception):
     """Something went wrong; the message is shown as it is."""
 
@@ -707,6 +735,15 @@ class Library:
         result["avatarUrl"] = public_url(result["avatar"]) if result.get("avatar") else ""
         result["bannerUrl"] = public_url(result["banner"]) if result.get("banner") else ""
         result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
+        result["look"] = result.get("look") if isinstance(result.get("look"), dict) else {}
+        showcase = []
+        for item in result.get("showcase") or []:
+            if not item:
+                continue  # deleted since it was pinned
+            if item.get("kind") == "sound" and item.get("path"):
+                item = {**item, "url": public_url(item["path"])}
+            showcase.append(item)
+        result["showcase"] = showcase
         return result
 
     def feed(self, days=7):
@@ -761,6 +798,8 @@ class Library:
             out["twitch"] = name
         if "hide" in info:
             out["hide"] = [str(h) for h in info["hide"] or [] if h in ("online", "videos", "sounds", "povs", "games", "stats")]
+        if "look" in info:
+            out["look"] = clean_look(info["look"])
         _rpc("lelons_set_profile", token=self._token(), info=out)
         return self.my_profile()
 

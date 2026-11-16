@@ -6965,3 +6965,180 @@ html.side-small .sidebar .tabs .tab-dot { position: absolute; top: 6px; right: 8
   .cm-vid { display: none; }
   .cm-text, .cm-meta, .cm-replies, .cm-actions, .cm-box { margin-left: 0; }
 }
+
+/* ---------------------------------------------------------------- 2.33.0: account page
+   Tabs on top. The Profile tab is your profile itself: click the banner or picture to change them,
+   type your status and bio right on it. The save bar only shows when something changed. */
+.acct { max-width: 760px; }
+.acct-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+.acct-tabs button {
+  all: unset; cursor: pointer; padding: 10px 14px; margin-bottom: -1px; font: 600 14px var(--head); color: var(--muted);
+  border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+}
+.acct-tabs button:hover { color: var(--text); }
+.acct-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.acct-tabs button[hidden], .acct-pane[hidden] { display: none; }
+
+/* Ready-made banners (also on the profile popup when there's no banner picture) */
+.bn-galaxy:not(.has-picture) { background: radial-gradient(circle at 20% 30%, rgba(255,255,255,.5) 0 1px, transparent 2px), radial-gradient(circle at 70% 60%, rgba(255,255,255,.4) 0 1px, transparent 2px), radial-gradient(circle at 45% 80%, rgba(255,255,255,.35) 0 1px, transparent 2px), radial-gradient(ellipse at 30% 40%, #7b3fe4 0, transparent 55%), radial-gradient(ellipse at 80% 70%, #e0408a 0, transparent 50%), #120a2a; background-size: 90px 70px, 130px 90px, 70px 110px, 100% 100%, 100% 100%, 100% 100%; }
+.bn-sunset:not(.has-picture) { background: linear-gradient(180deg, #ff6f61 0%, #ff9a3d 45%, #ffd36b 75%, #6b3b8f 100%); }
+.bn-ocean:not(.has-picture) { background: linear-gradient(160deg, #0b3d6e 0%, #1677b8 50%, #3fd0c9 100%); }
+.bn-grass:not(.has-picture) { background: linear-gradient(170deg, #9be15d 0%, #3fa34d 55%, #1f5f3a 100%); }
+.bn-plain:not(.has-picture) { background: var(--panel2); }
+
+/* Rings around your picture (they use your color) */
+.pf-face.ring-color .avatar.huge, .pf-face.ring-color .avatar.big { outline: 3px solid var(--pf); outline-offset: 2px; }
+.pf-face.ring-glow .avatar.huge, .pf-face.ring-glow .avatar.big { outline: 3px solid var(--pf); outline-offset: 2px; filter: drop-shadow(0 0 10px var(--pf)); }
+.pf-face.ring-rainbow .avatar { box-shadow: 0 0 0 3px var(--panel); }
+.pf-face.ring-rainbow::before {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%; z-index: 0;
+  background: conic-gradient(#ff5c5c, #ffcf3f, #7ed957, #3fd0c9, #4f9dff, #a879ff, #ff6fb5, #ff5c5c);
+}
+.pf-face.ring-rainbow > * { position: relative; z-index: 1; }
+.pf-face.ring-rainbow .pf-dot, .pf-face.ring-rainbow .ap-cam { position: absolute; }
+
+/* The hero: your profile, editable */
+.ap-hero.pe-preview { position: relative; overflow: visible; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 14px; }
+.ap-hero .pf-banner.ap-banner {
+  border: 0; padding: 0; margin: 0; font: inherit; color: inherit; box-sizing: border-box; display: block; width: 100%; height: 150px;
+  cursor: pointer; position: relative; border-radius: 8px 8px 0 0;
+}
+.ap-banner { background-color: var(--pf); background-size: cover; background-position: center; }
+.ap-hero .pf-banner.ap-banner:not(.has-picture):not([class*="bn-"]) { background-image: linear-gradient(135deg, rgba(255,255,255,.14), rgba(0,0,0,.18)); }
+.ap-edit {
+  position: absolute; right: 12px; top: 12px; display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+  border-radius: 16px; background: rgba(0,0,0,.5); color: #fff; font: 600 12.5px var(--head); opacity: .85; transition: opacity .15s, background .15s;
+}
+.ap-edit svg { width: 15px; height: 15px; }
+.ap-banner:hover .ap-edit { opacity: 1; background: rgba(0,0,0,.72); }
+.ap-banner:disabled { cursor: progress; }
+.ap-banner-menu {
+  position: absolute; right: 12px; top: 50px; z-index: 5; width: 300px; padding: 12px; border-radius: 8px;
+  background: var(--panel2); border: 1px solid var(--line2); box-shadow: 0 12px 30px rgba(0,0,0,.45);
+}
+.ap-banner-menu[hidden] { display: none; }
+.ap-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ap-preset {
+  all: unset; cursor: pointer; height: 46px; border-radius: 6px; position: relative; display: flex; align-items: flex-end; padding: 5px 7px;
+  box-sizing: border-box; font: 600 11px var(--head); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); background: var(--pf);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
+}
+.ap-preset.none { background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(0,0,0,.18)), var(--pf); }
+.ap-preset.on { box-shadow: 0 0 0 2px var(--panel2), 0 0 0 4px var(--text); }
+.ap-banner-own { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.ap-banner-own .small-button { height: 34px; padding: 0 12px; }
+.ap-hero .pf-face.ap-face {
+  all: unset; cursor: pointer; position: absolute; left: 24px; top: 98px; line-height: 0; border-radius: 50%;
+}
+.ap-hero .pf-face.ap-face .avatar.huge { width: 104px; height: 104px; font-size: 40px; box-shadow: 0 0 0 6px var(--panel); }
+.ap-cam {
+  position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.5); color: #fff;
+  opacity: 0; transition: opacity .15s; z-index: 2;
+}
+.ap-cam svg { width: 26px; height: 26px; }
+.ap-face:hover .ap-cam, .ap-face.saving .ap-cam { opacity: 1; }
+.ap-face.saving { cursor: progress; }
+.ap-hero .pf-dot { right: 4px; bottom: 4px; z-index: 3; }
+.ap-body { display: flex; gap: 20px; padding: 62px 24px 20px; }
+.ap-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.ap-name { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ap-name b { font: 700 24px var(--head); color: var(--pf); overflow: hidden; text-overflow: ellipsis; }
+.ap-name .link { font-size: 12.5px; color: var(--muted); }
+.ap-status, .ap-bio, .ap-link {
+  display: flex; align-items: center; gap: 9px; padding: 0 12px; border-radius: 6px; background: var(--bg);
+  border: 1px solid transparent; transition: border-color .15s;
+}
+.ap-status:hover, .ap-bio:hover, .ap-link:hover { border-color: var(--line2); }
+.ap-status:focus-within, .ap-bio:focus-within, .ap-link:focus-within { border-color: var(--pf); }
+.ap-status input, .ap-link input, .ap-bio textarea {
+  all: unset; flex: 1; min-width: 0; height: 38px; font-size: 14px; color: var(--text); user-select: text; caret-color: var(--pf);
+}
+.ap-status input::placeholder, .ap-link input::placeholder, .ap-bio textarea::placeholder { color: var(--muted); }
+.ap-online { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
+.ap-bio { align-items: flex-end; padding: 10px 12px; }
+.ap-bio textarea { height: auto; min-height: 44px; line-height: 1.45; white-space: pre-wrap; resize: vertical; }
+.ap-bio small { flex: none; color: var(--muted); font-size: 11px; }
+.ap-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-link svg { width: 18px; height: 18px; flex: none; }
+.ap-link input { height: 36px; font-size: 13px; }
+.ap-main .pe-hint { margin: -2px 0 0; font-size: 12px; color: var(--muted); }
+.ap-side { width: 190px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.ap-stats { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.ap-stats > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 6px; background: var(--bg); }
+.ap-stats b { font: 700 17px var(--head); }
+.ap-stats span { font-size: 12px; color: var(--muted); }
+.ap-stats.hidden-stats { opacity: .45; }
+.ap-side .outline-button { height: 36px; font-size: 13px; }
+
+.ap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ap-grid .acct-card { margin-bottom: 14px; }
+.ap-rings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; --pf: var(--accent); }
+.ap-ring-pick {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px 8px;
+  border-radius: 8px; border: 1px solid var(--line2); font: 600 11.5px var(--head); color: var(--muted); min-width: 0;
+}
+.ap-ring-pick .pf-face { line-height: 0; }
+.ap-ring-pick .avatar.big { width: 40px; height: 40px; font-size: 16px; }
+.ap-ring-pick.on { border-color: var(--text); color: var(--text); }
+.pe-colors .pe-any {
+  position: relative; overflow: hidden; background: conic-gradient(#ff5c5c, #ffcf3f, #7ed957, #3fd0c9, #4f9dff, #a879ff, #ff6fb5, #ff5c5c);
+}
+.pe-colors .pe-any input { position: absolute; inset: -6px; width: 40px; height: 40px; opacity: 0; cursor: pointer; }
+.pe-colors .pe-any.on::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font: 700 12px var(--head); text-shadow: 0 1px 2px #000; }
+
+/* Showcase tiles: in the editor and on the profile popup */
+.ap-show, .pf-show { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pf-show-tile {
+  all: unset; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; box-sizing: border-box;
+  padding: 0 0 10px; border-radius: 8px; overflow: hidden; background: var(--bg); border: 1px solid var(--line);
+  transition: border-color .15s, transform .15s;
+}
+.pf-show-tile:hover { border-color: var(--line2); }
+button.pf-show-tile:hover:not(:disabled) { transform: translateY(-1px); }
+.pf-show-tile:disabled { cursor: default; opacity: .45; }
+.pf-show-tile.on { border-color: var(--accent); opacity: 1; }
+.pf-show-pic { display: grid; place-items: center; aspect-ratio: 16 / 9; background: var(--panel2); color: var(--muted); overflow: hidden; margin-bottom: 4px; }
+.pf-show-pic img { width: 100%; height: 100%; object-fit: cover; }
+.pf-show-pic svg { width: 26px; height: 26px; }
+.kind-sound .pf-show-pic { background: linear-gradient(135deg, rgba(var(--accent-rgb), .25), var(--panel2)); color: var(--accent); }
+.pf-show-tile b { padding: 0 10px; font: 600 13px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-show-tile > span:not(.pf-show-pic) { padding: 0 10px; font-size: 11.5px; color: var(--muted); }
+.pf-show-x {
+  all: unset; cursor: pointer; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(0,0,0,.6); color: #fff;
+}
+.pf-show-x svg { width: 12px; height: 12px; }
+.ap-show-add { border-style: dashed; background: transparent; }
+.ap-show-add .pf-show-pic { background: transparent; color: var(--accent); }
+.ap-pick { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); position: relative; }
+.ap-pick[hidden] { display: none; }
+.ap-pick-close { position: absolute; right: 0; top: 14px; font-size: 13px; }
+.ap-pick-row + .ap-pick-row { margin-top: 14px; }
+.ap-pick-row h3 { margin: 0 0 8px; font: 600 11px var(--head); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.ap-pick-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ap-pick-list .pf-empty { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--muted); }
+
+/* The save bar: sticks to the bottom while you have changes */
+.ap-savebar {
+  position: sticky; bottom: 14px; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 10px 12px 10px 18px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line2);
+  box-shadow: 0 10px 30px rgba(0,0,0,.4); transform: translateY(12px); opacity: 0; pointer-events: none; transition: transform .2s, opacity .2s;
+}
+.ap-savebar.show { transform: none; opacity: 1; pointer-events: auto; }
+.ap-savebar .acct-note { margin: 0; color: var(--text); }
+.ap-savebar .acct-note.good { color: var(--green); }
+.ap-save-buttons { display: flex; align-items: center; gap: 14px; }
+.ap-save-buttons .convert { height: 38px; padding: 0 22px; }
+.ap-save-buttons [hidden], .ap-save-buttons :disabled { display: none; }
+
+@container page (max-width: 700px) {
+  .ap-body { flex-direction: column; }
+  .ap-side { width: auto; }
+  .ap-stats { grid-template-columns: repeat(3, 1fr); }
+  .ap-grid { grid-template-columns: 1fr; gap: 0; }
+  .ap-pick-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container page (max-width: 480px) {
+  .ap-links { grid-template-columns: 1fr; }
+  .ap-show, .pf-show { grid-template-columns: 1fr 1fr; }
+}
