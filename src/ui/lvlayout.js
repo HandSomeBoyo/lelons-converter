@@ -247,3 +247,9 @@ function lvDragEnd() {
   l.order = [...$("lvGrid").querySelectorAll(":scope > [data-c]:not(.lv-off)")].map((el) => el.dataset.c).filter((id) => LV_CARD[id]);
   lvLayoutSave(l);
 }
+
+// (a safety net, called with every redraw: measure every card again)
+function lvRefit() {
+  const grid = $("lvGrid");
+  if (grid && !$("liveTab").hidden) for (const el of grid.children) lvFit(el);
+}

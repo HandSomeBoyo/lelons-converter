@@ -102,6 +102,7 @@ function lvDrawConsole(fresh) {
   if (typeof lvDrawInfo === "function") lvDrawInfo();
   if (typeof lvDrawTwitchCards === "function") lvDrawTwitchCards();
   if (typeof lvDrawObs === "function") lvDrawObs();
+  if (typeof lvRefit === "function") lvRefit();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
 
