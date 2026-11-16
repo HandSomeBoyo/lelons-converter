@@ -22,6 +22,7 @@
           <button type="button" id="tourOpen">How to use</button>
           <button type="button" id="whatsNewOpen">What's new</button>
           <button type="button" id="shortcutsOpen">Keyboard shortcuts</button>
+          <button type="button" id="feedbackMenu">Send feedback</button>
         </div>
       </div>
       <div class="note-menu">
@@ -47,10 +48,10 @@
           <div class="note-foot"><button type="button" class="link" id="noteClear" hidden>Clear all</button></div>
         </div>
       </div>
-      <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback">
+      <button type="button" class="icon-button head-button" id="feedbackOpen" title="Send feedback" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8.5 9.5h7M8.5 12.5h4"/></svg>
       </button>
-      <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)">
+      <button type="button" class="icon-button head-button" id="refreshButton" title="Refresh (F5)" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
       </button>
       <button type="button" class="online-pill" id="chatOpen" hidden title="Live chat">
@@ -67,6 +68,7 @@
           </div>
           <div class="lib-menu" id="libMenuItems" hidden>
             <button type="button" id="libAccountOpen">Manage account</button>
+            <button type="button" id="libInvitesOpen" hidden>Invite friends</button>
             <button type="button" id="libPeopleOpen" hidden>People and roles</button>
             <button type="button" id="libInboxOpen" hidden>Feedback inbox <span class="menu-count" id="libInboxCount"></span></button>
             <button type="button" id="libFeedbackOpen">Send feedback</button>
@@ -78,6 +80,7 @@
               <button type="button" data-mode="signup">Create account</button>
             </div>
             <form id="libLoginForm">
+              <label class="lib-field" id="libInviteField" hidden><span>Invite code</span><input id="libInvite" maxlength="20" autocomplete="off" spellcheck="false" placeholder="From the owner or an admin"></label>
               <label class="lib-field"><span>Username</span><input id="libUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
               <label class="lib-field"><span>Password</span><input id="libPassword" type="password" autocomplete="current-password"></label>
               <p class="sfx-error" id="libLoginError"></p>
@@ -104,24 +107,36 @@
     </button>
     <nav class="tabs" id="tabs">
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
-      <div class="tab-group" data-group="convert" role="button" tabindex="0" aria-expanded="true" title="Hide or show Convert"><span>Convert</span><svg class="tab-group-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
-      <button data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Video</span></button>
-      <button data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
-      <button data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
-      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
-      <div class="tab-group" data-group="create" role="button" tabindex="0" aria-expanded="true" title="Hide or show Create"><span>Create</span><svg class="tab-group-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
-      <button data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span></button>
+      <button data-section="convert" data-tab="video" title="Convert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><span>Convert</span><b class="tab-dot" hidden></b></button>
+      <button data-section="library" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span><b class="tab-dot" hidden></b></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
-      <button data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
-      <button data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
-      <button data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
-      <div class="tab-group" data-group="tools" role="button" tabindex="0" aria-expanded="true" title="Hide or show Tools"><span>Tools</span><svg class="tab-group-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></div>
-      <button data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
-      <button data-tab="titles" title="Titles &amp; tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h11M4 11h7"/><path d="M13.5 20.5 12 21l.5-1.5 6.2-6.2a1.06 1.06 0 0 1 1.5 1.5z"/><path d="M4.5 15.5h3"/></svg><span>Titles &amp; tags</span></button>
-      <button data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
-      <button data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
+      <button data-section="recording" data-tab="games" title="Recording"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg><span>Recording</span><b class="tab-dot" hidden></b></button>
+      <button data-section="youtube" data-tab="channel" title="YouTube"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>YouTube</span><b class="tab-dot" hidden></b></button>
+      <button data-tab="resolve" title="Resolve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg><span>Resolve</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="resolveTabBadge" hidden></b></button>
     </nav>
+    <div id="subTabsHome" hidden>
+<div class="sub-tabs" data-section="convert" role="tablist">
+      <button type="button" role="tab" data-tab="video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 9.5v5l4-2.5z"/></svg><span>Link</span></button>
+      <button type="button" role="tab" data-tab="files" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
+      <button type="button" role="tab" data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
+      <button type="button" role="tab" data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
+</div>
+<div class="sub-tabs" data-section="library" role="tablist">
+      <button type="button" role="tab" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Sounds</span></button>
+      <button type="button" role="tab" data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
+</div>
+<div class="sub-tabs" data-section="recording" role="tablist">
+      <button type="button" role="tab" data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
+      <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
+</div>
+<div class="sub-tabs" data-section="youtube" role="tablist">
+      <button type="button" role="tab" data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
+      <button type="button" role="tab" data-tab="comments" title="Comments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-11.2 6.5L4 19.5l1.5-4.3A7.5 7.5 0 1 1 20 11.5z"/><path d="M9 10h6M9 13.5h3.5"/></svg><span>Comments</span><b class="tab-badge" id="commentsTabBadge" hidden></b></button>
+      <button type="button" role="tab" data-tab="titles" title="Titles &amp; tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h11M4 11h7"/><path d="M13.5 20.5 12 21l.5-1.5 6.2-6.2a1.06 1.06 0 0 1 1.5 1.5z"/><path d="M4.5 15.5h3"/></svg><span>Titles &amp; tags</span></button>
+      <button type="button" role="tab" data-tab="copyright" title="Copyright"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.4-3 8.2-7 9.5-4-1.3-7-5.1-7-9.5V6z"/><path d="M14.4 9.8a3.2 3.2 0 1 0 0 4.4"/></svg><span>Copyright</span></button>
+</div>
+    </div>
     <div class="side-foot">
       <button type="button" class="side-link chat-button" id="chatButton" title="Chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span>
@@ -148,6 +163,13 @@
         <button type="button" class="link" id="hwReset">Start over</button>
         <button type="button" class="convert" id="hwDone">Done</button>
       </span>
+    </div>
+
+    <div class="home-start" id="homeStart">
+      <button type="button" data-go="video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><b>Convert</b><small>A link, a video or a picture</small></button>
+      <button type="button" data-go="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><b>Write</b><small>Scripts and notes</small></button>
+      <button type="button" data-go="boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><b>Plan</b><small>Your boards</small></button>
+      <button type="button" data-go="sfx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><b>Find a sound</b><small>The crew's library</small></button>
     </div>
 
     <div class="hw-grid" id="homeWidgets">
@@ -454,6 +476,42 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="tab-page" id="commentsTab" hidden>
+    <h1 class="headline">Your comments.<br><em>Answer them fast.</em></h1>
+
+    <div class="home-card ch-start cm-start" id="cmStart" hidden>
+      <h3>See every comment in one place</h3>
+      <p class="home-muted">Sign in with Google and all comments on your channel show up here, the ones you haven't answered on top. Answer them right from VaultHub.</p>
+      <button type="button" class="ch-google" id="cmStartGoogle"><i class="ch-g" aria-hidden="true"></i>Sign in with Google</button>
+      <p class="home-muted ch-google-why">It's the same sign-in as Channel stats, and it's free.</p>
+    </div>
+
+    <div class="cm-main" id="cmMain" hidden>
+      <div class="ch-upsell cm-allow" id="cmAllow" hidden>
+        <i class="ch-g" aria-hidden="true"></i>
+        <p><b>Answer comments from here</b><span>Google needs one more yes so VaultHub can post your answers. You can read them already.</span></p>
+        <button type="button" class="small-button" id="cmAllowGo">Allow answering</button>
+      </div>
+
+      <div class="cm-bar">
+        <div class="chips cm-filters" id="cmFilters">
+          <button type="button" data-f="unread">Unread <b></b></button>
+          <button type="button" data-f="read">Read</button>
+        </div>
+        <span class="spacer"></span>
+        <button type="button" class="icon-button" id="cmRefresh" title="Look again">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/><path d="M20 3.5v5h-5"/></svg>
+        </button>
+      </div>
+      <div class="cm-bar cm-bar2">
+        <label class="input cm-search"><input id="cmSearch" placeholder="Search comments" autocomplete="off" spellcheck="false"></label>
+        <select class="cm-video" id="cmVideo" title="Which video"></select>
+      </div>
+      <p class="stats-note ch-note" id="cmNote"></p>
+      <div class="cm-list" id="cmList"></div>
     </div>
   </section>
 
@@ -881,7 +939,7 @@
           Watch a folder
         </button>
       </div>
-      <p class="opt-note error" id="watchError" hidden></p>
+      <p class="opt-note error" id="filesWatchError" hidden></p>
       <div class="watch-list" id="watchList"></div>
     </div>
   </section>
@@ -963,71 +1021,91 @@
     </div>
 
     <div class="acct" id="acctMain" hidden>
-      <div class="acct-card acct-profile">
-        <span class="avatar huge" id="acctAvatar"></span>
-        <div class="acct-who">
-          <b id="acctName"></b>
-          <span class="role" id="acctRole"></span>
-          <span class="acct-since" id="acctSince"></span>
-        </div>
-        <button type="button" class="outline-button" id="acctSeeProfile">See my profile</button>
+      <div class="acct-tabs" id="acctTabs" role="tablist">
+        <button type="button" data-pane="profile" class="active">Profile</button>
+        <button type="button" data-pane="account">Account</button>
+        <button type="button" data-pane="invites" id="acctTabInvites" hidden>Invites</button>
+        <button type="button" data-pane="people" id="acctTabPeople" hidden>People</button>
       </div>
 
-      <form class="acct-card pe" id="profileEditor">
-        <h2>Your profile</h2>
-        <p class="acct-help">This is what your friends see when they click your name or picture anywhere in VaultHub.</p>
-        <div class="pe-wrap">
-          <div class="pe-form">
-            <div class="pe-row">
-              <span class="pe-label">Picture</span>
-              <div class="pe-buttons">
-                <button type="button" class="small-button" id="acctPicture">Change picture</button>
-                <button type="button" class="link" id="acctPictureRemove" hidden>Remove</button>
-              </div>
-              <input type="file" id="acctPictureInput" accept="image/*" hidden>
-            </div>
-            <div class="pe-row">
-              <span class="pe-label">Banner</span>
-              <div class="pe-buttons">
-                <button type="button" class="ghost-button" id="peBanner">Add a banner</button>
-                <button type="button" class="link" id="peBannerRemove" hidden>Remove</button>
-              </div>
-              <input type="file" id="peBannerInput" accept="image/*" hidden>
-            </div>
-            <div class="pe-row pe-top">
-              <span class="pe-label">Your color</span>
-              <div class="pe-colors" id="peColors"></div>
-            </div>
-            <label class="lib-field"><span>Status</span><input id="peStatus" maxlength="60" placeholder="Like: Editing my next video" spellcheck="false"></label>
-            <label class="lib-field pe-bio"><span>About me <small id="peBioCount"></small></span><textarea id="peBio" maxlength="300" rows="3" placeholder="A few words about you"></textarea></label>
-            <div class="pe-channels">
-              <label class="lib-field"><span>YouTube channel</span><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
-              <label class="lib-field"><span>Twitch</span><input id="peTwitch" maxlength="60" placeholder="twitch.tv/yourname" spellcheck="false"></label>
-            </div>
-            <p class="pe-hint">Friends get a ping when you go live on one of these.</p>
-            <div class="pe-label pe-show-label">Show on my profile</div>
-            <div class="pe-show" id="peShow"></div>
-            <div class="pe-save">
-              <button type="submit" class="small-button" id="peSave" disabled>Save profile</button>
-              <span class="acct-note" id="peNote"></span>
+      <div class="acct-pane" data-pane="profile">
+      <form class="pe" id="profileEditor" autocomplete="off">
+        <div class="ap-hero pe-preview" id="pePreview">
+          <button type="button" class="pf-banner ap-banner" id="peBannerView" title="Change your banner">
+            <span class="ap-edit" id="peBanner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Change banner</span></span>
+          </button>
+          <div class="ap-banner-menu" id="peBannerMenu" hidden>
+            <div class="ap-presets" id="pePresets"></div>
+            <div class="ap-banner-own">
+              <button type="button" class="small-button" id="peBannerOwn">Use my own picture</button>
+              <button type="button" class="link" id="peBannerRemove" hidden>Remove picture</button>
             </div>
           </div>
-          <div class="pe-preview-wrap">
-            <span class="pe-label">Preview</span>
-            <div class="pe-preview" id="pePreview">
-              <div class="pf-banner" id="peBannerView"></div>
-              <span class="pf-face"><span id="peFace"></span><i class="pf-dot"></i></span>
-              <div class="pe-preview-body">
-                <b id="peName"></b>
-                <p class="pf-status" id="peStatusView"></p>
-                <p class="pf-bio" id="peBioView"></p>
-                <span class="pf-btn pf-main">Message</span>
+          <input type="file" id="peBannerInput" accept="image/*" hidden>
+          <button type="button" class="pf-face ap-face" id="acctPicture" title="Change your picture"><span id="peFace"></span><span class="ap-cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg></span><i class="pf-dot"></i></button>
+          <input type="file" id="acctPictureInput" accept="image/*" hidden>
+          <div class="ap-body">
+            <div class="ap-main">
+              <div class="ap-name"><b id="peName"></b><span class="role" id="acctRole"></span>
+                <button type="button" class="link" id="acctPictureRemove" hidden>Remove picture</button></div>
+              <label class="ap-status"><i class="ap-online"></i><input id="peStatus" maxlength="60" placeholder="Set a status, like: Editing my next video" spellcheck="false"></label>
+              <label class="ap-bio"><textarea id="peBio" maxlength="300" rows="2" placeholder="Write a few words about you"></textarea><small id="peBioCount"></small></label>
+              <div class="ap-links">
+                <label class="ap-link"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#ff3d3d"/><path d="M10 9v6l5-3z" fill="#fff"/></svg><input id="peYoutube" maxlength="200" placeholder="youtube.com/@yourname" spellcheck="false"></label>
+                <label class="ap-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 3.5 6.5V19h4v2.5h2.5l2.5-2.5h3.5l5-5V3z" fill="#a970ff"/><path d="M11 7.5v5M15.5 7.5v5" stroke="#fff" stroke-width="2"/></svg><input id="peTwitch" maxlength="60" placeholder="twitch.tv/yourname" spellcheck="false"></label>
               </div>
+              <p class="pe-hint">Friends get a ping when you go live on one of these.</p>
             </div>
+            <div class="ap-side">
+              <div class="ap-stats" id="peStats"></div>
+              <button type="button" class="outline-button" id="acctSeeProfile">See how friends see it</button>
+            </div>
+          </div>
+          <p class="pf-status" id="peStatusView" hidden></p><p class="pf-bio" id="peBioView" hidden></p>
+        </div>
+
+        <div class="ap-grid">
+          <div class="acct-card ap-card">
+            <h2>Picture ring</h2>
+            <p class="acct-help">A ring around your picture on your profile. It uses your color.</p>
+            <div class="ap-rings" id="peRings"></div>
+          </div>
+          <div class="acct-card ap-card">
+            <h2>Your color</h2>
+            <p class="acct-help">For your name, buttons and ring on your profile.</p>
+            <div class="pe-colors" id="peColors"></div>
           </div>
         </div>
-      </form>
 
+        <div class="acct-card ap-card">
+          <h2>Showcase</h2>
+          <p class="acct-help">Pin up to 3 things to the top of your profile: a video, a sound or a game.</p>
+          <div class="ap-show" id="peShowcase"></div>
+          <div class="ap-pick" id="pePick" hidden></div>
+        </div>
+
+        <div class="acct-card ap-card">
+          <h2>Show on my profile</h2>
+          <p class="acct-help">Pick what your friends see.</p>
+          <div class="pe-show" id="peShow"></div>
+        </div>
+
+        <div class="ap-savebar" id="peSaveBar">
+          <span class="acct-note" id="peNote"></span>
+          <span class="ap-save-buttons"><button type="button" class="link" id="peUndo" hidden>Undo</button>
+          <button type="submit" class="convert" id="peSave" disabled>Save</button></span>
+        </div>
+      </form>
+      </div>
+
+      <div class="acct-pane" data-pane="account" hidden>
+        <div class="acct-card acct-profile">
+          <span class="avatar huge" id="acctAvatar"></span>
+          <div class="acct-who">
+            <b id="acctName"></b>
+            <span class="acct-since" id="acctSince"></span>
+          </div>
+        </div>
       <form class="acct-card" id="acctNameForm">
         <h2>Username</h2>
         <p class="acct-help">This is the name everyone sees next to your sounds. 3 to 20 letters or numbers.</p>
@@ -1037,30 +1115,21 @@
         </div>
         <p class="acct-note" id="acctNameNote"></p>
       </form>
-
       <form class="acct-card" id="acctPasswordForm">
         <h2>Password</h2>
-        <p class="acct-help">At least 6 characters. Other computers you're logged in on get logged out.</p>
+        <p class="acct-help">At least 8 characters, and not one people often use. Your other devices get logged out.</p>
         <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
         <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password"></label>
         <button type="submit" class="small-button">Change password</button>
         <p class="acct-note" id="acctPasswordNote"></p>
       </form>
-
-      <div class="acct-card" id="acctInbox" hidden>
-        <h2>Feedback inbox</h2>
-        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
-        <p class="sfx-error" id="inboxError"></p>
-        <div id="inboxList"></div>
+      <div class="acct-card" id="acctDevices">
+        <h2>Your devices</h2>
+        <p class="acct-help">The computers logged in to your account. If you see one you don't know, log it out and change your password.</p>
+        <div id="devList"></div>
+        <p class="acct-note" id="devNote"></p>
+        <button type="button" class="small-button acct-danger" id="devOutOthers" hidden>Log out everywhere else</button>
       </div>
-
-      <div class="acct-card" id="libPeople" hidden>
-        <h2>People and roles</h2>
-        <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
-        <p class="sfx-error" id="libPeopleError"></p>
-        <div id="libPeopleList"></div>
-      </div>
-
       <div class="acct-card acct-end">
         <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
         <div id="acctDeleteBox">
@@ -1074,6 +1143,44 @@
             <p class="acct-note" id="acctDeleteNote"></p>
           </form>
         </div>
+      </div>
+      </div>
+
+      <div class="acct-pane" data-pane="invites" hidden>
+      <div class="acct-card" id="acctInvites" hidden>
+        <h2>Invite friends</h2>
+        <p class="acct-help">New accounts need an invite code. Make one, send it to a friend, and they type it in when they press Create account.</p>
+        <div class="inv-make">
+          <div class="inv-pick"><span>Works for</span>
+            <label class="quality"><select id="invHours">
+              <option value="1">1 hour</option><option value="24" selected>1 day</option><option value="168">7 days</option><option value="720">30 days</option><option value="">Until I delete it</option>
+            </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
+          </div>
+          <div class="inv-pick"><span>How many people</span>
+            <label class="quality"><select id="invUses">
+              <option value="1" selected>1 person</option><option value="5">Up to 5</option><option value="20">Up to 20</option><option value="">Anyone with the code</option>
+            </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
+          </div>
+          <button type="button" class="convert inv-make-button" id="invMake">Make a code</button>
+        </div>
+        <p class="acct-note" id="invNote"></p>
+        <div id="invList"></div>
+      </div>
+      </div>
+
+      <div class="acct-pane" data-pane="people" hidden>
+      <div class="acct-card" id="libPeople" hidden>
+        <h2>People and roles</h2>
+        <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
+        <p class="sfx-error" id="libPeopleError"></p>
+        <div id="libPeopleList"></div>
+      </div>
+      <div class="acct-card" id="acctInbox" hidden>
+        <h2>Feedback inbox</h2>
+        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
+        <p class="sfx-error" id="inboxError"></p>
+        <div id="inboxList"></div>
+      </div>
       </div>
     </div>
   </section>
@@ -2017,6 +2124,10 @@
       <p class="pf-status" id="profileStatus" hidden></p>
       <p class="pf-bio" id="profileBio" hidden></p>
       <div class="profile-stats" id="profileStats"></div>
+      <div class="pf-part" id="profileShowPart" hidden>
+        <h3 class="profile-h">Showcase</h3>
+        <div class="pf-show" id="profileShow"></div>
+      </div>
       <div class="pf-live" id="profileLive" hidden></div>
       <button type="button" class="link pf-twitch" id="profileTwitch" hidden></button>
       <div class="pf-part" id="profileVideosPart" hidden>
@@ -2347,6 +2458,7 @@
 <script src="home.js"></script>
 <script src="stats.js"></script>
 <script src="channel.js"></script>
+<script src="comments.js"></script>
 <script src="chcompare.js"></script>
 <script src="titles.js"></script>
 <script src="copyright.js"></script>

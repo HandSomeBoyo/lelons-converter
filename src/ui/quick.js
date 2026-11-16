@@ -52,18 +52,26 @@ const qk = { items: [], at: 0, loaded: false };
 
 // The pages in the side bar (new pages show up here on their own), in the order of Ctrl+1-9.
 const qkTabButtons = () => [...document.querySelectorAll("#tabs button[data-tab]")];
+// Every page, also the ones inside a place (Files sits in Convert): the side bar's own pages first.
+const qkAllPages = () => [...document.querySelectorAll("#tabs button[data-tab]:not([data-section]), .sub-tabs button[data-tab]")];
+const QK_PAGE_NAMES = { video: "Convert a link", sfx: "Sounds", fx: "Film assets", history: "History" };
 const QK_WORDS = {
   home: "start channels", video: "youtube tiktok mp3 mp4 download song link convert", files: "convert trim shrink compress",
   images: "picture photo png jpg resize crop", resolve: "davinci subtitles silence edit", sfx: "library sounds sound effects music songs",
   docs: "script write document notes pdf", boards: "trello plan todo cards", fx: "film assets vfx clips explosions",
+  comments: "comment inbox reply answer youtube viewers",
   feed: "friends activity feed today what new uploads", games: "steam record", povs: "recordings share friends", copyright: "music check song claim", titles: "title tags hashtags seo score ideas clickbait", history: "downloads recent",
 };
 
 function qkPages() {
-  const tabs = qkTabButtons().map((b, n) => ({
-    group: "Pages", label: b.querySelector("span").textContent.trim(), key: n < 9 ? `Ctrl+${n + 1}` : "",
-    icon: b.querySelector("svg").outerHTML, words: QK_WORDS[b.dataset.tab] || "", run: () => b.click(),
-  }));
+  const side = qkTabButtons();
+  const tabs = qkAllPages().map((b) => {
+    const t = b.dataset.tab, section = typeof sectionOf === "function" ? sectionOf(t) : "";
+    const place = section && document.querySelector(`#tabs button[data-section="${section}"]`);
+    const n = side.findIndex((s) => s === b || (place && s === place && TAB_SECTIONS[section][0] === t));
+    return { group: "Pages", label: QK_PAGE_NAMES[t] || b.querySelector("span").textContent.trim(), note: place ? place.querySelector("span").textContent.trim() : "",
+      key: n >= 0 && n < 9 ? `Ctrl+${n + 1}` : "", icon: b.querySelector("svg").outerHTML, words: QK_WORDS[t] || "", run: () => b.click() };
+  });
   return [...tabs,
     { group: "Pages", label: "Chat", icon: QK_ICONS.chat, words: "message talk friends dm", run: () => $("chatButton").click() },
     { group: "Pages", label: "Settings", key: "Ctrl+,", icon: QK_ICONS.gear, words: "options preferences theme zoom", run: () => openSettings() },

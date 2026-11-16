@@ -35,6 +35,7 @@ import findsounds  # noqa: E402
 import pagecache  # noqa: E402
 import boards  # noqa: E402
 import channelstats  # noqa: E402
+import comments  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -522,8 +523,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_body(self, body, content_type, cookie=False, tag=None):
+    def send_body(self, body, content_type, cookie=False, tag=None, nonce=None):
         self.send_response(200)
+        if nonce:
+            # (2.33.0) A safety net: the page only runs the app's own scripts. Even if something someone sent
+            # (a chat message, a shared doc) ever got past the cleaning, it couldn't run code here.
+            self.send_header("Content-Security-Policy", f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; "
+                             "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
         if cookie:
             port = self.server.server_port
             self.send_header("Set-Cookie", f"lelons{port}={TOKEN}; Path=/; HttpOnly; SameSite=Strict")
@@ -567,9 +573,10 @@ class Handler(BaseHTTPRequestHandler):
                      "zoom": state.zoom, "nativeZoom": appwindow.active()}
             text = json.dumps(saved).replace("<", "\\u003c")
             cache = json.dumps(pagecache.get(), separators=(",", ":")).replace("<", "\\u003c")
-            body = body.replace(b"<!--SAVED-->", f"<script>const LELONS_SAVED = {text};\nconst LELONS_CACHE = {cache};</script>".encode())
+            nonce = secrets.token_urlsafe(16)
+            body = body.replace(b"<!--SAVED-->", f"<script nonce=\"{nonce}\">const LELONS_SAVED = {text};\nconst LELONS_CACHE = {cache};</script>".encode())
         content_type = CONTENT_TYPES.get(os.path.splitext(path)[1].lower(), "application/octet-stream")
-        self.send_body(body, content_type, cookie)
+        self.send_body(body, content_type, cookie, nonce=nonce if os.path.basename(path) == "index.html" else None)
 
     def send_media(self, path, kind=None):
         """Audio for the trim editor. Supports byte ranges so the player can jump around."""
@@ -720,7 +727,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "client":
                 channelstats.set_client(data.get("clientId"), data.get("clientSecret"))
             elif action == "connect":
-                webbrowser.open(channelstats.connect_url(self.server.server_port))
+                webbrowser.open(channelstats.connect_url(self.server.server_port, bool(data.get("replies"))))
             elif action == "disconnect":
                 channelstats.disconnect(bool(data.get("forgetClient")))
             elif action == "open":
@@ -730,6 +737,33 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self.send_error(404)
         except channelstats.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True})
+
+    def handle_comments(self, action, data):
+        """The Comments tab (your channel's comments, answer them fast)."""
+        try:
+            if action == "page":
+                return self.send_json(comments.page())
+            elif action == "count":
+                return self.send_json({"ok": True, "count": comments.count()})
+            elif action == "refresh":
+                comments.refresh_now()
+            elif action == "done":
+                comments.set_done(data.get("id"), bool(data.get("done")))
+            elif action == "saved":
+                return self.send_json({"ok": True, "saved": comments.set_saved(data.get("saved"))})
+            elif action == "reply":
+                return self.send_json({"ok": True, "reply": comments.reply(data.get("id"), data.get("text"))})
+            elif action == "hide":
+                comments.moderate(data.get("id"), "rejected")
+            elif action == "approve":
+                comments.moderate(data.get("id"), "published")
+            elif action == "unreply":
+                comments.delete_reply(data.get("id"))
+            else:
+                return self.send_error(404)
+        except (comments.Error, channelstats.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         self.send_json({"ok": True})
 
@@ -824,7 +858,7 @@ class Handler(BaseHTTPRequestHandler):
                     pagecache.forget()
                 pagecache.put("account", result["account"])
             elif action == "signup":
-                result = {"account": library.signup(data.get("username"), data.get("password"))}
+                result = {"account": library.signup(data.get("username"), data.get("password"), data.get("invite"))}
             elif action == "login":
                 result = {"account": library.login(data.get("username"), data.get("password"))}
             elif action == "logout":
@@ -856,6 +890,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"account": library.remove_picture()}
             elif action == "people":
                 result = {"people": library.people()}
+            elif action == "devices":
+                result = library.devices(str(data.get("what") or "list"), data.get("id"))
+            elif action == "invites":
+                result = library.invites(str(data.get("what") or "list"), data.get("code"), data.get("hours"), data.get("uses"))
             elif action == "role":
                 library.set_role(data.get("id"), data.get("role"))
                 result = {"people": library.people()}
@@ -1668,6 +1706,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/ch-"):
             self.handle_channel(self.path[len("/api/ch-"):], data)
+        elif self.path.startswith("/api/cm-"):
+            self.handle_comments(self.path[len("/api/cm-"):], data)
         elif self.path == "/api/titles-look":  # the Titles & tags tab looks up a topic on YouTube
             try:
                 self.send_json(titles.look_up(data.get("topic")))
@@ -2044,6 +2084,10 @@ def main():
     # Left over from a time the app didn't close properly (the PC turned off, say).
     clean_up()
     check_window_crash()
+    try:
+        settings.lock_old_secrets()  # (2.33.0) sign-ins saved before were plain text
+    except OSError:
+        pass
 
     started = time.time()  # half-made files older than this are leftovers from last time
     names.FOLDERS_FILE = os.path.join(settings.DATA_DIR, "making-in.json")

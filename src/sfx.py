@@ -54,6 +54,34 @@ UPLOAD_KINDS = [
 ]
 
 
+
+LOOK_BANNERS = ("galaxy", "sunset", "ocean", "plain", "grass")
+LOOK_RINGS = ("color", "glow", "rainbow")
+
+
+def clean_look(look):
+    """How a profile looks (ready-made banner, picture ring, up to 3 pinned things), with anything odd left out."""
+    look = look if isinstance(look, dict) else {}
+    out = {}
+    if look.get("banner") in LOOK_BANNERS:
+        out["banner"] = look["banner"]
+    if look.get("ring") in LOOK_RINGS:
+        out["ring"] = look["ring"]
+    show = []
+    for item in look.get("show") or []:
+        if not isinstance(item, dict) or item.get("kind") not in ("video", "sound", "game"):
+            continue
+        ident = str(item.get("id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", ident) or any(x["kind"] == item["kind"] and x["id"] == ident for x in show):
+            continue
+        entry = {"kind": item["kind"], "id": ident}
+        if item["kind"] == "video":
+            entry["title"] = " ".join(str(item.get("title") or "").split())[:100]
+        show.append(entry)
+    if show:
+        out["show"] = show[:3]
+    return out
+
 class Error(Exception):
     """Something went wrong; the message is shown as it is."""
 
@@ -82,7 +110,9 @@ FRIENDLY = {
     "same_file": "That sound is already in the Library.",
     # what log in and create account can answer
     "username": "Usernames are 3 to 20 letters or numbers (dots, dashes and _ are fine too).",
-    "password": "Passwords need at least 6 characters.",
+    "password": "Passwords need at least 8 characters.",
+    "password_name": "Your password can't be the same as your username.",
+    "password_common": "That password is one of the first ones people try. Pick something harder to guess.",
     "taken": "That username is taken. Pick another one.",
     "wrong": "Wrong username or password.",
     "wrong_password": "That's not your current password.",
@@ -94,6 +124,9 @@ FRIENDLY = {
     "many": "A group can have up to 50 people.",
     "noplaylist": "That playlist is gone, or you're not in it any more.",
     "many_people": "A playlist can have up to 50 people.",
+    "no_invite": "You need an invite code to make an account. Ask the owner or an admin for one.",
+    "bad_invite": "That invite code doesn't work. It may have run out. Ask for a new one.",
+    "many_invites": "You have 30 codes that still work. Delete some first.",
 }
 ROLES = {"owner": "Owner", "admin": "Admin", "viewer": "Viewer"}
 
@@ -297,6 +330,15 @@ def _clean_name(text, limit=80):
     return re.sub(r"\s+", " ", str(text or "")).strip()[:limit]
 
 
+def _device():
+    """What this PC is called, for the Your devices list on the Account page."""
+    name = os.environ.get("COMPUTERNAME") or ""
+    if not name:
+        import platform
+        name = platform.node()
+    return {"device": name[:60], "app_version": version.VERSION}
+
+
 class Library:
     def __init__(self):
         self.lock = threading.Lock()
@@ -335,16 +377,23 @@ class Library:
 
     def _logged_in(self, result):
         if not result or not result.get("ok"):
-            raise Error(FRIENDLY.get((result or {}).get("error"), "That didn't work. Try again."))
+            error = (result or {}).get("error")
+            if error == "locked" and result.get("minutes"):
+                minutes = int(result["minutes"])
+                wait = f"{minutes} minute{'s' if minutes != 1 else ''}" if minutes < 90 else f"{round(minutes / 60)} hours"
+                raise Error(f"Too many wrong tries. Wait {wait} and try again.")
+            raise Error(FRIENDLY.get(error, "That didn't work. Try again."))
         settings.save(library_token=result["token"])
         presence.poke()
         return self.account()
 
-    def signup(self, username, password):
-        return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or "")))
+    def signup(self, username, password, invite=""):
+        return self._logged_in(_rpc("lelons_signup", username=str(username or "").strip(), password=str(password or ""),
+                                    invite=str(invite or "").strip()[:40], **_device()))
 
     def login(self, username, password):
-        return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or "")))
+        return self._logged_in(_rpc("lelons_login", username=str(username or "").strip(), password=str(password or ""),
+                                    **_device()))
 
     def logout(self):
         token = settings.load().get("library_token")
@@ -703,6 +752,15 @@ class Library:
         result["avatarUrl"] = public_url(result["avatar"]) if result.get("avatar") else ""
         result["bannerUrl"] = public_url(result["banner"]) if result.get("banner") else ""
         result["recent"] = [{**s, "url": public_url(s["path"])} for s in result.get("recent") or []]
+        result["look"] = result.get("look") if isinstance(result.get("look"), dict) else {}
+        showcase = []
+        for item in result.get("showcase") or []:
+            if not item:
+                continue  # deleted since it was pinned
+            if item.get("kind") == "sound" and item.get("path"):
+                item = {**item, "url": public_url(item["path"])}
+            showcase.append(item)
+        result["showcase"] = showcase
         return result
 
     def feed(self, days=7):
@@ -757,6 +815,8 @@ class Library:
             out["twitch"] = name
         if "hide" in info:
             out["hide"] = [str(h) for h in info["hide"] or [] if h in ("online", "videos", "sounds", "povs", "games", "stats")]
+        if "look" in info:
+            out["look"] = clean_look(info["look"])
         _rpc("lelons_set_profile", token=self._token(), info=out)
         return self.my_profile()
 
@@ -930,6 +990,32 @@ class Library:
         return [{**self._user(person), "created_at": person["created_at"], "last_seen": person["last_seen"],
                  "sounds": person["sounds"], "me": person["me"]}
                 for person in _rpc("lelons_accounts", token=self._token()) or []]
+
+    # ---- your devices: the PCs logged in to your account
+
+    def devices(self, what="list", device_id=None):
+        args = {"token": self._token(), "what": what if what in ("list", "out", "out_others") else "list"}
+        if what == "out":
+            args["id"] = str(device_id or "")
+        result = _rpc("lelons_devices", **args) or {}
+        return {"devices": result.get("devices") or []}
+
+    # ---- invite codes (the owner and admins)
+
+    def invites(self, what="list", code=None, hours=None, uses=None):
+        args = {"token": self._token(), "what": what}
+        if what == "make":
+            hours = int(hours) if hours else None
+            uses = int(uses) if uses else None
+            if (hours is not None and not 1 <= hours <= 24 * 366) or (uses is not None and not 1 <= uses <= 500):
+                raise Error("Pick how long the code works and how many people can use it.")
+            args.update(hours=hours, uses=uses)
+        elif what == "delete":
+            args["code"] = str(code or "")[:40]
+        result = _rpc("lelons_invites", **args) or {}
+        if not result.get("ok"):
+            raise Error(FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
+        return {"invites": result.get("invites") or [], "made": result.get("made")}
 
     def set_role(self, account_id, role):
         if role not in ("admin", "viewer"):

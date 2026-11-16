@@ -129,6 +129,7 @@ function fdMarkSeen() {
 
 function fdDrawBadge() {
   const badge = $("feedTabBadge");
+  if (!badge) return; // (the Feed has no button with a badge in the side bar now)
   const seen = +loadPref("feedSeen") || 0;
   const n = fdData && fdLoggedIn() && !fdTabOpen() ? fdFriends(fdData.items).filter((i) => i.at > seen && i.kind !== "board").length : 0;
   const text = n > 9 ? "9+" : String(n);

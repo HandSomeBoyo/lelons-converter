@@ -11,6 +11,7 @@ app window like before.
 
 import ctypes
 import os
+import urllib.parse
 import threading
 from ctypes import wintypes
 
@@ -201,6 +202,7 @@ CLOSE_REQUESTED = "5c19e9e0-092f-486b-affa-ca8231913039"
 NEW_WINDOW_REQUESTED = "d4c185fe-c81c-4989-97af-2d3fa7ab5651"
 CONTROLLER2 = "c979903e-d4ca-4228-92eb-47ee3fa96eab"
 PERMISSION_REQUESTED = "15e1c6a3-c72a-4df3-91d7-d097fbec6bfd"
+NAVIGATION_STARTING = "9adbe429-f36d-432b-9ddc-f8881fbd76e3"
 
 
 class Handler:
@@ -466,6 +468,11 @@ class Window:
         self.handlers.append(allow)
         _method(self.webview, 23, ctypes.c_void_p, ctypes.POINTER(Token))(allow.pointer, ctypes.byref(token))
 
+        # (2.33.0) The window only ever shows the app itself: an outside page opens in the normal browser.
+        navigate = Handler(NAVIGATION_STARTING, self._navigation_starting, with_result=False)
+        self.handlers.append(navigate)
+        _method(self.webview, 7, ctypes.c_void_p, ctypes.POINTER(Token))(navigate.pointer, ctypes.byref(token))
+
         self._fit()
         self._zoom()
         _method(self.webview, 5, wintypes.LPCWSTR)(self.url)  # Navigate
@@ -519,11 +526,34 @@ class Window:
         self.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
         return S_OK
 
+    def _is_app(self, link):
+        """True for the app's own pages (http://127.0.0.1:<its port>/...)."""
+        own = urllib.parse.urlsplit(self.url)
+        there = urllib.parse.urlsplit(link or "")
+        return there.scheme == "http" and there.netloc == own.netloc
+
+    def _uri(self, args):
+        uri = ctypes.c_wchar_p()
+        _method(args, 3, ctypes.POINTER(ctypes.c_wchar_p))(ctypes.byref(uri))  # get_Uri (both kinds of args)
+        link = uri.value or ""
+        ctypes.windll.ole32.CoTaskMemFree(uri)
+        return link
+
     def _permission(self, this, sender, args):
         kind = ctypes.c_int()
         _method(args, 4, ctypes.POINTER(ctypes.c_int))(ctypes.byref(kind))  # get_PermissionKind
-        if kind.value in (1, 2):  # COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, _CAMERA (for calls)
+        # The microphone and camera, for calls: only the app's own page gets them without asking (2.33.0).
+        if kind.value in (1, 2) and self._is_app(self._uri(args)):  # MICROPHONE, CAMERA
             _method(args, 7, ctypes.c_int)(1)  # put_State: COREWEBVIEW2_PERMISSION_STATE_ALLOW
+        return S_OK
+
+    def _navigation_starting(self, this, sender, args):
+        link = self._uri(args)
+        if self._is_app(link) or link.startswith("about:"):
+            return S_OK
+        _method(args, 8, wintypes.BOOL)(True)  # put_Cancel
+        if link.startswith(("https://", "http://")):
+            os.startfile(link)
         return S_OK
 
     def _new_window(self, this, sender, args):

@@ -23,6 +23,7 @@ function countFeedback() {
 }
 
 $("feedbackOpen").addEventListener("click", openFeedback);
+$("feedbackMenu").addEventListener("click", openFeedback);
 $("libFeedbackOpen").addEventListener("click", openFeedback);
 $("feedbackCancel").addEventListener("click", closeFeedback);
 $("feedbackDone").addEventListener("click", closeFeedback);

@@ -220,7 +220,7 @@ async function refreshPage() {
   button.classList.remove("spin");
   void button.offsetWidth; // so the spin plays again
   button.classList.add("spin");
-  const tab = (document.querySelector("#tabs button.active") || {}).dataset?.tab;
+  const tab = (document.querySelector("#tabs button.active") || {}).dataset?.tab;  // (a place's button carries the page that's open)
   const work = [refresh(), loadAccount()];
   if (!$("homeTab").hidden) work.push(loadHome());
   if (!$("statsTab").hidden) work.push(loadStats());
