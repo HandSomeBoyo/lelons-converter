@@ -8239,3 +8239,13 @@ textarea.ap-msg { width: 100%; box-sizing: border-box; padding: 9px 12px; border
   .srv-modal.srv-set > .srv-set-dialog { grid-template-columns: 150px minmax(0, 1fr); }
   .srv-roles { grid-template-columns: 1fr; }
 }
+
+/* (2.39.0) Dragging channels and people in a server, like Discord */
+.srv-ch[draggable="true"], .srv-vp[draggable="true"] { -webkit-user-drag: element; }
+.srv-vp[draggable="true"] { cursor: grab; border-radius: 6px; }
+.srv-vp[draggable="true"]:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.srv-ch.dragging, .srv-vp.dragging { opacity: .4; }
+.srv-ch.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.srv-ch.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.srv-ch.drop-in, .srv-cat.drop-in { background: color-mix(in srgb, #22c55e 16%, transparent); box-shadow: inset 0 0 0 1.5px #22c55e; border-radius: 8px; }
+

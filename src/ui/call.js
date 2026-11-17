@@ -78,6 +78,7 @@ async function checkCalls() {
   try {
     const res = await callApi({ what: "check" });
     if (res && !sfxLoggedOut(res) && res.ok) callCame(res);
+    if (res && res.ok && res.move && typeof srvMovedTo === "function") srvMovedTo(res.move.channel, res.move.by);
   } finally {
     callBusy = false;
     pollCalls(callIsLive() && call.phase !== "incoming" ? 1500 : 3000);
@@ -229,7 +230,7 @@ function callDecline() {
 function callHangUp(note = "Call ended.") {
   if (!callIsLive()) return;
   for (const p of callPeers.values()) callSend(p, { bye: true });
-  if (call.id) callApi({ what: "leave", room: call.id }).then(() => pollCalls(300));
+  if (call.id) callApi({ what: "leave", room: call.id }).then(() => { pollCalls(300); if (typeof srvPoll === "function") srvPoll(200); });
   callFinish(note);
 }
 
@@ -703,7 +704,12 @@ function callChannel(p, dc) {
     if (callPeers.get(lower(p.name)) !== p) return;
     let msg = {};
     try { msg = JSON.parse(e.data); } catch (err) { return; }
-    if (msg.bye) return callDropPeer(lower(p.name));
+    if (msg.bye) {
+      // They left: off the call card and the voice channel list right away (not at the next check).
+      const who = (call && call.people || []).find((x) => lower(x.username) === lower(p.name));
+      if (who) who.state = "left";
+      return callDropPeer(lower(p.name));
+    }
     if (msg.hello >= 2 && lower(callMe()) < lower(p.name)) callAddCameraLane(p);
     if (msg.sdp) callLaneSignal(p, msg.sdp);
     if ("camera" in msg) p.camera = !!msg.camera;

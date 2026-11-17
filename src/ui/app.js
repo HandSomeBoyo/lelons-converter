@@ -871,7 +871,9 @@ function settingsCheckDone(s) {
     $("setVersionLine").textContent = `Version ${s.appUpdate.version} is ready to install.`;
     if (typeof closeSettings === "function") closeSettings();
   } else {
-    $("setVersionLine").textContent = `You have the newest version (${s.version}).`;
+    $("setVersionLine").textContent = s.checkFailed
+      ? `Couldn't reach GitHub to check. You have ${s.version}. Try again in a minute.`
+      : `You have the newest version (${s.version}).`;
   }
 }
 $("autoUpdate").addEventListener("change", async () => render(await api("/api/auto-update", { on: $("autoUpdate").checked })));

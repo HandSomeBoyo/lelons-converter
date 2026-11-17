@@ -610,9 +610,6 @@ def _overlay_run():
             gdi32.DeleteObject(font)
             user32.EndPaint(hwnd, ctypes.byref(ps))
             return 0
-        if msg == 0x0202 and hwnd == bar["hwnd"]:  # WM_LBUTTONUP on the bar: Stop
-            stop_now()
-            return 0
         if msg == 0x0021:  # WM_MOUSEACTIVATE: clicking the bar doesn't take the focus
             return 3  # MA_NOACTIVATE
         return user32.DefWindowProcW(hwnd, msg, wp, lp)
@@ -651,10 +648,45 @@ def _overlay_run():
     hwnds = [make(left, top, w, edge, True), make(left, bottom - edge, w, edge, True),
              make(left, top, edge, h, True), make(right - edge, top, edge, h, True)]
     bw = min(560, w - 40)
-    bar["hwnd"] = make(left + (w - bw) // 2, top + 10, bw, 44, False)
+    bx, by = left + (w - bw) // 2, top + 10
+    bar["stop"] = (bw - 80, 7, bw - 8, 37)
+    # (2.38.2) The bar lets every click through, like the frame. The other PC can't see it (it's left out
+    # of the picture), so its clicks on what's under it (a browser's tabs, the title bar) used to land on
+    # the bar and stop the session. Only a real click on Stop, from the mouse on this PC, stops it.
+    bar["hwnd"] = make(bx, by, bw, 44, True)
     hwnds.append(bar["hwnd"])
     _overlay["hwnds"] = hwnds
     hotkey = user32.RegisterHotKey(None, 0x7E01, 0x1 | 0x2 | 0x4000, 0x23)  # Ctrl+Alt+End (MOD_NOREPEAT)
+
+    class MSLLHOOKSTRUCT(ctypes.Structure):
+        _fields_ = [("pt", wintypes.POINT), ("mouseData", wintypes.DWORD), ("flags", wintypes.DWORD),
+                    ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+    HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+    user32.CallNextHookEx.restype = ctypes.c_ssize_t
+    user32.CallNextHookEx.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+    user32.SetWindowsHookExW.restype = wintypes.HANDLE
+    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+
+    def on_mouse(code, wp, lp):
+        try:
+            if code == 0 and wp in (0x0201, 0x0202):  # WM_LBUTTONDOWN / UP
+                info = ctypes.cast(lp, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+                if not info.flags & 0x3:  # not LLMHF_INJECTED: a real mouse on this PC
+                    r = wintypes.RECT()
+                    user32.GetWindowRect(bar["hwnd"], ctypes.byref(r))
+                    x, y = info.pt.x - r.left, info.pt.y - r.top
+                    sl, st, sr, sb = bar["stop"]
+                    if sl <= x < sr and st <= y < sb:
+                        if wp == 0x0202:
+                            stop_now()
+                        return 1  # (the click doesn't reach the window under Stop)
+        except Exception:  # noqa: BLE001 (a hook must never get stuck)
+            pass
+        return user32.CallNextHookEx(None, code, wp, lp)
+
+    mouse_proc = HOOKPROC(on_mouse)
+    mouse_hook = user32.SetWindowsHookExW(14, mouse_proc, inst, 0)  # WH_MOUSE_LL
 
     msg = wintypes.MSG()
     while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
@@ -667,6 +699,8 @@ def _overlay_run():
         user32.DispatchMessageW(ctypes.byref(msg))
     if hotkey:
         user32.UnregisterHotKey(None, 0x7E01)
+    if mouse_hook:
+        user32.UnhookWindowsHookEx(mouse_hook)
     for hwnd in hwnds:
         user32.DestroyWindow(hwnd)
     _overlay["hwnds"] = []

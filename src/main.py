@@ -135,6 +135,7 @@ class State:
         self.save_mode = saved["save_mode"]
         self.last_asked = saved["last_asked"]
         self.checking = False
+        self.check_failed = False  # (2.38.2) the last update check couldn't reach GitHub
         self.installing = False
         self.app_update = None  # newer version info, once found
         self.app_update_progress = None
@@ -168,6 +169,7 @@ class State:
                 "nativeZoom": appwindow.active(),
                 "online": sfx.presence.get(),
                 "checking": self.checking,
+                "checkFailed": self.check_failed,
                 "appUpdate": self.app_update,
                 "appUpdateProgress": self.app_update_progress,
                 "jobs": queue.snapshot(),
@@ -237,7 +239,7 @@ def check_for_updates(manual=False):
             new_downloader = updater.update_yt_dlp(YT_DLP_VERSION)
         except Exception:
             failed = True
-    state.set(checking=False)
+    state.set(checking=False, check_failed=failed and not state.app_update)
     if not manual or state.app_update:
         if manual:
             state.set(notice=None)
@@ -2302,6 +2304,21 @@ def window_closed(placement):
     if placement:
         settings.save(window=placement)
     state.set(closed_at=time.time())
+    # (2.39.0) Out of any call right away, so friends don't see you in a voice channel for half a minute
+    try:
+        if sfx.configured() and settings.load().get("library_token"):
+            bye = threading.Thread(target=lambda: _quietly(sfx.library.room, "bye"), daemon=True)
+            bye.start()
+            bye.join(3)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _quietly(fn, *args):
+    try:
+        fn(*args)
+    except Exception:  # noqa: BLE001 (closing anyway)
+        pass
 
 
 def start_remote_engine(screen=None):

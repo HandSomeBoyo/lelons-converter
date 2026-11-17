@@ -2679,7 +2679,7 @@ begin
   if r.id is null then
     return;
   end if;
-  update lelons.room_people p set state = 'left' where p.room_id = rid and p.state = 'in' and p.seen_at < now() - interval '25 seconds';
+  update lelons.room_people p set state = 'left' where p.room_id = rid and p.state = 'in' and p.seen_at < now() - interval '12 seconds';  -- (2.39.0: was 25)
   update lelons.room_people p set state = 'missed' where p.room_id = rid and p.state = 'ringing' and p.rang_at < now() - interval '45 seconds';
   select count(*) filter (where p.state = 'in'), count(*) filter (where p.state = 'ringing') into inside, ringing
   from lelons.room_people p where p.room_id = rid;
@@ -2745,6 +2745,8 @@ declare
   r lelons.rooms;
   target uuid;
   x record;
+  mv record;
+  extra jsonb := '{}';
 begin
   update lelons.room_people p set seen_at = now() where p.account_id = me.id and p.state = 'in';
   for x in select p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
@@ -2871,13 +2873,25 @@ begin
     elsif r.id is not null then
       perform lelons.room_tidy(rid);
     end if;
+  elsif what = 'bye' then  -- (2.39.0) the app is closing: out of every call right away
+    for x in select p.room_id from lelons.room_people p where p.account_id = me.id and p.state in ('in', 'ringing') loop
+      update lelons.room_people p set state = case when p.state = 'ringing' then 'declined' else 'left' end
+      where p.room_id = x.room_id and p.account_id = me.id;
+      perform lelons.room_tidy(x.room_id);
+    end loop;
+    return json_build_object('ok', true);
   elsif what <> 'check' then
     raise exception 'bad what';
   end if;
-  if what = 'join' and rid is not null then  -- (a voice channel's call joined from 'start': the app needs to know which room)
-    return lelons.rooms_json(me.id, after)::jsonb || jsonb_build_object('room', rid);
+  -- (2.39.0) Someone moved you to another voice channel
+  delete from lelons.voice_moves v where v.account_id = me.id returning v.channel_id, v.by_name, v.at into mv;
+  if mv.channel_id is not null and mv.at > now() - interval '30 seconds' then
+    extra := jsonb_build_object('move', jsonb_build_object('channel', mv.channel_id, 'by', mv.by_name));
   end if;
-  return lelons.rooms_json(me.id, after);
+  if what = 'join' and rid is not null then  -- (a voice channel's call joined from 'start': the app needs to know which room)
+    return lelons.rooms_json(me.id, after)::jsonb || extra || jsonb_build_object('room', rid);
+  end if;
+  return lelons.rooms_json(me.id, after)::jsonb || extra;
 end $$;
 
 revoke execute on all functions in schema lelons from public;
@@ -4106,6 +4120,15 @@ create or replace function lelons.srv_code(name text) returns text language sql 
   $$ select left(coalesce(nullif(upper(regexp_replace(name, '[^A-Za-z0-9]+', '', 'g')), ''), 'SERVER'), 12) || '-'
             || upper(left(replace(gen_random_uuid()::text, '-', ''), 5)) $$;
 
+-- (2.39.0) Moving someone to another voice channel (drag them, like Discord): their app picks it up
+-- at its next call check (about a second) and switches channels.
+create table if not exists lelons.voice_moves (
+  account_id uuid primary key references lelons.accounts (id) on delete cascade,
+  channel_id uuid not null references lelons.chat_groups (id) on delete cascade,
+  by_name text not null default '',
+  at timestamptz not null default now()
+);
+
 -- Everything about servers. what (data):
 --   list / get (sid) / preview (code) / create (name, template) / join (code, or sid when you were invited) / decline (sid)
 --   leave (sid) / delete (sid, owner)
@@ -4117,6 +4140,7 @@ create or replace function lelons.srv_code(name text) returns text language sql 
 --   member_role (username, role)                                              -- manage
 --   invite_code (days, uses) / invite_delete (code) / invite_friend (username) -- invite
 --   kick (username) / ban (username) / unban (username)                       -- kick
+--   move (username, channel: a voice channel)                                  -- kick ("move members")
 create or replace function public.lelons_server(token text, what text, sid uuid default null, data jsonb default '{}')
 returns json language plpgsql security definer set search_path = '' as $$
 declare
@@ -4265,6 +4289,24 @@ begin
     return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
   end if;
 
+  if what = 'move' then
+    if not ('kick' = any (perms)) then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', '')));
+    gid := case when coalesce(data->>'channel', '') ~ '^[0-9a-f-]{36}$' then (data->>'channel')::uuid end;
+    if them is null or gid is null
+       or not exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id = sid and g.kind = 'voice')
+       or not exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+                      join lelons.chat_groups g on g.id = rr.group_id
+                      where p.account_id = them and p.state = 'in' and rr.ended_at is null and g.server_id = sid) then
+      return json_build_object('ok', false, 'error', 'gone');  -- (they're not in a voice channel here any more)
+    end if;
+    insert into lelons.voice_moves (account_id, channel_id, by_name) values (them, gid, me.username)
+    on conflict (account_id) do update set channel_id = excluded.channel_id, by_name = excluded.by_name, at = now();
+    return json_build_object('ok', true);
+  end if;
+
   if what in ('kick', 'ban', 'unban') then
     if not ('kick' = any (perms)) then
       return json_build_object('ok', false, 'error', 'denied');
@@ -4362,9 +4404,10 @@ begin
     delete from lelons.chat_groups g where g.id = gid and g.server_id = sid;
     return json_build_object('ok', true, 'files', files, 'server', lelons.srv_json(sid, me));
   elsif what = 'channel_order' then
-    update lelons.chat_groups g set position = x.n, category = coalesce(x.cat, g.category)
-    from (select (e->>'id')::uuid id, e->>'category' cat, n::int from jsonb_array_elements(
-            case when jsonb_typeof(data->'ids') = 'array' then data->'ids' else '[]' end) with ordinality as t(e, n)) x
+    -- (2.39.0) "ord", not "n": n is also a variable in here, so this used to fail ("n is ambiguous")
+    update lelons.chat_groups g set position = x.ord, category = coalesce(x.cat, g.category)
+    from (select (t.e->>'id')::uuid id, t.e->>'category' cat, t.ord::int ord from jsonb_array_elements(
+            case when jsonb_typeof(data->'ids') = 'array' then data->'ids' else '[]' end) with ordinality as t(e, ord)) x
     where g.id = x.id and g.server_id = sid;
     return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
   elsif what in ('role_add', 'role_edit') then

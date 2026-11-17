@@ -536,4 +536,7 @@ function rdEnd(why, quiet) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("rdPop")) $("rdPop").remove();
 });
+// (2.38.2) When the app opens on the Remote page, the page was picked before this file loaded, so it
+// never heard about it and stayed empty until you clicked Remote again.
+if ($("remoteTab") && !$("remoteTab").hidden) rd.open = true;
 remoteAccountChanged();

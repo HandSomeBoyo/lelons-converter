@@ -2,6 +2,16 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.39.0", items: [
+    "Servers: drag channels to move them, like on Discord. Drop one on a category name to move it there.",
+    "Drag yourself into another voice channel to switch. The owner and mods can drag other people into another voice channel too.",
+    "When someone leaves a voice channel, they're gone from the list right away (it could take up to half a minute before). Closing VaultHub takes you out of the call straight away.",
+    "Fixed: moving channels up and down in server settings didn't save.",
+    "Remote: clicking near the top of the other PC's screen (like a browser's tabs or title bar) no longer stops the session. Only a real click on Stop on that PC, or Ctrl+Alt+End, stops it.",
+    "Remote: the page no longer opens empty when VaultHub starts on it.",
+    "Check for updates works again when GitHub is busy, and Settings tells you if the check couldn't get through.",
+    "You stay signed in to Twitch in the Live console after an update or restart.",
+  ] },
   { version: "2.38.1", items: [
     "Remote: PCs no longer say \"key changed\" after VaultHub restarts or updates. Allow each PC once more with the 6-digit code, and after that it stays allowed.",
   ] },
