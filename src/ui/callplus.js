@@ -547,3 +547,92 @@ function callShareAudioOptions() {
   return { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false,
     ...(callShareSoundSafe() ? { restrictOwnAudio: true } : {}) };
 }
+
+// ---- zoom in and out on a shared screen (2.37.0): the mouse wheel or the + and - buttons, then drag to look around
+
+const callZoom = { z: 1, x: 0, y: 0, who: "", drag: null };
+const callZoomBox = Object.assign(document.createElement("div"), { className: "call-zoom" });
+$("callVideo").before(callZoomBox);
+callZoomBox.append($("callVideo"));
+const callZoomBar = Object.assign(document.createElement("div"), { className: "call-zoom-bar" });
+const callZoomBtn = (html, title, fn) => {
+  const b = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title, innerHTML: html });
+  b.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+  return b;
+};
+const callZoomLevel = Object.assign(document.createElement("button"), { type: "button", className: "call-zoom-level", title: "Back to the whole screen (0)" });
+callZoomLevel.addEventListener("click", (e) => { e.stopPropagation(); callZoomTo(1); });
+callZoomBar.append(
+  callZoomBtn('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>', "Zoom out (-)", () => callZoomTo(callZoom.z / 1.4)),
+  callZoomLevel,
+  callZoomBtn('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>', "Zoom in (+). Or use the mouse wheel.", () => callZoomTo(callZoom.z * 1.4)));
+$("callStageSize").before(callZoomBar);
+
+function callZoomApply() {
+  const v = $("callVideo");
+  const zoomed = callZoom.z > 1.001;
+  v.style.transform = zoomed ? `translate(${callZoom.x}px, ${callZoom.y}px) scale(${callZoom.z})` : "";
+  callZoomBox.classList.toggle("zoomed", zoomed);
+  callZoomBox.classList.toggle("dragging", !!callZoom.drag);
+  callZoomBar.classList.toggle("zoomed", zoomed);
+  callZoomLevel.textContent = Math.round(callZoom.z * 100) + "%";
+}
+function callZoomClamp() {
+  const w = callZoomBox.clientWidth, h = callZoomBox.clientHeight, z = callZoom.z;
+  callZoom.x = Math.min(0, Math.max(w - w * z, callZoom.x));
+  callZoom.y = Math.min(0, Math.max(h - h * z, callZoom.y));
+}
+// Zoom to z, keeping the point (cx, cy) in the box where it is (the middle when it isn't given).
+function callZoomTo(z, cx, cy) {
+  const w = callZoomBox.clientWidth, h = callZoomBox.clientHeight;
+  if (cx == null) { cx = w / 2; cy = h / 2; }
+  z = Math.min(8, Math.max(1, z));
+  const old = callZoom.z;
+  callZoom.x = cx - (cx - callZoom.x) * (z / old);
+  callZoom.y = cy - (cy - callZoom.y) * (z / old);
+  callZoom.z = z;
+  if (z <= 1.001) { callZoom.z = 1; callZoom.x = callZoom.y = 0; }
+  callZoomClamp();
+  callZoomApply();
+}
+// A different screen on the stage starts at the whole screen again (called by drawCallStage).
+function callZoomWatch(who) {
+  if (callZoom.who === who) return;
+  callZoom.who = who;
+  callZoom.z = 1; callZoom.x = callZoom.y = 0;
+  callZoomApply();
+}
+callZoomBox.addEventListener("wheel", (e) => {
+  if ($("callVideo").hidden) return;
+  e.preventDefault();
+  const r = callZoomBox.getBoundingClientRect();
+  callZoomTo(callZoom.z * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0018)), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+callZoomBox.addEventListener("pointerdown", (e) => {
+  if (callZoom.z <= 1 || e.button !== 0) return;
+  callZoom.drag = { px: e.clientX, py: e.clientY, x: callZoom.x, y: callZoom.y };
+  callZoomBox.setPointerCapture(e.pointerId);
+  callZoomApply();
+});
+callZoomBox.addEventListener("pointermove", (e) => {
+  if (!callZoom.drag) return;
+  callZoom.x = callZoom.drag.x + e.clientX - callZoom.drag.px;
+  callZoom.y = callZoom.drag.y + e.clientY - callZoom.drag.py;
+  callZoomClamp();
+  callZoomApply();
+});
+const callZoomDrop = () => { if (callZoom.drag) { callZoom.drag = null; callZoomApply(); } };
+callZoomBox.addEventListener("pointerup", callZoomDrop);
+callZoomBox.addEventListener("pointercancel", callZoomDrop);
+window.addEventListener("resize", () => { callZoomClamp(); callZoomApply(); });
+document.addEventListener("keydown", (e) => {
+  if ($("callStage").hidden || $("callVideo").hidden || e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (e.key === "+" || e.key === "=") callZoomTo(callZoom.z * 1.4);
+  else if (e.key === "-") callZoomTo(callZoom.z / 1.4);
+  else if (e.key === "0" && callZoom.z > 1) callZoomTo(1);
+  else return;
+  e.preventDefault();
+});
+callZoomApply();
