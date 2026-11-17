@@ -49,6 +49,7 @@ import trash  # noqa: E402
 import film  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
+import remote  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
 import subtitles  # noqa: E402
@@ -70,6 +71,7 @@ downloader.use_bundled_ffmpeg()
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(APP_DIR, "ui")
+PORT = [0]  # the local server's port, once it runs
 ICON_CANDIDATES = [os.path.join(APP_DIR, "icon.png"), os.path.join(APP_DIR, "..", "assets", "icon.png")]
 WINDOW_ICON = next((p for p in (os.path.join(APP_DIR, "icon.ico"), os.path.join(APP_DIR, "..", "assets", "icon.ico"))
                     if os.path.isfile(p)), "")
@@ -643,6 +645,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
             if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
                 return self.send_file(os.path.join(UI_DIR, "index.html"), cookie=True)
+        if url.path == "/remote-host" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
+            # (2.37.0) The Remote desktop's hidden sender (its own engine, so it gets its own cookie).
+            if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
+                return self.send_file(os.path.join(UI_DIR, "remote-host.html"), cookie=True)
         if url.path == "/" and channelstats.is_callback(urllib.parse.parse_qs(url.query)):
             # Google sends the browser back here after you sign in on the Channel stats tab.
             if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
@@ -1135,6 +1141,23 @@ class Handler(BaseHTTPRequestHandler):
                     raise sfx.Error("That picture is too big.")
                 with open(paths[0], "rb") as f:
                     result = library.set_group_picture(data.get("group"), f.read())
+            elif action == "server":
+                result = library.server(data.get("what"), data.get("server"), data.get("data"))
+            elif action == "server-picture-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a picture for the server", [
+                        ("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp"), ("All files", "*.*")])
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if not paths:
+                    return self.send_json({"ok": True, "server": None})
+                if os.path.getsize(paths[0]) > 30 * 1024 * 1024:
+                    raise sfx.Error("That picture is too big.")
+                with open(paths[0], "rb") as f:
+                    result = library.set_server_picture(data.get("server"), f.read())
             elif action == "group-picture-remove":
                 result = library.chat_group("picture", data.get("group"))
             elif action == "chat-typing":
@@ -1494,6 +1517,75 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_remote(self, action, data):
+        """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""
+        try:
+            if action == "info":
+                result = remote.info()
+            elif action == "set":
+                result = remote.set_options(data)
+                if any(k in data for k in ("host",)):
+                    start_remote_engine()
+            elif action == "hello":  # every few seconds: this PC is here; the others and notes for it
+                me = remote.info()
+                args = {"token": sfx.library._token(), "what": "hello", "device": me["device"], "after": int(data.get("after") or 0),
+                        "data": {"name": me["name"], "kind": me["kind"], "host": me["host"] and bool(data.get("sender")),
+                                 "ctrlKey": str(data.get("ctrlKey") or "")[:400], "hostKey": str(data.get("hostKey") or "")[:400],
+                                 "width": data.get("width"), "height": data.get("height"), "busy": bool(me["session"])}}
+                if not data.get("sender"):
+                    args["data"]["host"] = me["host"] and remote._state["engine"] != ""
+                result = sfx._rpc("lelons_remote", **args) or {}
+                if not result.get("ok"):
+                    return self.send_json({"ok": False, "error": result.get("error") or "no"})
+            elif action == "signal":
+                me = remote.info()
+                result = sfx._rpc("lelons_remote", token=sfx.library._token(), what="signal", device=me["device"],
+                                  data={"to": str(data.get("to") or ""), "kind": str(data.get("kind") or ""),
+                                        "body": str(data.get("body") or "")[:60000]}) or {}
+                if not result.get("ok"):
+                    return self.send_json({"ok": False, "error": result.get("error") or "no"})
+            elif action in ("rename", "forget"):
+                me = remote.info()
+                device = str(data.get("device") or me["device"])
+                result = sfx._rpc("lelons_remote", token=sfx.library._token(), what=action, device=device,
+                                  data={"name": str(data.get("name") or "")}) or {}
+                if action == "rename" and device == me["device"] and result.get("ok"):
+                    remote.set_options({"name": data.get("name")})
+            elif action == "allowed":
+                result = {"allowed": remote.allowed(str(data.get("key") or ""))}
+            elif action == "ask":
+                result = {"id": remote.ask(data.get("name"), data.get("device"), data.get("key"), data.get("code"))}
+                show_window()
+            elif action == "answer":
+                result = {"done": remote.answer(str(data.get("id") or ""), bool(data.get("yes")))}
+            elif action == "answered":
+                result = {"answer": remote.answered(str(data.get("id") or ""))}
+            elif action == "remember-host":
+                remote.remember_host(data.get("device"), data.get("key"))
+                result = {}
+            elif action == "pin":
+                result = remote.pin_check(data.get("pin"))
+            elif action == "start":
+                remote.start(str(data.get("key") or ""), data.get("name"), data.get("screen"))
+                result = {}
+            elif action == "end":
+                result = {"ended": remote.end(str(data.get("reason") or ""))}
+            elif action == "input":
+                result = remote.input_events(data.get("e"))
+            elif action == "host-state":
+                result = remote.host_state()
+            elif action == "screen":  # show another screen: the sender starts again on it
+                remote.end("screen")
+                threading.Thread(target=start_remote_engine, args=(int(data.get("screen") or 0),), daemon=True).start()
+                result = {}
+            else:
+                raise remote.Error("That didn't work.")
+        except sfx.LoggedOut:
+            return self.send_json({"ok": False, "error": "login"})
+        except (remote.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True, **result})
+
     def handle_trash(self, action, data):
         """The Trash bin (Settings > Trash). Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         kind, item_id, where = str(data.get("kind") or ""), data.get("id"), str(data.get("where") or "")
@@ -1721,6 +1813,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **sfx.library.set_group_picture(group, self.rfile.read(length))})
             except sfx.Error as e:
                 return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+        if self.path == "/api/sfx-server-picture-upload":  # the body is a server's new picture
+            if length > 30 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                return self.send_json({"ok": True, **sfx.library.set_server_picture(
+                    self.headers.get("X-Server") or "", self.rfile.read(length))})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/boards-background":  # the body is a picture for a board's background
             if length > 40 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})
@@ -1934,6 +2034,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": str(e)})
         elif self.path.startswith("/api/games-"):
             self.handle_games(self.path[len("/api/games-"):], data)
+        elif self.path.startswith("/api/remote-"):
+            self.handle_remote(self.path[len("/api/remote-"):], data)
         elif self.path.startswith("/api/pov-"):
             self.handle_povs(self.path[len("/api/pov-"):], data)
         elif self.path == "/api/cancel":
@@ -2198,6 +2300,24 @@ def window_closed(placement):
     state.set(closed_at=time.time())
 
 
+def start_remote_engine(screen=0):
+    """(2.37.0) The Remote desktop's hidden sender runs while "let my other PCs control this one" is on."""
+    try:
+        remote.run_engine(f"http://127.0.0.1:{PORT[0]}/remote-host?t={TOKEN}", WINDOW_ICON, screen)
+        remote.awake()
+    except Exception:  # noqa: BLE001 (never stop the app over this)
+        pass
+
+
+def show_window():
+    """Bring the app's window to the front (a PC wants in and you need to answer)."""
+    try:
+        if appwindow._window and appwindow._window.alive:
+            appwindow._window.show()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def open_window(url):
     """Show the app's window (or bring it to the front if it's open)."""
     shown = False
@@ -2316,8 +2436,13 @@ def main():
     os.makedirs(settings.DATA_DIR, exist_ok=True)
     with open(PORT_FILE, "w") as f:
         f.write(f"{server.server_port} {TOKEN}")
+    PORT[0] = server.server_port
+    if remote.info()["host"]:
+        threading.Timer(8, start_remote_engine).start()  # (after the window, so it doesn't slow the start)
 
     media.use_gpu(state.hardware)
+    import srvwatch
+    srvwatch.start()  # auto-posts about your own videos and streams in your servers
     # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
     browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
     if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too
