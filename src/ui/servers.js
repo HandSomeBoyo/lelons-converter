@@ -225,7 +225,8 @@ function srvDrawSide() {
     return;
   }
   const speaking = typeof callSpeaking !== "undefined" ? [...callSpeaking.entries()].filter(([, v]) => v.on).map(([k]) => k) : [];
-  const sig = JSON.stringify([srv, chatWith, [...srvShut], speaking, srvVoice, callIsLive() && call.phase]);
+  const sig = JSON.stringify([srv, chatWith, [...srvShut], srvVoice, callIsLive() && call.phase,
+    typeof callPeers !== "undefined" ? [...callPeers.values()].map((p) => !!p.sharing).concat(!!callScreen) : []]);
   if (sig === srvSideDrawn) return;
   srvSideDrawn = sig;
   const online = (srv.members || []).filter((m) => m.online).length;
@@ -274,9 +275,11 @@ function srvDrawSide() {
           const isMe = sfxUser() && lower(p.username) === lower(sfxUser().username);
           const talking = srvInVoice(key) && speaking.includes(isMe ? "" : lower(p.username));
           const row2 = srvEl("div", "srv-vp" + (talking ? " talk" : ""));
+          row2.dataset.user = isMe ? "" : lower(p.username);
+          row2.dataset.channel = key;
           row2.append(avatarEl(p.avatarUrl, p.username), srvText("span", "", p.username));
           const peer = srvInVoice(key) && typeof callPeers !== "undefined" ? callPeers.get(lower(p.username)) : null;
-          if (peer && peer.sharing) row2.append(srvText("span", "live", "LIVE"));
+          if ((peer && peer.sharing) || (isMe && srvInVoice(key) && typeof callScreen !== "undefined" && callScreen)) row2.append(srvText("span", "live", "LIVE"));
           vp.append(row2);
         }
         chans.append(vp);
@@ -293,6 +296,7 @@ function srvDrawSide() {
   if (bar) keep.push(bar);
   if ($("chatMe")) keep.push($("chatMe"));
   srvSide.replaceChildren(...keep);
+  srvDrawTalking();
 }
 
 // The members list on the right: online people by role (in its color), then everyone who's offline.
@@ -310,6 +314,7 @@ function srvDrawMembers() {
     out.push(h);
     for (const m of people) {
       const row = srvBtn("srv-mem" + (off ? " off" : ""), "", "", (e, b) => srvMemberMenu(m, b));
+      row.dataset.user = sfxUser() && lower(m.username) === lower(sfxUser().username) ? "" : lower(m.username);
       const face = srvEl("span", "srv-face");
       face.append(avatarEl(m.avatarUrl, m.username));
       if (m.online && typeof modeDot === "function") face.append(modeDot(m, "on-face"));
@@ -330,6 +335,7 @@ function srvDrawMembers() {
   for (const r of srv.roles || []) group(r.name, r.is_default && r.color === "#94a3b8" ? "" : r.color, online.filter((m) => !m.owner && m.role === r.id));
   group("Offline", "", (srv.members || []).filter((m) => !m.online), true);
   srvMembers.replaceChildren(...out);
+  srvDrawTalking();
 }
 
 // ---- going into a server, a channel, or back home
@@ -382,6 +388,19 @@ function srvJoinVoice(c) {
   srvVoice = { server: srv.id, serverName: srv.name, channel: c.id, name: c.name };
   callStart("g:" + c.id);
   setTimeout(() => srvPoll(600), 800);
+}
+
+// The green ring on whoever's talking in your call (like Discord): in the voice channel list, the members
+// list and on your own name card. Called by call.js many times a second, so it only flips classes.
+function srvDrawTalking() {
+  const live = callIsLive() && call.phase === "in";
+  const on = (key) => live && !!(callSpeaking.get(key) || {}).on
+    && !(key === "" ? callMuted || callDeafened : (callPeers.get(key) || {}).muted);
+  const inCall = (key) => key === "" || callPeers.has(key);
+  for (const el of document.querySelectorAll(".srv-vp[data-user]")) el.classList.toggle("talk", live && lower(el.dataset.channel) === lower(call.key) && on(el.dataset.user));
+  for (const el of document.querySelectorAll(".srv-mem[data-user]")) el.classList.toggle("talk", inCall(el.dataset.user) && on(el.dataset.user));
+  const me = $("chatMe");
+  if (me) me.classList.toggle("talking", on(""));
 }
 
 // Called by chat.js when another chat opens.

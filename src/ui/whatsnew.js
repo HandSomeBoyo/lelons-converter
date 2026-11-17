@@ -2,7 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "2.37.1", items: [
+  { version: "2.38.0", items: [
+    "Calls: your picture lights up green while you talk, like on Discord, in the call card, voice channels, the members list and the video tiles.",
+    "When you share your screen, you now see it too (\"Your screen\"), so you know what friends are watching. If a friend shares at the same time, switch between the two at the top.",
+    "The call card at the top no longer covers the page: the page moves down under it.",
+    "Sharing your PC's sound is asked only once now, with the \"Share system audio\" switch in the Windows window.",
     "Remote: switching to another screen no longer gets stuck on \"Connecting\". If the home PC's screen sender ever stops, VaultHub starts it again by itself within half a minute.",
   ] },
   { version: "2.37.0", items: [

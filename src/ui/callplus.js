@@ -537,7 +537,8 @@ function callToast(text, action, fn) {
 
 // ---- sharing your PC's sound along with your screen
 
-function callShareSound() { return loadPref("callShareSound") !== false; }
+// PC sound is picked once, in the Windows share window (its "Share system audio" switch).
+function callShareSound() { return true; }
 // Leaves out VaultHub's own sound (the call), so friends don't hear themselves back, where Windows' browser engine can.
 function callShareSoundSafe() {
   try { return !!navigator.mediaDevices.getSupportedConstraints().restrictOwnAudio; } catch (e) { return false; }
