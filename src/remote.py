@@ -33,6 +33,8 @@ _state = {
     "stop": False,  # the Stop button or Ctrl+Alt+End: the sender page ends it
     "asking": None,  # {"id", "name", "device", "code", "key", "at"}: a new PC wants in; the app asks you
     "answer": {},  # id -> True / False once you answered
+    "nonces": {},  # (2.37.1) nonce -> time: hellos already used, kept while the app runs (the sender restarts)
+    "screen": 0,  # (2.37.1) which screen the sender shows
     "engine": "",  # the switches the sender runs with (which screen)
 }
 _held_keys = set()
@@ -277,7 +279,24 @@ def engine_args(screen=0):
     ])
 
 
-def run_engine(url, icon, screen=0):
+def nonce_fresh(nonce):
+    """(2.37.1) True the first time a signed hello is seen. Kept here, not in the sender page, so a hello
+    from before a screen switch isn't answered again by the sender that starts after it."""
+    nonce = str(nonce or "")[:64]
+    if len(nonce) < 16:
+        return False
+    now = time.time()
+    with _lock:
+        seen = _state["nonces"]
+        for n in [n for n, at in seen.items() if now - at > 300]:
+            del seen[n]
+        if nonce in seen:
+            return False
+        seen[nonce] = now
+        return True
+
+
+def run_engine(url, icon, screen=None):
     """Start (or stop) the hidden sender to match the "let my other PCs control this one" switch."""
     import appwindow
     data = _this_pc()
@@ -286,7 +305,9 @@ def run_engine(url, icon, screen=0):
         _state["engine"] = ""
         appwindow.engine(url, folder, icon, "", close=True)
         return False
-    args = engine_args(screen)
+    if screen is not None:
+        _state["screen"] = int(screen or 0)
+    args = engine_args(_state["screen"])
     _state["engine"] = args
     return appwindow.engine(url, folder, icon, args)
 

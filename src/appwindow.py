@@ -13,6 +13,7 @@ import ctypes
 import os
 import urllib.parse
 import threading
+import time
 from ctypes import wintypes
 
 TITLE = "VaultHub"
@@ -334,7 +335,15 @@ def popout(url, data_folder, icon, on_top=True, see=100, close=False, on_closed=
     return pop.ok
 
 
+_engine_start = threading.Lock()  # (2.37.1) one start or stop of the hidden engine at a time
+
+
 def engine(url, data_folder, icon, browser_args, close=False):
+    with _engine_start:
+        return _engine_now(url, data_folder, icon, browser_args, close)
+
+
+def _engine_now(url, data_folder, icon, browser_args, close):
     """(2.37.0) A window nobody sees, for the Remote desktop: it sends this PC's screen and sound when you
     connect from your other PC. It has its own engine (data_folder) so its switches don't touch the app's
     window. Returns True when it's running (or closed, with close=True)."""
@@ -352,13 +361,23 @@ def engine(url, data_folder, icon, browser_args, close=False):
                 return True
         if running:
             return True
-        win = _engine = Window(url, data_folder, icon, lambda placement: None, None, popout=True,
-                               hidden=True, browser_args=browser_args)
-    win.thread.start()
-    if not win.started.wait(30):
-        win.cancel()
-        return False
-    return win.ok
+    # (2.37.1) After a screen switch the old engine's browser takes a moment to really quit, and WebView2
+    # won't start the same data folder with other switches while it's still there. Try again for a while
+    # instead of giving up (that left the sender gone until the app was restarted).
+    for attempt in range(12):
+        with _lock:
+            if _engine and _engine.alive:
+                return True
+            win = _engine = Window(url, data_folder, icon, lambda placement: None, None, popout=True,
+                                   hidden=True, browser_args=browser_args)
+        win.thread.start()
+        if not win.started.wait(30):
+            win.cancel()
+        elif win.ok:
+            return True
+        win.thread.join(5)
+        time.sleep(min(1 + attempt, 5))
+    return False
 
 
 @WNDPROC  # (it must sit right on this: Windows calls it for every window message)

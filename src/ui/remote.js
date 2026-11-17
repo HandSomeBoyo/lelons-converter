@@ -202,7 +202,7 @@ function rdAsking(asking) {
 
 // ---- connecting to one of your PCs
 
-async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto") {
+async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto", switching = false) {
   const dev = rd.devices.find((d) => d.id === id);
   if (!dev || rd.conn) return;
   if (!rd.keys) rd.keys = await rdKeys("ctrl");
@@ -218,9 +218,9 @@ async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto") {
   const mv = pc.createDataChannel("mv", { ordered: false, maxRetransmits: 0 });
   const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const c = rd.conn = { id, dev, pc, ctl, mv, nonce, screen, mode, phase: "calling", stream: new MediaStream(), held: new Set(),
-    bytes: 0, since: Date.now(), rtt: 0, fps: 0, height: 0, w: 0, h: 0, volume: loadPref("rdVolume") ?? 80, muted: false, tries: 0 };
+    bytes: 0, since: Date.now(), rtt: 0, fps: 0, height: 0, w: 0, h: 0, volume: loadPref("rdVolume") ?? 80, muted: false, tries: 0, switching };
   rdSession();
-  rdPhase("Connecting to " + dev.name + "…");
+  rdPhase(switching ? `Switching to screen ${screen + 1}…` : "Connecting to " + dev.name + "…");
   pc.ontrack = (ev) => { c.stream.addTrack(ev.track); const v = $("rdVideo"); if (v) { v.srcObject = c.stream; v.play().catch(() => {}); } try { ev.receiver.jitterBufferTarget = 0; } catch (e) { /* older */ } };
   pc.onconnectionstatechange = () => {
     if (rd.conn !== c) return;
@@ -239,7 +239,8 @@ async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto") {
   if (!sent.ok) return rdEnd(sent.error === "slow" ? "Too many tries. Wait a minute." : "Couldn't reach the server. Check your internet.");
   // Listen fast for the answer.
   c.wait = setInterval(() => { if (rd.conn === c && c.phase === "calling") rdHello(); }, 1000);
-  c.giveUp = setTimeout(() => { if (rd.conn === c && c.phase === "calling") rdEnd(`${dev.name} didn't answer. Is VaultHub open on it?`); }, 25000);
+  // (2.37.1) After a screen switch the other PC's sender is starting again, which can take a little while.
+  c.giveUp = setTimeout(() => { if (rd.conn === c && c.phase === "calling") rdEnd(`${dev.name} didn't answer. Is VaultHub open on it?`); }, switching ? 60000 : 25000);
 }
 
 async function rdConnSignal(s) {
@@ -312,7 +313,7 @@ function rdCtl(c, data) {
     const id = c.id, screen = msg.switching, mode = c.mode;
     rdEnd("", true);
     rdSession(); rdPhase(`Switching to screen ${screen + 1}…`);
-    setTimeout(() => { rdSessionClose(); rdConnect(id, screen, mode); }, 7000);
+    setTimeout(() => { rdSessionClose(); rdConnect(id, screen, mode, true); }, 5000);
     return;
   }
   if (msg.bye) {

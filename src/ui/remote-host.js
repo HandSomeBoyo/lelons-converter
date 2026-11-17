@@ -2,7 +2,7 @@
 // It waits for notes from your other PCs, checks they're really yours (keys + allowed on this PC + PIN),
 // then sends this PC's screen and sound, and passes the mouse and keys on to remote.py.
 
-const rh = { keys: null, me: null, after: 0, nonces: new Set(), sess: null, timer: 0, slow: 0 };
+const rh = { keys: null, me: null, after: 0, nonces: new Set(), sess: null, timer: 0, slow: 0, gate: Promise.resolve() };
 
 function rhSay(text) { document.getElementById("what").textContent = text; }
 
@@ -25,6 +25,7 @@ async function rhTick() {
         rhSay(res.error === "owner_only" ? "Only the owner can use Remote desktop." : "Not connected: " + res.error);
       } else {
         for (const s of res.signals || []) {
+          if (s.id <= rh.after) continue;
           rh.after = Math.max(rh.after, s.id);
           rhSignal(s).catch(() => {});
         }
@@ -46,6 +47,19 @@ async function rhSignal(s) {
     return;
   }
   if (s.kind !== "offer") return;
+  // (2.37.1) Hellos are checked one at a time, so two of them can't both start a session.
+  const earlier = rh.gate;
+  let release;
+  rh.gate = new Promise((r) => { release = r; });
+  await earlier;
+  try {
+    await rhOffer(s, body, release);
+  } finally {
+    release();
+  }
+}
+
+async function rhOffer(s, body, release) {
   // A fresh, signed hello from one of your PCs.
   const now = Date.now() / 1000;
   if (typeof body.sdp !== "string" || typeof body.key !== "string" || typeof body.sig !== "string") return;
@@ -56,6 +70,9 @@ async function rhSignal(s) {
   const ok = await rdVerify(body.key, `offer|${rh.me.device}|${s.from}|${fpOffer}|${body.nonce}|${body.ts}`, body.sig);
   if (!ok) return;
   rh.nonces.add(body.nonce);
+  // (2.37.1) The app remembers used hellos too: after a screen switch this page starts fresh, and it
+  // mustn't answer the hello from before the switch again (that blocked the new one as "busy").
+  if ((await rdPost("/api/remote-nonce", { nonce: body.nonce })).fresh !== true) return;
   if (rh.sess) {
     await rdPost("/api/remote-signal", { to: s.from, kind: "bye", body: JSON.stringify({ nonce: body.nonce, why: "busy" }) });
     return;
@@ -68,6 +85,7 @@ async function rhSignal(s) {
     approved: known, pinOk: !rh.me.pin, started: false, last: Date.now(), ctl: null, queue: [], sending: false,
     mode: RD_MODES[body.mode] ? body.mode : "auto", screen: Number(body.screen) || 0, stream: null,
   };
+  release(); // the next hello may be looked at now (it gets "busy")
   pc.ondatachannel = (ev) => {
     const ch = ev.channel;
     if (ch.label === "ctl") { sess.ctl = ch; ch.onopen = () => rhReady(sess); if (ch.readyState === "open") rhReady(sess); }

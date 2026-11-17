@@ -1572,6 +1572,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"ended": remote.end(str(data.get("reason") or ""))}
             elif action == "input":
                 result = remote.input_events(data.get("e"))
+            elif action == "nonce":  # (2.37.1) a hello is only ever answered once, even across restarts
+                result = {"fresh": remote.nonce_fresh(data.get("nonce"))}
             elif action == "host-state":
                 result = remote.host_state()
             elif action == "screen":  # show another screen: the sender starts again on it
@@ -2300,13 +2302,26 @@ def window_closed(placement):
     state.set(closed_at=time.time())
 
 
-def start_remote_engine(screen=0):
+def start_remote_engine(screen=None):
     """(2.37.0) The Remote desktop's hidden sender runs while "let my other PCs control this one" is on."""
     try:
         remote.run_engine(f"http://127.0.0.1:{PORT[0]}/remote-host?t={TOKEN}", WINDOW_ICON, screen)
         remote.awake()
     except Exception:  # noqa: BLE001 (never stop the app over this)
         pass
+
+
+def remote_engine_watch():
+    """(2.37.1) Starts the hidden sender a little after the window (so it doesn't slow the start), then
+    checks every half minute that it's still there while the switch is on, and starts it again if not."""
+    time.sleep(8)
+    while True:
+        try:
+            if remote.info()["host"]:
+                start_remote_engine()
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(30)
 
 
 def show_window():
@@ -2437,8 +2452,7 @@ def main():
     with open(PORT_FILE, "w") as f:
         f.write(f"{server.server_port} {TOKEN}")
     PORT[0] = server.server_port
-    if remote.info()["host"]:
-        threading.Timer(8, start_remote_engine).start()  # (after the window, so it doesn't slow the start)
+    threading.Thread(target=remote_engine_watch, daemon=True).start()
 
     media.use_gpu(state.hardware)
     import srvwatch
