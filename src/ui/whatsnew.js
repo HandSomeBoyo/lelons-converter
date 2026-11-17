@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.37.1", items: [
+    "Remote: switching to another screen no longer gets stuck on \"Connecting\". If the home PC's screen sender ever stops, VaultHub starts it again by itself within half a minute.",
+  ] },
   { version: "2.37.0", items: [
     "Servers in Chat: make a home for your crew with text and voice channels, roles with colors and permissions, and invites by name or code.",
     "Auto-posts: VaultHub posts by itself in the channel you pick when someone uploads, goes live, hits a subscriber milestone, shares a POV, adds a sound or posts a game, with your own message.",
