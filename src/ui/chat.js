@@ -204,6 +204,7 @@ function switchChat(name) {
   $("chatNote").textContent = "";
   drawConvos();
   pollChat(0);
+  if (typeof srvChatSwitched === "function") srvChatSwitched(); // (servers.js)
 }
 
 function drawChatUser() {
@@ -296,11 +297,16 @@ function drawConvos() {
   $("chatPrivateHead").hidden = true;
   $("chatInput").placeholder = isGroupKey(chatWith) ? `Message ${chatGroup ? chatGroup.name : "the group"}...`
     : chatWith ? `Message ${chatWith}...` : "Message everyone... (@ to mention)";
+  if (typeof srvDrawForm === "function") srvDrawForm(); // (a server channel: its name, read-only and voice channels)
 }
 
 // The top of the chat: what you're in, and the group's buttons.
 let roomDrawn = "";
 function drawRoom() {
+  if (typeof srvRoomHead === "function") { // (servers.js: a server channel has its own top)
+    if (roomDrawn === "") srvRoomDrawn = "";
+    if (srvRoomHead()) return;
+  }
   const g = isGroupKey(chatWith) ? chatGroup || chatGroups.find((x) => "g:" + x.id === chatWith) : null;
   const sig = JSON.stringify([chatWith, g && [g.name, g.pictureUrl, (g.members || []).map((m) => m.username), g.people]]);
   const calls = typeof callWith === "function"; // (call.js loads after this file)
@@ -714,11 +720,13 @@ function drawChat(force) {
   chatDrawn = sig;
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
   const me = sfxUser();
-  const canDeleteAll = me && chatWith === "" && (me.role === "owner" || me.role === "admin");
+  const srvCh = typeof srvChannel === "function" ? srvChannel() : null;
+  const canDeleteAll = me && ((chatWith === "" && (me.role === "owner" || me.role === "admin")) || (srvCh && srvCan("delete")));
   if (!chatMessages.length) {
     const empty = document.createElement("p");
     empty.className = "chat-empty";
     empty.textContent = !chatLoaded ? "Loading..."
+      : srvCh ? `This is the start of #${srvCh.name}.${srvCh.topic ? " " + srvCh.topic + "." : ""} Say hi!`
       : isGroupKey(chatWith) ? `No messages in ${chatGroup ? chatGroup.name : "this group"} yet. Say hi!`
       : chatWith ? `No messages with ${chatWith} yet. Say hi!` : "No messages yet. Say hi!";
     list.replaceChildren(empty);
@@ -762,9 +770,13 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
   el.className = "chat-msg" + (follow ? " follow" : "") + ((!m.mine && mentionsMe(m.message)) || answersMe ? " mentions-me" : "")
     + (m.id > shownUpTo ? " new" : "") + (m.pinned ? " pinned" : "") + (m.sticker && !m.message ? " has-sticker" : "");
   el.dataset.id = m.id;
-  const face = avatarEl(m.avatarUrl, m.username);
-  face.title = "See " + m.username + "'s profile";
-  face.addEventListener("click", () => openProfile(m.username));
+  const auto = !!m.auto && typeof srvBotFace === "function"; // (servers) posted by VaultHub itself
+  if (auto) el.classList.add("auto");
+  const face = auto ? srvBotFace() : avatarEl(m.avatarUrl, m.username);
+  if (!auto) {
+    face.title = "See " + m.username + "'s profile";
+    face.addEventListener("click", () => openProfile(m.username));
+  }
   el.append(face);
   const body = document.createElement("div");
   body.className = "body";
@@ -775,13 +787,17 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
     const name = document.createElement("button");
     name.type = "button";
     name.className = "name role-" + m.role;
-    name.textContent = m.username;
-    name.title = "See " + m.username + "'s profile";
-    name.addEventListener("click", () => openProfile(m.username));
+    name.textContent = auto ? "VaultHub" : m.username;
+    name.title = auto ? "Posted by VaultHub by itself" : "See " + m.username + "'s profile";
+    if (!auto) name.addEventListener("click", () => openProfile(m.username));
+    const color = !auto && typeof srvNameColor === "function" ? srvNameColor(m.username) : "";
+    if (color) name.style.color = color;
     const when = document.createElement("span");
     when.className = "when";
     when.textContent = chatTime(m.created_at);
-    line.append(name, when);
+    line.append(name);
+    if (auto) line.append(Object.assign(document.createElement("span"), { className: "ap-tag", textContent: "AUTO" }));
+    line.append(when);
     if (m.pinned) {
       const pin = document.createElement("span");
       pin.className = "pinned-tag";

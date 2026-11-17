@@ -154,6 +154,7 @@ function chatToolsEl(m, where, canDelete) {
 
 function chatCanPin() {
   const me = sfxUser();
+  if (typeof srvChannel === "function" && srvChannel()) return srvCan("pin");
   return !!me && (chatWith !== "" || me.role === "owner" || me.role === "admin");
 }
 
@@ -173,7 +174,8 @@ function chatMessageParts(m, body, where) {
   else if (m.sound || m.file || m.shared_gone) body.append(chatAttachment(m));
   if (m.sticker) body.append(chatStickerEl(m.sticker));
   if (m.poll) body.append(chatPollEl(m, where));
-  if (m.message && chatEditing !== m.id) chatLinkCards(m, body);
+  if (m.card && typeof srvCardEl === "function") { const card = srvCardEl(m.card); if (card) body.append(card); } // (servers) an auto-post's card
+  else if (m.message && chatEditing !== m.id) chatLinkCards(m, body);
   if ((m.reactions || []).length) {
     const row = reactionRow(m);
     row.append(cpButton("reaction add", CP_ICONS.smilePlus, "Add a reaction", (e, b) => openEmojiPicker(b, (emoji) => {

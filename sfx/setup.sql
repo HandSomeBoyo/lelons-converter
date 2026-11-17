@@ -217,6 +217,125 @@ create table if not exists lelons.chat_poll_votes (
   primary key (message_id, account_id, choice)
 );
 alter table lelons.chat_poll_votes enable row level security;
+
+-- (servers) Servers: a home for a crew with its own channels (text and voice), roles and invites.
+-- Each channel is a chat_groups row with server_id set, so everything the chat can do works in it.
+create table if not exists lelons.servers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(name) between 1 and 50),
+  picture text,
+  banner text not null default 'sunset' check (banner ~ '^[a-z]{1,20}$'),
+  about text not null default '' check (length(about) <= 300),
+  owner_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+-- perms: manage (settings, channels, roles, auto-posts), pin, delete (other people's messages), invite, kick (and ban)
+create table if not exists lelons.server_roles (
+  id uuid primary key default gen_random_uuid(),
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  name text not null check (length(name) between 1 and 30),
+  color text not null default '#94a3b8' check (color ~ '^#[0-9a-f]{6}$'),
+  perms text[] not null default '{}',
+  position int not null default 0,
+  is_default boolean not null default false,  -- "Member": everyone gets it when they join
+  created_at timestamptz not null default now()
+);
+create index if not exists server_roles_by_server on lelons.server_roles (server_id, position);
+create table if not exists lelons.server_members (
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  role_id uuid references lelons.server_roles (id) on delete set null,  -- null: the default role
+  joined_at timestamptz not null default now(),
+  primary key (server_id, account_id)
+);
+create index if not exists server_members_by_account on lelons.server_members (account_id);
+create table if not exists lelons.server_invites (  -- invite codes anyone can paste
+  code text primary key check (code ~ '^[A-Z0-9-]{6,40}$'),
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  created_by uuid references lelons.accounts (id) on delete set null,
+  expires_at timestamptz,
+  max_uses int check (max_uses between 1 and 1000),
+  uses int not null default 0,
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.server_asks (  -- a friend invited by name: it shows up in their app
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  invited_by uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (server_id, account_id)
+);
+create table if not exists lelons.server_bans (
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  banned_by uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (server_id, account_id)
+);
+-- What VaultHub posts by itself, and where: kind is video, live, milestone, pov, sound, game, recording or join.
+create table if not exists lelons.server_autoposts (
+  server_id uuid not null references lelons.servers (id) on delete cascade,
+  kind text not null check (kind in ('video', 'live', 'milestone', 'pov', 'sound', 'game', 'recording', 'join')),
+  channel_id uuid references lelons.chat_groups (id) on delete set null,
+  enabled boolean not null default true,
+  template text not null default '' check (length(template) <= 300),
+  ping boolean not null default false,  -- @everyone
+  primary key (server_id, kind)
+);
+-- Things already posted (so a video or a milestone is posted once), by the person and a key.
+create table if not exists lelons.server_posted (
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  key text not null check (length(key) <= 200),
+  at timestamptz not null default now(),
+  primary key (account_id, key)
+);
+alter table lelons.chat_groups add column if not exists server_id uuid references lelons.servers (id) on delete cascade;
+alter table lelons.chat_groups add column if not exists kind text not null default 'text' check (kind in ('text', 'voice'));
+alter table lelons.chat_groups add column if not exists category text not null default '' check (length(category) <= 30);
+alter table lelons.chat_groups add column if not exists position int not null default 0;
+alter table lelons.chat_groups add column if not exists topic text not null default '' check (length(topic) <= 120);
+alter table lelons.chat_groups add column if not exists read_only boolean not null default false;  -- only people who can manage post
+alter table lelons.chat_groups add column if not exists private_roles uuid[];  -- null: everyone in the server sees it
+create index if not exists chat_groups_by_server on lelons.chat_groups (server_id, position) where server_id is not null;
+-- An auto-post: what kind it is, and its card (a video, a POV, a game...).
+alter table lelons.chat add column if not exists auto text check (auto is null or auto ~ '^[a-z]{1,20}$');
+alter table lelons.chat add column if not exists card jsonb check (card is null or length(card::text) <= 3000);
+alter table lelons.servers enable row level security;
+alter table lelons.server_roles enable row level security;
+alter table lelons.server_members enable row level security;
+alter table lelons.server_invites enable row level security;
+alter table lelons.server_asks enable row level security;
+alter table lelons.server_bans enable row level security;
+alter table lelons.server_autoposts enable row level security;
+alter table lelons.server_posted enable row level security;
+
+-- What you may do in a server (the owner may do everything; null: you're not in it).
+create or replace function lelons.srv_perms(sid uuid, me uuid) returns text[]
+  language sql stable security definer set search_path = '' as
+  $$ select case when s.owner_id = me then array['owner', 'manage', 'pin', 'delete', 'invite', 'kick']
+                 when m.account_id is null then null
+                 else coalesce((select r.perms from lelons.server_roles r where r.id = m.role_id),
+                               (select r.perms from lelons.server_roles r where r.server_id = sid and r.is_default limit 1), '{}') end
+     from lelons.servers s left join lelons.server_members m on m.server_id = s.id and m.account_id = me
+     where s.id = sid $$;
+
+-- Can you see this channel: in the server, and (a private channel) you have one of its roles or can manage.
+create or replace function lelons.srv_sees(g lelons.chat_groups, me uuid) returns boolean
+  language sql stable security definer set search_path = '' as
+  $$ select exists (select 1 from lelons.server_members m join lelons.servers s on s.id = m.server_id
+                    where m.server_id = g.server_id and m.account_id = me
+                      and (g.private_roles is null or s.owner_id = me
+                           or coalesce(m.role_id, (select r.id from lelons.server_roles r where r.server_id = s.id and r.is_default limit 1)) = any (g.private_roles)
+                           or 'manage' = any (coalesce(lelons.srv_perms(s.id, me), '{}')))) $$;
+
+-- In this chat group or server channel.
+create or replace function lelons.in_group(gid uuid, me uuid) returns boolean
+  language sql stable security definer set search_path = '' as
+  $$ select coalesce((select case when g.server_id is null
+                                  then exists (select 1 from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me)
+                                  else lelons.srv_sees(g, me) end
+                      from lelons.chat_groups g where g.id = gid), false) $$;
+
 -- (2.31.0) What you're up to, next to your name: Away, Busy, Recording...
 alter table lelons.accounts add column if not exists mode text not null default ''
   check (mode in ('', 'away', 'busy', 'recording', 'editing', 'gaming', 'streaming'));
@@ -673,7 +792,7 @@ drop function if exists public.lelons_chat_delete(text, bigint);
 create or replace function lelons.chat_sees(c lelons.chat, me uuid) returns boolean
   language sql stable set search_path = '' as
   $$ select case when c.group_id is not null
-                 then exists (select 1 from lelons.chat_group_members m where m.group_id = c.group_id and m.account_id = me)
+                 then lelons.in_group(c.group_id, me)
                  else c.to_id is null or c.to_id = me or c.account_id = me end $$;
 
 -- (2.4.0) A group chat is asked for as "g:" and its id (where a username goes otherwise).
@@ -691,7 +810,7 @@ begin
   exception when others then
     raise exception 'no group' using hint = 'nogroup';
   end;
-  if not exists (select 1 from lelons.chat_group_members m where m.group_id = gid and m.account_id = me) then
+  if not lelons.in_group(gid, me) then
     raise exception 'no group' using hint = 'nogroup';
   end if;
   return gid;
@@ -739,6 +858,11 @@ begin
   end if;
   if length(text_in) > 500 then
     return json_build_object('ok', false, 'error', 'long');
+  end if;
+  -- (servers) not in voice channels, and only people who can manage post in a read-only channel
+  if gid is not null and exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id is not null
+       and (g.kind = 'voice' or (g.read_only and not ('manage' = any (coalesce(lelons.srv_perms(g.server_id, me.id), '{}')))))) then
+    return json_build_object('ok', false, 'error', 'readonly');
   end if;
   if to_user is not null and gid is null then
     select a.id into target from lelons.accounts a where lower(a.username) = lower(btrim(to_user));
@@ -848,6 +972,7 @@ language sql stable security definer set search_path = '' as $$
     'shared_gone', c.sound_id is null and c.file is null and c.file_name is not null and c.file_name <> '',
     'file', c.file, 'file_name', c.file_name, 'file_seconds', c.file_seconds, 'call_seconds', c.call_seconds,
     'voice', c.voice, 'peaks', c.peaks, 'gif', c.gif, 'sticker', c.sticker, 'thread_of', c.thread_of,
+    'auto', c.auto, 'card', c.card,
     'reply', case when c.reply_to is null then null else coalesce(
       (select jsonb_build_object('id', r.id, 'username', ra.username, 'avatar', ra.avatar, 'message', left(r.message, 140),
                                  'thread_of', r.thread_of,
@@ -882,17 +1007,18 @@ language sql stable security definer set search_path = '' as $$
                (select c.account_id = me from lelons.chat c where c.group_id = x.id and c.thread_of is null order by c.id desc limit 1) last_mine,
                (select count(*) from lelons.chat_group_members m2 where m2.group_id = x.id) people
         from lelons.chat_groups x
-        where exists (select 1 from lelons.chat_group_members m where m.group_id = x.id and m.account_id = me)) g
+        where x.server_id is null and exists (select 1 from lelons.chat_group_members m where m.group_id = x.id and m.account_id = me)) g
 $$;
 
 create or replace function lelons.group_json(gid uuid) returns json
 language sql stable security definer set search_path = '' as $$
   select json_build_object('id', g.id, 'name', g.name, 'picture', g.picture, 'owner', o.username,
+    'server', g.server_id, 'kind', g.kind, 'topic', g.topic, 'read_only', g.read_only,
     'members', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'role', a.role,
                                                            'mode', a.mode, 'status', a.status)
                                          order by m.added_at, lower(a.username))
                          from lelons.chat_group_members m join lelons.accounts a on a.id = m.account_id
-                         where m.group_id = g.id), '[]'::json))
+                         where m.group_id = g.id and g.server_id is null), '[]'::json))
   from lelons.chat_groups g left join lelons.accounts o on o.id = g.owner_id where g.id = gid
 $$;
 
@@ -1022,6 +1148,10 @@ begin
   if m.to_id is null and m.group_id is null and me.role not in ('owner', 'admin') then
     return json_build_object('ok', false, 'error', 'denied');
   end if;
+  if exists (select 1 from lelons.chat_groups g where g.id = m.group_id and g.server_id is not null
+             and not ('pin' = any (coalesce(lelons.srv_perms(g.server_id, me.id), '{}')))) then
+    return json_build_object('ok', false, 'error', 'denied');  -- (servers) a role that may pin
+  end if;
   if on_off and m.pinned_at is null and (select count(*) from lelons.chat c where c.pinned_at is not null
       and c.group_id is not distinct from m.group_id
       and (case when m.to_id is null then c.to_id is null
@@ -1042,7 +1172,7 @@ declare
   m lelons.chat;
   text_in text := btrim(coalesce(message, ''));
 begin
-  select c.* into m from lelons.chat c where c.id = message_id and c.account_id = me.id;
+  select c.* into m from lelons.chat c where c.id = message_id and c.account_id = me.id and c.auto is null;
   if m.id is null or m.call_seconds is not null then
     return json_build_object('ok', false, 'error', 'gone');
   end if;
@@ -1148,7 +1278,9 @@ declare
   files text[];
 begin
   with gone as (delete from lelons.chat c where c.id = message_id
-                  and (c.account_id = me.id or (c.to_id is null and c.group_id is null and me.role in ('owner', 'admin')))
+                  and (c.account_id = me.id or (c.to_id is null and c.group_id is null and me.role in ('owner', 'admin'))
+                       or 'delete' = any (coalesce((select lelons.srv_perms(g.server_id, me.id) from lelons.chat_groups g
+                                                    where g.id = c.group_id and g.server_id is not null), '{}')))
                 returning c.id, c.file),
        replies as (delete from lelons.chat c where c.thread_of in (select g.id from gone g) returning c.file)
   select coalesce(array_agg(f) filter (where f is not null), '{}') into files
@@ -1790,8 +1922,7 @@ begin
                             from lelons.chat_seen x join lelons.accounts a on a.id = x.account_id
                             where x.account_id <> me.id and x.seen_at > now() - interval '30 days'
                               and (case when gid is not null then x.peer_key = gid
-                                          and exists (select 1 from lelons.chat_group_members m
-                                                      where m.group_id = gid and m.account_id = x.account_id)
+                                          and lelons.in_group(gid, x.account_id)
                                         when peer is null then x.peer_key = zero else x.account_id = peer and x.peer_key = me.id end)
                             order by x.seen_at desc limit 20) y),
                      '[]'::json));
@@ -2280,7 +2411,7 @@ begin
     insert into lelons.chat_groups (name, owner_id) values (clean, me.id) returning * into g;
     insert into lelons.chat_group_members (group_id, account_id) values (g.id, me.id);
   else
-    select x.* into g from lelons.chat_groups x where x.id = lelons_chat_group.group_id for update;
+    select x.* into g from lelons.chat_groups x where x.id = lelons_chat_group.group_id and x.server_id is null for update;
     if g.id is null or not exists (select 1 from lelons.chat_group_members m where m.group_id = g.id and m.account_id = me.id) then
       return json_build_object('ok', false, 'error', 'nogroup');
     end if;
@@ -2527,7 +2658,8 @@ begin
   update lelons.room_people p set state = case when p.state = 'ringing' then 'missed' else 'left' end
   where p.room_id = rid and p.state in ('ringing', 'in');
   delete from lelons.room_signals s where s.room_id = rid;
-  if r.started_by is not null and (r.group_id is not null or r.peer_id is not null) then
+  if r.started_by is not null and (r.group_id is not null or r.peer_id is not null)
+     and not exists (select 1 from lelons.chat_groups g where g.id = r.group_id and g.server_id is not null) then  -- (not voice channels)
     insert into lelons.chat (account_id, to_id, group_id, message, call_seconds)
     values (r.started_by, case when r.group_id is null then r.peer_id end, r.group_id, '',
             case when r.talked_at is not null then greatest(1, extract(epoch from now() - r.talked_at)::int)
@@ -2569,8 +2701,9 @@ language sql stable security definer set search_path = '' as $$
       select json_agg(json_build_object(
         'id', r.id, 'live', r.ended_at is null, 'why', r.why, 'my_state', mine.state,
         'group', case when r.group_id is null then null
-                      else (select json_build_object('id', g.id, 'name', g.name, 'picture', g.picture)
-                            from lelons.chat_groups g where g.id = r.group_id) end,
+                      else (select json_build_object('id', g.id, 'name', g.name, 'picture', g.picture,
+                                                     'server', g.server_id, 'server_name', sv.name)
+                            from lelons.chat_groups g left join lelons.servers sv on sv.id = g.server_id where g.id = r.group_id) end,
         'started_by', (select a.username from lelons.accounts a where a.id = r.started_by),
         'created_at', r.created_at, 'talked_at', r.talked_at,
         'people', (select coalesce(json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'state', p.state)
@@ -2580,7 +2713,8 @@ language sql stable security definer set search_path = '' as $$
       from lelons.rooms r join lelons.room_people mine on mine.room_id = r.id and mine.account_id = me
       where (r.ended_at is null and mine.state in ('ringing', 'in'))
          or (r.ended_at > now() - interval '1 minute')
-         or (r.ended_at is null and mine.state in ('left', 'declined', 'missed') and r.group_id is not null)), '[]'::json),
+         or (r.ended_at is null and mine.state in ('left', 'declined', 'missed') and r.group_id is not null
+             and not exists (select 1 from lelons.chat_groups g where g.id = r.group_id and g.server_id is not null))), '[]'::json),
     'signals', coalesce((
       select json_agg(json_build_object('id', s.id, 'room', s.room_id, 'from', a.username, 'kind', s.kind, 'sdp', s.sdp) order by s.id)
       from lelons.room_signals s join lelons.accounts a on a.id = s.from_id
@@ -2589,7 +2723,8 @@ language sql stable security definer set search_path = '' as $$
       select json_agg(json_build_object('group', r.group_id, 'room', r.id,
                                         'people', (select count(*) from lelons.room_people p where p.room_id = r.id and p.state = 'in')))
       from lelons.rooms r where r.ended_at is null and r.group_id in
-        (select m.group_id from lelons.chat_group_members m where m.account_id = me)), '[]'::json))
+        (select m.group_id from lelons.chat_group_members m join lelons.chat_groups g on g.id = m.group_id
+         where m.account_id = me and g.server_id is null)), '[]'::json))
 $$;
 
 -- what:
@@ -2615,15 +2750,21 @@ begin
   for x in select p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
            where p.account_id = me.id and rr.ended_at is null
            union select rr.id from lelons.rooms rr join lelons.chat_group_members m on m.group_id = rr.group_id
-           where m.account_id = me.id and rr.ended_at is null loop
+           where m.account_id = me.id and rr.ended_at is null
+           union select rr.id from lelons.rooms rr join lelons.chat_groups g on g.id = rr.group_id
+           join lelons.server_members sm on sm.server_id = g.server_id and sm.account_id = me.id
+           where rr.ended_at is null loop
     perform lelons.room_tidy(x.room_id);
   end loop;
 
   if what = 'start' then
-    if exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
-               where p.account_id = me.id and p.state = 'in' and rr.ended_at is null) then
-      return json_build_object('ok', false, 'error', 'in_call');
-    end if;
+    -- (2.37.0) The app only starts a call when it isn't in one, so a call the library still has you in was left
+    -- behind (the app closed or crashed in it): you leave that one now instead of being stuck "in a call".
+    for x in select p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+             where p.account_id = me.id and p.state = 'in' and rr.ended_at is null loop
+      update lelons.room_people p set state = 'left' where p.room_id = x.room_id and p.account_id = me.id;
+      perform lelons.room_tidy(x.room_id);
+    end loop;
     if (select count(*) from lelons.rooms rr where rr.started_by = me.id and rr.created_at > now() - interval '1 minute') >= 6 then
       return json_build_object('ok', false, 'error', 'slow');
     end if;
@@ -2631,8 +2772,17 @@ begin
       return json_build_object('ok', false, 'error', 'daily');
     end if;
     gid := lelons.group_of(with_user, me.id);
+    if gid is not null and exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id is not null and g.kind <> 'voice') then
+      return json_build_object('ok', false, 'error', 'gone');  -- (servers) calls are in voice channels
+    end if;
     if gid is not null then
       select rr.id into rid from lelons.rooms rr where rr.group_id = gid and rr.ended_at is null;
+      if rid is null and exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id is not null) then
+        insert into lelons.rooms (group_id, started_by) values (gid, me.id) returning id into rid;  -- a voice channel: nobody rings
+        insert into lelons.room_people (room_id, account_id, state) values (rid, me.id, 'in');
+        update lelons.rooms rr set talked_at = now() where rr.id = rid;
+        return lelons.rooms_json(me.id, after)::jsonb || jsonb_build_object('room', rid);
+      end if;
       if rid is null then
         insert into lelons.rooms (group_id, started_by) values (gid, me.id) returning id into rid;
         insert into lelons.room_people (room_id, account_id, state)
@@ -2671,12 +2821,13 @@ begin
     if r.id is null then
       return json_build_object('ok', false, 'error', 'gone');
     end if;
-    if exists (select 1 from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
-               where p.account_id = me.id and p.state = 'in' and rr.ended_at is null and rr.id <> rid) then
-      return json_build_object('ok', false, 'error', 'in_call');
-    end if;
+    for x in select p.room_id from lelons.room_people p join lelons.rooms rr on rr.id = p.room_id
+             where p.account_id = me.id and p.state = 'in' and rr.ended_at is null and rr.id <> rid loop
+      update lelons.room_people p set state = 'left' where p.room_id = x.room_id and p.account_id = me.id;  -- (see 'start')
+      perform lelons.room_tidy(x.room_id);
+    end loop;
     if r.group_id is not null then
-      if not exists (select 1 from lelons.chat_group_members m where m.group_id = r.group_id and m.account_id = me.id) then
+      if not lelons.in_group(r.group_id, me.id) then
         return json_build_object('ok', false, 'error', 'gone');
       end if;
       if (select count(*) from lelons.room_people p where p.room_id = rid and p.state = 'in' and p.account_id <> me.id) >= 8 then
@@ -2722,6 +2873,9 @@ begin
     end if;
   elsif what <> 'check' then
     raise exception 'bad what';
+  end if;
+  if what = 'join' and rid is not null then  -- (a voice channel's call joined from 'start': the app needs to know which room)
+    return lelons.rooms_json(me.id, after)::jsonb || jsonb_build_object('room', rid);
   end if;
   return lelons.rooms_json(me.id, after);
 end $$;
@@ -3686,6 +3840,603 @@ begin
   return json_build_object('ok', false, 'error', 'what');
 end $$;
 
+-- ---- (servers) servers: channels, roles, invites and auto-posts (the tables are near the top)
+
+-- Your unread messages in a channel (since you last looked, or since you joined the server).
+create or replace function lelons.srv_unread(g lelons.chat_groups, me uuid, joined timestamptz) returns int
+  language sql stable security definer set search_path = '' as
+  $$ select count(*)::int from (select 1 from lelons.chat c
+                                where c.group_id = g.id and c.thread_of is null and c.account_id <> me
+                                  and c.id > coalesce((select x.last_id from lelons.chat_seen x where x.account_id = me and x.peer_key = g.id), 0)
+                                  and c.created_at > joined
+                                limit 100) z $$;
+
+create or replace function lelons.srv_mentions(g lelons.chat_groups, me uuid, myname text, joined timestamptz) returns int
+  language sql stable security definer set search_path = '' as
+  $$ select count(*)::int from (select 1 from lelons.chat c
+                                where c.group_id = g.id and c.thread_of is null and c.account_id <> me
+                                  and c.id > coalesce((select x.last_id from lelons.chat_seen x where x.account_id = me and x.peer_key = g.id), 0)
+                                  and c.created_at > joined
+                                  and (c.message ilike '%@' || myname || '%' or c.message ilike '%@everyone%')
+                                limit 100) z $$;
+
+-- Your servers (with how much is unread in each) and the servers friends invited you to.
+create or replace function lelons.srv_list(me lelons.accounts) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'servers', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'picture', s.picture, 'banner', s.banner,
+                          'unread', (select coalesce(sum(lelons.srv_unread(g, me.id, m.joined_at)), 0) from lelons.chat_groups g
+                                     where g.server_id = s.id and g.kind = 'text' and lelons.srv_sees(g, me.id)),
+                          'mentions', (select coalesce(sum(lelons.srv_mentions(g, me.id, me.username, m.joined_at)), 0) from lelons.chat_groups g
+                                       where g.server_id = s.id and g.kind = 'text' and lelons.srv_sees(g, me.id)),
+                          'voice', (select count(*) from lelons.rooms r join lelons.chat_groups g on g.id = r.group_id
+                                    join lelons.room_people p on p.room_id = r.id and p.state = 'in'
+                                    where g.server_id = s.id and r.ended_at is null))
+                          order by m.joined_at)
+                         from lelons.server_members m join lelons.servers s on s.id = m.server_id where m.account_id = me.id), '[]'::jsonb),
+    'asks', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'picture', s.picture, 'banner', s.banner,
+                                                          'by', a.username, 'members', (select count(*) from lelons.server_members x where x.server_id = s.id))
+                                       order by k.created_at desc)
+                      from lelons.server_asks k join lelons.servers s on s.id = k.server_id left join lelons.accounts a on a.id = k.invited_by
+                      where k.account_id = me.id), '[]'::jsonb),
+    'watch', coalesce((select jsonb_agg(distinct ap.kind) from lelons.server_autoposts ap
+                       join lelons.server_members m on m.server_id = ap.server_id and m.account_id = me.id
+                       where ap.enabled and ap.channel_id is not null and ap.kind in ('video', 'live', 'milestone')), '[]'::jsonb))
+$$;
+
+-- One server, as the app shows it.
+create or replace function lelons.srv_json(sid uuid, me lelons.accounts) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  s lelons.servers;
+  perms text[] := lelons.srv_perms(sid, me.id);
+  joined timestamptz;
+  def uuid;
+begin
+  select x.* into s from lelons.servers x where x.id = sid;
+  select m.joined_at into joined from lelons.server_members m where m.server_id = sid and m.account_id = me.id;
+  select r.id into def from lelons.server_roles r where r.server_id = sid and r.is_default limit 1;
+  return jsonb_build_object(
+    'id', s.id, 'name', s.name, 'picture', s.picture, 'banner', s.banner, 'about', s.about,
+    'owner', (select a.username from lelons.accounts a where a.id = s.owner_id),
+    'perms', to_jsonb(coalesce(perms, '{}')),
+    'my_role', (select coalesce(m.role_id, def) from lelons.server_members m where m.server_id = sid and m.account_id = me.id),
+    'roles', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name, 'color', r.color, 'perms', to_jsonb(r.perms),
+                                                           'position', r.position, 'is_default', r.is_default,
+                                                           'count', (select count(*) from lelons.server_members m where m.server_id = sid
+                                                                     and coalesce(m.role_id, def) = r.id and m.account_id is distinct from s.owner_id))
+                                        order by r.is_default, r.position, r.created_at)
+                       from lelons.server_roles r where r.server_id = sid), '[]'::jsonb),
+    'channels', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'kind', g.kind, 'category', g.category,
+                            'position', g.position, 'topic', g.topic, 'read_only', g.read_only,
+                            'private_roles', to_jsonb(g.private_roles),
+                            'last_id', (select max(c.id) from lelons.chat c where c.group_id = g.id and c.thread_of is null),
+                            'unread', case when g.kind = 'text' then lelons.srv_unread(g, me.id, joined) else 0 end,
+                            'mentions', case when g.kind = 'text' then lelons.srv_mentions(g, me.id, me.username, joined) else 0 end,
+                            'room', (select r.id from lelons.rooms r where r.group_id = g.id and r.ended_at is null limit 1),
+                            'people', case when g.kind = 'voice' then coalesce((
+                               select jsonb_agg(jsonb_build_object('username', a.username, 'avatar', a.avatar) order by p.rang_at)
+                               from lelons.rooms r join lelons.room_people p on p.room_id = r.id and p.state = 'in'
+                               join lelons.accounts a on a.id = p.account_id
+                               where r.group_id = g.id and r.ended_at is null), '[]'::jsonb) end)
+                          order by g.position, g.created_at)
+                          from lelons.chat_groups g where g.server_id = sid and lelons.srv_sees(g, me.id)), '[]'::jsonb),
+    'members', coalesce((select jsonb_agg(jsonb_build_object('username', a.username, 'avatar', a.avatar, 'mode', a.mode, 'status', a.status,
+                           'online', not ('online' = any (coalesce(a.hide, '{}'))) and exists (select 1 from lelons.presence p
+                                     where p.account_id = a.id and p.seen_at > now() - interval '150 seconds'),
+                           'role', case when a.id = s.owner_id then null else coalesce(m.role_id, def) end,
+                           'owner', a.id = s.owner_id, 'joined_at', m.joined_at)
+                         order by lower(a.username))
+                         from lelons.server_members m join lelons.accounts a on a.id = m.account_id where m.server_id = sid), '[]'::jsonb),
+    'autoposts', case when 'manage' = any (perms) then coalesce((
+       select jsonb_agg(jsonb_build_object('kind', ap.kind, 'channel', ap.channel_id, 'enabled', ap.enabled,
+                                           'template', ap.template, 'ping', ap.ping))
+       from lelons.server_autoposts ap where ap.server_id = sid), '[]'::jsonb) end,
+    'invites', case when 'invite' = any (perms) then coalesce((
+       select jsonb_agg(jsonb_build_object('code', i.code, 'expires_at', i.expires_at, 'max_uses', i.max_uses, 'uses', i.uses,
+                                           'by', (select a.username from lelons.accounts a where a.id = i.created_by)) order by i.created_at desc)
+       from lelons.server_invites i where i.server_id = sid and (i.expires_at is null or i.expires_at > now())
+         and (i.max_uses is null or i.uses < i.max_uses)), '[]'::jsonb) end,
+    'asked', case when 'invite' = any (perms) then coalesce((
+       select jsonb_agg(a.username) from lelons.server_asks k join lelons.accounts a on a.id = k.account_id where k.server_id = sid), '[]'::jsonb) end,
+    'bans', case when 'kick' = any (perms) then coalesce((
+       select jsonb_agg(jsonb_build_object('username', a.username, 'avatar', a.avatar, 'at', b.created_at) order by b.created_at desc)
+       from lelons.server_bans b join lelons.accounts a on a.id = b.account_id where b.server_id = sid), '[]'::jsonb) end);
+end $$;
+
+-- The default words of each auto-post: {name} who did it, {title} what, {count} a number, {what} started/finished.
+create or replace function lelons.srv_template(kind text) returns text language sql immutable as $$
+  select case kind
+    when 'video' then '🎬 {name} just uploaded {title}! Go watch 👀'
+    when 'live' then '🔴 {name} is live now: {title}'
+    when 'milestone' then '🏆 {name}''s channel just hit {count} subscribers! 🎉'
+    when 'pov' then '🎮 {name} shared a POV: {title}'
+    when 'sound' then '🎵 {name} added a new sound: {title}'
+    when 'game' then '🕹️ {name} posted a game to record: {title}'
+    when 'recording' then '🎥 {name} {what} recording {title}'
+    when 'join' then '👋 Welcome {name}! Say hi, everyone'
+  end $$;
+
+-- Post an auto-post in every server (or just only_server) the person is in that wants this kind.
+create or replace function lelons.srv_autopost(kind text, actor uuid, title text, card jsonb default null,
+                                               count_in bigint default null, what text default null,
+                                               sound uuid default null, only_server uuid default null) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  ap record;
+  words text;
+  who text := (select a.username from lelons.accounts a where a.id = actor);
+begin
+  if actor is null or who is null then
+    return;
+  end if;
+  for ap in select x.* from lelons.server_autoposts x
+            join lelons.server_members m on m.server_id = x.server_id and m.account_id = actor
+            join lelons.chat_groups g on g.id = x.channel_id and g.server_id = x.server_id and g.kind = 'text'
+            where x.kind = srv_autopost.kind and x.enabled and (only_server is null or x.server_id = only_server) loop
+    words := coalesce(nullif(btrim(ap.template), ''), lelons.srv_template(srv_autopost.kind));
+    words := replace(replace(replace(replace(words, '{name}', who), '{title}', coalesce(title, '')),
+                     '{count}', coalesce(to_char(count_in, 'FM999,999,999,999'), '')), '{what}', coalesce(what, ''));
+    if ap.ping then
+      words := '@everyone ' || words;
+    end if;
+    insert into lelons.chat (account_id, message, group_id, auto, card, sound_id, file_name)
+    values (actor, left(words, 500), ap.channel_id, srv_autopost.kind, card, sound,
+            case when sound is not null then left(coalesce(title, ''), 120) end);
+  end loop;
+exception when others then
+  return;  -- (an auto-post never stops the thing that caused it)
+end $$;
+
+create or replace function lelons.srv_on_sound() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  perform lelons.srv_autopost('sound', new.uploader_id, new.name, null, null, null, new.id);
+  return null;
+end $$;
+drop trigger if exists srv_sound on lelons.sounds;
+create trigger srv_sound after insert on lelons.sounds for each row execute function lelons.srv_on_sound();
+
+create or replace function lelons.srv_on_pov() returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  x lelons.pov_sessions;
+begin
+  if exists (select 1 from lelons.pov_files f where f.session_id = new.session_id and f.id <> new.id) then
+    return null;  -- (one post for a POV, not one per file)
+  end if;
+  select * into x from lelons.pov_sessions s where s.id = new.session_id;
+  perform lelons.srv_autopost('pov', new.owner_id, x.title,
+    jsonb_build_object('kind', 'pov', 'id', x.id, 'title', x.title, 'game', x.game, 'seconds', new.seconds));
+  return null;
+end $$;
+drop trigger if exists srv_pov on lelons.pov_files;
+create trigger srv_pov after insert on lelons.pov_files for each row execute function lelons.srv_on_pov();
+
+create or replace function lelons.srv_on_game() returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  card jsonb := jsonb_build_object('kind', 'game', 'id', new.id, 'name', new.info->>'name', 'header', new.info->>'header',
+                                   'app_id', new.app_id);
+begin
+  if tg_op = 'INSERT' then
+    perform lelons.srv_autopost('game', new.poster_id, new.info->>'name', card);
+  elsif new.status is distinct from old.status and new.status in ('recording', 'done') then
+    perform lelons.srv_autopost('recording', new.status_by, new.info->>'name', card, null,
+                                case when new.status = 'done' then 'finished' else 'started' end);
+  end if;
+  return null;
+end $$;
+drop trigger if exists srv_game on lelons.games;
+create trigger srv_game after insert or update of status on lelons.games for each row execute function lelons.srv_on_game();
+
+-- Things only your own app knows (it looks at your channel): a new video, going live, a subscriber milestone.
+-- key: the video's id (posted once); data: {title, url, thumb} or {subs}.
+create or replace function public.lelons_server_event(token text, kind text, key text, data jsonb default '{}')
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  n bigint;
+  mark bigint;
+  first_time boolean;
+begin
+  if kind not in ('video', 'live', 'milestone') or coalesce(length(key), 0) not between 1 and 150 or jsonb_typeof(data) <> 'object' then
+    return json_build_object('ok', false);
+  end if;
+  if kind = 'milestone' then
+    n := greatest(0, least(coalesce((data->>'subs')::bigint, 0), 10000000000));
+    if n < 100 then
+      return json_build_object('ok', true);
+    end if;
+    mark := n / lelons.step(n) * lelons.step(n);
+    first_time := not exists (select 1 from lelons.server_posted p where p.account_id = me.id and p.key like 'milestone:%');
+    insert into lelons.server_posted (account_id, key) values (me.id, 'milestone:' || mark) on conflict do nothing;
+    if not found or first_time then
+      return json_build_object('ok', true);  -- (the first number we see is only remembered)
+    end if;
+    perform lelons.srv_autopost('milestone', me.id, '', null, mark);
+    return json_build_object('ok', true, 'posted', true);
+  end if;
+  insert into lelons.server_posted (account_id, key) values (me.id, kind || ':' || key) on conflict do nothing;
+  if not found then
+    return json_build_object('ok', true);
+  end if;
+  delete from lelons.server_posted p where p.at < now() - interval '120 days' and p.key not like 'milestone:%' and p.key not like 'join:%';
+  perform lelons.srv_autopost(kind, me.id, left(coalesce(data->>'title', ''), 150),
+    jsonb_build_object('kind', kind, 'url', left(coalesce(data->>'url', ''), 300), 'title', left(coalesce(data->>'title', ''), 150),
+                       'thumb', left(coalesce(data->>'thumb', ''), 400), 'channel', left(coalesce(data->>'channel', ''), 100)));
+  return json_build_object('ok', true, 'posted', true);
+end $$;
+
+-- Starting channels for a new server.
+create or replace function lelons.srv_setup(sid uuid, template text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  chans text[][];
+  c text[];
+  i int := 0;
+  ids jsonb := '{}';
+  gid uuid;
+  posts text[][];
+begin
+  chans := case template
+    when 'youtube' then array[['Info', 'rules', 'text', 'ro'], ['Info', 'announcements', 'text', 'ro'], ['Chat', 'general', 'text', ''],
+                              ['Chat', 'clips', 'text', ''], ['Chat', 'thumbnails', 'text', ''], ['Voice', 'Lobby', 'voice', ''],
+                              ['Voice', 'Recording room', 'voice', '']]
+    when 'gaming' then array[['Info', 'rules', 'text', 'ro'], ['Chat', 'general', 'text', ''], ['Chat', 'looking-for-group', 'text', ''],
+                             ['Chat', 'clips', 'text', ''], ['Voice', 'Lobby', 'voice', ''], ['Voice', 'Squad', 'voice', '']]
+    when 'friends' then array[['Chat', 'general', 'text', ''], ['Chat', 'memes', 'text', ''], ['Voice', 'Lobby', 'voice', '']]
+    else array[['Chat', 'general', 'text', ''], ['Voice', 'Lobby', 'voice', '']] end;
+  foreach c slice 1 in array chans loop
+    i := i + 1;
+    insert into lelons.chat_groups (name, server_id, kind, category, position, read_only)
+    values (c[2], sid, c[3], c[1], i, c[4] = 'ro') returning id into gid;
+    ids := ids || jsonb_build_object(c[2], gid);
+  end loop;
+  posts := case template
+    when 'youtube' then array[['video', 'announcements', 'on'], ['live', 'announcements', 'on'], ['milestone', 'announcements', 'on'],
+                              ['pov', 'clips', 'on'], ['sound', 'general', ''], ['game', 'general', ''], ['recording', 'general', 'on'],
+                              ['join', 'general', 'on']]
+    else array[['video', 'general', ''], ['live', 'general', ''], ['milestone', 'general', ''], ['pov', 'clips', ''],
+               ['sound', 'general', ''], ['game', 'general', ''], ['recording', 'general', ''], ['join', 'general', 'on']] end;
+  foreach c slice 1 in array posts loop
+    insert into lelons.server_autoposts (server_id, kind, channel_id, enabled)
+    values (sid, c[1], coalesce((ids->>c[2])::uuid, (ids->>'general')::uuid), c[3] = 'on') on conflict do nothing;
+  end loop;
+end $$;
+
+create or replace function lelons.srv_code(name text) returns text language sql volatile set search_path = '' as
+  $$ select left(coalesce(nullif(upper(regexp_replace(name, '[^A-Za-z0-9]+', '', 'g')), ''), 'SERVER'), 12) || '-'
+            || upper(left(replace(gen_random_uuid()::text, '-', ''), 5)) $$;
+
+-- Everything about servers. what (data):
+--   list / get (sid) / preview (code) / create (name, template) / join (code, or sid when you were invited) / decline (sid)
+--   leave (sid) / delete (sid, owner)
+--   edit (name, about, banner, picture)                                       -- manage
+--   channel_add (name, kind, category, topic, read_only, private_roles) / channel_edit (id, ...) / channel_delete (id)
+--   channel_order (ids: in the order they go)                                 -- manage
+--   role_add (name, color, perms) / role_edit (id, ...) / role_delete (id)    -- manage
+--   autopost (kind, channel, enabled, template, ping)                         -- manage
+--   member_role (username, role)                                              -- manage
+--   invite_code (days, uses) / invite_delete (code) / invite_friend (username) -- invite
+--   kick (username) / ban (username) / unban (username)                       -- kick
+create or replace function public.lelons_server(token text, what text, sid uuid default null, data jsonb default '{}')
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  perms text[];
+  s lelons.servers;
+  inv lelons.server_invites;
+  them uuid;
+  rid uuid;
+  gid uuid;
+  clean text;
+  n int;
+  ok_perms text[] := array['manage', 'pin', 'delete', 'invite', 'kick'];
+  v_name text := btrim(coalesce(data->>'name', ''));
+  files json;
+begin
+  if jsonb_typeof(coalesce(data, '{}')) <> 'object' then
+    data := '{}';
+  end if;
+  if what = 'list' then
+    return lelons.srv_list(me);
+  end if;
+  if what = 'preview' or (what = 'join' and coalesce(data->>'code', '') <> '') then
+    select i.* into inv from lelons.server_invites i where i.code = upper(btrim(coalesce(data->>'code', '')))
+      and (i.expires_at is null or i.expires_at > now()) and (i.max_uses is null or i.uses < i.max_uses);
+    if inv.code is null then
+      return json_build_object('ok', false, 'error', 'nocode');
+    end if;
+    sid := inv.server_id;
+    if what = 'preview' then
+      return (select json_build_object('ok', true, 'server', jsonb_build_object('id', x.id, 'name', x.name, 'picture', x.picture,
+                      'banner', x.banner, 'about', x.about, 'members', (select count(*) from lelons.server_members m where m.server_id = x.id),
+                      'online', (select count(*) from lelons.server_members m join lelons.presence p on p.account_id = m.account_id
+                                 where m.server_id = x.id and p.seen_at > now() - interval '150 seconds'),
+                      'joined', exists (select 1 from lelons.server_members m where m.server_id = x.id and m.account_id = me.id)))
+              from lelons.servers x where x.id = sid);
+    end if;
+  end if;
+  if what = 'create' then
+    if length(v_name) < 1 or length(v_name) > 50 then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if (select count(*) from lelons.servers x where x.owner_id = me.id and x.created_at > now() - interval '1 day') >= 10 then
+      return json_build_object('ok', false, 'error', 'slow');
+    end if;
+    if (select count(*) from lelons.server_members m where m.account_id = me.id) >= 50 then
+      return json_build_object('ok', false, 'error', 'many');
+    end if;
+    insert into lelons.servers (name, owner_id, banner)
+    values (v_name, me.id, case when coalesce(data->>'banner', '') ~ '^[a-z]{1,20}$' then data->>'banner' else 'sunset' end)
+    returning * into s;
+    insert into lelons.server_roles (server_id, name, color, perms, position)
+    values (s.id, 'Mods', '#38bdf8', array['manage', 'pin', 'delete', 'invite', 'kick'], 1);
+    insert into lelons.server_roles (server_id, name, color, perms, position, is_default)
+    values (s.id, 'Member', '#94a3b8', array['invite'], 99, true);
+    perform lelons.srv_setup(s.id, coalesce(data->>'template', 'friends'));
+    insert into lelons.server_members (server_id, account_id) values (s.id, me.id);
+    return json_build_object('ok', true, 'id', s.id, 'server', lelons.srv_json(s.id, me), 'list', lelons.srv_list(me));
+  end if;
+
+  select x.* into s from lelons.servers x where x.id = sid;
+  if s.id is null then
+    return json_build_object('ok', false, 'error', 'gone');
+  end if;
+  perms := lelons.srv_perms(sid, me.id);
+
+  if what = 'join' then
+    if exists (select 1 from lelons.server_bans b where b.server_id = sid and b.account_id = me.id) then
+      return json_build_object('ok', false, 'error', 'banned');
+    end if;
+    if perms is null then
+      if inv.code is null and not exists (select 1 from lelons.server_asks k where k.server_id = sid and k.account_id = me.id) then
+        return json_build_object('ok', false, 'error', 'nocode');
+      end if;
+      if (select count(*) from lelons.server_members m where m.server_id = sid) >= 200 then
+        return json_build_object('ok', false, 'error', 'full');
+      end if;
+      insert into lelons.server_members (server_id, account_id) values (sid, me.id) on conflict do nothing;
+      if inv.code is not null then
+        update lelons.server_invites i set uses = i.uses + 1 where i.code = inv.code;
+      end if;
+      delete from lelons.server_asks k where k.server_id = sid and k.account_id = me.id;
+      insert into lelons.server_posted (account_id, key) values (me.id, 'join:' || sid) on conflict do nothing;
+      if found then  -- (a welcome only the first time someone joins, not each time they come back)
+        perform lelons.srv_autopost('join', me.id, s.name, null, null, null, null, sid);
+      end if;
+    end if;
+    return json_build_object('ok', true, 'id', sid, 'server', lelons.srv_json(sid, me), 'list', lelons.srv_list(me));
+  elsif what = 'decline' then
+    delete from lelons.server_asks k where k.server_id = sid and k.account_id = me.id;
+    return json_build_object('ok', true, 'list', lelons.srv_list(me));
+  end if;
+
+  if perms is null then
+    return json_build_object('ok', false, 'error', 'gone');
+  end if;
+  if what = 'get' then
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  elsif what = 'leave' then
+    if s.owner_id = me.id then
+      return json_build_object('ok', false, 'error', 'owner');
+    end if;
+    delete from lelons.server_members m where m.server_id = sid and m.account_id = me.id;
+    delete from lelons.chat_seen x where x.account_id = me.id and x.peer_key in (select g.id from lelons.chat_groups g where g.server_id = sid);
+    return json_build_object('ok', true, 'list', lelons.srv_list(me));
+  elsif what = 'delete' then
+    if s.owner_id <> me.id then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    files := (select coalesce(json_agg(f), '[]'::json) from (
+               select c.file f from lelons.chat c join lelons.chat_groups g on g.id = c.group_id where g.server_id = sid and c.file is not null
+               union all select s.picture where s.picture is not null) y);
+    delete from lelons.servers x where x.id = sid;
+    return json_build_object('ok', true, 'files', files, 'list', lelons.srv_list(me));
+  end if;
+
+  if what in ('invite_code', 'invite_delete', 'invite_friend') then
+    if not ('invite' = any (perms)) then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    if what = 'invite_code' then
+      if (select count(*) from lelons.server_invites i where i.created_by = me.id and i.created_at > now() - interval '1 day') >= 50 then
+        return json_build_object('ok', false, 'error', 'slow');
+      end if;
+      insert into lelons.server_invites (code, server_id, created_by, expires_at, max_uses)
+      values (lelons.srv_code(s.name), sid, me.id,
+              case when coalesce((data->>'days')::int, 7) > 0 then now() + make_interval(days => least(coalesce((data->>'days')::int, 7), 365)) end,
+              nullif(least(greatest(coalesce((data->>'uses')::int, 10), 0), 1000), 0))
+      returning * into inv;
+      return json_build_object('ok', true, 'code', inv.code, 'server', lelons.srv_json(sid, me));
+    elsif what = 'invite_delete' then
+      delete from lelons.server_invites i where i.server_id = sid and i.code = data->>'code'
+        and (i.created_by = me.id or 'manage' = any (perms));
+    else
+      select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', '')));
+      if them is null then
+        return json_build_object('ok', false, 'error', 'nobody');
+      end if;
+      if exists (select 1 from lelons.server_bans b where b.server_id = sid and b.account_id = them) then
+        return json_build_object('ok', false, 'error', 'banned');
+      end if;
+      if not exists (select 1 from lelons.server_members m where m.server_id = sid and m.account_id = them) then
+        insert into lelons.server_asks (server_id, account_id, invited_by) values (sid, them, me.id) on conflict do nothing;
+      end if;
+    end if;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  end if;
+
+  if what in ('kick', 'ban', 'unban') then
+    if not ('kick' = any (perms)) then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', '')));
+    if them is null then
+      return json_build_object('ok', false, 'error', 'nobody');
+    end if;
+    if them = s.owner_id or them = me.id
+       or (not ('owner' = any (perms)) and 'kick' = any (coalesce(lelons.srv_perms(sid, them), '{}'))) then
+      return json_build_object('ok', false, 'error', 'denied');  -- (mods can't kick other mods; only the owner can)
+    end if;
+    if what = 'unban' then
+      delete from lelons.server_bans b where b.server_id = sid and b.account_id = them;
+    else
+      delete from lelons.server_members m where m.server_id = sid and m.account_id = them;
+      delete from lelons.server_asks k where k.server_id = sid and k.account_id = them;
+      if what = 'ban' then
+        insert into lelons.server_bans (server_id, account_id, banned_by) values (sid, them, me.id) on conflict do nothing;
+      end if;
+    end if;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  end if;
+
+  if not ('manage' = any (perms)) then
+    return json_build_object('ok', false, 'error', 'denied');
+  end if;
+
+  if what = 'edit' then
+    if data ? 'name' and (length(v_name) < 1 or length(v_name) > 50) then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if data ? 'picture' and data->>'picture' is not null and not exists (select 1 from lelons.tickets t
+         where t.path = data->>'picture' and t.kind = 'upload' and t.account_id = me.id) then
+      raise exception 'wrong file';
+    end if;
+    update lelons.servers x set
+      name = case when data ? 'name' then v_name else x.name end,
+      about = case when data ? 'about' then left(btrim(coalesce(data->>'about', '')), 300) else x.about end,
+      banner = case when coalesce(data->>'banner', '') ~ '^[a-z]{1,20}$' then data->>'banner' else x.banner end,
+      picture = case when data ? 'picture' then data->>'picture' else x.picture end
+    where x.id = sid;
+    if data ? 'picture' then
+      delete from lelons.tickets t where t.path = data->>'picture';
+    end if;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me),
+                             'old_picture', case when data ? 'picture' and s.picture is distinct from data->>'picture' then s.picture end);
+  elsif what in ('channel_add', 'channel_edit') then
+    clean := btrim(coalesce(data->>'name', ''));
+    if coalesce(data->>'kind', 'text') = 'text' or what = 'channel_edit' then
+      clean := lower(regexp_replace(clean, '\s+', '-', 'g'));
+    end if;
+    if data ? 'name' and (length(clean) < 1 or length(clean) > 50) then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if what = 'channel_add' then
+      if (select count(*) from lelons.chat_groups g where g.server_id = sid) >= 60 then
+        return json_build_object('ok', false, 'error', 'many');
+      end if;
+      insert into lelons.chat_groups (name, server_id, kind, category, position)
+      values (case when coalesce(data->>'kind', 'text') = 'voice' then btrim(data->>'name') else clean end, sid,
+              case when data->>'kind' = 'voice' then 'voice' else 'text' end,
+              left(btrim(coalesce(data->>'category', '')), 30),
+              coalesce((select max(g.position) + 1 from lelons.chat_groups g where g.server_id = sid), 1))
+      returning id into gid;
+    else
+      gid := (data->>'id')::uuid;
+      if not exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id = sid) then
+        return json_build_object('ok', false, 'error', 'gone');
+      end if;
+      if data ? 'name' and (select g.kind from lelons.chat_groups g where g.id = gid) = 'voice' then
+        clean := btrim(data->>'name');
+      end if;
+    end if;
+    update lelons.chat_groups g set
+      name = case when data ? 'name' and what = 'channel_edit' then clean else g.name end,
+      category = case when data ? 'category' then left(btrim(coalesce(data->>'category', '')), 30) else g.category end,
+      topic = case when data ? 'topic' then left(btrim(coalesce(data->>'topic', '')), 120) else g.topic end,
+      read_only = case when data ? 'read_only' then coalesce((data->>'read_only')::boolean, false) else g.read_only end,
+      private_roles = case when data ? 'private_roles' then
+                        case when jsonb_typeof(data->'private_roles') = 'array' and jsonb_array_length(data->'private_roles') > 0
+                             then (select array_agg(r.id) from lelons.server_roles r where r.server_id = sid
+                                   and r.id::text in (select jsonb_array_elements_text(data->'private_roles'))) end
+                      else g.private_roles end
+    where g.id = gid;
+    return json_build_object('ok', true, 'id', gid, 'server', lelons.srv_json(sid, me));
+  elsif what = 'channel_delete' then
+    gid := (data->>'id')::uuid;
+    if (select count(*) from lelons.chat_groups g where g.server_id = sid and g.kind = 'text') <= 1
+       and exists (select 1 from lelons.chat_groups g where g.id = gid and g.kind = 'text') then
+      return json_build_object('ok', false, 'error', 'last');
+    end if;
+    files := (select coalesce(json_agg(c.file), '[]'::json) from lelons.chat c where c.group_id = gid and c.file is not null
+              and exists (select 1 from lelons.chat_groups g where g.id = gid and g.server_id = sid));
+    delete from lelons.chat_groups g where g.id = gid and g.server_id = sid;
+    return json_build_object('ok', true, 'files', files, 'server', lelons.srv_json(sid, me));
+  elsif what = 'channel_order' then
+    update lelons.chat_groups g set position = x.n, category = coalesce(x.cat, g.category)
+    from (select (e->>'id')::uuid id, e->>'category' cat, n::int from jsonb_array_elements(
+            case when jsonb_typeof(data->'ids') = 'array' then data->'ids' else '[]' end) with ordinality as t(e, n)) x
+    where g.id = x.id and g.server_id = sid;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  elsif what in ('role_add', 'role_edit') then
+    if data ? 'name' and (length(v_name) < 1 or length(v_name) > 30) then
+      return json_build_object('ok', false, 'error', 'name');
+    end if;
+    if what = 'role_add' then
+      if (select count(*) from lelons.server_roles r where r.server_id = sid) >= 20 then
+        return json_build_object('ok', false, 'error', 'many');
+      end if;
+      insert into lelons.server_roles (server_id, name, position)
+      values (sid, coalesce(nullif(v_name, ''), 'New role'), coalesce((select max(r.position) from lelons.server_roles r
+                                                                         where r.server_id = sid and not r.is_default), 0) + 1)
+      returning id into rid;
+    else
+      rid := (data->>'id')::uuid;
+      if not exists (select 1 from lelons.server_roles r where r.id = rid and r.server_id = sid) then
+        return json_build_object('ok', false, 'error', 'gone');
+      end if;
+    end if;
+    update lelons.server_roles r set
+      name = case when data ? 'name' then v_name else r.name end,
+      color = case when coalesce(data->>'color', '') ~ '^#[0-9a-f]{6}$' then data->>'color' else r.color end,
+      perms = case when jsonb_typeof(data->'perms') = 'array' then
+                (select coalesce(array_agg(distinct p), '{}') from jsonb_array_elements_text(data->'perms') p where p = any (ok_perms))
+              else r.perms end
+    where r.id = rid;
+    return json_build_object('ok', true, 'id', rid, 'server', lelons.srv_json(sid, me));
+  elsif what = 'role_delete' then
+    delete from lelons.server_roles r where r.id = (data->>'id')::uuid and r.server_id = sid and not r.is_default;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  elsif what = 'member_role' then
+    select a.id into them from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', '')));
+    rid := nullif(data->>'role', '')::uuid;
+    if them is null or them = s.owner_id or (rid is not null and not exists (select 1 from lelons.server_roles r where r.id = rid and r.server_id = sid)) then
+      return json_build_object('ok', false, 'error', 'denied');
+    end if;
+    update lelons.server_members m set role_id = case when rid = (select r.id from lelons.server_roles r where r.server_id = sid and r.is_default) then null else rid end
+    where m.server_id = sid and m.account_id = them;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  elsif what = 'autopost' then
+    if coalesce(data->>'kind', '') not in ('video', 'live', 'milestone', 'pov', 'sound', 'game', 'recording', 'join') then
+      return json_build_object('ok', false, 'error', 'bad');
+    end if;
+    if data ? 'channel' and data->>'channel' is not null and not exists (select 1 from lelons.chat_groups g
+         where g.id = (data->>'channel')::uuid and g.server_id = sid and g.kind = 'text') then
+      return json_build_object('ok', false, 'error', 'gone');
+    end if;
+    insert into lelons.server_autoposts as ap (server_id, kind, channel_id, enabled, template, ping)
+    values (sid, data->>'kind', (data->>'channel')::uuid, coalesce((data->>'enabled')::boolean, true),
+            left(coalesce(data->>'template', ''), 300), coalesce((data->>'ping')::boolean, false))
+    on conflict (server_id, kind) do update set
+      channel_id = case when data ? 'channel' then excluded.channel_id else ap.channel_id end,
+      enabled = case when data ? 'enabled' then excluded.enabled else ap.enabled end,
+      template = case when data ? 'template' then excluded.template else ap.template end,
+      ping = case when data ? 'ping' then excluded.ping else ap.ping end;
+    return json_build_object('ok', true, 'server', lelons.srv_json(sid, me));
+  end if;
+  return json_build_object('ok', false, 'error', 'bad');
+end $$;
+
+-- A server picture is in use, so the clean-up keeps it.
+create or replace function lelons.listed(file text) returns boolean
+  language sql stable security definer set search_path = '' as
+  $$ select exists (select 1 from lelons.sounds where path = file)
+         or exists (select 1 from lelons.sound_trash t where t.path = file)
+         or exists (select 1 from lelons.accounts where avatar = file or banner = file)
+         or exists (select 1 from lelons.chat c where c.file = listed.file)
+         or exists (select 1 from lelons.chat_groups g where g.picture = listed.file)
+         or exists (select 1 from lelons.servers s where s.picture = listed.file) $$;
+
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -3716,7 +4467,8 @@ begin
     'lelons_chat_group(text, text, uuid, text, text[], text)', 'lelons_playlists(text)',
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
-    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)', 'lelons_remote(text, text, uuid, jsonb, bigint)'] loop
+    'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)',
+    'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

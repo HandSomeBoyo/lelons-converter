@@ -668,6 +668,88 @@ class Library:
                                            for m in group.get("members") or []]}
         return result
 
+    SERVER_ACTIONS = ("list", "preview", "create", "join", "decline", "get", "leave", "delete", "invite_code",
+                      "invite_delete", "invite_friend", "kick", "ban", "unban", "edit", "channel_add", "channel_edit",
+                      "channel_delete", "channel_order", "role_add", "role_edit", "role_delete", "member_role", "autopost")
+
+    def server(self, what, server_id=None, data=None):
+        """Servers in Chat: your list, making and joining one, and its settings (see lelons_server)."""
+        if what not in self.SERVER_ACTIONS:
+            raise Error("That didn't work. Try again.")
+        data = data if isinstance(data, dict) else {}
+        result = _rpc("lelons_server", token=self._token(), what=what, sid=str(server_id) if server_id else None,
+                      data=data) or {}
+        if what == "list":
+            return {"list": self._server_list(result)}
+        if not result.get("ok"):
+            raise Error({"name": "Give it a name.",
+                         "slow": "You've made a lot today. Try again tomorrow.",
+                         "many": "That's the most there can be.",
+                         "nocode": "That invite doesn't work. It may have run out.",
+                         "banned": "You're banned from that server." if what == "join" else "They're banned from this server. Unban them first.",
+                         "full": "That server is full.",
+                         "owner": "You own this server. Delete it instead, or give it to someone else first.",
+                         "nobody": "There's nobody with that name.",
+                         "last": "A server needs at least one text channel.",
+                         "gone": "That server is gone.",
+                         "denied": "You aren't allowed to do that here.",
+                         }.get(result.get("error")) or FRIENDLY.get(result.get("error"), "That didn't work. Try again."))
+        for path in [result.get("old_picture"), *(result.get("files") or [])]:
+            self._remove_file(path)
+        if result.get("server"):
+            result["server"] = self._server_urls(result["server"])
+        if result.get("list"):
+            result["list"] = self._server_list(result["list"])
+        return result
+
+    @staticmethod
+    def _server_urls(server):
+        server = {**server, "pictureUrl": public_url(server["picture"]) if server.get("picture") else ""}
+        if isinstance(server.get("members"), list):
+            server["members"] = [{**m, "avatarUrl": public_url(m["avatar"]) if m.get("avatar") else ""}
+                                 for m in server.get("members") or []]
+        for ch in server.get("channels") or []:
+            if isinstance(ch.get("people"), list):
+                ch["people"] = [{**p, "avatarUrl": public_url(p["avatar"]) if p.get("avatar") else ""}
+                                for p in ch["people"]]
+        if isinstance(server.get("bans"), list):
+            server["bans"] = [{**b, "avatarUrl": public_url(b["avatar"]) if b.get("avatar") else ""} for b in server["bans"]]
+        return server
+
+    @classmethod
+    def _server_list(cls, result):
+        return {"servers": [cls._server_urls(s) for s in result.get("servers") or []],
+                "asks": [cls._server_urls(s) for s in result.get("asks") or []],
+                "watch": [str(k) for k in result.get("watch") or []]}
+
+    def server_event(self, kind, key, data):
+        """Tell your servers about your new video, your stream or a milestone (posted once, by key)."""
+        try:
+            return _rpc("lelons_server_event", token=self._token(), kind=str(kind), key=str(key)[:200], data=data) or {}
+        except Error:
+            return {}
+
+    def set_server_picture(self, server_id, data):
+        """A server's picture from an image file's bytes: cut to a square and made small."""
+        import io
+
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(io.BytesIO(data)) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
+                out = io.BytesIO()
+                im.save(out, "JPEG", quality=88)
+        except (OSError, ValueError, Image.DecompressionBombError):
+            raise Error("That isn't a picture the app can open.") from None
+        path = self._put_file("avatar", out.getvalue(), "image/jpeg")
+        try:
+            return self.server("edit", server_id, {"picture": path})
+        except Error:
+            self._remove_file(path)
+            raise
+
     def set_group_picture(self, group_id, data):
         """A group chat's picture from an image file's bytes: cut to a square and made small."""
         import io

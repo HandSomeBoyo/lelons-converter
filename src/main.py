@@ -1141,6 +1141,23 @@ class Handler(BaseHTTPRequestHandler):
                     raise sfx.Error("That picture is too big.")
                 with open(paths[0], "rb") as f:
                     result = library.set_group_picture(data.get("group"), f.read())
+            elif action == "server":
+                result = library.server(data.get("what"), data.get("server"), data.get("data"))
+            elif action == "server-picture-pick":
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick a picture for the server", [
+                        ("Pictures", "*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp"), ("All files", "*.*")])
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if not paths:
+                    return self.send_json({"ok": True, "server": None})
+                if os.path.getsize(paths[0]) > 30 * 1024 * 1024:
+                    raise sfx.Error("That picture is too big.")
+                with open(paths[0], "rb") as f:
+                    result = library.set_server_picture(data.get("server"), f.read())
             elif action == "group-picture-remove":
                 result = library.chat_group("picture", data.get("group"))
             elif action == "chat-typing":
@@ -1796,6 +1813,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, **sfx.library.set_group_picture(group, self.rfile.read(length))})
             except sfx.Error as e:
                 return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+        if self.path == "/api/sfx-server-picture-upload":  # the body is a server's new picture
+            if length > 30 * 1024 * 1024:
+                return self.send_json({"ok": False, "error": "That picture is too big."})
+            try:
+                return self.send_json({"ok": True, **sfx.library.set_server_picture(
+                    self.headers.get("X-Server") or "", self.rfile.read(length))})
+            except sfx.Error as e:
+                return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
         if self.path == "/api/boards-background":  # the body is a picture for a board's background
             if length > 40 * 1024 * 1024:
                 return self.send_json({"ok": False, "error": "That picture is too big."})
@@ -2416,6 +2441,8 @@ def main():
         threading.Timer(8, start_remote_engine).start()  # (after the window, so it doesn't slow the start)
 
     media.use_gpu(state.hardware)
+    import srvwatch
+    srvwatch.start()  # auto-posts about your own videos and streams in your servers
     # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
     browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
     if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too

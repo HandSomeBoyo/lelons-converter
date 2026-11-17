@@ -174,7 +174,9 @@ async function callJoin(roomId, key) {
 }
 
 function callFresh(key, id) {
-  const group = String(key || "").startsWith("g:") ? (chatGroups.find((g) => "g:" + g.id === key) || null) : null;
+  let group = String(key || "").startsWith("g:") ? (chatGroups.find((g) => "g:" + g.id === key) || null) : null;
+  const vc = typeof srvChannelOf === "function" ? srvChannelOf(key) : null; // (a server's voice channel)
+  if (vc) group = { id: vc.id, name: `${vc.name} · ${srv.name}`, pictureUrl: srv.pictureUrl || "", server: srv.id };
   return {
     id, key, group, title: group ? group.name : key, pictureUrl: group ? group.pictureUrl : callFaceOf(key),
     phase: "joining", status: "", people: [], startedAt: 0, everTalked: false,
@@ -1023,7 +1025,8 @@ function drawCall() {
   const box = $("callBox");
   box.hidden = !call;
   document.body.classList.toggle("in-call", !!call);
-  if (!call) { callDrawn = ""; $("callStage").hidden = true; drawCallTiles([], false); callPop(null); return; }
+  if (typeof srvDraw === "function") srvDraw(); // (servers: the "Voice connected" bar and who's in each voice channel)
+  if (!call) { callDrawn = ""; $("callStage").hidden = true; drawCallTiles([], false); callPop(null); callStagePlace(false); return; }
   drawCallStatus();
   drawCallPeople();
   drawCallStage();
@@ -1081,7 +1084,10 @@ function drawCallStage() {
   const watched = sharing.find((p) => lower(p.name) === callWatching);
   const tiles = live ? callTiles() : [];
   const cameras = tiles.some((t) => t.stream);
-  stage.hidden = !(watched || cameras);
+  // (servers) In a voice channel you're looking at, the call fills the middle of the chat, with everyone as a tile.
+  const inRoom = live && typeof srvStageHere === "function" && srvStageHere();
+  callStagePlace(inRoom);
+  stage.hidden = !(watched || cameras || inRoom);
   if (stage.hidden) {
     if ($("callVideo").srcObject) $("callVideo").srcObject = null;
     drawCallTiles([], false);
@@ -1090,13 +1096,14 @@ function drawCallStage() {
   if (!watched && $("callVideo").srcObject) $("callVideo").srcObject = null;
   if (watched && $("callVideo").srcObject !== watched.video) { $("callVideo").srcObject = watched.video; $("callVideo").play().catch(() => {}); }
   $("callVideo").hidden = !watched;
-  stage.classList.toggle("small", callStageSmall);
+  if (typeof callZoomWatch === "function") callZoomWatch(watched ? callWatching : "");
+  stage.classList.toggle("small", callStageSmall && !inRoom);
   stage.classList.toggle("cameras", !watched);
   $("callStageLabel").textContent = watched ? `${watched.name}'s screen` : "";
   $("callStageSize").innerHTML = callStageSmall ? CALL_ICONS.big : CALL_ICONS.small;
   $("callStageSize").title = callStageSmall ? "Make it big" : "Make it smaller";
   // Under a screen: only the cameras that are on (and none when it's small).
-  drawCallTiles(watched ? (callStageSmall ? [] : tiles.filter((t) => t.stream)) : tiles, !!watched);
+  drawCallTiles(watched ? (inRoom ? tiles : callStageSmall ? [] : tiles.filter((t) => t.stream)) : tiles, !!watched);
   const tabs = $("callStageTabs");
   const sig = JSON.stringify([sharing.map((p) => p.name), callWatching]);
   if (tabs.dataset.sig !== sig) {
@@ -1107,6 +1114,18 @@ function drawCallStage() {
       return b;
     }) : []));
   }
+}
+
+// The stage floats over the page, or sits in a voice channel's room in the chat.
+function callStagePlace(inRoom) {
+  const stage = $("callStage");
+  const room = $("vcRoom");
+  stage.classList.toggle("in-room", !!inRoom);
+  document.body.classList.toggle("vc-here", !!inRoom);
+  const moved = (inRoom && room && stage.parentElement !== room) || (!inRoom && stage.parentElement !== document.body);
+  if (inRoom && room && stage.parentElement !== room) room.append(stage);
+  else if (!inRoom && stage.parentElement !== document.body) $("callBox").after(stage);
+  if (moved) stage.querySelectorAll("video").forEach((v) => { if (v.srcObject) v.play().catch(() => {}); });
 }
 
 // Everyone in the call, with their camera when it's on: [{key, name, avatarUrl, stream, me, muted}]
