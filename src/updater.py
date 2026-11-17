@@ -44,11 +44,28 @@ def _get_json(url):
 
 # ---------------------------------------------------------------- the app
 
+def _latest_from_page():
+    """The newest release without the API: github.com/<repo>/releases/latest sends you on to .../tag/vX.Y.Z,
+    and the installer's address follows from the tag."""
+    with _get(f"https://github.com/{UPDATE_REPO}/releases/latest") as response:
+        final = response.geturl()
+    tag = final.rstrip("/").rsplit("/tag/", 1)[-1] if "/tag/" in final else ""
+    if not re.fullmatch(r"v?\d+\.\d+\.\d+", tag):
+        raise OSError("no release found")
+    url = f"https://github.com/{UPDATE_REPO}/releases/download/{tag}/VaultHub.Setup.exe"
+    return {"tag_name": tag, "body": "", "assets": [{"name": "VaultHub.Setup.exe", "browser_download_url": url}]}
+
+
 def check():
     """Returns {"version", "notes", "url"} if a newer version exists, else None."""
     if not UPDATE_REPO:
         return None
-    release = _get_json(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest")
+    try:
+        release = _get_json(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest")
+    except Exception:  # noqa: BLE001
+        # (2.38.2) GitHub's API only answers 60 times an hour per home internet (several PCs and restarts
+        # use that up fast). The normal release page has no such limit: it sends you on to the newest tag.
+        release = _latest_from_page()
     latest = release.get("tag_name", "")
     if not latest or parse_version(latest)[:3] <= parse_version(VERSION)[:3]:
         return None
