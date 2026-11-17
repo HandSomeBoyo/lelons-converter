@@ -225,9 +225,10 @@ function srvDrawSide() {
     return;
   }
   const speaking = typeof callSpeaking !== "undefined" ? [...callSpeaking.entries()].filter(([, v]) => v.on).map(([k]) => k) : [];
-  const sig = JSON.stringify([srv, chatWith, [...srvShut], srvVoice, callIsLive() && call.phase,
+  const sig = JSON.stringify([srv, chatWith, [...srvShut], srvVoice, callIsLive() && call.phase, callIsLive() && call.key,
+    callIsLive() ? (call.people || []).map((p) => p.username + p.state) : [],
     typeof callPeers !== "undefined" ? [...callPeers.values()].map((p) => !!p.sharing).concat(!!callScreen) : []]);
-  if (sig === srvSideDrawn) return;
+  if (sig === srvSideDrawn || srvDrag) return;
   srvSideDrawn = sig;
   const online = (srv.members || []).filter((m) => m.online).length;
   const count = (srv.members || []).length;
@@ -254,13 +255,15 @@ function srvDrawSide() {
         srvDrawSide();
       });
       head.append(srvText("span", "", cat.name));
+      head.dataset.cat = cat.name;
       if (srvCan("manage")) head.append(srvBtn("plus", SRV_I.plus, "Make a channel here", () => srvChannelDialog(null, cat.name)));
       chans.append(head);
     }
     for (const c of cat.channels) {
       const key = "g:" + c.id;
       const open = key === chatWith;
-      if (shut && !open && !(c.kind === "voice" && (c.people || []).length)) continue;
+      const people = c.kind === "voice" ? srvVoicePeople(c) : [];
+      if (shut && !open && !people.length) continue;
       const row = srvBtn("srv-ch" + (open ? " on" : "") + (c.unread && !open ? " unread" : "") + (c.kind === "voice" ? " voice" : ""),
         c.kind === "voice" ? SRV_I.vol : '<span class="h">#</span>', c.topic || "", () => srvPick(c));
       row.append(srvText("span", "srv-ch-name", c.name));
@@ -268,15 +271,20 @@ function srvDrawSide() {
       else if (c.private_roles) row.append(srvEl("span", "ico", SRV_I.lock));
       else if (c.read_only) row.append(srvEl("span", "ico", SRV_I.megaphone));
       if (srvCan("manage")) row.append(srvBtn("srv-ch-edit", SRV_I.gear, "Edit channel", () => srvChannelDialog(c)));
+      row.dataset.ch = c.id;
+      if (srvCan("manage")) row.draggable = true;
       chans.append(row);
-      if (c.kind === "voice" && (c.people || []).length) {
+      if (people.length) {
         const vp = srvEl("div", "srv-voice-people");
-        for (const p of c.people) {
+        vp.dataset.voice = c.id;
+        for (const p of people) {
           const isMe = sfxUser() && lower(p.username) === lower(sfxUser().username);
           const talking = srvInVoice(key) && speaking.includes(isMe ? "" : lower(p.username));
           const row2 = srvEl("div", "srv-vp" + (talking ? " talk" : ""));
           row2.dataset.user = isMe ? "" : lower(p.username);
           row2.dataset.channel = key;
+          row2.dataset.name = p.username;
+          if (isMe || srvCan("kick")) { row2.draggable = true; row2.title = isMe ? "Drag yourself to another voice channel" : "Drag to move them to another voice channel"; }
           row2.append(avatarEl(p.avatarUrl, p.username), srvText("span", "", p.username));
           const peer = srvInVoice(key) && typeof callPeers !== "undefined" ? callPeers.get(lower(p.username)) : null;
           if ((peer && peer.sharing) || (isMe && srvInVoice(key) && typeof callScreen !== "undefined" && callScreen)) row2.append(srvText("span", "live", "LIVE"));
@@ -380,12 +388,152 @@ function srvPick(c) {
   if (c.kind === "text") $("chatInput").focus();
 }
 
-function srvJoinVoice(c) {
+// Who's in a voice channel. The server's list is a few seconds behind, so your own call fills in the
+// channel you're in right away: you show up when you join and go away the moment you (or a friend) leave.
+function srvVoicePeople(c) {
+  const me = sfxUser() ? lower(sfxUser().username) : "";
+  const here = callIsLive() && call.phase !== "ended" && lower(call.key) === lower("g:" + c.id);
+  let people = (c.people || []).filter((p) => lower(p.username) !== me);
+  if (here) {
+    const inCall = (call.people || []).filter((p) => p.state === "in" && lower(p.username) !== me);
+    if (call.people && call.people.length) people = people.filter((p) => inCall.some((x) => lower(x.username) === lower(p.username)));
+    for (const x of inCall) if (!people.some((p) => lower(p.username) === lower(x.username))) people.push(x);
+    const u = sfxUser();
+    people.unshift((c.people || []).find((p) => lower(p.username) === me) || { username: u.username, avatarUrl: u.avatarUrl || "" });
+  }
+  return people;
+}
+
+// ---- dragging (like Discord): channels to a new spot, and people (you, or anyone if you may move members)
+// into another voice channel.
+let srvDrag = null; // {kind: "ch", id} or {kind: "user", name, me, from}
+function srvDropMark(el, where) {
+  for (const x of srvSide.querySelectorAll(".drop-before, .drop-after, .drop-in")) x.classList.remove("drop-before", "drop-after", "drop-in");
+  if (el && where) el.classList.add("drop-" + where);
+}
+// Where a drop would land: {el, where, ...}, or null.
+function srvDropAt(target, y) {
+  if (!srvDrag || !srv) return null;
+  if (srvDrag.kind === "ch") {
+    const row = target.closest(".srv-ch[data-ch]");
+    if (row && row.dataset.ch !== srvDrag.id) {
+      const r = row.getBoundingClientRect();
+      return { el: row, where: y < r.top + r.height / 2 ? "before" : "after", ch: row.dataset.ch };
+    }
+    const head = target.closest(".srv-cat[data-cat]");
+    if (head) return { el: head, where: "in", cat: head.dataset.cat };
+    return null;
+  }
+  const vp = target.closest(".srv-voice-people[data-voice]");
+  const row = vp ? null : target.closest(".srv-ch.voice[data-ch]");
+  const id = vp ? vp.dataset.voice : row ? row.dataset.ch : "";
+  if (!id || id === srvDrag.from) return null;
+  return { el: row || vp.previousElementSibling, where: "in", voice: id };
+}
+srvSide.addEventListener("dragstart", (e) => {
+  const vp = e.target.closest && e.target.closest(".srv-vp[draggable=true]");
+  const ch = !vp && e.target.closest && e.target.closest(".srv-ch[data-ch][draggable=true]");
+  if (vp) srvDrag = { kind: "user", name: vp.dataset.name, me: vp.dataset.user === "", from: lower(vp.dataset.channel).slice(2) };
+  else if (ch) srvDrag = { kind: "ch", id: ch.dataset.ch };
+  else return;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", vp ? vp.dataset.name : ch.dataset.ch);
+  (vp || ch).classList.add("dragging");
+});
+srvSide.addEventListener("dragover", (e) => {
+  const at = srvDropAt(e.target, e.clientY);
+  if (!at) return srvDropMark(null);
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  srvDropMark(at.el, at.where);
+});
+srvSide.addEventListener("dragleave", (e) => { if (!srvSide.contains(e.relatedTarget)) srvDropMark(null); });
+srvSide.addEventListener("drop", (e) => {
+  const at = srvDropAt(e.target, e.clientY);
+  const drag = srvDrag;
+  srvDragDone();
+  if (!at || !drag) return;
+  e.preventDefault();
+  if (drag.kind === "ch") srvMoveChannel(drag.id, at);
+  else srvMovePerson(drag, at.voice);
+});
+srvSide.addEventListener("dragend", () => srvDragDone());
+function srvDragDone() {
+  srvDrag = null;
+  srvDropMark(null);
+  srvSideDrawn = "";
+  srvDrawSide();
+}
+
+// A channel dropped before/after another one, or onto a category (it goes to the end of it).
+async function srvMoveChannel(id, at) {
+  const chans = (srv.channels || []).slice();
+  const moving = chans.find((c) => c.id === id);
+  if (!moving) return;
+  chans.splice(chans.indexOf(moving), 1);
+  let category = moving.category || "";
+  let i;
+  if (at.ch) {
+    const other = chans.find((c) => c.id === at.ch);
+    category = other.category || "";
+    i = chans.indexOf(other) + (at.where === "after" ? 1 : 0);
+  } else {
+    category = at.cat;
+    const last = chans.map((c) => c.category || "").lastIndexOf(category);
+    i = last + 1;
+  }
+  chans.splice(i, 0, { ...moving, category });
+  // (channels of one category stay together, in the order their categories first show up)
+  const order = [...new Set(chans.map((c) => c.category || ""))];
+  chans.sort((a, b) => order.indexOf(a.category || "") - order.indexOf(b.category || ""));
+  const before = srv.channels;
+  srv = { ...srv, channels: chans };
+  srvSideDrawn = "";
+  srvDraw();
+  const res = await srvApi("channel_order", srv.id, { ids: chans.map((c) => ({ id: c.id, category: c.category || "" })) });
+  if (!res.ok) { srv = { ...srv, channels: before }; srvSideDrawn = ""; srvDraw(); }
+}
+
+// You (or someone else, if you may move members) dropped into another voice channel.
+async function srvMovePerson(drag, channelId) {
+  const c = (srv.channels || []).find((x) => x.id === channelId && x.kind === "voice");
+  if (!c) return;
+  if (drag.me) return srvJoinVoice(c, true);
+  // (shown there right away; the next check puts the real list back)
+  const from = (srv.channels || []).find((x) => x.id === drag.from);
+  const person = from && (from.people || []).find((p) => lower(p.username) === lower(drag.name));
+  if (person) {
+    from.people = from.people.filter((p) => p !== person);
+    c.people = [...(c.people || []), person];
+    if (callIsLive() && call.people) for (const p of call.people) if (lower(p.username) === lower(drag.name) && lower(call.key) === lower("g:" + from.id)) p.state = "left";
+    srvSideDrawn = "";
+    srvDraw();
+  }
+  await srvApi("move", srv.id, { username: drag.name, channel: c.id });
+  srvPoll(1200);
+}
+
+// Someone moved you to another voice channel (call.js sees it at its next check).
+async function srvMovedTo(channelId, by) {
+  if (callIsLive() && lower(call.key) === lower("g:" + channelId)) return;
+  let s = srv && (srv.channels || []).some((c) => c.id === channelId) ? srv : null;
+  if (!s && srvVoice) {
+    const res = await api("/api/sfx-server", { what: "get", server: srvVoice.server }).catch(() => null);
+    if (res && res.ok && res.server) s = res.server;
+  }
+  const c = s && (s.channels || []).find((x) => x.id === channelId && x.kind === "voice");
+  if (!c) return;
+  srvJoinVoice(c, true, s);
+  const note = $("chatNote");
+  if (by && note && chatIsOpen()) note.textContent = `${by} moved you to ${c.name}.`;
+}
+
+function srvJoinVoice(c, quiet = false, s = srv) {
   if (callIsLive() && call.phase !== "incoming" && !callWith("g:" + c.id)) {
-    if (!confirm("Leave the call you're in and join " + c.name + "?")) return;
+    if (!quiet && !confirm("Leave the call you're in and join " + c.name + "?")) return;
     callHangUp("");
   }
-  srvVoice = { server: srv.id, serverName: srv.name, channel: c.id, name: c.name };
+  srvVoice = { server: s.id, serverName: s.name, channel: c.id, name: c.name };
   callStart("g:" + c.id);
   setTimeout(() => srvPoll(600), 800);
 }
@@ -416,7 +564,7 @@ function srvRoomHead() {
   const c = srvChannel();
   if (!c) { srvRoomDrawn = ""; return false; }
   const inVoice = srvInVoice(chatWith);
-  const sig = JSON.stringify([c.id, c.name, c.topic, c.kind, c.read_only, (c.people || []).length, inVoice, chatPinCount, chatPane && chatPane.kind]);
+  const sig = JSON.stringify([c.id, c.name, c.topic, c.kind, c.read_only, srvVoicePeople(c).length, inVoice, chatPinCount, chatPane && chatPane.kind]);
   if (sig === srvRoomDrawn) return true;
   srvRoomDrawn = sig;
   roomDrawn = "srv";
@@ -424,7 +572,7 @@ function srvRoomHead() {
   head.append(srvEl("span", "hash" + (c.kind === "voice" ? " vc" : ""), c.kind === "voice" ? SRV_I.vol : "#"));
   const t = srvEl("span", "srv-room-text");
   t.append(srvText("b", "", c.name));
-  const n = (c.people || []).length;
+  const n = c.kind === "voice" ? srvVoicePeople(c).length : 0;
   const sub = c.kind === "voice" ? (n ? `${n} in here` : "Nobody's here yet. Click Join to hang out.") : c.topic;
   if (sub) t.append(srvText("small", "", sub));
   head.append(t);
@@ -487,7 +635,7 @@ function srvDrawVoiceRoom() {
   if (!show) { srvVoiceDrawn = ""; return; }
   const here = srvStageHere();
   srvVoiceRoom.classList.toggle("live", here);
-  const sig = JSON.stringify([c.id, c.name, c.people, here, callIsLive() && call.phase]);
+  const sig = JSON.stringify([c.id, c.name, srvVoicePeople(c), here, callIsLive() && call.phase]);
   if (sig === srvVoiceDrawn) return;
   srvVoiceDrawn = sig;
   const stage = $("callStage");
@@ -498,7 +646,7 @@ function srvDrawVoiceRoom() {
   }
   const box = srvEl("div", "vc-join");
   box.append(srvEl("span", "vc-join-ico", SRV_I.vol), srvText("h3", "", c.name));
-  const people = c.people || [];
+  const people = srvVoicePeople(c);
   if (people.length) {
     const faces = srvEl("div", "vc-join-faces");
     for (const p of people.slice(0, 8)) faces.append(avatarEl(p.avatarUrl, p.username));
@@ -1305,7 +1453,7 @@ async function srvCheck() {
     }
   } finally {
     srvBusy = false;
-    srvPoll(chatIsOpen() && !document.hidden ? 4000 : 45000);
+    srvPoll(chatIsOpen() && !document.hidden ? (srvId ? 2500 : 4000) : 45000);
   }
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && chatIsOpen()) srvPoll(300); });

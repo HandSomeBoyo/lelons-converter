@@ -670,7 +670,7 @@ class Library:
 
     SERVER_ACTIONS = ("list", "preview", "create", "join", "decline", "get", "leave", "delete", "invite_code",
                       "invite_delete", "invite_friend", "kick", "ban", "unban", "edit", "channel_add", "channel_edit",
-                      "channel_delete", "channel_order", "role_add", "role_edit", "role_delete", "member_role", "autopost")
+                      "channel_delete", "channel_order", "role_add", "role_edit", "role_delete", "member_role", "autopost", "move")
 
     def server(self, what, server_id=None, data=None):
         """Servers in Chat: your list, making and joining one, and its settings (see lelons_server)."""
@@ -797,7 +797,7 @@ class Library:
     def room(self, what, room_id=None, with_user=None, to_user=None, kind=None, sdp=None, after=0):
         """Calls (private and group): "check" (every few seconds), "start", "join", "signal" or "leave"
         (see lelons_room)."""
-        if what not in ("check", "start", "join", "signal", "leave"):
+        if what not in ("check", "start", "join", "signal", "leave", "bye"):
             raise Error("That didn't work. Try again.")
         try:
             after = max(0, int(after or 0))

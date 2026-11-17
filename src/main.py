@@ -2302,6 +2302,21 @@ def window_closed(placement):
     if placement:
         settings.save(window=placement)
     state.set(closed_at=time.time())
+    # (2.39.0) Out of any call right away, so friends don't see you in a voice channel for half a minute
+    try:
+        if sfx.configured() and settings.load().get("library_token"):
+            bye = threading.Thread(target=lambda: _quietly(sfx.library.room, "bye"), daemon=True)
+            bye.start()
+            bye.join(3)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _quietly(fn, *args):
+    try:
+        fn(*args)
+    except Exception:  # noqa: BLE001 (closing anyway)
+        pass
 
 
 def start_remote_engine(screen=None):
