@@ -12,6 +12,8 @@ import threading
 import time
 from collections import deque
 
+import adtimer
+import multistream
 import obsstats
 import settings
 import streamtwitch
@@ -85,6 +87,8 @@ def _start():
         _youtube = streamyt.YouTube(emit)
     _twitch.start()
     _youtube.start()
+    adtimer.start(_twitch)
+    multistream.start_at_launch()
     s = settings.load()
     obsstats.configure(s.get("lv_obs_port") or 4455, s.get("lv_obs_password") or "", s.get("lv_obs_on", True))
     if not (_ticker and _ticker.is_alive()):
@@ -322,7 +326,8 @@ def state(since=0):
                        "clips": s.get("clips", [])[-30:], "totals": _totals(s, tw.get("viewers"), yt.get("viewers"))}
         seq = _seq
     return {"ok": True, "config": config(), "twitch": tw, "youtube": yt, "obs": obsstats.state(), "chat": chat,
-            "removed": removed, "seq": seq, "speed": speed, "session": session}
+            "removed": removed, "seq": seq, "speed": speed, "session": session,
+            "ms": multistream.status(), "ads": adtimer.status()}
 
 
 def send(text, to):

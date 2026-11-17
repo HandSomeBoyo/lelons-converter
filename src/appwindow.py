@@ -33,6 +33,7 @@ WM_TOAST = WM_APP + 4  # "show a Windows notification", from another thread
 WM_TRAY = WM_APP + 5  # the little icon by the clock (it's there for the notifications) was clicked
 WM_HOTKEYS = WM_APP + 6  # "use these keys", from another thread (the Live soundboard)
 WM_POPSET = WM_APP + 7  # the pop-out chat: on top or not, how see-through
+WM_HIDE = WM_APP + 8  # (2.36.0) "hide to the tray": the window goes, the app keeps running
 WM_HOTKEY = 0x0312
 NIN_BALLOONUSERCLICK = 0x0405
 
@@ -43,6 +44,7 @@ _hotkeys = []  # [(id, modifiers, key code)] the soundboard wants
 _hotkeys_taken = []  # ids another program already uses
 _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
+_close_guard = None  # (2.36.0) a function: a reason not to close right away (you're multistreaming), or ""
 
 
 def available():
@@ -169,10 +171,26 @@ def active():
     return bool(window and window.alive and window.hwnd)
 
 
-def close():
-    """Close the window (when the app quits) and wait a moment for it to go."""
+def set_close_guard(fn):
+    """fn() -> a reason to ask before the window closes (the page shows "You're live. Close anyway?")."""
+    global _close_guard
+    _close_guard = fn
+
+
+def hide():
+    """Hide the window to the little icon by the clock. Clicking the icon brings it back."""
     window = _window
     if window and window.alive and window.hwnd:
+        window.user32.PostMessageW(window.hwnd, WM_HIDE, 0, 0)
+        return True
+    return False
+
+
+def close():
+    """Close the window (when the app quits, or "Close anyway") and wait a moment for it to go."""
+    window = _window
+    if window and window.alive and window.hwnd:
+        window.force_close = True
         window.user32.PostMessageW(window.hwnd, WM_CLOSE, 0, 0)
         window.thread.join(3)
 
@@ -338,6 +356,7 @@ class Window:
         self.toast_clicked = False
         self.toast_key = ""
         self.tray = False  # the icon by the clock is there
+        self.force_close = False  # close without asking (the app quits, or you said Close anyway)
         self.small_icon = None
         self.controller = None
         self.environment = None
@@ -413,6 +432,7 @@ class Window:
         user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
         user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
         user32.IsIconic.argtypes = [wintypes.HWND]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
         user32.SetForegroundWindow.argtypes = [wintypes.HWND]
         user32.DestroyWindow.argtypes = [wintypes.HWND]
         kernel32.GetModuleHandleW.restype = wintypes.HMODULE
@@ -583,6 +603,7 @@ class Window:
             self.closed_at = [r.left, r.top, r.right, r.bottom, int(bool(maximized))]
 
     def _close_requested(self, this, sender, args):
+        self.force_close = True
         self.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
         return S_OK
 
@@ -637,14 +658,18 @@ class Window:
         data.szTip = TITLE
         return data
 
-    def _toast(self, hwnd, title, text, quiet):
+    def _tray_icon(self, hwnd):
         shell = ctypes.windll.shell32
         shell.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.c_void_p]
         if not self.tray:
             # Windows shows notifications for an icon by the clock, so the app puts one there the first time.
             self.tray = bool(shell.Shell_NotifyIconW(0, ctypes.byref(self._tray_data(hwnd, 0x1 | 0x2 | 0x4))))  # NIM_ADD: MESSAGE, ICON, TIP
-            if not self.tray:
-                return
+        return self.tray
+
+    def _toast(self, hwnd, title, text, quiet):
+        shell = ctypes.windll.shell32
+        if not self._tray_icon(hwnd):
+            return
         data = self._tray_data(hwnd, 0x10)  # NIF_INFO
         data.szInfoTitle = title
         data.szInfo = text or " "
@@ -691,6 +716,26 @@ class Window:
             _method(self.controller, 6, wintypes.RECT)(rect)  # put_Bounds
 
     def _message(self, hwnd, message, wparam, lparam):
+        if message == WM_CLOSE and not self.popout and not self.force_close and _close_guard and self.webview:
+            try:
+                reason = _close_guard()
+            except Exception:  # noqa: BLE001 (never keep the window from closing because of a bug here)
+                reason = ""
+            if reason:
+                # (2.36.0) You're multistreaming: closing would stop it everywhere. The page asks first.
+                if self.user32.IsIconic(hwnd) or not self.user32.IsWindowVisible(hwnd):
+                    self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                self.user32.SetForegroundWindow(hwnd)
+                _method(self.webview, 33, wintypes.LPCWSTR)("close-ask")  # PostWebMessageAsString
+                return 0
+        if message == WM_HIDE:
+            self._tray_icon(hwnd)
+            self.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+            try:
+                self._toast(hwnd, TITLE, "Still streaming. Click this icon to open VaultHub again.", True)
+            except Exception:  # noqa: BLE001
+                pass
+            return 0
         if message == WM_SIZE:
             self._fit()
             if self.controller:
@@ -741,11 +786,15 @@ class Window:
                     self.toast_clicked = True
                 if self.user32.IsIconic(hwnd):
                     self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                elif not self.user32.IsWindowVisible(hwnd):
+                    self.user32.ShowWindow(hwnd, 5)  # SW_SHOW (it was hidden to the tray)
                 self.user32.SetForegroundWindow(hwnd)
             return 0
         elif message == WM_SHOW:
             if self.user32.IsIconic(hwnd):
                 self.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            elif not self.user32.IsWindowVisible(hwnd):
+                self.user32.ShowWindow(hwnd, 5)  # SW_SHOW
             self.user32.SetForegroundWindow(hwnd)
             return 0
         elif message == WM_DESTROY:

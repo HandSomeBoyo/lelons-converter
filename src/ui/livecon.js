@@ -102,6 +102,8 @@ function lvDrawConsole(fresh) {
   if (typeof lvDrawInfo === "function") lvDrawInfo();
   if (typeof lvDrawTwitchCards === "function") lvDrawTwitchCards();
   if (typeof lvDrawObs === "function") lvDrawObs();
+  if (typeof lvDrawMulti === "function") lvDrawMulti();
+  if (typeof lvDrawAds === "function") lvDrawAds();
   if (typeof lvRefit === "function") lvRefit();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
@@ -167,6 +169,8 @@ function lvBuildConsole() {
       <div class="lv-card" data-c="clips" id="lvClips"></div>
       <div class="lv-card" data-c="modes" id="lvModes"></div>
       <div class="lv-card" data-c="newbies" id="lvNewbies"></div>
+      <div class="lv-card ms-card" data-c="multi" id="lvMulti"></div>
+      <div class="lv-card ad-card" data-c="ads" id="lvAds" hidden></div>
     </div>`;
   if (typeof lvLayoutInit === "function") lvLayoutInit();
   LV.drawn = new Set();
@@ -199,10 +203,11 @@ function lvDrawTopBar() {
     ${live ? `<span class="lv-live-pill">LIVE <b id="lvClock">${lvClock(since)}</b></span>` : `<span class="lv-pill dim"><i class="lv-off-dot"></i>Not live</span>`}
     ${c.twitch ? chip("tw", tw.live, tw.viewers, tw.chat === "on" ? "Offline · chat on" : "Offline") : ""}
     ${c.youtube ? chip("yt", yt.live, yt.viewers, "Offline") : ""}
+    ${typeof lvMsPills === "function" ? lvMsPills() : ""}
     ${c.obsOn ? `<span class="lv-pill ${obs.connected ? "" : "dim"}" title="${lvEsc(obs.error || "")}"><i class="lv-obs-dot ${obs.connected ? (obs.streaming ? "on" : "ok") : ""}"></i>OBS ${obs.connected ? (obs.streaming ? "streaming" : "connected") : "not connected"}</span>` : ""}
     <span class="sp"></span>
     <button type="button" class="lv-ghost" id="lvCustomize" title="Move, size and pick the cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.5"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Customize</button>
-    <button type="button" class="lv-ghost" id="lvPop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10M19.5 4.5 12 12"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></svg>Pop out chat</button>
+    <button type="button" class="lv-ghost" id="lvPop" title="Pop out chat (a small chat window that stays on top of your game)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10M19.5 4.5 12 12"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></svg>Pop out</button>
     <button type="button" class="icon-button" id="lvSetupOpen" title="Set up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>`;
   $("lvPop").addEventListener("click", lvPopOut);
   $("lvCustomize").addEventListener("click", () => lvLayoutEdit(true));

@@ -28,7 +28,8 @@ HELIX = "https://api.twitch.tv/helix/"
 ID = "https://id.twitch.tv/oauth2/"
 SCOPES = ("chat:read chat:edit moderator:read:followers moderator:manage:chat_messages "
           "moderator:manage:banned_users channel:read:subscriptions bits:read channel:manage:broadcast "
-          "clips:edit moderator:manage:chat_settings moderator:manage:shield_mode")
+          "clips:edit moderator:manage:chat_settings moderator:manage:shield_mode "
+          "channel:read:ads channel:edit:commercial channel:manage:ads")
 LOOK_EVERY = 30  # seconds between looks at viewers and followers
 
 
@@ -442,6 +443,48 @@ class Twitch:
             self._needs(lambda: self._helix("moderation/shield_mode", method="PUT", body={"is_active": bool(change["shield"])},
                                             broadcaster_id=broadcaster, moderator_id=me), "turn on Shield Mode")
         return self.chat_modes()
+
+    # ---- ads (2.36.0)
+
+    def ad_schedule(self):
+        """When Twitch runs the next ad break, how long it is, snoozes left and pre-roll free time."""
+        broadcaster, _ = self._ids()
+        d = (self._needs(lambda: self._helix("channels/ads", broadcaster_id=broadcaster), "see your ad breaks").get("data") or [{}])[0]
+
+        def when(v):
+            try:
+                return int(v) if v not in (None, "", 0, "0") else 0
+            except (TypeError, ValueError):
+                return 0
+        return {"next": when(d.get("next_ad_at")), "last": when(d.get("last_ad_at")), "length": int(d.get("duration") or 0),
+                "prerollFree": int(d.get("preroll_free_time") or 0), "snoozes": int(d.get("snooze_count") or 0),
+                "snoozeRefill": when(d.get("snooze_refresh_at"))}
+
+    def run_ad(self, length):
+        broadcaster, _ = self._ids()
+        length = min((30, 60, 90, 120, 150, 180), key=lambda x: abs(x - int(length or 180)))
+        try:
+            r = self._needs(lambda: self._helix("channels/commercial", method="POST",
+                                                body={"broadcaster_id": broadcaster, "length": length}), "run ads")
+        except Error as e:
+            if "live" in str(e).lower():
+                raise Error("You can only run ads while you're live.")
+            raise
+        d = (r.get("data") or [{}])[0]
+        return {"length": int(d.get("length") or length), "retryAfter": int(d.get("retry_after") or 0),
+                "message": d.get("message") or ""}
+
+    def snooze_ad(self):
+        broadcaster, _ = self._ids()
+        try:
+            r = self._needs(lambda: self._helix("channels/ads/schedule/snooze", method="POST", body={}, broadcaster_id=broadcaster),
+                            "snooze ads")
+        except Error as e:
+            if "snooze" in str(e).lower() or "429" in str(e):
+                raise Error("No snoozes left right now. Twitch gives you a new one every hour.")
+            raise
+        d = (r.get("data") or [{}])[0]
+        return {"snoozes": int(d.get("snooze_count") or 0)}
 
     # ---- the chat
 

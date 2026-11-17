@@ -286,3 +286,24 @@ def picture(width=640):
     d = conn.ask("GetSourceScreenshot", {"sourceName": scene, "imageFormat": "jpg", "imageWidth": width,
                                          "imageHeight": int(math.ceil(width * 9 / 16)), "imageCompressionQuality": 70})
     return d.get("imageData") or ""
+
+
+def ask_once(kind, data=None):
+    """One request to OBS, also when the console's connection isn't open (multistreaming, the ad timer).
+    Uses the open connection when there is one, or opens one just for this."""
+    conn = _conn
+    if conn and conn.alive:
+        return conn.ask(kind, data)
+    s = settings.load()
+    if not s.get("lv_obs_on", True):
+        raise Error("OBS is turned off in the Live console's Set up.")
+    try:
+        conn = _Conn(s.get("lv_obs_port") or 4455, s.get("lv_obs_password") or "")
+    except (OSError, wsclient.Closed, ValueError):
+        raise Error("OBS isn't open, or its WebSocket server is off.")
+    reader = threading.Thread(target=conn.read_forever, daemon=True)
+    reader.start()
+    try:
+        return conn.ask(kind, data)
+    finally:
+        conn.close()
