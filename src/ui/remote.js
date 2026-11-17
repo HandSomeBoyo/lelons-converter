@@ -291,7 +291,7 @@ function rdCtl(c, data) {
     const why = msg.wait ? `Too many wrong tries. Wait ${Math.ceil(msg.wait / 60)} min.` : msg.pinBad ? `Wrong PIN.${msg.left ? ` ${msg.left} tries left.` : ""}` : "";
     rdPhase("", `<div class="rd-big-ic">${RD_ICONS.lock}</div><h2>PIN for ${rdEsc(c.dev.name)}</h2><p>${rdEsc(c.dev.name)} asks for its PIN.</p>
       <input id="rdPinIn" class="rd-pin-big" type="password" inputmode="numeric" maxlength="12" autocomplete="off">
-      <p class="rd-error">${rdEsc(why)}</p><div class="rd-acts"><button type="button" class="convert" id="rdPinGo">Connect</button></div>`);
+      <p class="rd-error">${rdEsc(why)}</p>`, '<button type="button" class="convert" id="rdPinGo">Connect</button>');
     const go = () => rdSend(c, { pin: $("rdPinIn").value });
     $("rdPinGo").addEventListener("click", go);
     $("rdPinIn").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
@@ -342,11 +342,11 @@ function rdSessionClose() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
-function rdPhase(text, html) {
+function rdPhase(text, html, buttons = "") {
   const p = $("rdPhase");
   if (!p) return;
   p.hidden = !text && !html;
-  p.innerHTML = html ? `<div class="rd-dlg">${html}<div class="rd-acts"><button type="button" class="ghost-button" id="rdCancel">Cancel</button></div></div>`
+  p.innerHTML = html ? `<div class="rd-dlg">${html}<div class="rd-acts"><button type="button" class="ghost-button" id="rdCancel">Cancel</button>${buttons}</div></div>`
     : `<div class="rd-wait"><div class="rd-spin"></div>${rdEsc(text)}<div class="rd-acts" style="justify-content:center;margin-top:14px"><button type="button" class="ghost-button" id="rdCancel">Cancel</button></div></div>`;
   const cancel = $("rdCancel");
   if (cancel) cancel.addEventListener("click", () => rdEnd(""));

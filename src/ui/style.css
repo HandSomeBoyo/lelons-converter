@@ -7809,7 +7809,7 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .rd-add .plus { width: 44px; height: 44px; border-radius: 50%; background: var(--panel2); display: grid; place-items: center; color: var(--text); }
 .rd-add .plus svg { width: 20px; height: 20px; }
 .rd-add b { color: var(--text); font: 600 15px var(--head); }
-.rd-this { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--panel2); font-size: 13px; color: var(--muted); line-height: 1.4; }
+.rd-this { margin-top: 14px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--panel2); font-size: 13px; color: var(--muted); line-height: 1.4; }
 .rd-this b { color: var(--text); font-weight: 600; display: block; font-size: 13.5px; }
 .rd-sw { width: 40px; height: 24px; border-radius: 99px; background: var(--panel); position: relative; flex: none; box-shadow: inset 0 0 0 1px var(--line2); margin-left: auto; }
 .rd-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); }
@@ -7929,7 +7929,8 @@ button.rd-sw.on { background: var(--accent); box-shadow: none; }
 .rd-hint[hidden] { display: none; }
 .rd-mute { all: unset; cursor: pointer; line-height: 0; color: var(--accent); }
 .rd-vol input[type=range] { width: 90px; accent-color: var(--accent); }
-.rd-opt { all: unset; cursor: pointer; box-sizing: border-box; width: 100%; }
+.rd-opt { all: unset; cursor: pointer; box-sizing: border-box; width: 100%; display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border-radius: 10px; font-size: 13px; color: var(--muted); line-height: 1.35; }
+.rd-opt:hover { background: var(--panel2); }
 .rd-mons button { all: unset; cursor: pointer; flex: 1; height: 44px; border-radius: 8px; background: var(--panel2); display: grid; place-items: center; font: 600 13px var(--head); color: var(--muted); border: 2px solid transparent; }
 .rd-mons button.on { border-color: var(--accent); color: var(--text); }
 .rd-used { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
