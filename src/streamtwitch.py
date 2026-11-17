@@ -205,6 +205,7 @@ class Twitch:
         self.status = {"chat": "off", "live": False, "viewers": None, "title": "", "game": "", "started": None,
                        "followers": None, "error": "", "signedIn": False, "login": ""}
         self.access = {"token": "", "until": 0}
+        self.refreshing = threading.Lock()
         self.device = None  # the sign-in waiting for the code to be typed
         self.seen_follows = set()
         self.user_id = ""
@@ -301,19 +302,26 @@ class Twitch:
     def token(self):
         if self.access["token"] and time.time() < self.access["until"]:
             return self.access["token"]
-        c = self.config()
-        if not (c["client"] and c["refresh"]):
-            return ""
-        try:
-            r = _http(ID + "token", {"client_id": c["client"], "grant_type": "refresh_token", "refresh_token": c["refresh"]})
-        except SignedOut:
-            settings.save(lv_tw_refresh="")
-            self.status["signedIn"] = False
-            raise
-        self.access.update(token=r["access_token"], until=time.time() + int(r.get("expires_in") or 3600) - 60)
-        if r.get("refresh_token"):
-            settings.save(lv_tw_refresh=r["refresh_token"])
-        return self.access["token"]
+        # (2.38.2) One refresh at a time. Twitch's refresh keys only work once: when the app starts, the
+        # chat, the live check and the page all asked at the same moment, so the second one used an
+        # already-used key, Twitch said no, and the app forgot the sign-in (often right after an update).
+        with self.refreshing:
+            if self.access["token"] and time.time() < self.access["until"]:
+                return self.access["token"]  # another one just got it
+            c = self.config()
+            if not (c["client"] and c["refresh"]):
+                return ""
+            try:
+                r = _http(ID + "token", {"client_id": c["client"], "grant_type": "refresh_token", "refresh_token": c["refresh"]})
+            except SignedOut:
+                if self.config()["refresh"] == c["refresh"]:  # only forget the key that really stopped working
+                    settings.save(lv_tw_refresh="")
+                    self.status["signedIn"] = False
+                raise
+            if r.get("refresh_token"):
+                settings.save(lv_tw_refresh=r["refresh_token"])  # saved first, so it's never lost
+            self.access.update(token=r["access_token"], until=time.time() + int(r.get("expires_in") or 3600) - 60)
+            return self.access["token"]
 
     def _helix(self, path, method=None, body=None, **query):
         c = self.config()
