@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>VaultHub remote sender</title>
+</head>
+<body style="margin:0;background:#141414;color:#eee;font:14px system-ui">
+<!-- (2.37.0) Nobody sees this page: it runs in a hidden window and sends this PC's screen and sound to
+     your other PC when you connect from there (see remote.py). -->
+<p id="what">Waiting for your other PCs.</p>
+<script src="remote-common.js"></script>
+<script src="remote-host.js"></script>
+</body>
+</html>

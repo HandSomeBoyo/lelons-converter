@@ -2,6 +2,17 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.37.1", items: [
+    "Remote: switching to another screen no longer gets stuck on \"Connecting\". If the home PC's screen sender ever stops, VaultHub starts it again by itself within half a minute.",
+  ] },
+  { version: "2.37.0", items: [
+    "Servers in Chat: make a home for your crew with text and voice channels, roles with colors and permissions, and invites by name or code.",
+    "Auto-posts: VaultHub posts by itself in the channel you pick when someone uploads, goes live, hits a subscriber milestone, shares a POV, adds a sound or posts a game, with your own message.",
+    "Voice channels: click and you're in, with no ringing. A \"Voice connected\" bar lets you keep chatting elsewhere.",
+    "Zoom in on a shared screen in calls with the mouse wheel or + and -, and drag to look around.",
+    "New Remote place (owner only): use your own PCs from anywhere with your mouse, keyboard and sound. The first time, you allow each PC on that PC with a 6-digit code; a yellow bar shows while it's controlled and Ctrl+Alt+End stops it.",
+    "Fixed: you could get stuck as \"already in a call\" after the app closed during a call.",
+  ] },
   { version: "2.36.0", items: [
     "Multistreaming in the Live console: stream to Twitch, YouTube, Kick and TikTok at the same time, with a switch for each site. OBS sends one stream to VaultHub, and VaultHub passes it on (it doesn't encode it again, so it hardly uses your PC).",
     "VaultHub sets up OBS for you: turn multistreaming on and OBS sends to VaultHub, turn it off and OBS goes straight back to Twitch. No OBS settings to change by hand.",

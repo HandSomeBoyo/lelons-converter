@@ -3733,6 +3733,113 @@ begin
                           where coalesce(a.youtube, '') <> '' and not ('videos' = any (coalesce(a.hide, '{}')))), '[]'::json));
 end $$;
 
+-- ---- Remote desktop (2.37.0): use your own PCs from anywhere. Only the owner, only their own PCs.
+-- The server only passes short "hello" notes between your PCs so they can find each other. The picture,
+-- sound, mouse and keys go straight from PC to PC, locked (WebRTC). Each PC signs its notes with its own
+-- key, and a PC only lets in PCs you allowed on that PC itself (with a code), so even this server can't sneak in.
+create table if not exists lelons.remote_devices (
+  id uuid primary key,  -- made by the app on that PC
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  name text not null check (length(name) between 1 and 40),
+  kind text not null default 'desktop' check (kind in ('desktop', 'laptop')),
+  host boolean not null default false,  -- "let my other PCs control this one" is on
+  ctrl_key text not null default '' check (length(ctrl_key) <= 400),  -- public keys (the private halves never leave the PC)
+  host_key text not null default '' check (length(host_key) <= 400),
+  width int, height int,
+  busy boolean not null default false,
+  seen_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+create table if not exists lelons.remote_signals (
+  id bigint generated always as identity primary key,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  from_device uuid not null references lelons.remote_devices (id) on delete cascade,
+  to_device uuid not null references lelons.remote_devices (id) on delete cascade,
+  kind text not null check (kind in ('offer', 'answer', 'bye')),
+  body text not null default '' check (length(body) <= 60000),
+  created_at timestamptz not null default now()
+);
+create index if not exists remote_devices_account on lelons.remote_devices (account_id);
+create index if not exists remote_signals_to on lelons.remote_signals (to_device, id);
+alter table lelons.remote_devices enable row level security;
+alter table lelons.remote_signals enable row level security;
+revoke all on lelons.remote_devices, lelons.remote_signals from anon, authenticated;
+
+-- lelons_remote(token, what, device, data, after)
+--   'hello'   device = this PC, data {name, kind, host, ctrlKey, hostKey, width, height, busy}
+--             -> {devices, signals (to this PC, after id 'after')}   (every few seconds)
+--   'signal'  device = this PC, data {to, kind offer|answer|bye, body}
+--   'rename'  device, data {name}
+--   'forget'  device  (takes a PC off your list)
+create or replace function public.lelons_remote(token text, what text, device uuid default null, data jsonb default null,
+                                                after bigint default 0)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  d lelons.remote_devices;
+  other uuid;
+begin
+  if me.role <> 'owner' then
+    return json_build_object('ok', false, 'error', 'owner_only');
+  end if;
+  if device is null then
+    return json_build_object('ok', false, 'error', 'no_device');
+  end if;
+  select * into d from lelons.remote_devices r where r.id = device;
+  if d.id is not null and d.account_id <> me.id then
+    return json_build_object('ok', false, 'error', 'not_yours');
+  end if;
+  delete from lelons.remote_signals s where s.account_id = me.id and s.created_at < now() - interval '2 minutes';
+
+  if what = 'hello' then
+    if d.id is null and (select count(*) from lelons.remote_devices r where r.account_id = me.id) >= 12 then
+      return json_build_object('ok', false, 'error', 'too_many');
+    end if;
+    insert into lelons.remote_devices as r (id, account_id, name, kind, host, ctrl_key, host_key, width, height, busy, seen_at)
+    values (device, me.id, left(coalesce(nullif(trim(data->>'name'), ''), 'PC'), 40),
+            case when data->>'kind' = 'laptop' then 'laptop' else 'desktop' end,
+            coalesce((data->>'host')::boolean, false), left(coalesce(data->>'ctrlKey', ''), 400),
+            left(coalesce(data->>'hostKey', ''), 400), (data->>'width')::int, (data->>'height')::int,
+            coalesce((data->>'busy')::boolean, false), now())
+    on conflict (id) do update set host = excluded.host, kind = excluded.kind,
+      ctrl_key = case when excluded.ctrl_key <> '' then excluded.ctrl_key else r.ctrl_key end,
+      host_key = case when excluded.host_key <> '' then excluded.host_key else r.host_key end,
+      width = excluded.width, height = excluded.height, busy = excluded.busy, seen_at = now();
+    return json_build_object('ok', true,
+      'devices', coalesce((select json_agg(json_build_object('id', r.id, 'name', r.name, 'kind', r.kind, 'host', r.host,
+                                 'ctrlKey', r.ctrl_key, 'hostKey', r.host_key, 'width', r.width, 'height', r.height,
+                                 'busy', r.busy, 'me', r.id = device, 'online', r.seen_at > now() - interval '25 seconds',
+                                 'seen', extract(epoch from r.seen_at)) order by r.created_at)
+                           from lelons.remote_devices r where r.account_id = me.id), '[]'::json),
+      'signals', coalesce((select json_agg(json_build_object('id', s.id, 'from', s.from_device, 'kind', s.kind, 'body', s.body) order by s.id)
+                           from lelons.remote_signals s where s.to_device = device and s.id > coalesce(after, 0)), '[]'::json));
+  end if;
+
+  if d.id is null then
+    return json_build_object('ok', false, 'error', 'no_device');
+  end if;
+
+  if what = 'signal' then
+    other := (data->>'to')::uuid;
+    if not exists (select 1 from lelons.remote_devices r where r.id = other and r.account_id = me.id) then
+      return json_build_object('ok', false, 'error', 'not_yours');
+    end if;
+    if (select count(*) from lelons.remote_signals s where s.account_id = me.id and s.created_at > now() - interval '1 minute') >= 40 then
+      return json_build_object('ok', false, 'error', 'slow');
+    end if;
+    insert into lelons.remote_signals (account_id, from_device, to_device, kind, body)
+    values (me.id, device, other, data->>'kind', left(coalesce(data->>'body', ''), 60000));
+    return json_build_object('ok', true);
+  elsif what = 'rename' then
+    update lelons.remote_devices r set name = left(coalesce(nullif(trim(data->>'name'), ''), r.name), 40) where r.id = device;
+    return json_build_object('ok', true);
+  elsif what = 'forget' then
+    delete from lelons.remote_devices r where r.id = device;
+    return json_build_object('ok', true);
+  end if;
+  return json_build_object('ok', false, 'error', 'what');
+end $$;
+
 -- ---- (servers) servers: channels, roles, invites and auto-posts (the tables are near the top)
 
 -- Your unread messages in a channel (since you last looked, or since you joined the server).
@@ -4361,7 +4468,7 @@ begin
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
     'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)',
-    'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)'] loop
+    'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

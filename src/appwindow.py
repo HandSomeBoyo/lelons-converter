@@ -13,6 +13,7 @@ import ctypes
 import os
 import urllib.parse
 import threading
+import time
 from ctypes import wintypes
 
 TITLE = "VaultHub"
@@ -44,6 +45,8 @@ _hotkeys = []  # [(id, modifiers, key code)] the soundboard wants
 _hotkeys_taken = []  # ids another program already uses
 _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
+_engine = None  # (2.37.0) the Remote desktop's hidden screen sender, while it runs
+_args_lock = threading.Lock()
 _close_guard = None  # (2.36.0) a function: a reason not to close right away (you're multistreaming), or ""
 
 
@@ -332,6 +335,51 @@ def popout(url, data_folder, icon, on_top=True, see=100, close=False, on_closed=
     return pop.ok
 
 
+_engine_start = threading.Lock()  # (2.37.1) one start or stop of the hidden engine at a time
+
+
+def engine(url, data_folder, icon, browser_args, close=False):
+    with _engine_start:
+        return _engine_now(url, data_folder, icon, browser_args, close)
+
+
+def _engine_now(url, data_folder, icon, browser_args, close):
+    """(2.37.0) A window nobody sees, for the Remote desktop: it sends this PC's screen and sound when you
+    connect from your other PC. It has its own engine (data_folder) so its switches don't touch the app's
+    window. Returns True when it's running (or closed, with close=True)."""
+    global _engine
+    if not available():
+        return False
+    with _lock:
+        running = _engine if _engine and _engine.alive else None
+        if close or (running and running.browser_args != browser_args):
+            if running:
+                running.cancel()
+                running.thread.join(10)
+            _engine = running = None
+            if close:
+                return True
+        if running:
+            return True
+    # (2.37.1) After a screen switch the old engine's browser takes a moment to really quit, and WebView2
+    # won't start the same data folder with other switches while it's still there. Try again for a while
+    # instead of giving up (that left the sender gone until the app was restarted).
+    for attempt in range(12):
+        with _lock:
+            if _engine and _engine.alive:
+                return True
+            win = _engine = Window(url, data_folder, icon, lambda placement: None, None, popout=True,
+                                   hidden=True, browser_args=browser_args)
+        win.thread.start()
+        if not win.started.wait(30):
+            win.cancel()
+        elif win.ok:
+            return True
+        win.thread.join(5)
+        time.sleep(min(1 + attempt, 5))
+    return False
+
+
 @WNDPROC  # (it must sit right on this: Windows calls it for every window message)
 def _window_procedure(hwnd, message, wparam, lparam):
     window = _windows.get(hwnd)
@@ -344,8 +392,10 @@ def _window_procedure(hwnd, message, wparam, lparam):
 
 
 class Window:
-    def __init__(self, url, data_folder, icon, on_closed, placement=None, popout=False, on_top=False, see=100):
+    def __init__(self, url, data_folder, icon, on_closed, placement=None, popout=False, on_top=False, see=100,
+                 hidden=False, browser_args=""):
         self.url, self.data_folder, self.icon, self.on_closed = url, data_folder, icon, on_closed
+        self.hidden, self.browser_args = hidden, browser_args  # (2.37.0) the Remote desktop's screen sender
         self.popout, self.pop_on_top, self.pop_see = popout, on_top, max(30, min(100, int(see or 100)))
         self.placement = placement
         self.cancelled = False
@@ -484,7 +534,21 @@ class Window:
         handler = Handler(ENVIRONMENT_DONE, self._guarded(self._environment_ready), with_result=True)
         self.handlers.append(handler)
         os.makedirs(self.data_folder, exist_ok=True)
-        if create(None, self.data_folder, None, handler.pointer) != S_OK:
+        with _args_lock:
+            # WebView2 reads its extra switches when the engine starts. The Remote desktop's hidden engine
+            # gets its own (it picks the whole screen by itself); the app's window keeps the normal ones.
+            before = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")
+            if self.browser_args:
+                os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = self.browser_args
+            try:
+                made = create(None, self.data_folder, None, handler.pointer)
+            finally:
+                if self.browser_args:
+                    if before is None:
+                        os.environ.pop("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", None)
+                    else:
+                        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = before
+        if made != S_OK:
             raise OSError("WebView2 isn't installed")
 
     def _environment_ready(self, this, error, environment):
@@ -552,14 +616,15 @@ class Window:
         self._fit()
         self._zoom()
         _method(self.webview, 5, wintypes.LPCWSTR)(self.url)  # Navigate
-        self.user32.ShowWindow(self.hwnd, 3 if self.maximized else 1)  # SW_SHOWMAXIMIZED / SW_SHOWNORMAL
-        self.user32.SetForegroundWindow(self.hwnd)
+        if not self.hidden:
+            self.user32.ShowWindow(self.hwnd, 3 if self.maximized else 1)  # SW_SHOWMAXIMIZED / SW_SHOWNORMAL
+            self.user32.SetForegroundWindow(self.hwnd)
         _method(controller, 4, wintypes.BOOL)(True)  # put_IsVisible
         _method(controller, 12, ctypes.c_int)(0)  # MoveFocus: typing goes to the page
         self.ok = self.alive = True
         if self.popout:
             self._pop_style(self.hwnd)
-        elif _hotkeys:
+        elif _hotkeys and not self.hidden:
             self._use_hotkeys(self.hwnd)
         self.started.set()
         return S_OK
