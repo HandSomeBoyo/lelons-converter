@@ -41,6 +41,9 @@ _held_keys = set()
 _held_buttons = set()
 
 
+KEY_VERSION = 2  # (2.38.1) keys kept in remote.json (see _this_pc)
+
+
 class Error(Exception):
     pass
 
@@ -82,6 +85,15 @@ def _this_pc():
             data.setdefault("hosts", {})
             data.setdefault("lockOnEnd", False)
             data.setdefault("keepAwake", True)
+            data["keyVersion"] = KEY_VERSION
+            _save(data)
+        if data.get("keyVersion") != KEY_VERSION:
+            # (2.38.1) The keys used to live in the page's own storage, which belongs to the app's address,
+            # and the address (its port) is new each time VaultHub starts: so every restart made new keys
+            # and the other PC said "key changed". Now they're kept here. What was paired with the old
+            # keys can't be used any more, so it's forgotten once and each PC is allowed again.
+            data["keys"], data["hosts"], data["allowed"] = {}, {}, {}
+            data["keyVersion"] = KEY_VERSION
             _save(data)
         return data
 
@@ -180,6 +192,28 @@ def answered(ask_id):
 
 def allowed(key):
     return bool(key) and key in (_this_pc().get("allowed") or {})
+
+
+def key(role, pub=None, priv=None):
+    """(2.38.1) This PC's own key for a role ("ctrl" on the Remote page, "host" in the hidden sender).
+    The page makes it the first time and hands it over; it's kept locked with Windows' DPAPI (only your
+    Windows account on this PC can open it). Returns the kept one: {"pub", "priv"} or {}."""
+    role = "host" if role == "host" else "ctrl"
+    with _lock:
+        data = _this_pc()
+        keys = data.setdefault("keys", {})
+        kept = keys.get(role)
+        if not kept and isinstance(pub, str) and isinstance(priv, str) and 60 < len(pub) < 400 and 60 < len(priv) < 1000:
+            kept = keys[role] = {"pub": pub, "priv": settings.lock_secret(priv)}
+            _save(data)
+        if not kept:
+            return {}
+        opened = settings.open_secret(kept.get("priv", ""))
+        if not opened:  # (from another PC or Windows account: make a new one)
+            del keys[role]
+            _save(data)
+            return {}
+        return {"pub": kept["pub"], "priv": opened}
 
 
 def remember_host(device, key):
