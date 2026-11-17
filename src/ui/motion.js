@@ -197,3 +197,34 @@ document.getElementById("tabs").addEventListener("keydown", (e) => {
 // A page opened (or a badge changed) while its group is folded: keep things right.
 new MutationObserver(() => drawSideGroups()).observe(document.getElementById("tabs"), { subtree: true, attributes: true, attributeFilter: ["class", "hidden"] });
 drawSideGroups();
+
+/* ---- scrolling stays inside the open panel
+   When the mouse is over a popup, Settings, a menu or a side panel, the wheel
+   should only ever scroll that panel. Without this, reaching the end of the
+   panel (or scrolling over a part that doesn't scroll) passes the scroll on
+   to the page behind it. The side bar and the player bar are left alone. */
+(() => {
+  const free = (el) => el.matches(".sidebar, .player-bar");
+  const canScroll = (el, dy) => {
+    if (el.scrollHeight <= el.clientHeight + 1) return false;
+    const oy = getComputedStyle(el).overflowY;
+    if (oy !== "auto" && oy !== "scroll" && oy !== "overlay") return false;
+    return dy < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+  };
+  document.addEventListener("wheel", (e) => {
+    if (e.ctrlKey || e.defaultPrevented) return;
+    const dy = e.deltaY;
+    if (!dy || Math.abs(e.deltaX) > Math.abs(dy)) return;
+    let el = e.target instanceof Element ? e.target : null;
+    let panel = null;
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      if (getComputedStyle(n).position === "fixed") panel = n;
+    }
+    if (!panel || free(panel)) return;
+    for (let n = el; n; n = n.parentElement) {
+      if (canScroll(n, dy)) return;
+      if (n === panel) break;
+    }
+    e.preventDefault();
+  }, { passive: false, capture: true });
+})();

@@ -40,6 +40,8 @@ import streamlive  # noqa: E402
 import streamtwitch  # noqa: E402
 import streampreview  # noqa: E402
 import obsctl  # noqa: E402
+import adtimer  # noqa: E402
+import multistream  # noqa: E402
 import titles  # noqa: E402
 import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
@@ -182,7 +184,8 @@ class State:
 
     @property
     def converting(self):
-        return queue.busy or local_files.busy or resolvetools.get().busy or waveform.busy() or sfx.library.busy
+        return (queue.busy or local_files.busy or resolvetools.get().busy or waveform.busy() or sfx.library.busy
+                or multistream.live())  # (2.36.0) passing a stream on: don't quit under it
 
     def start(self, flag):
         """Set a flag (like "checking") if it isn't set yet. False if it already was."""
@@ -757,6 +760,36 @@ class Handler(BaseHTTPRequestHandler):
                 webbrowser.open(channelstats.connect_url(self.server.server_port, bool(data.get("replies"))))
             elif action == "disconnect":
                 channelstats.disconnect(bool(data.get("forgetClient")))
+            elif action == "ms-config":  # (2.36.0) multistreaming
+                return self.send_json({"ok": True, "config": multistream.config()})
+            elif action == "ms-setup":
+                return self.send_json({"ok": True, "config": multistream.setup(data)})
+            elif action == "ms-switch":
+                return self.send_json({"ok": True, "ms": multistream.switch(bool(data.get("on")))})
+            elif action == "ms-site":
+                return self.send_json({"ok": True, "ms": multistream.site_switch(str(data.get("site") or ""), bool(data.get("on")))})
+            elif action == "ms-test":
+                return self.send_json({"ok": True, "test": multistream.speed_test()})
+            elif action == "ms-obs":
+                ok = multistream.point_obs(bool(multistream.config()["on"]))
+                return self.send_json({"ok": True, "done": ok, "ms": multistream.status()})
+            elif action == "ads-run":  # (2.36.0) the ad timer
+                return self.send_json({"ok": True, "ads": adtimer.run_now(data.get("length"))})
+            elif action == "ads-snooze":
+                return self.send_json({"ok": True, "ads": adtimer.snooze()})
+            elif action == "ads-end":
+                return self.send_json({"ok": True, "ads": adtimer.end_now()})
+            elif action == "ads-set":
+                return self.send_json({"ok": True, "prefs": adtimer.set_prefs(data.get("prefs") or {})})
+            elif action == "ads-scenes":
+                return self.send_json({"ok": True, "scenes": adtimer.scenes()})
+            elif action == "close-ask":  # (2.36.0) what the "You're live. Close anyway?" box lists
+                return self.send_json({"ok": True, "sites": multistream.live_sites()})
+            elif action == "hide":
+                return self.send_json({"ok": appwindow.hide()})
+            elif action == "close-now":
+                multistream.stop_all()
+                threading.Thread(target=appwindow.close, daemon=True).start()
             elif action == "open":
                 url = str(data.get("url") or "")
                 if re.match(r"^https://(www\.youtube\.com|studio\.youtube\.com|console\.cloud\.google\.com)/", url):
@@ -836,13 +869,43 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": True, "url": streampreview.source(str(data.get("p") or ""), str(data.get("name") or ""))})
                 except streampreview.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
+            elif action == "ms-config":  # (2.36.0) multistreaming
+                return self.send_json({"ok": True, "config": multistream.config()})
+            elif action == "ms-setup":
+                return self.send_json({"ok": True, "config": multistream.setup(data)})
+            elif action == "ms-switch":
+                return self.send_json({"ok": True, "ms": multistream.switch(bool(data.get("on")))})
+            elif action == "ms-site":
+                return self.send_json({"ok": True, "ms": multistream.site_switch(str(data.get("site") or ""), bool(data.get("on")))})
+            elif action == "ms-test":
+                return self.send_json({"ok": True, "test": multistream.speed_test()})
+            elif action == "ms-obs":
+                ok = multistream.point_obs(bool(multistream.config()["on"]))
+                return self.send_json({"ok": True, "done": ok, "ms": multistream.status()})
+            elif action == "ads-run":  # (2.36.0) the ad timer
+                return self.send_json({"ok": True, "ads": adtimer.run_now(data.get("length"))})
+            elif action == "ads-snooze":
+                return self.send_json({"ok": True, "ads": adtimer.snooze()})
+            elif action == "ads-end":
+                return self.send_json({"ok": True, "ads": adtimer.end_now()})
+            elif action == "ads-set":
+                return self.send_json({"ok": True, "prefs": adtimer.set_prefs(data.get("prefs") or {})})
+            elif action == "ads-scenes":
+                return self.send_json({"ok": True, "scenes": adtimer.scenes()})
+            elif action == "close-ask":  # (2.36.0) what the "You're live. Close anyway?" box lists
+                return self.send_json({"ok": True, "sites": multistream.live_sites()})
+            elif action == "hide":
+                return self.send_json({"ok": appwindow.hide()})
+            elif action == "close-now":
+                multistream.stop_all()
+                threading.Thread(target=appwindow.close, daemon=True).start()
             elif action == "open":
                 url = str(data.get("url") or "")
                 if re.match(r"^https://(www\.twitch\.tv|clips\.twitch\.tv|dashboard\.twitch\.tv|dev\.twitch\.tv|www\.youtube\.com|studio\.youtube\.com|obsproject\.com)/", url):
                     webbrowser.open(url)
             else:
                 return self.send_error(404)
-        except (streamtwitch.Error, streamlive.streamyt.Error) as e:
+        except (streamtwitch.Error, streamlive.streamyt.Error, multistream.Error, RuntimeError) as e:
             return self.send_json({"ok": False, "error": str(e)})
         except channelstats.Error as e:
             return self.send_json({"ok": False, "error": str(e)})
@@ -2262,6 +2325,8 @@ def main():
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(browser_args)
     appwindow.set_zoom(state.zoom)
     appwindow.set_dark(state.theme != "light")
+    # (2.36.0) While VaultHub passes your stream on to other sites, closing the window asks first.
+    appwindow.set_close_guard(lambda: "multistream" if multistream.live() else "")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     sfx.presence.start()
     home.on_update = sfx.library.log_channel
@@ -2280,6 +2345,7 @@ def main():
         if state.auto_update:
             start_background(check_for_updates)
         warm_up()
+        multistream.start_at_launch()  # (2.36.0) multistreaming was on: listen for OBS again
     start_background(after_start)
 
     # Quit once the window is closed (the page says bye and stops checking in).
