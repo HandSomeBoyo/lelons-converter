@@ -24,34 +24,21 @@ const rdB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const rdUnB64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 const rdBytes = (text) => new TextEncoder().encode(text);
 
-// role: "ctrl" (this PC controls others) or "host" (others control this PC). Kept in this engine's own store.
-function rdDb() {
-  return new Promise((done, fail) => {
-    const req = indexedDB.open("vaulthub-remote", 1);
-    req.onupgradeneeded = () => req.result.createObjectStore("keys");
-    req.onsuccess = () => done(req.result);
-    req.onerror = () => fail(req.error);
-  });
-}
+// role: "ctrl" (this PC controls others) or "host" (others control this PC).
+// (2.38.1) The keys are kept by the app (locked with Windows' DPAPI), not in this page's storage: that
+// storage belongs to the app's address, whose port is new each start, so every restart made new keys.
 async function rdKeys(role) {
-  const db = await rdDb();
-  const get = () => new Promise((done) => {
-    const r = db.transaction("keys").objectStore("keys").get(role);
-    r.onsuccess = () => done(r.result || null);
-    r.onerror = () => done(null);
-  });
-  let found = await get();
-  if (!found) {
-    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+  const load = (priv) => crypto.subtle.importKey("pkcs8", rdUnB64(priv), { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  let kept = await rdPost("/api/remote-key", { role });
+  if (!kept.ok) throw new Error("no key");
+  if (!kept.priv) {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
     const pub = rdB64(await crypto.subtle.exportKey("spki", pair.publicKey));
-    found = { priv: pair.privateKey, pub };
-    await new Promise((done) => {
-      const tx = db.transaction("keys", "readwrite");
-      tx.objectStore("keys").put(found, role);
-      tx.oncomplete = done; tx.onerror = done;
-    });
+    const priv = rdB64(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+    kept = await rdPost("/api/remote-key", { role, pub, priv }); // (if two made one at once, the first is kept)
+    if (!kept.ok || !kept.priv) throw new Error("no key");
   }
-  return found;
+  return { priv: await load(kept.priv), pub: kept.pub };
 }
 
 async function rdSign(priv, text) {
