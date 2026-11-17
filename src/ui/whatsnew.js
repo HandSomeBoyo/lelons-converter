@@ -8,6 +8,7 @@ const CHANGES = [
     "Upload speed check: see how many sites your internet can handle, and a clear warning with one-click buttons if it gets too slow while you're live.",
     "While you multistream, closing VaultHub asks first: keep streaming, hide it to the little icon by the clock, or close and stop the stream.",
     "New Ad timer card: see when your next Twitch ad break comes, run it yourself at a good moment or snooze it. It can tell chat a minute before and switch OBS to your BRB scene during the ads. (Sign in to Twitch again once so VaultHub may see your ads.)",
+    "Scrolling in Settings or a popup no longer scrolls the page behind it.",
   ] },
   { version: "2.35.0", items: [
     "New Trash bin in Settings > Trash: deleted documents, boards and Library sounds wait there for 30 days. Put them back with one click, or delete them for good. After 30 days they go away on their own.",
