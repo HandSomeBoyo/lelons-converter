@@ -1020,11 +1020,23 @@ function drawCallPeople() {
   }));
 }
 
+// The page moves down by the call card's height, so the card never covers what's under it.
+let callCardSeen = null;
+function callWatchCardHeight() {
+  const card = document.querySelector("#callBox .call-card");
+  if (!card || callCardSeen === card || typeof ResizeObserver === "undefined") return;
+  callCardSeen = card;
+  new ResizeObserver(() => {
+    if (card.offsetHeight) document.documentElement.style.setProperty("--call-h", card.offsetHeight + "px");
+  }).observe(card);
+}
+
 let callDrawn = "";
 function drawCall() {
   const box = $("callBox");
   box.hidden = !call;
   document.body.classList.toggle("in-call", !!call);
+  callWatchCardHeight();
   if (typeof srvDraw === "function") srvDraw(); // (servers: the "Voice connected" bar and who's in each voice channel)
   if (!call) { callDrawn = ""; $("callStage").hidden = true; drawCallTiles([], false); callPop(null); callStagePlace(false); return; }
   drawCallStatus();
@@ -1080,6 +1092,8 @@ function drawCallStage() {
   const stage = $("callStage");
   const live = !!call && call.phase === "in";
   const sharing = live ? [...callPeers.values()].filter((p) => p.sharing && p.video) : [];
+  // Your own screen too, so you can see what everyone's watching (friends' screens come first).
+  if (live && callScreen) sharing.push({ name: callMe(), video: callScreen, me: true });
   if (sharing.length && !sharing.some((p) => lower(p.name) === callWatching)) callWatching = lower(sharing[0].name);
   const watched = sharing.find((p) => lower(p.name) === callWatching);
   const tiles = live ? callTiles() : [];
@@ -1099,7 +1113,7 @@ function drawCallStage() {
   if (typeof callZoomWatch === "function") callZoomWatch(watched ? callWatching : "");
   stage.classList.toggle("small", callStageSmall && !inRoom);
   stage.classList.toggle("cameras", !watched);
-  $("callStageLabel").textContent = watched ? `${watched.name}'s screen` : "";
+  $("callStageLabel").textContent = watched ? (watched.me ? "Your screen (what friends see)" : `${watched.name}'s screen`) : "";
   $("callStageSize").innerHTML = callStageSmall ? CALL_ICONS.big : CALL_ICONS.small;
   $("callStageSize").title = callStageSmall ? "Make it big" : "Make it smaller";
   // Under a screen: only the cameras that are on (and none when it's small).
@@ -1109,7 +1123,7 @@ function drawCallStage() {
   if (tabs.dataset.sig !== sig) {
     tabs.dataset.sig = sig;
     tabs.replaceChildren(...(sharing.length > 1 ? sharing.map((p) => {
-      const b = Object.assign(document.createElement("button"), { type: "button", className: lower(p.name) === callWatching ? "on" : "", textContent: p.name });
+      const b = Object.assign(document.createElement("button"), { type: "button", className: lower(p.name) === callWatching ? "on" : "", textContent: p.me ? "Your screen" : p.name });
       b.addEventListener("click", () => { callWatching = lower(p.name); drawCall(); });
       return b;
     }) : []));
@@ -1182,6 +1196,7 @@ function drawCallTiles(tiles, strip) {
 
 // The green outline on whoever's talking (called often, so it only flips classes).
 function drawCallTalking() {
+  if (typeof srvDrawTalking === "function") srvDrawTalking(); // (servers.js: voice channel list, members, your name card)
   for (const [key, el] of callTileEls) {
     const muted = key === "" ? callMuted || callDeafened : (callPeers.get(key) || {}).muted;
     el.classList.toggle("speaking", !!(callSpeaking.get(key) || {}).on && !muted);
@@ -1230,16 +1245,12 @@ async function drawCallPop() {
       textContent: q.size >= 1080 || q.fps >= 60 ? "Sharper and smoother needs a faster internet connection" + (callOthersIn().length > 1 ? ", and more for every person watching." : ".")
         : "Lower is easier on slow internet.",
     }));
-    els.push(title("PC sound"));
-    els.push(chips(["off", "on"], callShareSound() ? "on" : "off", (v) => (v === "on" ? "Share it" : "Off"), (v) => { savePref("callShareSound", v === "on"); drawCallPop(); }));
     const live = callScreen && callScreen.getAudioTracks().length;
     els.push(Object.assign(document.createElement("p"), {
       className: "call-pop-note",
-      textContent: !callShareSound() ? "Only your screen is shared, without sound."
-        : (live ? "Your PC's sound is going out with your screen. " : "Tick \u201cAlso share system audio\u201d when you pick a whole screen, so friends hear your game or music. ")
-          + (callShareSoundSafe() ? "Friends' voices are left out, so nobody hears themselves." : "Use headphones, or friends may hear themselves back."),
+      textContent: (live ? "Your PC's sound is going out with your screen. " : "Want friends to hear your game or music? Turn on \u201cShare system audio\u201d in the next window. ")
+        + (callShareSoundSafe() ? "Friends' voices are left out, so nobody hears themselves." : "Use headphones, or friends may hear themselves back."),
     }));
-    if (callShareSound() && callScreen && !live) els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: "To add sound now, click Change screen." }));
     const actions = document.createElement("div");
     actions.className = "call-pop-actions";
     if (callScreen) {
