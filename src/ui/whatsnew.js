@@ -2,12 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-<<<<<<< HEAD
-=======
   { version: "2.38.1", items: [
     "Remote: PCs no longer say \"key changed\" after VaultHub restarts or updates. Allow each PC once more with the 6-digit code, and after that it stays allowed.",
   ] },
->>>>>>> origin/main
   { version: "2.38.0", items: [
     "Calls: your picture lights up green while you talk, like on Discord, in the call card, voice channels, the members list and the video tiles.",
     "When you share your screen, you now see it too (\"Your screen\"), so you know what friends are watching. If a friend shares at the same time, switch between the two at the top.",
