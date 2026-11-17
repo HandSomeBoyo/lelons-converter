@@ -1572,6 +1572,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"ended": remote.end(str(data.get("reason") or ""))}
             elif action == "input":
                 result = remote.input_events(data.get("e"))
+            elif action == "key":  # (2.38.1) this PC's own key, kept by the app (see remote.key)
+                result = remote.key(data.get("role"), data.get("pub"), data.get("priv"))
             elif action == "nonce":  # (2.37.1) a hello is only ever answered once, even across restarts
                 result = {"fresh": remote.nonce_fresh(data.get("nonce"))}
             elif action == "host-state":
