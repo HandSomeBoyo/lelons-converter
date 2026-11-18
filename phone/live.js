@@ -40,7 +40,7 @@ function twitchSignOut() {
   }
   LV.token = ""; LV.me = null; LV.stream = null; LV.channel = null; LV.chat = []; LV.loaded = false;
   store.set("tw_token", ""); store.set("tw_me", null);
-  closeChat();
+  twCloseChat();
   render();
 }
 
@@ -92,7 +92,7 @@ async function liveLoad() {
     LV.followers = fo.status === "fulfilled" ? fo.value.total : LV.followers;
     LV.ads = ad.status === "fulfilled" ? (ad.value.data || [])[0] || null : LV.ads;
     LV.loaded = true;
-    openChat();
+    twOpenChat();
   } catch (e) {
     toast(e.message);
   }
@@ -106,7 +106,7 @@ function liveTick() {
 
 // ---------------------------------------------------------------- Twitch chat (over a WebSocket)
 
-function openChat() {
+function twOpenChat() {
   if (LV.ws || !LV.me) return;
   const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
   LV.ws = ws;
@@ -122,15 +122,15 @@ function openChat() {
       if (line.startsWith("PING")) { ws.send("PONG :tmi.twitch.tv"); continue; }
       const m = parseIrc(line);
       if (!m) continue;
-      if (m.cmd === "PRIVMSG") addChat({ name: m.tags["display-name"] || m.nick, color: m.tags.color || "", text: m.text });
-      else if (m.cmd === "USERNOTICE") addChat({ notice: m.tags["system-msg"] || "", text: m.text });
+      if (m.cmd === "PRIVMSG") twAdd({ name: m.tags["display-name"] || m.nick, color: m.tags.color || "", text: m.text });
+      else if (m.cmd === "USERNOTICE") twAdd({ notice: m.tags["system-msg"] || "", text: m.text });
       else if (m.cmd === "CLEARCHAT" || m.cmd === "CLEARMSG") { /* (removed messages stay on the phone for now) */ }
     }
   };
-  ws.onclose = () => { if (LV.ws === ws) { LV.ws = null; if (LV.token) setTimeout(openChat, 5000); } };
+  ws.onclose = () => { if (LV.ws === ws) { LV.ws = null; if (LV.token) setTimeout(twOpenChat, 5000); } };
 }
 
-function closeChat() {
+function twCloseChat() {
   const ws = LV.ws;
   LV.ws = null;
   if (ws) try { ws.close(); } catch { /* closed */ }
@@ -158,7 +158,7 @@ function parseIrc(line) {
   return { tags, nick, cmd: head.split(" ")[0], text };
 }
 
-function addChat(m) {
+function twAdd(m) {
   LV.chat.push(m);
   if (LV.chat.length > 80) LV.chat.shift();
   const box = document.getElementById("lvChat");
@@ -166,13 +166,13 @@ function addChat(m) {
     const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
     const empty = box.querySelector(".lv-empty");
     if (empty) empty.remove();
-    box.insertAdjacentHTML("beforeend", chatLine(m));
+    box.insertAdjacentHTML("beforeend", twLine(m));
     while (box.children.length > 80) box.firstElementChild.remove();
     if (near) box.scrollTop = box.scrollHeight;
   }
 }
 
-function chatLine(m) {
+function twLine(m) {
   if (m.notice !== undefined) return `<div class="lv-note">⭐ ${esc(m.notice)}${m.text ? ` <span class="muted">${esc(m.text)}</span>` : ""}</div>`;
   const color = /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : NAMECOLORS[hash(m.name) % NAMECOLORS.length];
   return `<div><b style="color:${color}">${esc(m.name)}</b> ${esc(m.text)}</div>`;
@@ -184,7 +184,7 @@ function sendTwitch() {
   if (!text) return;
   if (!LV.ws || LV.ws.readyState !== 1) return toast("Twitch chat isn't connected yet. Try again in a moment.");
   LV.ws.send(`PRIVMSG #${LV.me.login} :${text}`);
-  addChat({ name: LV.me.login, color: "#ffcf3f", text });
+  twAdd({ name: LV.me.login, color: "#ffcf3f", text });
   box.value = "";
 }
 
@@ -256,7 +256,7 @@ function liveHtml() {
         ${LV.followers != null ? `<span><b style="color:var(--text)">${LV.followers}</b> followers</span>` : ""}
         ${nextAd != null && s ? `<span style="color:var(--accent)">Next ad in ${nextAd} min</span>` : ""}</div></div>
     <div class="lbl">Chat</div>
-    <div class="card" style="padding:10px 14px"><div id="lvChat" class="lv-chat">${LV.chat.length ? LV.chat.map(chatLine).join("") : '<div class="muted sm lv-empty">Nothing in chat yet.</div>'}</div>
+    <div class="card" style="padding:10px 14px"><div id="lvChat" class="lv-chat">${LV.chat.length ? LV.chat.map(twLine).join("") : '<div class="muted sm lv-empty">Nothing in chat yet.</div>'}</div>
       <div class="row" style="gap:8px;margin-top:8px"><input class="field" id="lvSay" placeholder="Say something in chat" enterkeyhint="send" style="height:42px;flex:1;border-radius:999px;background:var(--panel2)">
       <button class="send" data-lv="say" aria-label="Send">${I.send}</button></div></div>
     <div style="text-align:center;margin-top:18px"><button class="sm muted" data-lv="signout">Signed in as ${esc(LV.me ? LV.me.login : "")} · Sign out</button></div>`;
