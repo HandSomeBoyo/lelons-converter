@@ -5783,6 +5783,11 @@ main { container: page / inline-size; }
   box-shadow: 0 0 0 1px #2e2e2e, 0 12px 32px rgba(0, 0, 0, .5);
 }
 .watch-menu[hidden] { display: none; }
+.watch-menu.wide { width: 210px; }
+.watch-menu button small { color: #8d8a83; font-size: 12px; }
+.watch-menu button.cur small { color: inherit; opacity: .75; }
+.watch-menu p { margin: 6px 10px 4px; padding-top: 8px; border-top: 1px solid #2a2a2a; font-size: 11.5px; line-height: 1.35; color: #8d8a83; white-space: normal; }
+.watch-screen iframe.sized { right: auto; bottom: auto; transform-origin: 0 0; }
 .watch-menu h6 { margin: 4px 10px 6px; font: 600 11px Inter, sans-serif; text-transform: uppercase; letter-spacing: .06em; color: #8d8a83; }
 .watch-menu button {
   all: unset; cursor: pointer; box-sizing: border-box; width: 100%; display: flex; justify-content: space-between;

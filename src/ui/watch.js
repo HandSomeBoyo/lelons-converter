@@ -24,6 +24,17 @@ let watchConvert = null;
 // What the player told us last (it sends this a few times a second while we listen).
 const watchState = { time: 0, at: 0, dur: 0, state: -1, rate: 1, vol: 100, muted: false, loaded: 0, cc: false, heard: false };
 const WATCH_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+// Video quality. YouTube no longer lets apps pick it directly (setPlaybackQuality does nothing),
+// but it picks the quality from how big the player is. So the player is laid out at the size of
+// the picked quality and then scaled to fit the screen: big for 4K, small for 480p.
+const WATCH_QUALITIES = [
+  { h: 0, label: "Auto", note: "fits the window" },
+  { h: 2160, label: "4K", note: "2160p" }, { h: 1440, label: "1440p" }, { h: 1080, label: "1080p", note: "HD" },
+  { h: 720, label: "720p" }, { h: 480, label: "480p", note: "saves data" }, { h: 360, label: "360p" },
+];
+let watchQuality = 0;
+try { watchQuality = Number(localStorage.getItem("watchQuality")) || 0; } catch {}
+if (!WATCH_QUALITIES.some((q) => q.h === watchQuality)) watchQuality = 0;
 let watchHello = 0, watchIdle = 0, watchTick = 0, watchDragAt = null;
 
 function openWatch(url, info = {}) {
@@ -41,8 +52,7 @@ function openWatch(url, info = {}) {
   $("watchError").hidden = true;
   Object.assign(watchState, { time: 0, at: 0, dur: 0, state: -1, rate: 1, loaded: 0, cc: false, heard: false });
   $("watchVideo").classList.remove("playing", "ended", "idle");
-  $("watchSpeedMenu").hidden = true;
-  $("watchSpeedBtn").classList.remove("open");
+  watchCloseMenus();
   const frame = document.createElement("iframe");
   frame.id = "watchFrame";
   frame.allow = "autoplay; encrypted-media; picture-in-picture";
@@ -61,6 +71,7 @@ function openWatch(url, info = {}) {
     watchHello = setInterval(() => { if (watchState.heard || ++tries > 40) clearInterval(watchHello); else hello(); }, 250);
   });
   $("watchScreen").replaceChildren(frame);
+  watchFit();
   watchDraw();
   $("watchModal").hidden = false;
   watchWake();
@@ -115,6 +126,7 @@ function watchDraw() {
   v.classList.toggle("muted", watchState.muted || watchState.vol === 0);
   $("watchVolFill").style.width = (watchState.muted ? 0 : watchState.vol) + "%";
   $("watchSpeedBtn").textContent = watchState.rate === 1 ? "1x" : watchState.rate + "x";
+  $("watchQualityBtn").textContent = WATCH_QUALITIES.find((q) => q.h === watchQuality).label;
   $("watchCc").classList.toggle("on", watchState.cc);
   // The big button: paused (after it started) or at the end. At the end it covers YouTube's
   // "more videos" screen.
@@ -134,7 +146,7 @@ function watchWake() {
   v.classList.remove("idle");
   clearTimeout(watchIdle);
   watchIdle = setTimeout(() => {
-    if (watchState.state === 1 && $("watchSpeedMenu").hidden && watchDragAt === null) v.classList.add("idle");
+    if (watchState.state === 1 && !watchMenuOpen() && watchDragAt === null) v.classList.add("idle");
   }, 2500);
 }
 
@@ -195,24 +207,68 @@ function watchFull() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else $("watchVideo").requestFullscreen().catch(() => {});
 }
-function watchSpeedMenu(open) {
-  const menu = $("watchSpeedMenu");
-  if (open === undefined) open = menu.hidden;
-  menu.hidden = !open;
-  $("watchSpeedBtn").classList.toggle("open", open);
+function watchMenuOpen() { return !$("watchSpeedMenu").hidden || !$("watchQualityMenu").hidden; }
+function watchCloseMenus() {
+  for (const k of ["Speed", "Quality"]) { $(`watch${k}Menu`).hidden = true; $(`watch${k}Btn`).classList.remove("open"); }
+}
+// Opens one of the little menus above the controls: a heading, the choices, and maybe a note.
+function watchMenu(kind, title, items, note) {
+  const menu = $(`watch${kind}Menu`), open = menu.hidden;
+  watchCloseMenus();
   if (!open) return watchWake();
+  menu.hidden = false;
+  $(`watch${kind}Btn`).classList.add("open");
   const h = document.createElement("h6");
-  h.textContent = "Speed";
-  menu.replaceChildren(h, ...WATCH_SPEEDS.map((r) => {
+  h.textContent = title;
+  const rows = items.map((it) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = r === watchState.rate ? "cur" : "";
-    b.innerHTML = `<span>${r === 1 ? "Normal" : r + "x"}</span>${r === watchState.rate ? "<span>✓</span>" : ""}`;
-    b.onclick = () => { watchState.time = watchNow(); watchState.at = performance.now(); watchState.rate = r; watchCommand("setPlaybackRate", [r]); watchSpeedMenu(false); };
+    b.className = it.cur ? "cur" : "";
+    const label = document.createElement("span");
+    label.textContent = it.label + " ";
+    if (it.note) { const n = document.createElement("small"); n.textContent = it.note; label.append(n); }
+    b.append(label);
+    if (it.cur) { const c = document.createElement("span"); c.textContent = "✓"; b.append(c); }
+    b.onclick = () => { it.pick(); watchCloseMenus(); watchWake(); };
     return b;
-  }));
+  });
+  menu.replaceChildren(h, ...rows);
+  if (note) { const p = document.createElement("p"); p.textContent = note; menu.append(p); }
   $("watchVideo").classList.remove("idle");
 }
+function watchSpeedMenu() {
+  watchMenu("Speed", "Speed", WATCH_SPEEDS.map((r) => ({
+    label: r === 1 ? "Normal" : r + "x", cur: r === watchState.rate,
+    pick: () => { watchState.time = watchNow(); watchState.at = performance.now(); watchState.rate = r; watchCommand("setPlaybackRate", [r]); },
+  })));
+}
+function watchQualityMenu() {
+  watchMenu("Quality", "Quality", WATCH_QUALITIES.map((q) => ({
+    label: q.label, note: q.note, cur: q.h === watchQuality,
+    pick: () => { watchQuality = q.h; try { localStorage.setItem("watchQuality", String(q.h)); } catch {} watchFit(); watchDraw(); },
+  })), "YouTube can still go lower for a moment if your internet is slow, or if the video isn't made in that quality.");
+}
+
+// Lay the player out at the picked quality's size and scale it to fill the screen (see WATCH_QUALITIES).
+function watchFit() {
+  const frame = $("watchFrame");
+  if (!frame) return;
+  if (!watchQuality) {
+    frame.classList.remove("sized");
+    frame.style.width = frame.style.height = frame.style.transform = "";
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1, w = watchQuality * 16 / 9 / dpr, h = watchQuality / dpr;
+  const box = $("watchScreen").getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  const scale = Math.min(box.width / w, box.height / h);
+  const x = (box.width - w * scale) / 2, y = (box.height - h * scale) / 2;
+  frame.classList.add("sized");
+  frame.style.width = w + "px";
+  frame.style.height = h + "px";
+  frame.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+}
+if (window.ResizeObserver) new ResizeObserver(() => watchFit()).observe($("watchScreen"));
 
 // Dragging on the progress bar and the volume bar.
 function watchBarDrag(bar, onMove, onEnd) {
@@ -242,7 +298,7 @@ $("watchSeek").addEventListener("pointermove", (e) => {
 });
 $("watchSeek").addEventListener("pointerleave", () => { $("watchTip").hidden = true; });
 
-$("watchHit").addEventListener("click", () => { if (!$("watchSpeedMenu").hidden) return watchSpeedMenu(false); watchToggle(); });
+$("watchHit").addEventListener("click", () => { if (watchMenuOpen()) { watchCloseMenus(); return watchWake(); } watchToggle(); });
 $("watchHit").addEventListener("dblclick", watchFull);
 $("watchVideo").addEventListener("pointermove", watchWake);
 $("watchVideo").addEventListener("wheel", (e) => { if (e.target.closest(".watch-vol, #watchMute")) { e.preventDefault(); watchSetVolume(watchState.vol - Math.sign(e.deltaY) * 5); } }, { passive: false });
@@ -253,14 +309,15 @@ $("watchMute").addEventListener("click", watchMute);
 $("watchCc").addEventListener("click", watchCaptions);
 $("watchFull").addEventListener("click", watchFull);
 $("watchSpeedBtn").addEventListener("click", (e) => { e.stopPropagation(); watchSpeedMenu(); });
-document.addEventListener("pointerdown", (e) => { if (!$("watchSpeedMenu").hidden && !e.target.closest(".watch-speed-wrap")) watchSpeedMenu(false); });
+$("watchQualityBtn").addEventListener("click", (e) => { e.stopPropagation(); watchQualityMenu(); });
+document.addEventListener("pointerdown", (e) => { if (watchMenuOpen() && !e.target.closest(".watch-speed-wrap")) watchCloseMenus(); });
 
 $("watchClose").addEventListener("click", closeWatch);
 document.addEventListener("keydown", (e) => {
   if ($("watchModal").hidden) return;
   if (e.key === "Escape") {
     e.stopPropagation();
-    if (!$("watchSpeedMenu").hidden) watchSpeedMenu(false);
+    if (watchMenuOpen()) watchCloseMenus();
     else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else closeWatch();
     return;
@@ -271,7 +328,7 @@ document.addEventListener("keydown", (e) => {
     " ": watchToggle, k: watchToggle, arrowleft: () => watchSeekTo(watchNow() - 10), arrowright: () => watchSeekTo(watchNow() + 10),
     j: () => watchSeekTo(watchNow() - 10), l: () => watchSeekTo(watchNow() + 10),
     arrowup: () => watchSetVolume(watchState.vol + 5), arrowdown: () => watchSetVolume(watchState.vol - 5),
-    m: watchMute, f: watchFull, c: watchCaptions,
+    m: watchMute, f: watchFull, c: watchCaptions, q: watchQualityMenu,
   };
   if (!keys[k]) return;
   // Space and Enter on a focused button press that button instead.
