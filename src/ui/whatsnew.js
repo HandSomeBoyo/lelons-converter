@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.43.0", items: [
+    "Live: new card, Game auto-detect. Start a game and your Twitch game changes by itself. Pick \"Ask me first\" if you'd rather press a button. Wrong guess? Pick the right game once and it remembers.",
+    "New card: Earnings. A rough estimate of what this stream and this month made from subs, bits and ads, in kroner (or any money you pick).",
+    "New card: Mic sound. One click gives your mic the filters big streamers use in OBS: noise removal, silence between words, even volume and no crackling on loud laughs. Pick how noisy your room is and how loud your mic is.",
+    "YouTube player: new Quality button next to speed. Pick Auto, 4K, 1440p, 1080p, 720p, 480p or 360p, and VaultHub remembers it (Q opens it).",
+  ] },
   { version: "2.42.0", items: [
     "Live: when your stream ends, a recap pops up. How many watched (compared to last time), new followers, new chatters, your top chatters, clips, the best moments and whether the stream had problems.",
     "Copy recap for Discord puts a short summary on your clipboard, ready to paste. Every recap is saved in Stream stats too.",

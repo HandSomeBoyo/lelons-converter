@@ -147,9 +147,11 @@ def to_item(line, own_login=""):
             return [{**base, "kind": "sub", "months": int(tags.get("msg-param-cumulative-months") or 1),
                      "tier": (tags.get("msg-param-sub-plan") or "1000")}]
         if kind == "subgift":
-            return [{**base, "kind": "gift", "to": tags.get("msg-param-recipient-display-name") or "", "amount": 1}]
+            return [{**base, "kind": "gift", "to": tags.get("msg-param-recipient-display-name") or "", "amount": 1,
+                     "tier": tags.get("msg-param-sub-plan") or "1000"}]
         if kind == "submysterygift":
-            return [{**base, "kind": "gift", "amount": int(tags.get("msg-param-mass-gift-count") or 1)}]
+            return [{**base, "kind": "gift", "amount": int(tags.get("msg-param-mass-gift-count") or 1),
+                     "tier": tags.get("msg-param-sub-plan") or "1000"}]
         if kind == "raid":
             return [{**base, "kind": "raid", "user": tags.get("msg-param-displayName") or who,
                      "amount": int(tags.get("msg-param-viewerCount") or 0)}]

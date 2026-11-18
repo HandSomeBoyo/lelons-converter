@@ -106,6 +106,7 @@ function lvDrawConsole(fresh) {
   if (typeof lvDrawMulti === "function") lvDrawMulti();
   if (typeof lvDrawAds === "function") lvDrawAds();
   if (typeof lvDrawCo === "function") lvDrawCo();
+  if (typeof lvDrawExtras === "function") lvDrawExtras();
   if (typeof lvRefit === "function") lvRefit();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
@@ -172,6 +173,9 @@ function lvBuildConsole() {
       <div class="lv-card" data-c="modes" id="lvModes"></div>
       <div class="lv-card" data-c="newbies" id="lvNewbies"></div>
       <div class="lv-card lvco" data-c="costream" id="lvCo" hidden></div>
+      <div class="lv-card lvx" data-c="gamedetect" id="lvGd" hidden></div>
+      <div class="lv-card lvx" data-c="earn" id="lvEarn" hidden></div>
+      <div class="lv-card lvx" data-c="mic" id="lvMic" hidden></div>
       <div class="lv-card ms-card" data-c="multi" id="lvMulti"></div>
       <div class="lv-card ad-card" data-c="ads" id="lvAds" hidden></div>
     </div>`;

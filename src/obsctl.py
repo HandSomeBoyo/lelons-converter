@@ -9,6 +9,7 @@ The connection only stays up while the page asks for it (it closes 30 s after th
 import base64
 import hashlib
 import math
+import re
 import socket
 import threading
 import time
@@ -307,3 +308,87 @@ def ask_once(kind, data=None):
         return conn.ask(kind, data)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------- one-click mic sound (2.43.0)
+# Pro mic filters in OBS, added for you on your mic: noise suppression (RNNoise, built into OBS), a noise
+# gate, a compressor (evens out quiet and loud, with a little extra loudness for quiet mics) and a limiter
+# (no more clipping when you shout). They're OBS's own filters, named "VaultHub ...", so they keep working
+# with VaultHub closed, you can see them in OBS's Filters, and VaultHub never touches your other filters.
+
+MIC_ROOMS = {"quiet": (-42.0, -48.0), "some": (-34.0, -40.0), "noisy": (-28.0, -34.0)}  # gate open, close (dB)
+MIC_GAIN = {"quiet": 8.0, "normal": 4.0, "loud": 0.0}  # extra loudness after the compressor (dB)
+
+
+def mic_prefs():
+    saved = settings.load().get("lv_mic")
+    out = {"on": False, "mic": "", "room": "some", "voice": "normal"}
+    if isinstance(saved, dict):
+        out.update({k: saved[k] for k in out if k in saved})
+    if out["room"] not in MIC_ROOMS:
+        out["room"] = "some"
+    if out["voice"] not in MIC_GAIN:
+        out["voice"] = "normal"
+    return out
+
+
+def _mic_filters(room, voice):
+    open_db, close_db = MIC_ROOMS[room]
+    return [
+        ("VaultHub noise", "noise_suppress_filter_v2", {"method": "rnnoise"}),
+        ("VaultHub gate", "noise_gate_filter", {"open_threshold": open_db, "close_threshold": close_db,
+                                                 "attack_time": 25, "hold_time": 200, "release_time": 150}),
+        ("VaultHub compressor", "compressor_filter", {"ratio": 4.0, "threshold": -18.0, "attack_time": 6,
+                                                      "release_time": 60, "output_gain": MIC_GAIN[voice], "sidechain_source": "none"}),
+        ("VaultHub limiter", "limiter_filter", {"threshold": -3.0, "release_time": 60}),
+    ]
+
+
+def _guess_mic():
+    names = [i["name"] for i in _state["inputs"]]
+    special = _try(_need(), "GetSpecialInputs") or {}
+    return special.get("mic1") or next((n for n in names if re.search(r"mic|aux|headset|microphone", n, re.I)), "")
+
+
+def mic_state():
+    p = mic_prefs()
+    out = {**p, "sources": [i["name"] for i in _state["inputs"]], "have": [], "others": []}
+    if _conn and _conn.alive:
+        out["mic"] = p["mic"] or _guess_mic()
+        if out["mic"]:
+            filters = (_try(_conn, "GetSourceFilterList", {"sourceName": out["mic"]}) or {}).get("filters") or []
+            out["have"] = [f.get("filterName") for f in filters if str(f.get("filterName", "")).startswith("VaultHub ")]
+            out["others"] = [f.get("filterName") for f in filters if not str(f.get("filterName", "")).startswith("VaultHub ")]
+    return out
+
+
+def mic_set(data):
+    """Turn the mic filters on or off, or change the mic, the room or the voice level."""
+    conn = _need()
+    old = mic_state()
+    p = {k: old[k] for k in ("on", "mic", "room", "voice")}
+    if "mic" in data:
+        p["mic"] = str(data["mic"] or "")[:200]
+    if data.get("room") in MIC_ROOMS:
+        p["room"] = data["room"]
+    if data.get("voice") in MIC_GAIN:
+        p["voice"] = data["voice"]
+    if "on" in data:
+        p["on"] = bool(data["on"])
+    if p["on"] and not p["mic"]:
+        raise Error("Pick your mic first.")
+    if old["mic"] and old["mic"] != p["mic"]:  # (another mic: take them off the old one)
+        for name, _kind, _s in _mic_filters(p["room"], p["voice"]):
+            _try(conn, "RemoveSourceFilter", {"sourceName": old["mic"], "filterName": name})
+    for name, kind, values in _mic_filters(p["room"], p["voice"]):
+        if not p["on"]:
+            if p["mic"]:
+                _try(conn, "RemoveSourceFilter", {"sourceName": p["mic"], "filterName": name})
+            continue
+        if _try(conn, "GetSourceFilter", {"sourceName": p["mic"], "filterName": name}) is None:
+            conn.ask("CreateSourceFilter", {"sourceName": p["mic"], "filterName": name, "filterKind": kind, "filterSettings": values})
+        else:
+            conn.ask("SetSourceFilterSettings", {"sourceName": p["mic"], "filterName": name, "filterSettings": values, "overlay": True})
+            conn.ask("SetSourceFilterEnabled", {"sourceName": p["mic"], "filterName": name, "filterEnabled": True})
+    settings.save(lv_mic=p)
+    return mic_state()
