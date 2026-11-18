@@ -37,7 +37,7 @@ async function lvoTick() {
   const res = await api("/api/live-obs", {}).catch(() => null);
   if (res && res.ok) LVO.s = res.obs;
   lvoDraw();
-  if (typeof lvDrawDuck === "function") lvDrawDuck();
+  if (typeof lvDrawMic === "function") lvDrawMic();
   LVO.timer = setTimeout(lvoTick, 120);
 }
 

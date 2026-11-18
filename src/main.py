@@ -890,11 +890,11 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "earn-set":  # (2.43.0) earnings estimate
                 streamlive.set_earn_prefs(data)
                 return self.send_json({"ok": True, "earn": streamlive.earnings_now()})
-            elif action == "duck":  # (2.43.0) game quieter when you talk
-                return self.send_json({"ok": True, "duck": obsctl.duck_state()})
-            elif action == "duck-set":
+            elif action == "mic":  # (2.43.0) one-click mic sound
+                return self.send_json({"ok": True, "mic": obsctl.mic_state()})
+            elif action == "mic-set":
                 try:
-                    return self.send_json({"ok": True, "duck": obsctl.duck_set(data)})
+                    return self.send_json({"ok": True, "mic": obsctl.mic_set(data)})
                 except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
             elif action == "co-set":  # (2.42.0) co-streaming: friends' chats in the console

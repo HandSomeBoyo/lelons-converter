@@ -8656,7 +8656,7 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lv-code-easy small { color: var(--muted); font-size: 12.5px; }
 .lv-tw-own { margin-top: 12px; }
 
-/* (2.43.0) Game auto-detect, Earnings, Game ducking */
+/* (2.43.0) Game auto-detect, Earnings, Mic sound */
 .lvx h3 { display: flex; align-items: center; gap: 8px; }
 .lvx h3 small { font-weight: 500; font-size: 12px; }
 .lvx-gd { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
@@ -8691,11 +8691,17 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-rows i { font-style: normal; color: var(--muted); margin-left: 4px; }
 .lvx-rows b { font-variant-numeric: tabular-nums; }
 .lvx-earnset { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-.lvx-earnset select, .lvx-duck select { width: 100%; height: 36px; }
+.lvx-earnset select, .lvx.lv-card select { width: 100%; height: 36px; }
 .lvx-earnset .input { height: 36px; }
 .lvx-note { margin-top: 10px; font-size: 12px; line-height: 1.45; }
 .lvx-lead { margin: -2px 0 12px; font-size: 13px; }
-.lvx-duck { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.lvx-mic { display: grid; gap: 6px; margin-top: 12px; }
+.lvx-mic > div { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.lvx-mic > div i { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-style: normal; font-size: 11px; margin-top: 1px; }
+.lvx-mic > div.on i { background: var(--green); border-color: var(--green); color: #111; }
+.lvx-mic b { display: block; font-size: 13px; }
+.lvx-mic small { display: block; color: var(--muted); font-size: 12px; }
+#lvMic .lvx-meter { margin-top: 6px; }
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }

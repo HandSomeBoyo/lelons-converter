@@ -1,14 +1,14 @@
 // (2.43.0) Three Live console cards: Game auto-detect (your Twitch game follows what you play),
-// Earnings (a rough estimate of what this stream and this month made) and Game ducking (the game gets
-// quieter while you talk, with OBS's own Compressor filter).
+// Earnings (a rough estimate of what this stream and this month made) and Mic sound (pro mic filters
+// in OBS with one click: noise removal, gate, compressor, limiter).
 // Uses $, api(), LV, lvEsc, lvNum, lvToast, lvOpenSetup, lvtSignedIn, lvtNeedSignIn, lvtAgo from the other lv files.
 
-const LVX = { gdBusy: false, gdPick: false, gdResults: [], gdSearch: 0, earnEdit: false, duck: null, duckAt: 0, duckBusy: false, duckErr: "" };
+const LVX = { gdBusy: false, gdPick: false, gdResults: [], gdSearch: 0, earnEdit: false, mic: null, micAt: 0, micBusy: false, micErr: "" };
 
 function lvDrawExtras() {
   lvDrawGd();
   lvDrawEarn();
-  lvDrawDuck();
+  lvDrawMic();
 }
 
 // ---------------------------------------------------------------- Game auto-detect
@@ -149,82 +149,86 @@ function lvDrawEarn(force) {
   if (LVX.earnEdit) $("lvxCur").onchange = () => { $("lvxRate").disabled = $("lvxCur").value === "USD"; };
 }
 
-// ---------------------------------------------------------------- Game quieter when you talk
+// ---------------------------------------------------------------- Mic sound (pro mic filters in OBS)
 
-async function lvDuckLoad() {
-  LVX.duckAt = Date.now();
-  const res = await api("/api/live-duck", {}).catch(() => null);
-  if (res && res.ok) LVX.duck = res.duck;
-  lvDrawDuck(true);
+const LVX_MIC_FILTERS = [
+  ["VaultHub noise", "Noise removal", "Takes away fans, keyboard and background hum."],
+  ["VaultHub gate", "Silence when you're quiet", "Closes the mic between your words."],
+  ["VaultHub compressor", "Even volume", "Quiet words get louder, shouting gets softer."],
+  ["VaultHub limiter", "No clipping", "Loud laughs and yells never crackle."],
+];
+
+async function lvMicLoad() {
+  LVX.micAt = Date.now();
+  const res = await api("/api/live-mic", {}).catch(() => null);
+  if (res && res.ok) LVX.mic = res.mic;
+  lvDrawMic(true);
 }
 
-async function lvDuckSet(change) {
-  LVX.duckBusy = true;
-  LVX.duckErr = "";
-  lvDrawDuck(true);
-  const res = await api("/api/live-duck-set", change).catch(() => null);
-  LVX.duckBusy = false;
+async function lvMicSet(change) {
+  LVX.micBusy = true;
+  LVX.micErr = "";
+  lvDrawMic(true);
+  const res = await api("/api/live-mic-set", change).catch(() => null);
+  LVX.micBusy = false;
   if (res && res.ok) {
-    LVX.duck = res.duck;
-    if ("on" in change) lvToast({ emoji: change.on ? "🎧" : "🔇", title: change.on ? "Game ducking is on" : "Game ducking is off", text: change.on ? "Talk and the game goes quieter." : "The filter is taken off in OBS." });
-  } else LVX.duckErr = (res && res.error) || "Couldn't reach OBS.";
-  lvDrawDuck(true);
+    LVX.mic = res.mic;
+    if ("on" in change) lvToast({ emoji: change.on ? "🎙️" : "🔇", title: change.on ? "Pro mic sound is on" : "Pro mic sound is off", text: change.on ? "Four filters were added to your mic in OBS." : "The filters are taken off your mic in OBS." });
+  } else LVX.micErr = (res && res.error) || "Couldn't reach OBS.";
+  lvDrawMic(true);
 }
 
-function lvDrawDuck(force) {
-  const box = $("lvDuck");
+function lvDrawMic(force) {
+  const box = $("lvMic");
   if (!box) return;
   const obs = (typeof LVO !== "undefined" && LVO.s) || {};
   const c = LV.cfg || {};
   box.hidden = !c.obsOn;
   if (!c.obsOn) return;
   // (the OBS card asks OBS often; without it on the page, this card asks by itself)
-  if (typeof lvoShown === "function" && !lvoShown() && !LVX.duckTimer && !box.classList.contains("lv-off") && !$("liveTab").hidden) {
-    LVX.duckTimer = setTimeout(async () => {
+  if (typeof lvoShown === "function" && !lvoShown() && !LVX.micTimer && !box.classList.contains("lv-off") && !$("liveTab").hidden) {
+    LVX.micTimer = setTimeout(async () => {
       const res = await api("/api/live-obs", {}).catch(() => null);
       if (res && res.ok) LVO.s = res.obs;
-      LVX.duckTimer = 0;
-      lvDrawDuck();
+      LVX.micTimer = 0;
+      lvDrawMic();
     }, 400);
   }
-  if (obs.connected && (!LVX.duck || Date.now() - LVX.duckAt > 30000)) { if (Date.now() - LVX.duckAt > 3000) lvDuckLoad(); }
-  const d = LVX.duck;
+  if (obs.connected && (!LVX.mic || Date.now() - LVX.micAt > 30000)) { if (Date.now() - (LVX.micAt || 0) > 3000) lvMicLoad(); }
+  const d = LVX.mic;
   const levels = Object.fromEntries((obs.inputs || []).map((i) => [i.name, i.level || 0]));
-  const shape = JSON.stringify([d, obs.connected, LVX.duckBusy, LVX.duckErr]);
+  const shape = JSON.stringify([d, obs.connected, LVX.micBusy, LVX.micErr]);
   if (!force && box.dataset.shape === shape) {
-    if (d) lvDuckMeters(levels, d);
+    if (d) lvMicMeter(levels, d);
     return;
   }
   box.dataset.shape = shape;
   if (!obs.connected || !d) {
-    box.innerHTML = `<h3>Game ducking</h3><p class="lv-muted">${obs.connected ? "Loading..." : "Connect OBS (Set up) and the game gets quieter by itself while you talk."}</p>`;
+    box.innerHTML = `<h3>Mic sound</h3><p class="lv-muted">${obs.connected ? "Loading..." : "Connect OBS (Set up) and your mic can sound like a pro's with one click."}</p>`;
     return;
   }
-  const opts = (sel) => d.sources.map((n) => `<option ${n === sel ? "selected" : ""}>${lvEsc(n)}</option>`).join("") || `<option value="">No sound sources in OBS</option>`;
+  const opts = d.sources.map((n) => `<option ${n === d.mic ? "selected" : ""}>${lvEsc(n)}</option>`).join("") || `<option value="">No sound sources in OBS</option>`;
+  const seg = (id, val, list) => `<span class="lv-seg" id="${id}">${list.map(([k, t]) => `<button data-v="${k}" class="${val === k ? "on" : ""}">${t}</button>`).join("")}</span>`;
+  const have = new Set(d.have || []);
   box.innerHTML = `
-    <h3>Game ducking<span class="sp"></span><label class="check" title="Turn on or off"><input type="checkbox" id="lvxDuckOn" ${d.on ? "checked" : ""} ${LVX.duckBusy ? "disabled" : ""}></label></h3>
-    <p class="lv-muted lvx-lead">The game gets quieter while you talk, and comes back when you stop.</p>
-    <div class="lvx-duck">
-      <label class="fx-field"><span>Game sound</span><select id="lvxDuckGame">${opts(d.game)}</select></label>
-      <div class="lvx-meter" data-m="game"><i></i></div>
-      <label class="fx-field"><span>Your mic</span><select id="lvxDuckMic">${opts(d.mic)}</select></label>
-      <div class="lvx-meter mic" data-m="mic"><i></i></div>
-    </div>
-    <div class="lvx-opts"><span class="lv-muted">How much quieter</span>
-      <span class="lv-seg" id="lvxDuckLevel">${["light", "medium", "strong"].map((l) => `<button data-l="${l}" class="${d.level === l ? "on" : ""}">${l[0].toUpperCase() + l.slice(1)}</button>`).join("")}</span></div>
-    ${d.on && d.found === false ? `<p class="lvi-err">The filter is turned off in OBS. Turn this off and on again to fix it.</p>` : ""}
-    ${LVX.duckErr ? `<p class="lvi-err">${lvEsc(LVX.duckErr)}</p>` : ""}
-    <p class="lv-muted lvx-note">${d.on ? `✓ Working. In OBS it's a Compressor filter called "VaultHub ducking" on ${lvEsc(d.game)}.` : "It uses OBS's own Compressor filter, so it keeps working even when VaultHub is closed."}</p>`;
-  $("lvxDuckOn").onchange = (e) => lvDuckSet({ on: e.target.checked, game: $("lvxDuckGame").value, mic: $("lvxDuckMic").value });
-  $("lvxDuckGame").onchange = () => lvDuckSet({ game: $("lvxDuckGame").value });
-  $("lvxDuckMic").onchange = () => lvDuckSet({ mic: $("lvxDuckMic").value });
-  $("lvxDuckLevel").onclick = (e) => { const b = e.target.closest("button"); if (b) lvDuckSet({ level: b.dataset.l }); };
-  lvDuckMeters(levels, d);
+    <h3>Mic sound<span class="sp"></span><label class="check" title="Turn on or off"><input type="checkbox" id="lvxMicOn" ${d.on ? "checked" : ""} ${LVX.micBusy ? "disabled" : ""}></label></h3>
+    <p class="lv-muted lvx-lead">Makes your mic sound clean and even, like the big streamers. One click, all in OBS.</p>
+    <label class="fx-field"><span>Your mic</span><select id="lvxMicPick">${opts}</select></label>
+    <div class="lvx-meter mic" data-m="mic"><i></i></div>
+    <div class="lvx-opts"><span class="lv-muted">Your room</span>${seg("lvxMicRoom", d.room, [["quiet", "Quiet"], ["some", "Some noise"], ["noisy", "Noisy"]])}</div>
+    <div class="lvx-opts"><span class="lv-muted">Your mic is</span>${seg("lvxMicVoice", d.voice, [["quiet", "Quiet"], ["normal", "Normal"], ["loud", "Loud"]])}</div>
+    <div class="lvx-mic">${LVX_MIC_FILTERS.map(([k, t, s]) => `<div class="${d.on && have.has(k) ? "on" : ""}"><i>${d.on && have.has(k) ? "✓" : ""}</i><span><b>${t}</b><small>${s}</small></span></div>`).join("")}</div>
+    ${d.on && have.size < 4 ? `<p class="lvi-err">Some filters are missing in OBS. Turn this off and on again to fix it.</p>` : ""}
+    ${LVX.micErr ? `<p class="lvi-err">${lvEsc(LVX.micErr)}</p>` : ""}
+    <p class="lv-muted lvx-note">${(d.others || []).length ? `Your mic already has ${d.others.length === 1 ? "a filter" : d.others.length + " filters"} of your own (${d.others.map(lvEsc).join(", ")}). They stay as they are. ` : ""}${d.on ? "✓ Working. They're OBS filters, so they keep working even when VaultHub is closed." : "Turning it off takes the filters away again, nothing else is changed."}</p>`;
+  $("lvxMicOn").onchange = (e) => lvMicSet({ on: e.target.checked, mic: $("lvxMicPick").value });
+  $("lvxMicPick").onchange = () => lvMicSet({ mic: $("lvxMicPick").value });
+  $("lvxMicRoom").onclick = (e) => { const b = e.target.closest("button"); if (b) lvMicSet({ room: b.dataset.v }); };
+  $("lvxMicVoice").onclick = (e) => { const b = e.target.closest("button"); if (b) lvMicSet({ voice: b.dataset.v }); };
+  lvMicMeter(levels, d);
 }
 
-function lvDuckMeters(levels, d) {
-  const box = $("lvDuck");
-  const set = (k, v) => { const i = box.querySelector(`.lvx-meter[data-m="${k}"] i`); if (i) i.style.width = Math.min(100, Math.round(Math.sqrt(v || 0) * 100)) + "%"; };
-  set("game", levels[d.game]);
-  set("mic", levels[d.mic]);
+function lvMicMeter(levels, d) {
+  const i = $("lvMic").querySelector('.lvx-meter[data-m="mic"] i');
+  if (i) i.style.width = Math.min(100, Math.round(Math.sqrt(levels[d.mic] || 0) * 100)) + "%";
 }

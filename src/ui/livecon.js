@@ -175,7 +175,7 @@ function lvBuildConsole() {
       <div class="lv-card lvco" data-c="costream" id="lvCo" hidden></div>
       <div class="lv-card lvx" data-c="gamedetect" id="lvGd" hidden></div>
       <div class="lv-card lvx" data-c="earn" id="lvEarn" hidden></div>
-      <div class="lv-card lvx" data-c="duck" id="lvDuck" hidden></div>
+      <div class="lv-card lvx" data-c="mic" id="lvMic" hidden></div>
       <div class="lv-card ms-card" data-c="multi" id="lvMulti"></div>
       <div class="lv-card ad-card" data-c="ads" id="lvAds" hidden></div>
     </div>`;

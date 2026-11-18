@@ -20,7 +20,7 @@ const LV_CARDS = [
   { id: "newbies", name: "New chatters", desc: "People chatting for the very first time, so you can welcome them.", w: 4 },
   { id: "gamedetect", name: "Game auto-detect", desc: "Your Twitch game changes by itself to the game you're playing.", w: 4 },
   { id: "earn", name: "Earnings", desc: "A rough estimate of what this stream and this month made from subs, bits and ads.", w: 4 },
-  { id: "duck", name: "Game ducking", desc: "The game gets quieter in OBS while you talk.", w: 4 },
+  { id: "mic", name: "Mic sound", desc: "Pro mic filters in OBS with one click: less noise, even volume, no clipping.", w: 4 },
   { id: "costream", name: "Co-stream", desc: "Streaming with friends? See their Twitch chats in your Chat card, mixed in or side by side.", w: 4 },
 ];
 const LV_CARD = Object.fromEntries(LV_CARDS.map((c) => [c.id, c]));

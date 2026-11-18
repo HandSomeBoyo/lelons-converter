@@ -310,83 +310,85 @@ def ask_once(kind, data=None):
         conn.close()
 
 
-# ---------------------------------------------------------------- game quieter when you talk (2.43.0)
-# OBS's own Compressor filter, put on the game sound and "listening" to your mic (its sidechain):
-# when you talk, the game goes down; when you stop, it comes back. VaultHub only adds and changes the
-# filter (named below), so it also works with VaultHub closed, and you can see it in OBS's Filters.
+# ---------------------------------------------------------------- one-click mic sound (2.43.0)
+# Pro mic filters in OBS, added for you on your mic: noise suppression (RNNoise, built into OBS), a noise
+# gate, a compressor (evens out quiet and loud, with a little extra loudness for quiet mics) and a limiter
+# (no more clipping when you shout). They're OBS's own filters, named "VaultHub ...", so they keep working
+# with VaultHub closed, you can see them in OBS's Filters, and VaultHub never touches your other filters.
 
-DUCK_NAME = "VaultHub ducking"
-DUCK_LEVELS = {"light": (4.0, -32.0), "medium": (8.0, -38.0), "strong": (20.0, -44.0)}  # ratio, threshold (dB)
+MIC_ROOMS = {"quiet": (-42.0, -48.0), "some": (-34.0, -40.0), "noisy": (-28.0, -34.0)}  # gate open, close (dB)
+MIC_GAIN = {"quiet": 8.0, "normal": 4.0, "loud": 0.0}  # extra loudness after the compressor (dB)
 
 
-def duck_prefs():
-    saved = settings.load().get("lv_duck")
-    out = {"on": False, "game": "", "mic": "", "level": "medium"}
+def mic_prefs():
+    saved = settings.load().get("lv_mic")
+    out = {"on": False, "mic": "", "room": "some", "voice": "normal"}
     if isinstance(saved, dict):
         out.update({k: saved[k] for k in out if k in saved})
-    if out["level"] not in DUCK_LEVELS:
-        out["level"] = "medium"
+    if out["room"] not in MIC_ROOMS:
+        out["room"] = "some"
+    if out["voice"] not in MIC_GAIN:
+        out["voice"] = "normal"
     return out
 
 
-def _duck_settings(mic, level):
-    ratio, threshold = DUCK_LEVELS[level]
-    return {"ratio": ratio, "threshold": threshold, "attack_time": 10, "release_time": 600,
-            "output_gain": 0.0, "sidechain_source": mic}
+def _mic_filters(room, voice):
+    open_db, close_db = MIC_ROOMS[room]
+    return [
+        ("VaultHub noise", "noise_suppress_filter_v2", {"method": "rnnoise"}),
+        ("VaultHub gate", "noise_gate_filter", {"open_threshold": open_db, "close_threshold": close_db,
+                                                 "attack_time": 25, "hold_time": 200, "release_time": 150}),
+        ("VaultHub compressor", "compressor_filter", {"ratio": 4.0, "threshold": -18.0, "attack_time": 6,
+                                                      "release_time": 60, "output_gain": MIC_GAIN[voice], "sidechain_source": "none"}),
+        ("VaultHub limiter", "limiter_filter", {"threshold": -3.0, "release_time": 60}),
+    ]
 
 
-def _guess_sources():
-    """Your mic and the game sound, guessed from OBS's names when nothing is picked yet."""
+def _guess_mic():
     names = [i["name"] for i in _state["inputs"]]
     special = _try(_need(), "GetSpecialInputs") or {}
-    mic = special.get("mic1") or next((n for n in names if re.search(r"mic|aux|headset|microphone", n, re.I)), "")
-    game = next((n for n in names if re.search(r"game", n, re.I)), "") or special.get("desktop1") or \
-        next((n for n in names if re.search(r"desktop", n, re.I)), "")
-    return mic, game
+    return special.get("mic1") or next((n for n in names if re.search(r"mic|aux|headset|microphone", n, re.I)), "")
 
 
-def duck_state():
-    p = duck_prefs()
-    out = {**p, "sources": [i["name"] for i in _state["inputs"]], "found": None}
+def mic_state():
+    p = mic_prefs()
+    out = {**p, "sources": [i["name"] for i in _state["inputs"]], "have": [], "others": []}
     if _conn and _conn.alive:
-        if not p["mic"] or not p["game"]:
-            mic, game = _guess_sources()
-            out["mic"] = p["mic"] or mic
-            out["game"] = p["game"] or game
-        if out["game"]:
-            f = _try(_conn, "GetSourceFilter", {"sourceName": out["game"], "filterName": DUCK_NAME})
-            out["found"] = None if f is None else bool(f.get("filterEnabled"))
+        out["mic"] = p["mic"] or _guess_mic()
+        if out["mic"]:
+            filters = (_try(_conn, "GetSourceFilterList", {"sourceName": out["mic"]}) or {}).get("filters") or []
+            out["have"] = [f.get("filterName") for f in filters if str(f.get("filterName", "")).startswith("VaultHub ")]
+            out["others"] = [f.get("filterName") for f in filters if not str(f.get("filterName", "")).startswith("VaultHub ")]
     return out
 
 
-def duck_set(data):
-    """Turn it on or off, or change the sources or how strong it is."""
+def mic_set(data):
+    """Turn the mic filters on or off, or change the mic, the room or the voice level."""
     conn = _need()
-    old = duck_state()
-    p = {k: old[k] for k in ("on", "game", "mic", "level")}
-    for k in ("game", "mic"):
-        if k in data:
-            p[k] = str(data[k] or "")[:200]
-    if data.get("level") in DUCK_LEVELS:
-        p["level"] = data["level"]
+    old = mic_state()
+    p = {k: old[k] for k in ("on", "mic", "room", "voice")}
+    if "mic" in data:
+        p["mic"] = str(data["mic"] or "")[:200]
+    if data.get("room") in MIC_ROOMS:
+        p["room"] = data["room"]
+    if data.get("voice") in MIC_GAIN:
+        p["voice"] = data["voice"]
     if "on" in data:
         p["on"] = bool(data["on"])
-    if p["on"] and (not p["game"] or not p["mic"]):
-        raise Error("Pick your game sound and your mic first.")
-    if p["on"] and p["game"] == p["mic"]:
-        raise Error("The game sound and the mic have to be two different sources.")
-    if old["game"] and old["game"] != p["game"]:  # (moved to another source: take it off the old one)
-        _try(conn, "RemoveSourceFilter", {"sourceName": old["game"], "filterName": DUCK_NAME})
-    if p["on"]:
-        have = _try(conn, "GetSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME})
-        if have is None:
-            conn.ask("CreateSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME, "filterKind": "compressor_filter",
-                                            "filterSettings": _duck_settings(p["mic"], p["level"])})
+    if p["on"] and not p["mic"]:
+        raise Error("Pick your mic first.")
+    if old["mic"] and old["mic"] != p["mic"]:  # (another mic: take them off the old one)
+        for name, _kind, _s in _mic_filters(p["room"], p["voice"]):
+            _try(conn, "RemoveSourceFilter", {"sourceName": old["mic"], "filterName": name})
+    for name, kind, values in _mic_filters(p["room"], p["voice"]):
+        if not p["on"]:
+            if p["mic"]:
+                _try(conn, "RemoveSourceFilter", {"sourceName": p["mic"], "filterName": name})
+            continue
+        if _try(conn, "GetSourceFilter", {"sourceName": p["mic"], "filterName": name}) is None:
+            conn.ask("CreateSourceFilter", {"sourceName": p["mic"], "filterName": name, "filterKind": kind, "filterSettings": values})
         else:
-            conn.ask("SetSourceFilterSettings", {"sourceName": p["game"], "filterName": DUCK_NAME,
-                                                 "filterSettings": _duck_settings(p["mic"], p["level"]), "overlay": True})
-            conn.ask("SetSourceFilterEnabled", {"sourceName": p["game"], "filterName": DUCK_NAME, "filterEnabled": True})
-    elif p["game"]:
-        _try(conn, "RemoveSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME})
-    settings.save(lv_duck=p)
-    return duck_state()
+            conn.ask("SetSourceFilterSettings", {"sourceName": p["mic"], "filterName": name, "filterSettings": values, "overlay": True})
+            conn.ask("SetSourceFilterEnabled", {"sourceName": p["mic"], "filterName": name, "filterEnabled": True})
+    settings.save(lv_mic=p)
+    return mic_state()
