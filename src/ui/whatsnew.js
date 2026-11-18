@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.43.0", items: [
+    "Live: new card, Game auto-detect. Start a game and your Twitch game changes by itself. Pick \"Ask me first\" if you'd rather press a button. Wrong guess? Pick the right game once and it remembers.",
+    "New card: Earnings. A rough estimate of what this stream and this month made from subs, bits and ads, in kroner (or any money you pick).",
+    "New card: Game ducking. The game gets quieter in OBS while you talk and comes back when you stop. It uses OBS's own Compressor filter, so it keeps working with VaultHub closed.",
+  ] },
   { version: "2.42.0", items: [
     "Live: when your stream ends, a recap pops up. How many watched (compared to last time), new followers, new chatters, your top chatters, clips, the best moments and whether the stream had problems.",
     "Copy recap for Discord puts a short summary on your clipboard, ready to paste. Every recap is saved in Stream stats too.",

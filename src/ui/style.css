@@ -8655,3 +8655,47 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lv-code-easy span b, .lv-code-easy small b { font: 600 inherit; font-size: inherit; letter-spacing: 0; color: var(--text); }
 .lv-code-easy small { color: var(--muted); font-size: 12.5px; }
 .lv-tw-own { margin-top: 12px; }
+
+/* (2.43.0) Game auto-detect, Earnings, Game ducking */
+.lvx h3 { display: flex; align-items: center; gap: 8px; }
+.lvx h3 small { font-weight: 500; font-size: 12px; }
+.lvx-gd { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.lvx-art { width: 46px; height: 62px; border-radius: 6px; object-fit: cover; flex: none; background: var(--panel2); }
+.lvx-art.empty { display: grid; place-items: center; font-size: 20px; }
+.lvx-gd .t { display: grid; gap: 2px; min-width: 0; }
+.lvx-gd .t small { color: var(--muted); font-size: 12px; }
+.lvx-gd .t b { font: 700 17px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvx-gd .t .lv-muted { font-size: 12px; }
+.lvx-status { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--r-sm); background: var(--panel2); font-size: 13px; }
+.lvx-status span { flex: 1; }
+.lvx-status.ok { background: rgba(159, 214, 122, .12); color: var(--green); }
+.lvx-status.ok b { color: var(--text); }
+.lvx-status.ask { background: rgba(var(--accent-rgb), .14); }
+.lvx-wrong { margin-top: 8px; font-size: 12.5px; }
+.lvx-pick { margin-top: 8px; display: grid; gap: 6px; }
+.lvx-pick .input { height: 36px; }
+.lvx-results { display: grid; gap: 4px; }
+.lvx-results button { all: unset; cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 8px; font-size: 13px; }
+.lvx-results button:hover { background: var(--panel2); }
+.lvx-results img { width: 24px; height: 32px; border-radius: 3px; object-fit: cover; }
+.lvx-opts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; }
+.lvx-small { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+.lvx-last { margin-top: 10px; display: grid; gap: 3px; font-size: 12.5px; }
+.lvx-earn { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.lvx-earn > div { background: var(--panel2); border-radius: var(--r-sm); padding: 10px 12px; display: grid; gap: 3px; }
+.lvx-earn small { color: var(--muted); font-size: 12px; }
+.lvx-earn b { font: 700 22px/1.1 var(--head); font-variant-numeric: tabular-nums; }
+.lvx-earn .lv-muted { font-size: 11.5px; }
+.lvx-rows { display: grid; gap: 2px; }
+.lvx-rows > div { display: flex; justify-content: space-between; padding: 6px 2px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.lvx-rows i { font-style: normal; color: var(--muted); margin-left: 4px; }
+.lvx-rows b { font-variant-numeric: tabular-nums; }
+.lvx-earnset { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.lvx-earnset select, .lvx-duck select { width: 100%; height: 36px; }
+.lvx-earnset .input { height: 36px; }
+.lvx-note { margin-top: 10px; font-size: 12px; line-height: 1.45; }
+.lvx-lead { margin: -2px 0 12px; font-size: 13px; }
+.lvx-duck { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
+.lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
+.lvx-meter.mic i { background: var(--green); }

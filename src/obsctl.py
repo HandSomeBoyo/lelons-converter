@@ -9,6 +9,7 @@ The connection only stays up while the page asks for it (it closes 30 s after th
 import base64
 import hashlib
 import math
+import re
 import socket
 import threading
 import time
@@ -307,3 +308,85 @@ def ask_once(kind, data=None):
         return conn.ask(kind, data)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------- game quieter when you talk (2.43.0)
+# OBS's own Compressor filter, put on the game sound and "listening" to your mic (its sidechain):
+# when you talk, the game goes down; when you stop, it comes back. VaultHub only adds and changes the
+# filter (named below), so it also works with VaultHub closed, and you can see it in OBS's Filters.
+
+DUCK_NAME = "VaultHub ducking"
+DUCK_LEVELS = {"light": (4.0, -32.0), "medium": (8.0, -38.0), "strong": (20.0, -44.0)}  # ratio, threshold (dB)
+
+
+def duck_prefs():
+    saved = settings.load().get("lv_duck")
+    out = {"on": False, "game": "", "mic": "", "level": "medium"}
+    if isinstance(saved, dict):
+        out.update({k: saved[k] for k in out if k in saved})
+    if out["level"] not in DUCK_LEVELS:
+        out["level"] = "medium"
+    return out
+
+
+def _duck_settings(mic, level):
+    ratio, threshold = DUCK_LEVELS[level]
+    return {"ratio": ratio, "threshold": threshold, "attack_time": 10, "release_time": 600,
+            "output_gain": 0.0, "sidechain_source": mic}
+
+
+def _guess_sources():
+    """Your mic and the game sound, guessed from OBS's names when nothing is picked yet."""
+    names = [i["name"] for i in _state["inputs"]]
+    special = _try(_need(), "GetSpecialInputs") or {}
+    mic = special.get("mic1") or next((n for n in names if re.search(r"mic|aux|headset|microphone", n, re.I)), "")
+    game = next((n for n in names if re.search(r"game", n, re.I)), "") or special.get("desktop1") or \
+        next((n for n in names if re.search(r"desktop", n, re.I)), "")
+    return mic, game
+
+
+def duck_state():
+    p = duck_prefs()
+    out = {**p, "sources": [i["name"] for i in _state["inputs"]], "found": None}
+    if _conn and _conn.alive:
+        if not p["mic"] or not p["game"]:
+            mic, game = _guess_sources()
+            out["mic"] = p["mic"] or mic
+            out["game"] = p["game"] or game
+        if out["game"]:
+            f = _try(_conn, "GetSourceFilter", {"sourceName": out["game"], "filterName": DUCK_NAME})
+            out["found"] = None if f is None else bool(f.get("filterEnabled"))
+    return out
+
+
+def duck_set(data):
+    """Turn it on or off, or change the sources or how strong it is."""
+    conn = _need()
+    old = duck_state()
+    p = {k: old[k] for k in ("on", "game", "mic", "level")}
+    for k in ("game", "mic"):
+        if k in data:
+            p[k] = str(data[k] or "")[:200]
+    if data.get("level") in DUCK_LEVELS:
+        p["level"] = data["level"]
+    if "on" in data:
+        p["on"] = bool(data["on"])
+    if p["on"] and (not p["game"] or not p["mic"]):
+        raise Error("Pick your game sound and your mic first.")
+    if p["on"] and p["game"] == p["mic"]:
+        raise Error("The game sound and the mic have to be two different sources.")
+    if old["game"] and old["game"] != p["game"]:  # (moved to another source: take it off the old one)
+        _try(conn, "RemoveSourceFilter", {"sourceName": old["game"], "filterName": DUCK_NAME})
+    if p["on"]:
+        have = _try(conn, "GetSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME})
+        if have is None:
+            conn.ask("CreateSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME, "filterKind": "compressor_filter",
+                                            "filterSettings": _duck_settings(p["mic"], p["level"])})
+        else:
+            conn.ask("SetSourceFilterSettings", {"sourceName": p["game"], "filterName": DUCK_NAME,
+                                                 "filterSettings": _duck_settings(p["mic"], p["level"]), "overlay": True})
+            conn.ask("SetSourceFilterEnabled", {"sourceName": p["game"], "filterName": DUCK_NAME, "filterEnabled": True})
+    elif p["game"]:
+        _try(conn, "RemoveSourceFilter", {"sourceName": p["game"], "filterName": DUCK_NAME})
+    settings.save(lv_duck=p)
+    return duck_state()

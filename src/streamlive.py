@@ -13,6 +13,7 @@ import time
 from collections import deque
 
 import adtimer
+import gamedetect
 import multistream
 import obsstats
 import settings
@@ -93,7 +94,7 @@ def emit(items):
                     s["first"].append({k: item.get(k) for k in ("p", "user", "login", "text", "at")})
                     del s["first"][:-300]
             elif item.get("type") == "event" and item.get("kind") in EVENT_KINDS:
-                ev = {k: item.get(k) for k in ("kind", "p", "user", "amount", "money", "months", "text", "to") if item.get(k) not in (None, "")}
+                ev = {k: item.get(k) for k in ("kind", "p", "user", "amount", "money", "months", "text", "to", "tier") if item.get(k) not in (None, "")}
                 ev["at"] = item.get("at") or now
                 s["events"].append(ev)
                 del s["events"][:-2000]
@@ -107,6 +108,7 @@ def _start():
     _twitch.start()
     _youtube.start()
     adtimer.start(_twitch)
+    gamedetect.start(_twitch)
     multistream.start_at_launch()
     s = settings.load()
     obsstats.configure(s.get("lv_obs_port") or 4455, s.get("lv_obs_password") or "", s.get("lv_obs_on", True))
@@ -241,6 +243,8 @@ def _tick():
         viewers = (tw.get("viewers") or 0) + (yt.get("viewers") or 0)
         if viewers > s["peak"]:
             s["peak"], s["peakAt"] = viewers, now
+        if (adtimer._state.get("running") or {}).get("until", 0) > now:  # (2.43.0) for the earnings estimate
+            s["adViews"] = s.get("adViews", 0) + (tw.get("viewers") or 0) * 10  # viewer-seconds of ads
         h = s.setdefault("health", {})
         if obs.get("connected") and obs.get("streaming"):
             h["obs"] = True
@@ -304,7 +308,76 @@ def summary(s):
             "hoursWatched": round(sum(views) / 60, 1), "chat": s["chat"], "chatters": len(s["chatters"]),
             "followers": t["followers"], "subs": t["subs"], "members": t["members"], "raids": t["raids"],
             "bits": t["bits"], "money": t["money"], "superchats": t["superchats"],
-            "newChatters": len(s.get("first") or []), "clips": len(s.get("clips") or [])}
+            "newChatters": len(s.get("first") or []), "clips": len(s.get("clips") or []), "earn": earnings(s)}
+
+
+# ---------------------------------------------------------------- earnings estimate (2.43.0)
+
+SUB_PRICE = {"1000": 4.99, "2000": 9.99, "3000": 24.99, "Prime": 4.99}
+EARN_DEFAULTS = {"split": 50, "cpm": 3.5, "cur": "NOK", "rate": 10.5}
+
+
+def earn_prefs():
+    saved = settings.load().get("lv_earn")
+    out = dict(EARN_DEFAULTS)
+    if isinstance(saved, dict):
+        out.update({k: saved[k] for k in EARN_DEFAULTS if k in saved})
+    return out
+
+
+def set_earn_prefs(data):
+    p = earn_prefs()
+    try:
+        if "split" in data:
+            p["split"] = min(100, max(10, int(data["split"])))
+        if "cpm" in data:
+            p["cpm"] = min(50.0, max(0.0, float(data["cpm"])))
+        if "rate" in data:
+            p["rate"] = min(100000.0, max(0.0001, float(data["rate"])))
+        if "cur" in data:
+            p["cur"] = re.sub(r"[^A-Z]", "", str(data["cur"]).upper())[:3] or "USD"
+    except (TypeError, ValueError):
+        raise streamtwitch.Error("Those numbers don't look right.")
+    settings.save(lv_earn=p)
+    return p
+
+
+def earnings(s):
+    """Roughly what Twitch pays for this stream, in US dollars: {subs, bits, ads, total, subCount, bitCount}."""
+    p = earn_prefs()
+    split = p["split"] / 100
+    subs = n = 0
+    for e in s.get("events") or []:
+        if e.get("p") != "tw":
+            continue
+        if e["kind"] == "sub":
+            subs += SUB_PRICE.get(str(e.get("tier") or "1000"), 4.99) * split
+            n += 1
+        elif e["kind"] == "gift" and e.get("to"):  # (a gift of 5 also comes as 5 single gifts: those are counted)
+            subs += SUB_PRICE.get(str(e.get("tier") or "1000"), 4.99) * split
+            n += 1
+    bits = sum(int(e.get("amount") or 0) for e in s.get("events") or [] if e["kind"] == "bits")
+    ads = (s.get("adViews") or 0) / 30 / 1000 * p["cpm"]  # (one ad is about 30 seconds, paid per 1000 shown)
+    return {"subs": round(subs, 2), "bits": round(bits / 100, 2), "ads": round(ads, 2),
+            "total": round(subs + bits / 100 + ads, 2), "subCount": n, "bitCount": bits}
+
+
+_month_cache = {"at": 0, "key": None, "total": 0, "count": 0}
+
+
+def earnings_now():
+    """This stream so far and this month (saved streams + this one)."""
+    with _lock:
+        s = _session
+        now_e = earnings(s) if s else None
+        sid = s["id"] if s else ""
+    month = time.strftime("%Y%m")
+    if time.time() - _month_cache["at"] > 60 or _month_cache["key"] != (month, sid):
+        past = [x for x in streams() if x.get("id", "").startswith(month) and x.get("id") != sid]
+        _month_cache.update(at=time.time(), key=(month, sid), total=sum((x.get("earn") or {}).get("total", 0) for x in past), count=len(past))
+    total = (now_e or {}).get("total", 0) + _month_cache["total"]
+    count = _month_cache["count"] + (1 if now_e else 0)
+    return {"stream": now_e, "month": round(total, 2), "monthStreams": count, "prefs": earn_prefs()}
 
 
 def _top(s, n=5):
@@ -403,7 +476,8 @@ def state(since=0):
         seq = _seq
     return {"ok": True, "config": config(), "twitch": tw, "youtube": yt, "obs": obsstats.state(), "chat": chat,
             "removed": removed, "seq": seq, "speed": speed, "session": session,
-            "ms": multistream.status(), "ads": adtimer.status(), "ended": last_ended(), "co": costream()}
+            "ms": multistream.status(), "ads": adtimer.status(), "ended": last_ended(), "co": costream(),
+            "gd": gamedetect.status(), "earn": earnings_now()}
 
 
 # ---------------------------------------------------------------- co-streaming (2.42.0)

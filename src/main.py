@@ -876,6 +876,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": bool(found), **(found or {"error": "That stream is gone."})})
             elif action == "forget":
                 streamlive.forget(data.get("id"))
+            elif action == "gd-set":  # (2.43.0) game auto-detect
+                import gamedetect
+                gamedetect.set_prefs(data)
+                return self.send_json({"ok": True, "gd": gamedetect.status()})
+            elif action == "gd-teach":
+                import gamedetect
+                gamedetect.teach(data.get("exe"), data.get("game") if isinstance(data.get("game"), dict) else None)
+                return self.send_json({"ok": True, "gd": gamedetect.status()})
+            elif action == "gd-apply":
+                import gamedetect
+                return self.send_json({"ok": True, "gd": gamedetect.apply()})
+            elif action == "earn-set":  # (2.43.0) earnings estimate
+                streamlive.set_earn_prefs(data)
+                return self.send_json({"ok": True, "earn": streamlive.earnings_now()})
+            elif action == "duck":  # (2.43.0) game quieter when you talk
+                return self.send_json({"ok": True, "duck": obsctl.duck_state()})
+            elif action == "duck-set":
+                try:
+                    return self.send_json({"ok": True, "duck": obsctl.duck_set(data)})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "co-set":  # (2.42.0) co-streaming: friends' chats in the console
                 names = data.get("names")
                 return self.send_json({"ok": True, "co": streamlive.set_costream(names if isinstance(names, list) else [])})
