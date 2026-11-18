@@ -3,9 +3,13 @@
 
 const CHANGES = [
   { version: "2.40.0", items: [
+    "New (Beta): Projects. Edit videos together with friends. Each video gets a shared folder with everyone's footage, every saved cut, notes and music from the Library.",
+    "Press Edit in Resolve and VaultHub downloads what you need and makes a timeline for DaVinci Resolve (File › Import › Timeline). Your friends' notes show up as markers.",
+    "When you're done, export the timeline from Resolve and press Upload new cut. Only one person edits at a time, so nobody's work gets overwritten.",
+    "Watch each cut in the app and click to leave a note at the exact second.",
     "A cleaner YouTube player: videos now open in a dark full-window view, without YouTube's title, share buttons and \"More videos\" in the way.",
     "New controls: a yellow progress bar you can click or drag, play/pause, skip 10 seconds, volume, speed, captions and full screen. They hide while you watch and come back when you move the mouse.",
-    "Shortcuts: Space to pause, arrows to skip or change the volume, M to mute, F for full screen, C for captions, Esc to go back.",
+    "Player shortcuts: Space to pause, arrows to skip or change the volume, M to mute, F for full screen, C for captions, Esc to go back.",
   ] },
   { version: "2.39.0", items: [
     "Servers: drag channels to move them, like on Discord. Drop one on a category name to move it there.",

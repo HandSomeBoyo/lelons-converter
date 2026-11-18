@@ -46,7 +46,7 @@ function showTab(tab) {
     b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab));
     if (b.closest(".sub-tabs")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   });
-  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "remote", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "account", "live", "lvboard", "lvalerts", "lvstats"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "account", "live", "lvboard", "lvalerts", "lvstats"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
@@ -58,6 +58,7 @@ function showTab(tab) {
   if (typeof resolveTabChanged === "function") resolveTabChanged(tab);
   if (typeof remoteTabChanged === "function") remoteTabChanged(tab);
   if (typeof fxTabChanged === "function") fxTabChanged(tab);
+  if (typeof pjTabChanged === "function") pjTabChanged(tab);
   if (typeof gamesTabChanged === "function") gamesTabChanged(tab);
   if (typeof povsTabChanged === "function") povsTabChanged(tab);
   if (typeof feedTabChanged === "function") feedTabChanged(tab);
@@ -73,7 +74,7 @@ document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => b.add
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "resolve", "remote", "sfx", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // A page inside a place has news (like a game on sale): a dot on the place's side bar button too.
@@ -144,6 +145,7 @@ window.addEventListener("drop", (e) => {
   if (typeof sfxTakesDrop === "function" && sfxTakesDrop(files)) return;
   if (typeof copyTakesDrop === "function" && copyTakesDrop(files)) return;
   if (typeof fxTakesDrop === "function" && fxTakesDrop(files)) return;
+  if (typeof pjTakesDrop === "function" && pjTakesDrop(files)) return;
   if (typeof rtTakesDrop === "function" && rtTakesDrop(files)) return;
   const isPicture = (f) => f.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?|ico)$/i.test(f.name);
   // A whole folder: its videos and songs go to the Files tab (or its pictures to Images, if that's all it has).
