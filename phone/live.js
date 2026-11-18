@@ -3,7 +3,7 @@
 // (Twitch's "implicit" sign-in: the token comes back in the link, no secret needed).
 "use strict";
 
-const TWITCH_CLIENT_ID = "";  // the user's Twitch developer app (dev.twitch.tv); its redirect URL must be this page
+const TWITCH_CLIENT_ID = "93vewoxax6ixje6tg26af1yfwzrtxn";  // the user's Twitch developer app (dev.twitch.tv); its redirect URL must be this page
 const TWITCH_SCOPES = "chat:read chat:edit channel:manage:broadcast channel:edit:commercial clips:edit moderator:read:followers channel:read:ads";
 const HELIX = "https://api.twitch.tv/helix/";
 
