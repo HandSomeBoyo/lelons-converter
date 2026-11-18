@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.41.0", items: [
+    "Projects (Beta): footage now goes straight from PC to PC. Nothing is stored online, so there's no size limit and it's free. No more Backblaze setup.",
+    "New clips come to your PC by themselves while you and your friends have VaultHub open. If two friends have a clip, you get it from both at once.",
+    "A download that stops picks up where it left off, and every file is checked when it arrives, so Resolve never opens a broken clip.",
+    "It slows down by itself while you're live or in a call. Change that, or set a speed limit, in Sharing settings (the ⋯ menu on a project).",
+    "New: Shot list. Write down the clips you still need and who should film them. Press Add clip on a shot and it ticks itself off.",
+  ] },
   { version: "2.40.0", items: [
     "New (Beta): Projects. Edit videos together with friends. Each video gets a shared folder with everyone's footage, every saved cut, notes and music from the Library.",
     "Press Edit in Resolve and VaultHub downloads what you need and makes a timeline for DaVinci Resolve (File › Import › Timeline). Your friends' notes show up as markers.",

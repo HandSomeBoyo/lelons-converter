@@ -3,8 +3,9 @@
 Not the same as project.py (the Resolve tab's tidy folders on this PC). Here a project lives online:
  - The list of projects, the crew, the footage list, every saved cut and the notes are in the Library's
    Supabase project (lelons_project in sfx/setup.sql).
- - The big files (footage, and a video of each cut to watch) go in the owner's own free Backblaze B2
-   storage, in a bucket of its own (set up once by the owner, like Film assets).
+ - The big files (footage, and a video of each cut to watch) go straight from PC to PC (2.41.0, see
+   projectsync.py and projects.js), like POVs: free, no size limit. (Before that they went in the owner's
+   Backblaze B2 storage; files from then still come from there.)
  - On each PC the files are kept in Videos\\VaultHub Projects\\<project>\\, so DaVinci Resolve finds them.
  - A cut is the timeline Resolve exports (File > Export > Timeline, FCPXML). When someone takes their turn,
    VaultHub downloads what's missing and writes that timeline again with the paths of THIS PC, with the open
@@ -32,7 +33,7 @@ import names
 import settings
 import sfx
 import waveform
-from film import B2, B2_FRIENDLY, Cancelled, Error, _quote_path, upload_file
+from film import B2, B2_FRIENDLY, Cancelled, Error, _quote_path
 
 FOLDER = os.path.join(waveform.FOLDER, "projects")  # thumbnails being made and dropped files (cleaned up)
 TIMELINE_MAX = 3_000_000
@@ -56,6 +57,8 @@ FRIENDLY = {
     "pj_busy": "Someone else is editing right now. Wait for their cut, or ask for a turn.",
     "pj_timeline": "That timeline file is empty or too big.",
     "pj_nocut": "That cut isn't there any more.",
+    "pj_slow": "That's a lot at once. Wait a minute and try again.",
+    "pj_shots": "The shot list is full (300 shots).",
     "denied": "You can't do that in this project.",
 }
 
@@ -124,6 +127,8 @@ def _part(name, fallback):
 
 def local_path(folder, f):
     """Where a project file is (or goes) on this PC."""
+    if f["kind"] == "render":  # (2.41.0) the video of a cut
+        return os.path.join(folder, "Cuts", "Videos", _part(f["name"], "Cut.mp4"))
     if f["kind"] == "sound":
         name = _part(f["name"], "Sound")
         if not os.path.splitext(name)[1]:
@@ -327,7 +332,7 @@ class Projects:
         for p in projects:
             _faces(p.get("people"))
         return {"projects": projects, "invites": _faces(result.get("invites")), "store": self.files(),
-                "ready": bool(result.get("ready")), "canSetup": bool(result.get("can_setup"))}
+                "ready": True, "canSetup": bool(result.get("can_setup"))}
 
     def open(self, project_id):
         result = _rpc("open", project_id)
@@ -342,7 +347,7 @@ class Projects:
                 f["url"] = sfx.public_url(f["path"])
         return {"project": project, "role": result.get("role"), "me": result.get("me"),
                 "editingSince": result.get("editing_since"), "files": files, "cuts": result.get("cuts") or [],
-                "notes": result.get("notes") or [], "events": result.get("events") or [],
+                "notes": result.get("notes") or [], "events": result.get("events") or [], "shots": result.get("shots") or [],
                 "folder": folder, "store": self.files()}
 
     def people(self):
@@ -518,13 +523,13 @@ class Projects:
                 self.worker.start()
         return job["id"]
 
-    def add_paths(self, project_id, folder, paths, copied=False):
+    def add_paths(self, project_id, folder, paths, copied=False, shot=None):
         folder = _clean(folder, 40) or "Footage"
         for path in paths:
             self._add_job(project=project_id, kind="up", name=os.path.basename(path), path=path, folder=folder,
-                          copied=copied, total=os.path.getsize(path))
+                          copied=copied, total=os.path.getsize(path), shot=str(shot) if shot else None)
 
-    def add_stream(self, project_id, folder, name, stream, length):
+    def add_stream(self, project_id, folder, name, stream, length, shot=None):
         """A file dropped on the page, copied into the app's temporary folder first."""
         work = os.path.join(FOLDER, uuid.uuid4().hex[:8])
         os.makedirs(work, exist_ok=True)
@@ -543,7 +548,7 @@ class Projects:
         if left:
             shutil.rmtree(work, ignore_errors=True)
             raise Error("The file wasn't copied all the way.")
-        self.add_paths(project_id, folder, [path], copied=True)
+        self.add_paths(project_id, folder, [path], copied=True, shot=shot)
 
     def upload_cut(self, project_id, timeline, video, note):
         text = read_timeline(timeline)
@@ -617,8 +622,11 @@ class Projects:
                     except Exception:
                         pass
 
-    def _upload_one(self, job, project_id, path, folder, name=None, keep_local=None):
-        """Uploads one footage file (with a small picture) and adds it to the project."""
+    def _upload_one(self, job, project_id, path, folder, name=None, keep_local=None, kind="footage", shot=None):
+        """(2.41.0) Adds one file to the project, PC to PC: its fingerprint, a small picture, and a copy in this
+        PC's project folder (friends get it from there). Nothing is uploaded: friends' apps get it from yours."""
+        import base64
+        import projectsync
         stopped = lambda: job["id"] in self.cancelled
         if not os.path.isfile(path):
             raise Error(f"{os.path.basename(path)} isn't there any more.")
@@ -627,41 +635,55 @@ class Projects:
         work = os.path.join(FOLDER, "make-" + uuid.uuid4().hex[:8])
         os.makedirs(work, exist_ok=True)
         try:
-            job["step"] = "Making the picture"
             thumb = ""
-            if found.get("video"):
+            if found.get("video") and kind == "footage":
+                job["step"] = "Making the picture"
                 thumb = self._thumb(path, found, work)
             if stopped():
                 raise Cancelled("Stopped.")
-            writer = self._writer(project_id)
-            where = f"{project_id}/{uuid.uuid4().hex[:12]}/"
-            job["step"] = "Uploading"
-            uploaded = []
-            try:
-                clip = {"kind": "footage", "folder": folder, "name": name, "size": os.path.getsize(path),
-                        "seconds": round(found["duration"], 2), "width": found["width"], "height": found["height"]}
-                clip["file_id"] = upload_file(writer, self.bucket_id, path, where + name, lambda n: job.update(done=job["done"] + n), stopped)
-                clip["path"] = where + name
-                uploaded.append({"path": clip["path"], "id": clip["file_id"]})
-                if thumb:
-                    clip["thumb_id"] = upload_file(writer, self.bucket_id, thumb, where + "thumb.jpg")
-                    clip["thumb"] = where + "thumb.jpg"
-                    uploaded.append({"path": clip["thumb"], "id": clip["thumb_id"]})
-                _rpc("add_file", project_id, clip)
-            except BaseException:
-                self._delete_files(uploaded)
-                raise
-            if keep_local:  # (the uploader's PC has it already: put a copy where the project keeps its files)
-                target = local_path(keep_local, clip)
-                if not _have(target, clip["size"]) and os.path.normcase(os.path.abspath(target)) != os.path.normcase(os.path.abspath(path)):
-                    try:
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        if job.get("copied"):
-                            shutil.move(path, target)
-                        else:
+            job["step"] = "Checking the file"
+            clip = {"p2p": True, "kind": kind, "folder": folder, "name": name, "size": os.path.getsize(path),
+                    "seconds": round(found["duration"], 2), "width": found["width"], "height": found["height"],
+                    "hash": projectsync.file_hash(path, lambda n: job.update(done=job["done"] + n), stopped)}
+            if thumb:
+                with open(thumb, "rb") as f:
+                    data = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+                if len(data) <= 60000:
+                    clip["thumb"] = data
+            if shot:
+                clip["shot"] = str(shot)
+            # Friends get it from the project folder: put it there first (a link when it's on the same drive).
+            target = local_path(keep_local, clip)
+            same = os.path.normcase(os.path.abspath(target)) == os.path.normcase(os.path.abspath(path))
+            if not same:
+                if os.path.exists(target):
+                    stem, ext = os.path.splitext(clip["name"])
+                    target = names.free_path(os.path.dirname(target), stem, ext)
+                    clip["name"] = os.path.basename(target)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                job["step"] = "Putting it in the project folder"
+                try:
+                    if job.get("copied") and kind == "footage":
+                        shutil.move(path, target)
+                    else:
+                        try:
+                            os.link(path, target)
+                        except OSError:
                             shutil.copy2(path, target)
+                except OSError:
+                    raise Error("Couldn't put it in the project folder. Is the drive full?") from None
+            job["step"] = "Adding it"
+            try:
+                clip["id"] = _rpc("add_file", project_id, clip)["id"]
+            except BaseException:
+                if not same:
+                    try:
+                        os.remove(target)
                     except OSError:
                         pass
+                raise
+            projectsync.sync.learn(project_id, clip, target)
+            return clip
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -673,7 +695,7 @@ class Projects:
         at = (found.get("duration") or 0) / 3
         try:
             subprocess.run([media.ffmpeg(), "-hide_banner", "-nostdin", "-y", *(["-ss", f"{at:.2f}"] if at > 0.2 else []),
-                            "-i", path, "-vf", "scale=480:-2", "-frames:v", "1", "-q:v", "5", target],
+                            "-i", path, "-vf", "scale=400:-2", "-frames:v", "1", "-q:v", "7", target],
                            capture_output=True, timeout=120, creationflags=media.NO_WINDOW)
         except subprocess.TimeoutExpired:
             return ""
@@ -681,12 +703,11 @@ class Projects:
 
     def _upload(self, job):
         opened = self.open(job["project"])
-        self._upload_one(job, job["project"], job["path"], job["folder"], keep_local=opened["folder"])
+        self._upload_one(job, job["project"], job["path"], job["folder"], keep_local=opened["folder"], shot=job.get("shot"))
 
     def _upload_cut(self, job):
         """A new cut: the files its timeline uses that the project doesn't have yet go up first (they're on
         this PC), then the video to watch (if any), then the timeline itself."""
-        stopped = lambda: job["id"] in self.cancelled
         project_id = job["project"]
         opened = self.open(project_id)
         known = {f["name"].lower() for f in opened["files"] if f["kind"] == "footage"}
@@ -699,31 +720,22 @@ class Projects:
             self._upload_one(job, project_id, m["path"], "From cuts", keep_local=opened["folder"])
         cut = {"timeline": job["text"], "timeline_name": _part(os.path.basename(job["timeline"]), "timeline")[:160],
                "note": job["note"]}
-        uploaded = []
-        try:
-            if job["video"]:
-                job["name"] = os.path.basename(job["video"])
-                job["step"] = "Uploading the video"
-                found = media.probe(job["video"])
-                writer = self._writer(project_id)
-                where = f"{project_id}/cut-{uuid.uuid4().hex[:10]}/"
-                file_name = _part(os.path.basename(job["video"]), "cut")
-                cut["video_id"] = upload_file(writer, self.bucket_id, job["video"], where + file_name,
-                                              lambda n: job.update(done=job["done"] + n), stopped)
-                cut["video"] = where + file_name
-                cut["video_size"] = os.path.getsize(job["video"])
-                cut["seconds"] = round(found["duration"], 2)
-                uploaded.append({"path": cut["video"], "id": cut["video_id"]})
-            job["step"] = "Saving the cut"
-            job["result"] = _rpc("add_cut", project_id, cut)
-        except BaseException:
-            self._delete_files(uploaded)
-            raise
+        if job["video"]:  # (2.41.0) the video to watch is a file of the project, sent PC to PC like the footage
+            job["name"] = os.path.basename(job["video"])
+            render = self._upload_one(job, project_id, job["video"], "Cuts", keep_local=opened["folder"], kind="render")
+            cut["file"] = render["id"]
+            cut["video_size"] = render["size"]
+            cut["seconds"] = render["seconds"]
+        job["step"] = "Saving the cut"
+        job["result"] = _rpc("add_cut", project_id, cut)
 
     def _fetch_missing(self, job, opened):
         """Downloads every footage file and sound this PC doesn't have yet."""
         folder = opened["folder"]
         todo = [f for f in opened["files"] if not _have(local_path(folder, f), f["size"] if f["kind"] == "footage" else 0)]
+        # (2.41.0) PC-to-PC files come by themselves (projects.js): the ones not here yet are "still coming".
+        job["coming"] = [f["name"] for f in todo if f.get("p2p") and f["kind"] == "footage"]
+        todo = [f for f in todo if not f.get("p2p")]
         job["total"] = sum(f["size"] for f in todo)
         failed = []
         for n, f in enumerate(todo, 1):
@@ -766,12 +778,14 @@ class Projects:
                 text = add_markers(text, [n for n in opened["notes"] if n["cut"] == cut["id"] and not n["done"]])
             target = os.path.join(folder, "Cuts", f"Cut {cut['n']} (for you).fcpxml")
         else:
-            clips = [local_path(folder, f) for f in opened["files"] if f["kind"] == "footage"]
+            clips = [local_path(folder, f) for f in opened["files"] if f["kind"] == "footage" and os.path.isfile(local_path(folder, f))]
             text, missing = starter_timeline(clips, opened["project"]["name"]), []
             target = os.path.join(folder, "Cuts", "All footage (start here).fcpxml")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
-        job["result"] = {"file": target, "folder": folder, "missing": (missing + job.get("failed", []))[:20], "cut": cut["n"] if cut else 0}
+        coming = set(job.get("coming") or [])
+        job["result"] = {"file": target, "folder": folder, "cut": cut["n"] if cut else 0,
+                         "missing": [m for m in missing + job.get("failed", []) if m not in coming][:20], "coming": sorted(coming)[:20]}
 
 
 projects = Projects()
