@@ -11,6 +11,10 @@ UPDATE_REPO = "HandSomeBoyo/lelons-converter"
 SFX_URL = "https://hjuoeiouotgaapuevflp.supabase.co"
 SFX_KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2"
 
+# (2.42.0) VaultHub's own Twitch app (a "Public" app, so there's no secret: the Client ID is meant to ship
+# inside the app). With it, signing in to Twitch is one button for everyone.
+TWITCH_CLIENT_ID = "93vewoxax6ixje6tg26af1yfwzrtxn"
+
 # The Copyright tab looks songs up on AcoustID (acoustid.org). This is the app's key there (an
 # application key, meant to ship inside the app).
 ACOUSTID_KEY = "gAaOATnWF6"

@@ -268,6 +268,9 @@ class Twitch:
 
     def begin_sign_in(self, client_id):
         client_id = str(client_id or "").strip()
+        if not client_id:  # (2.42.0) VaultHub's own Twitch app: nothing to make or paste
+            import version
+            client_id = getattr(version, "TWITCH_CLIENT_ID", "")
         if not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
             raise Error("That Client ID doesn't look right. It's about 30 letters and numbers, from dev.twitch.tv.")
         r = _http(ID + "device", {"client_id": client_id, "scopes": SCOPES})

@@ -557,27 +557,35 @@ function lvTwitchSignHtml() {
   if (c.twitchSignedIn) {
     return `<p class="lv-muted">Signed in as <b style="color:var(--text)">${lvEsc(c.twitchLogin)}</b>. You get followers, exact viewers, writing in chat, time-outs and changing your title and game. <button type="button" class="link" id="lvTwOut">Sign out</button></p>`;
   }
-  return `<details class="lv-more-box"><summary>Sign in for followers, writing in chat, time-outs and changing your title (optional, free)</summary>
+  return `<div class="lv-tw-easy">
+      <button type="button" class="small-button lv-tw-btn" id="lvTwEasy">${LV_ICONS.tw}Sign in with Twitch</button>
+      <p class="lv-muted">Optional and free. Gives you followers, writing in chat, time-outs, clips and changing your title and game.</p>
+    </div>
+    <div id="lvTwCode"></div>
+    <details class="lv-more-box lv-tw-own"><summary>Use your own Twitch app instead</summary>
     <ol class="lv-steps">
       <li>Open <button type="button" class="link" data-open="https://dev.twitch.tv/console/apps/create">dev.twitch.tv</button> and log in. (Twitch asks you to turn on two-step login first.)</li>
       <li>Name it <i>VaultHub ${Math.floor(Math.random() * 9000 + 1000)}</i>, type <i>http://localhost</i> as the OAuth Redirect URL, pick <b>Chat Bot</b> as the category and <b>Public</b> as the client type, then press <b>Create</b>.</li>
       <li>Press <b>Manage</b> and copy the <b>Client ID</b> here.</li>
     </ol>
-    <div class="lv-row"><label class="input" style="flex:1"><input id="lvTwClient" placeholder="Client ID" value="${lvEsc(c.twitchClient)}" spellcheck="false" autocomplete="off"></label><button type="button" class="small-button" id="lvTwGo">Sign in</button></div>
-    <div id="lvTwCode"></div></details>`;
+    <div class="lv-row"><label class="input" style="flex:1"><input id="lvTwClient" placeholder="Client ID" value="" spellcheck="false" autocomplete="off"></label><button type="button" class="small-button" id="lvTwGo">Sign in</button></div>
+    </details>`;
 }
 
 function lvWireTwitchSign() {
   const box = $("lvTwSign");
   box.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => api("/api/live-open", { url: b.dataset.open })));
   $("lvTwOut")?.addEventListener("click", async () => { await api("/api/live-twitch-signout", {}); await lvLoadConfig(); box.innerHTML = lvTwitchSignHtml(); lvWireTwitchSign(); });
-  $("lvTwGo")?.addEventListener("click", async () => {
+  const start = async (clientId) => {
     $("lvSetupError").textContent = "";
     const name = $("lvSetTwitch").value.trim();
     if (name) await api("/api/live-setup", { twitch: name }).catch(() => null);
-    const res = await api("/api/live-twitch-signin", { clientId: $("lvTwClient").value }).catch(() => null);
+    const res = await api("/api/live-twitch-signin", { clientId }).catch(() => null);
     if (!res || !res.ok) { $("lvSetupError").textContent = (res && res.error) || "Couldn't reach Twitch."; return; }
-    $("lvTwCode").innerHTML = `<div class="lv-code"><span>Type this code on Twitch:</span><b>${lvEsc(res.userCode)}</b><button type="button" class="small-button" id="lvTwOpen">Open twitch.tv/activate</button></div><p class="lv-muted" id="lvTwWait">Waiting for you to press Authorize on Twitch...</p>`;
+    // (2.42.0) The link Twitch gives already has the code in it: you just press Activate and Authorize.
+    $("lvTwCode").innerHTML = `<div class="lv-code lv-code-easy"><div><b class="w">Twitch opened in your browser.</b><span>Press <b>Activate</b>, then <b>Authorize</b>. VaultHub notices by itself.</span>
+      <small>Didn't open? <button type="button" class="link" id="lvTwOpen">Open it again</button> · the code is <b>${lvEsc(res.userCode)}</b></small></div></div>
+      <p class="lv-muted" id="lvTwWait">Waiting for Twitch...</p>`;
     $("lvTwOpen").addEventListener("click", () => api("/api/live-open", { url: res.url }));
     api("/api/live-open", { url: res.url });
     clearInterval(LV.signTimer);
@@ -589,12 +597,15 @@ function lvWireTwitchSign() {
         await lvLoadConfig();
         box.innerHTML = lvTwitchSignHtml();
         lvWireTwitchSign();
+        lvToast({ emoji: "✅", title: "Signed in to Twitch", text: "Everything Twitch in the console works now." });
       } else if (r && !r.ok) {
         clearInterval(LV.signTimer);
         $("lvSetupError").textContent = r.error;
       }
     }, 3000);
-  });
+  };
+  $("lvTwEasy")?.addEventListener("click", () => start(""));
+  $("lvTwGo")?.addEventListener("click", () => start($("lvTwClient").value));
 }
 
 async function lvSaveSetup() {

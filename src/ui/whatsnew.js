@@ -7,6 +7,7 @@ const CHANGES = [
     "Copy recap for Discord puts a short summary on your clipboard, ready to paste. Every recap is saved in Stream stats too.",
     "New card: Co-stream. Streaming with friends? Add their Twitch name and their chat shows up in your Chat card, mixed in with a colored tag or side by side.",
     "You can write in your friend's chat right from the console, and friends on VaultHub with Twitch on their profile are one click away.",
+    "Signing in to Twitch is now one button: press Sign in with Twitch, then Activate and Authorize on Twitch. No more making your own Twitch app or copying a Client ID.",
   ] },
   { version: "2.41.0", items: [
     "Projects (Beta): footage now goes straight from PC to PC. Nothing is stored online, so there's no size limit and it's free. No more Backblaze setup.",
