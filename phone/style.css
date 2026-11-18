@@ -153,3 +153,36 @@ h1 em { font-style: normal; color: var(--accent); }
   border-radius: 12px; padding: 12px 14px; font-size: 14px; z-index: 10; }
 .spin { width: 22px; height: 22px; border: 2.5px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 40px auto; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- calls */
+.av.big { width: 80px; height: 80px; font-size: 30px; }
+body { position: relative; }
+#call { position: absolute; inset: 0; z-index: 20; background: radial-gradient(circle at 50% 28%, #1d2a1f, #141414 62%); }
+.call-in { height: 100%; display: flex; flex-direction: column; padding: calc(var(--top) + 8px) 22px calc(30px + var(--bottom)); }
+.call-top { display: flex; height: 36px; }
+.call-top button { color: var(--muted); padding: 6px; margin-left: -6px; }
+.call-title { text-align: center; margin-top: 6px; }
+.call-title b { display: block; font: 700 26px var(--head); margin-top: 2px; }
+.call-face { display: grid; place-items: center; flex: 1; }
+.call-face .av { width: 120px; height: 120px; font-size: 44px; }
+.call-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 26px 0 14px; }
+.call-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; text-align: center; padding: 18px 8px 14px; }
+.call-card .nm { margin-top: 10px; font-weight: 600; }
+.call-grid.many .av.big { width: 56px; height: 56px; font-size: 22px; }
+.face { display: inline-block; border-radius: 50%; padding: 3px; transition: box-shadow .12s; }
+.face.talking { box-shadow: 0 0 0 3px var(--green); }
+.call-share { width: 100%; padding: 10px 12px; gap: 10px; }
+.call-share .thumb { width: 60px; height: 38px; border-radius: 6px; background: linear-gradient(135deg, #223, #445); flex: none; }
+.call-screen { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.call-screen video { width: 100%; max-height: 55vh; border-radius: 12px; background: #000; }
+.call-btns { display: flex; justify-content: center; gap: 22px; }
+.cb { width: 64px; height: 64px; border-radius: 50%; background: var(--panel2); display: grid; place-items: center; color: var(--text); }
+.cb.on { background: var(--text); color: var(--ink); }
+.cb.red { background: #e2483d; }
+.cb.green { background: #34c759; }
+.call-labels { display: flex; justify-content: center; gap: 22px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.call-labels span { width: 64px; text-align: center; }
+.callbar { display: flex; align-items: center; gap: 10px; margin: 4px 12px 6px; padding: 9px 14px; border-radius: 12px; background: #1d3a24;
+  color: var(--green); font-size: 13.5px; flex: none; text-align: left; }
+.callbar b { color: var(--text); font-weight: 600; }
+.dotg { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
