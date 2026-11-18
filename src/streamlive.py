@@ -34,12 +34,16 @@ _last_live = 0
 _ticker = None
 _twitch = None
 _youtube = None
+_sources = deque(maxlen=500)  # (2.42.0) messages seen twice in a shared chat
+_ended = None  # (2.42.0) the stream that ended last, for the recap: {"id", "at"}
+_obs_stop = 0  # when OBS last ended a stream (Twitch says "live" a while longer: that isn't a new stream)
 
 
 def _new_session(now, started=None):
     return {"id": time.strftime("%Y%m%d-%H%M%S", time.localtime(now)), "start": started or now, "end": None,
             "title": "", "series": [], "events": [], "chat": 0, "chatters": [], "minute": {"chat": 0, "at": now},
-            "followersAtStart": None, "peak": 0, "peakAt": 0, "first": []}
+            "followersAtStart": None, "peak": 0, "peakAt": 0, "first": [], "talk": {},
+            "health": {"droppedPct": 0.0, "dropped": 0, "reconnects": 0, "slow": 0, "lag": 0, "obs": False}}
 
 
 def emit(items):
@@ -56,11 +60,22 @@ def emit(items):
                 _seq += 1
                 _items.append((_seq, item))
                 continue
+            ch = item.get("ch")
+            if item.get("p") == "tw" and ch and _twitch and _twitch.channel and ch != _twitch.channel:
+                # (2.42.0) a friend's chat (co-streaming): shown, but not counted as yours
+                if item.get("type") == "event":
+                    continue
+                item["guest"] = ch
+                item["first"] = False
+            if item.get("sourceId"):
+                if item["sourceId"] in _sources:
+                    continue
+                _sources.append(item["sourceId"])
             _seq += 1
             item["seq"] = _seq
             _items.append((_seq, item))
             s = _session
-            if not s or item.get("old"):
+            if not s or item.get("old") or item.get("guest"):
                 continue
             if item.get("type") == "msg" and not item.get("own"):
                 s["chat"] += 1
@@ -70,6 +85,10 @@ def emit(items):
                     s["chatters"].append(who)
                     if len(s["chatters"]) > 5000:
                         s["chatters"] = s["chatters"][-5000:]
+                talk = s.setdefault("talk", {})
+                if who in talk or len(talk) < 5000:
+                    t = talk.setdefault(who, [item.get("user") or "", 0])
+                    t[0], t[1] = item.get("user") or t[0], t[1] + 1
                 if item.get("first"):  # (their very first message in your Twitch chat)
                     s["first"].append({k: item.get(k) for k in ("p", "user", "login", "text", "at")})
                     del s["first"][:-300]
@@ -191,10 +210,21 @@ def _tick_loop():
 
 
 def _tick():
-    global _session, _last_live
+    global _session, _last_live, _ended, _obs_stop
     now = time.time()
     tw, yt, obs = (_twitch.status if _twitch else {}), (_youtube.status if _youtube else {}), obsstats.state()
     live = bool(tw.get("live") or yt.get("live") or obs.get("streaming"))
+    end_after = END_AFTER
+    with _lock:
+        h = _session.setdefault("health", {}) if _session else None
+        if h is not None and obs.get("connected"):
+            if obs.get("streaming"):
+                h["obs"] = True
+            elif h.get("obs"):
+                # OBS stopped streaming: Twitch keeps saying "live" for a few minutes, so OBS decides.
+                live, end_after = False, 45
+        elif h is None and obs.get("connected") and not obs.get("streaming") and now - _obs_stop < 600:
+            live = False
     with _lock:
         if live:
             _last_live = now
@@ -211,16 +241,34 @@ def _tick():
         viewers = (tw.get("viewers") or 0) + (yt.get("viewers") or 0)
         if viewers > s["peak"]:
             s["peak"], s["peakAt"] = viewers, now
+        h = s.setdefault("health", {})
+        if obs.get("connected") and obs.get("streaming"):
+            h["obs"] = True
+            if obs.get("total", 0) > 300:
+                h["droppedPct"] = round(max(h.get("droppedPct", 0), obs.get("droppedPct") or 0), 2)
+                h["dropped"] = max(h.get("dropped", 0), obs.get("dropped") or 0)
+            keys = {w.get("key") for w in obs.get("warnings") or []}
+            if obs.get("reconnecting") and not h.get("was"):
+                h["reconnects"] = h.get("reconnects", 0) + 1
+            h["was"] = bool(obs.get("reconnecting"))
+            if "bitrate" in keys:
+                h["slow"] = h.get("slow", 0) + 10  # (seconds: one look every 10)
+            if "lag" in keys or "gpu" in keys:
+                h["lag"] = h.get("lag", 0) + 10
         if now - s["minute"]["at"] >= SAMPLE:
             s["series"].append({"t": round(now - s["start"]), "tw": tw.get("viewers") or 0, "yt": yt.get("viewers") or 0,
                                 "chat": s["minute"]["chat"], "kbps": obs.get("bitrate") or 0})
             s["minute"] = {"chat": 0, "at": now}
             if len(s["series"]) % 5 == 0:
                 _save(s)
-        if not live and now - _last_live > END_AFTER:
+        if not live and now - _last_live > end_after:
             s["end"] = _last_live or now
             _save(s)
             _session = None
+            if end_after != END_AFTER:
+                _obs_stop = now
+            if s["end"] - s["start"] >= 300:  # (a few test minutes don't get a recap)
+                _ended = {"id": s["id"], "at": now}
 
 
 # ---------------------------------------------------------------- after the stream
@@ -255,7 +303,15 @@ def summary(s):
             "peak": max(views + [s["peak"]]) if views or s["peak"] else 0, "average": round(sum(views) / len(views)) if views else 0,
             "hoursWatched": round(sum(views) / 60, 1), "chat": s["chat"], "chatters": len(s["chatters"]),
             "followers": t["followers"], "subs": t["subs"], "members": t["members"], "raids": t["raids"],
-            "bits": t["bits"], "money": t["money"], "superchats": t["superchats"]}
+            "bits": t["bits"], "money": t["money"], "superchats": t["superchats"],
+            "newChatters": len(s.get("first") or []), "clips": len(s.get("clips") or [])}
+
+
+def _top(s, n=5):
+    """Who chatted the most: [{user, p, n}]."""
+    talk = s.get("talk") or {}
+    best = sorted(talk.items(), key=lambda kv: -kv[1][1])[:n]
+    return [{"user": v[0] or k.partition(":")[2], "p": k.partition(":")[0], "n": v[1]} for k, v in best]
 
 
 def _save(s):
@@ -293,8 +349,28 @@ def stream(sid):
             data = json.load(f)
     except (OSError, ValueError):
         return None
+    h = data.get("health") or {}
     return {"summary": data.get("summary") or summary(data), "series": data.get("series") or [],
-            "events": data.get("events") or [], "moments": data.get("moments") or _moments(data)}
+            "events": data.get("events") or [], "moments": data.get("moments") or _moments(data),
+            # (2.42.0) for the recap
+            "top": _top(data), "newbies": [f.get("user") for f in (data.get("first") or []) if f.get("user")][:60],
+            "clips": [{k: c.get(k) for k in ("id", "url", "edit", "at")} for c in (data.get("clips") or [])][-30:],
+            "health": {k: h.get(k) for k in ("droppedPct", "dropped", "reconnects", "slow", "lag", "obs")}}
+
+
+def last_ended():
+    """The newest stream that ended in the last 12 hours (even before the app was opened again)."""
+    if _ended:
+        return _ended
+    try:
+        names = sorted((n for n in os.listdir(STREAMS_DIR) if n.endswith(".json")), reverse=True)[:1]
+        with open(os.path.join(STREAMS_DIR, names[0]), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError, IndexError):
+        return None
+    if data.get("end") and time.time() - data["end"] < 12 * 3600 and data["end"] - data.get("start", 0) >= 300:
+        return {"id": data["id"], "at": data["end"]}
+    return None
 
 
 def forget(sid):
@@ -327,11 +403,38 @@ def state(since=0):
         seq = _seq
     return {"ok": True, "config": config(), "twitch": tw, "youtube": yt, "obs": obsstats.state(), "chat": chat,
             "removed": removed, "seq": seq, "speed": speed, "session": session,
-            "ms": multistream.status(), "ads": adtimer.status()}
+            "ms": multistream.status(), "ads": adtimer.status(), "ended": last_ended(), "co": costream()}
+
+
+# ---------------------------------------------------------------- co-streaming (2.42.0)
+
+def costream():
+    """The friends whose chats show in the console, and whether they're live (looked at for free)."""
+    names = list(_twitch.guests) if _twitch else []
+    if not names:
+        return []
+    import live
+    found = live.live([{"username": n, "twitch": n} for n in names])
+    on = {x["username"]: x for x in found["live"] if x.get("kind") == "twitch"}
+    return [{"name": n, "live": n in on, "viewers": (on.get(n) or {}).get("viewers"), "title": (on.get(n) or {}).get("title") or "",
+             "loading": found["loading"] and n not in on} for n in names]
+
+
+def set_costream(names):
+    _start()
+    _twitch.set_guests(names)
+    return costream()
 
 
 def send(text, to):
     out = {}
+    if to.startswith("co:") and _twitch:  # (2.42.0) a friend's chat
+        try:
+            _twitch.send(text, to[3:])
+            out["tw"] = True
+        except streamtwitch.Error as e:
+            out["twError"] = str(e)
+        return out
     if to in ("both", "tw") and _twitch and _twitch.channel:
         try:
             _twitch.send(text)

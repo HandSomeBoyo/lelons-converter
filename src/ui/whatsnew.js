@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.42.0", items: [
+    "Live: when your stream ends, a recap pops up. How many watched (compared to last time), new followers, new chatters, your top chatters, clips, the best moments and whether the stream had problems.",
+    "Copy recap for Discord puts a short summary on your clipboard, ready to paste. Every recap is saved in Stream stats too.",
+    "New card: Co-stream. Streaming with friends? Add their Twitch name and their chat shows up in your Chat card, mixed in with a colored tag or side by side.",
+    "You can write in your friend's chat right from the console, and friends on VaultHub with Twitch on their profile are one click away.",
+  ] },
   { version: "2.41.0", items: [
     "Projects (Beta): footage now goes straight from PC to PC. Nothing is stored online, so there's no size limit and it's free. No more Backblaze setup.",
     "New clips come to your PC by themselves while you and your friends have VaultHub open. If two friends have a clip, you get it from both at once.",

@@ -18,6 +18,7 @@ const LV_CARDS = [
   { id: "clips", name: "Clips", desc: "Clip the last moments with one button or a hotkey, even in a game.", w: 4 },
   { id: "modes", name: "Chat modes", desc: "Slow mode, followers-only, emote-only, subs-only and Shield Mode.", w: 4 },
   { id: "newbies", name: "New chatters", desc: "People chatting for the very first time, so you can welcome them.", w: 4 },
+  { id: "costream", name: "Co-stream", desc: "Streaming with friends? See their Twitch chats in your Chat card, mixed in or side by side.", w: 4 },
 ];
 const LV_CARD = Object.fromEntries(LV_CARDS.map((c) => [c.id, c]));
 const LV_WIDTHS = [3, 4, 5, 6, 7, 8, 9, 12];

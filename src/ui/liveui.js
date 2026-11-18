@@ -81,6 +81,15 @@ function lvChatLine(item, opts = {}) {
   const body = document.createElement("span");
   body.className = "body";
   body.append(lvPlat(item.p), " ");
+  if (item.guest && !opts.noTag) {  // (2.42.0) from a friend's chat, while co-streaming
+    const tag = document.createElement("span");
+    tag.className = "lv-co-tag";
+    tag.style.setProperty("--c", lvCoColor(item.guest));
+    tag.textContent = item.guest;
+    tag.title = `From ${item.guest}'s chat`;
+    body.append(tag, " ");
+    row.classList.add("guest");
+  }
   if (item.type === "event") {
     row.classList.add("event", "k-" + item.kind);
     const [who, what] = (LV_EVENT_WORDS[item.kind] || ((e) => [e.user, ""]))(item);
@@ -134,6 +143,13 @@ function lvChatLine(item, opts = {}) {
     }
   }
   return row;
+}
+
+const LV_CO_COLORS = ["#4fc3f7", "#f48fb1", "#aed581"];
+function lvCoColor(name) {
+  let h = 0;
+  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return LV_CO_COLORS[h % LV_CO_COLORS.length];
 }
 
 function lvToolButton(icon, title, onClick, red) {
