@@ -4,7 +4,7 @@
 // Uses $, api(), loadPref/savePref, showTab() from app.js and LV, lvEsc, lvNum, lvClock, lvPlat, lvToast,
 // lvTone from livecon.js / liveui.js.
 
-const LVR = { showing: "", busy: false };
+const LVR = { showing: "", busy: false, failed: "" };
 
 function lvrDuration(min) {
   const h = Math.floor(min / 60), m = min % 60;
@@ -16,7 +16,7 @@ function lvrHm(at) { const d = new Date(at * 1000); return d.getHours() + ":" + 
 // Called with each answer from the app: a stream that ended and wasn't shown yet gets its recap.
 function lvRecapCheck(res) {
   const e = res && res.ended;
-  if (!e || !e.id || LVR.busy || LVR.showing === e.id || loadPref("lvRecapSeen") === e.id) return;
+  if (!e || !e.id || LVR.busy || LVR.showing === e.id || LVR.failed === e.id || loadPref("lvRecapSeen") === e.id) return;
   if (!lvOnPage()) return;  // (it waits until you open the Live place)
   lvRecapOpen(e.id, true);
 }
@@ -28,7 +28,7 @@ async function lvRecapOpen(id, fresh) {
     api("/api/live-streams", {}).catch(() => null),
   ]);
   LVR.busy = false;
-  if (!data || !data.ok) return;
+  if (!data || !data.ok) { if (fresh) LVR.failed = id; return; }  // (2.43.1) not again with every update
   const streams = (list && list.streams) || [];
   const i = streams.findIndex((x) => x.id === id);
   const prev = i >= 0 ? streams[i + 1] : null;
