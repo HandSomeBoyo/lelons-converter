@@ -181,7 +181,7 @@ async function loadServers() {
 async function refreshAll() {
   if (!S.token) return;
   await Promise.allSettled([loadIndex(), loadServers()]);
-  if (!S.view) render();
+  if (!S.view && S.tab !== "live") render();  // (the Live tab has a chat box: don't wipe what you're typing)
   else renderTabsBadge();
 }
 
@@ -291,7 +291,10 @@ function render() {
   bindPage();
   afterRender();
 }
-function afterRender() { if (typeof callAfterRender === "function") callAfterRender(); }
+function afterRender() {
+  if (typeof callAfterRender === "function") callAfterRender();
+  if (typeof liveAfterRender === "function") liveAfterRender();
+}
 
 // Clicks inside a page: anything with data-open opens a chat, data-server a server, data-play a sound.
 function bindPage() {
@@ -694,13 +697,6 @@ function playingChanged() {
 }
 
 // ---------------------------------------------------------------- Live and More
-
-function liveHtml() {
-  return `<div class="row between"><h1>Live</h1><div class="row sm" style="gap:6px;background:#2a1d3d;color:#c9a8ff;padding:5px 10px;border-radius:14px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:#9146ff"></span>Twitch</div></div>
-    <div class="card soon"><div style="color:#c9a8ff">${I.live.replace("<svg", '<svg width="44" height="44"')}</div>
-      <div class="big">Coming next</div>
-      <div class="muted">Your Twitch stream time, viewers and chat, edit title, run ads, clips and OBS scenes will show up here in the next step.</div></div>`;
-}
 
 function moreHtml() {
   const me = S.me || {};
