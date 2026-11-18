@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.0.3";
+const VERSION = "phone 1.1.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -35,7 +35,7 @@ const hash = (s) => [...String(s || "").toLowerCase()].reduce((h, c) => (h * 31 
 const lower = (s) => String(s || "").toLowerCase();
 
 function avatar(name, url, opts = {}) {
-  const cls = ["av", opts.small ? "s" : "", opts.square ? "sq" : ""].join(" ");
+  const cls = ["av", opts.small ? "s" : "", opts.big ? "big" : "", opts.square ? "sq" : ""].join(" ");
   const style = url ? `background-image:url('${esc(url)}')` : `background:${opts.bg || COLORS[hash(name) % COLORS.length]}`;
   const letters = opts.letters || String(name || "?").slice(0, 1).toUpperCase();
   return `<div class="${cls}" style="${style}">${url ? "" : esc(letters)}${opts.dot ? `<span class="dot" style="background:${opts.dot}"></span>` : ""}</div>`;
@@ -84,7 +84,7 @@ async function rpc(name, args = {}) {
 }
 
 // Calls with your login. Logs you out when the login stopped working.
-async function call(name, args = {}) {
+async function rpcMe(name, args = {}) {
   try {
     return await rpc(name, { token: S.token, ...args });
   } catch (e) {
@@ -95,6 +95,7 @@ async function call(name, args = {}) {
 
 // ---------------------------------------------------------------- icons
 
+const CALL_ICON = '<svg class="ic" style="color:var(--text)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
 const I = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
@@ -167,13 +168,13 @@ function serverUnread() {
 // ---------------------------------------------------------------- loading
 
 async function loadIndex() {
-  const r = await call("lelons_chat_list", { after: 0, with_user: null });
+  const r = await rpcMe("lelons_chat_list", { after: 0, with_user: null });
   S.index = r || {};
   firstSeen();
 }
 
 async function loadServers() {
-  const r = await call("lelons_server", { what: "list", sid: null, data: {} });
+  const r = await rpcMe("lelons_server", { what: "list", sid: null, data: {} });
   S.servers = (r && r.servers) || [];
 }
 
@@ -237,6 +238,7 @@ function logOut(expired) {
   S.token = ""; S.me = null; S.index = null; S.servers = []; S.view = null; S.sounds = null;
   store.set("token", "");
   stopChatPoll();
+  if (typeof hangUp === "function") hangUp();
   if (token && !expired) rpc("lelons_logout", { token }).catch(() => {});
   renderLogin(expired ? "You were logged out. Log in again." : "");
 }
@@ -244,7 +246,7 @@ function logOut(expired) {
 async function start() {
   $("#app").innerHTML = '<div class="screen"><div class="spin" style="margin-top:45vh"></div></div>';
   try {
-    S.me = await call("lelons_me");
+    S.me = await rpcMe("lelons_me");
   } catch (e) {
     if (!S.token) return;  // (logged out already shows the log in page)
     $("#app").innerHTML = `<div class="screen"><div class="empty" style="margin-top:30vh">${esc(e.message)}<br><br><button class="btn2" id="retry">Try again</button></div></div>`;
@@ -287,23 +289,26 @@ function render() {
   $(".scroll").scrollTop = scrollWas;
   bindTabs();
   bindPage();
+  afterRender();
 }
+function afterRender() { if (typeof callAfterRender === "function") callAfterRender(); }
 
 // Clicks inside a page: anything with data-open opens a chat, data-server a server, data-play a sound.
 function bindPage() {
   const root = $("#app");
   root.onclick = (e) => {
-    const t = e.target.closest("[data-open],[data-server],[data-play],[data-seg],[data-cat],[data-genre],[data-act]");
+    const t = e.target.closest("[data-open],[data-server],[data-voice],[data-callkey],[data-play],[data-seg],[data-cat],[data-genre],[data-act]");
     if (!t) return;
     if (t.dataset.open !== undefined) return openChat(t.dataset.open, t.dataset.title, t.dataset.sub);
     if (t.dataset.server) return openServer(t.dataset.server);
+    if (t.dataset.voice) return startCall("g:" + t.dataset.voice, t.dataset.title, t.dataset.sub);
+    if (t.dataset.callkey) return startCall(t.dataset.callkey, t.dataset.title, t.dataset.sub);
     if (t.dataset.play) return playSound(t.dataset.play);
     if (t.dataset.seg) { S.chatSeg = t.dataset.seg; store.set("chatSeg", S.chatSeg); return render(); }
     if (t.dataset.cat) { S.libCat = t.dataset.cat; S.libGenre = ""; return render(); }
     if (t.dataset.genre !== undefined) { S.libGenre = t.dataset.genre; return render(); }
     if (t.dataset.act === "logout") return logOut(false);
     if (t.dataset.act === "toggle") return togglePlay();
-    if (t.dataset.act === "voice") return toast("Joining voice from the phone is coming in the next step. For now, join from your PC.");
   };
 }
 
@@ -323,9 +328,9 @@ function homeHtml() {
   for (const v of voiceNow()) {
     const p = v.channel.people;
     const first = p[0];
-    rows.push(`<button class="row" data-server="${esc(v.server.id)}">${avatar(first.username, publicUrl(first.avatar), { small: true, dot: "#4da3ff" })}
+    rows.push(`<button class="row" data-voice="${esc(v.channel.id)}" data-title="${esc(v.channel.name)}" data-sub="${esc(v.server.name)}">${avatar(first.username, publicUrl(first.avatar), { small: true, dot: "#4da3ff" })}
       <div class="grow"><b>${esc(p.map((x) => x.username).join(", "))}</b> <span class="muted sm">in ${esc(v.channel.name)}</span><div class="sm muted">${esc(v.server.name)} voice</div></div>
-      <span class="btn2 go">Open</span></button>`);
+      <span class="btn2 go">Join</span></button>`);
   }
   for (const u of unreadChats().slice(0, 4)) {
     rows.push(`<button class="row" data-open="${esc(u.key)}" data-title="${esc(u.name)}">${avatar(u.name, publicUrl(u.avatar), { small: true, square: u.group })}
@@ -366,7 +371,7 @@ async function loadGames() {
   if (S.gamesLoading) return;
   S.gamesLoading = true;
   try {
-    const r = await call("lelons_games", { what: "list" });
+    const r = await rpcMe("lelons_games", { what: "list" });
     S.games = (r && r.games) || [];
   } catch { S.games = []; }
   S.gamesLoading = false;
@@ -418,7 +423,7 @@ async function openServer(id) {
   S.view = { kind: "server", id };
   renderServer();
   try {
-    const r = await call("lelons_server", { what: "get", sid: id, data: {} });
+    const r = await rpcMe("lelons_server", { what: "get", sid: id, data: {} });
     const s = r && (r.server || r);
     if (s && s.id) {
       const i = S.servers.findIndex((x) => x.id === s.id);
@@ -444,11 +449,12 @@ function renderServer() {
     <div class="top"><button class="back" id="back">${I.back}</button>${avatar(s.name, publicUrl(s.picture), { small: true, square: true, letters: initials(s.name), bg: "#1f7a4a" })}
       <div class="grow"><b class="one" style="display:block">${esc(s.name)}</b><div class="sm muted" style="margin-top:-2px">${(s.members || []).length} members · ${online} online</div></div></div>
     <div class="scroll">${cats.map((g) => `<div class="cat">${esc(g.name)}</div>${g.list.map((c) => c.kind === "voice"
-      ? `<button class="chan" data-act="voice"><span class="hash">${I.speaker}</span><b>${esc(c.name)}</b></button>${(c.people || []).length ? `<div class="people">${c.people.map((p) => `<span>${avatar(p.username, publicUrl(p.avatar), { small: true })}${esc(p.username)}</span>`).join("")}</div>` : ""}`
+      ? `<button class="chan" data-voice="${esc(c.id)}" data-title="${esc(c.name)}" data-sub="${esc(s.name)}"><span class="hash">${I.speaker}</span><b class="grow">${esc(c.name)}</b><span class="btn2 go" style="height:28px;font-size:13px">Join</span></button>${(c.people || []).length ? `<div class="people">${c.people.map((p) => `<span>${avatar(p.username, publicUrl(p.avatar), { small: true })}${esc(p.username)}</span>`).join("")}</div>` : ""}`
       : `<button class="chan ${c.unread ? "new" : ""}" data-open="g:${esc(c.id)}" data-title="# ${esc(c.name)}" data-sub="${esc(s.name)}"><span class="hash">#</span><b class="grow">${esc(c.name)}</b>${c.mentions ? `<span class="unread">@</span>` : c.unread ? `<span class="unread">${c.unread}</span>` : ""}</button>`).join("")}`).join("")}
     </div></div>`;
   $("#back").onclick = closeView;
   bindPage();
+  afterRender();
 }
 
 function closeView() {
@@ -478,7 +484,7 @@ async function loadChat(first) {
   const v = S.view;
   if (!v || v.kind !== "chat") return;
   try {
-    const r = await call("lelons_chat_list", { after: first ? 0 : v.last, with_user: v.key || null });
+    const r = await rpcMe("lelons_chat_list", { after: first ? 0 : v.last, with_user: v.key || null });
     if (S.view !== v) return;
     v.loading = false;
     const wasNearBottom = nearBottom();
@@ -511,7 +517,7 @@ async function loadChat(first) {
       renderMessages();
       if (first || wasNearBottom) scrollDown();
     }
-    if (first) call("lelons_chat_live", { with_user: v.key || null, seen_id: v.last || null }).catch(() => {});
+    if (first) rpcMe("lelons_chat_live", { with_user: v.key || null, seen_id: v.last || null }).catch(() => {});
   } catch (e) {
     if (S.view === v && first) { v.loading = false; renderMessages(e.message); }
   }
@@ -528,7 +534,8 @@ function renderChat() {
   const v = S.view;
   $("#app").innerHTML = `<div class="screen">
     <div class="top"><button class="back" id="back">${I.back}</button>
-      <div class="grow"><b class="one" style="display:block">${esc(v.title)}</b>${v.sub ? `<div class="sm muted" style="margin-top:-2px">${esc(v.sub)}</div>` : ""}</div></div>
+      <div class="grow"><b class="one" style="display:block">${esc(v.title)}</b>${v.sub ? `<div class="sm muted" style="margin-top:-2px">${esc(v.sub)}</div>` : ""}</div>
+      ${v.key && !v.from ? `<button class="back" data-callkey="${esc(v.key)}" data-title="${esc(v.title)}" data-sub="${esc(v.sub || "")}" aria-label="Call">${CALL_ICON}</button>` : ""}</div>
     <div class="scroll msgs" id="msgs"></div>
     <div class="compose"><textarea id="box" rows="1" placeholder="Message ${esc(v.title.startsWith("#") ? v.title : v.title)}" enterkeyhint="send"></textarea>
       <button class="send" id="sendBtn" aria-label="Send">${I.send}</button></div></div>`;
@@ -539,6 +546,7 @@ function renderChat() {
   $("#sendBtn").onclick = sendMessage;
   renderMessages();
   bindPage();
+  afterRender();
 }
 
 function renderMessages(error) {
@@ -603,7 +611,7 @@ async function sendMessage() {
   if (!text || !v) return;
   box.value = ""; box.style.height = "auto";
   try {
-    const r = await call("lelons_chat_send", { message: text, to_user: v.key || null });
+    const r = await rpcMe("lelons_chat_send", { message: text, to_user: v.key || null });
     if (r && r.ok === false) throw new Error({ short: "Write something first.", long: "That's a bit long. Keep it under 500 letters.", slow: "Slow down a little! Wait a few seconds.", daily: "You've sent a lot today. Try again tomorrow.", denied: "You can't write in this channel." }[r.error] || "That didn't send. Try again.");
     stopChatPoll();
     await loadChat(false);
@@ -625,7 +633,7 @@ const GENRES = {
 
 async function loadSounds() {
   try {
-    S.sounds = (await call("lelons_list")) || [];
+    S.sounds = (await rpcMe("lelons_list")) || [];
   } catch (e) { S.sounds = []; toast(e.message); }
   if (S.tab === "lib" && !S.view) render();
 }
@@ -703,7 +711,7 @@ function moreHtml() {
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.0.3</div>
+    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.1.0</div>
     <div class="muted" style="text-align:center;margin-top:4px;font-size:11px">${screenInfo()}</div>`;
 }
 
