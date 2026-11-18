@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.0";
+const VERSION = "phone 1.0.1";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -703,12 +703,30 @@ function moreHtml() {
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.0</div>`;
+    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.0.1</div>`;
 }
 
 // ---------------------------------------------------------------- start
 
+// The app's height: the whole screen when opened from the home screen, else what the browser shows.
+function fitScreen() {
+  const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  let h = window.innerHeight;
+  if (standalone && screen.height) {
+    const portrait = window.innerHeight >= window.innerWidth;
+    h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+  }
+  // The keyboard is open: fit above it, so the message box stays in sight.
+  const vv = window.visualViewport;
+  if (vv && vv.height < h - 150) { h = vv.height; window.scrollTo(0, 0); }
+  document.documentElement.style.setProperty("--app-h", h + "px");
+}
+
 (function boot() {
+  fitScreen();
+  window.addEventListener("resize", fitScreen);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", fitScreen);
+  window.addEventListener("orientationchange", () => setTimeout(fitScreen, 300));
   const a = $("#audio");
   a.addEventListener("play", playingChanged);
   a.addEventListener("pause", playingChanged);

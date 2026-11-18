@@ -8,10 +8,12 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overscroll-behavior: none; }
-body { font: 15px/1.4 Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+body { font: 15px/1.4 Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 input { font: inherit; color: var(--text); }
-#app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+/* The app fills the whole screen. (iOS home-screen apps measure the screen short by the status bar's
+   height, which left an empty band under the tab bar, so app.js sets --app-h to the real height.) */
+#app { position: fixed; top: 0; left: 0; right: 0; height: 100vh; height: var(--app-h, 100dvh); display: flex; flex-direction: column; overflow: hidden; }
 .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: var(--top); }
 .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px 20px; }
 .muted { color: var(--muted); } .sm { font-size: 13px; }
