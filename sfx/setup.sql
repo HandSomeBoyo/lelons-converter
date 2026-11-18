@@ -4480,6 +4480,169 @@ create or replace function lelons.listed(file text) returns boolean
          or exists (select 1 from lelons.servers s where s.picture = listed.file) $$;
 
 
+-- ---- (phone 1.3) Notifications on the phone (web push).
+-- The phone app gives the library its push "address" (lelons_push_sub). A new message or a call that rings
+-- someone pokes the "push" Edge Function (through pg_net), which asks lelons_push_job who to tell and sends
+-- the notifications. lelons.push_config (the keys and the function's link) is filled in once by hand,
+-- with the snippet that comes with the setup steps (it holds secrets, so it isn't in this file).
+create extension if not exists pg_net;
+create table if not exists lelons.push_subs (
+  endpoint text primary key check (endpoint ~ '^https://' and length(endpoint) <= 1000),
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  p256dh text not null check (length(p256dh) <= 200),
+  auth text not null check (length(auth) <= 100),
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subs_by_account on lelons.push_subs (account_id);
+create table if not exists lelons.push_config (
+  id int primary key default 1 check (id = 1),
+  url text not null,           -- the push Edge Function's link
+  secret text not null,        -- what the function must show to ask lelons_push_job
+  vapid_public text not null,
+  vapid_private text not null,
+  subject text not null default 'mailto:vaulthub@example.com'
+);
+revoke all on lelons.push_subs, lelons.push_config from anon, authenticated;
+
+-- what: 'key' (the public key the phone needs), 'on' (sub: the phone's subscription) or 'off'.
+create or replace function public.lelons_push_sub(token text, what text, sub jsonb default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  cfg lelons.push_config;
+begin
+  select * into cfg from lelons.push_config where id = 1;
+  if what = 'key' then
+    return json_build_object('ok', cfg.id is not null, 'key', cfg.vapid_public);
+  elsif what = 'on' then
+    if cfg.id is null then
+      return json_build_object('ok', false, 'error', 'not_set_up');
+    end if;
+    if coalesce(sub->>'endpoint', '') !~ '^https://' or coalesce(sub->'keys'->>'p256dh', '') = '' or coalesce(sub->'keys'->>'auth', '') = '' then
+      return json_build_object('ok', false, 'error', 'bad_input');
+    end if;
+    insert into lelons.push_subs as p (endpoint, account_id, p256dh, auth)
+    values (left(sub->>'endpoint', 1000), me.id, left(sub->'keys'->>'p256dh', 200), left(sub->'keys'->>'auth', 100))
+    on conflict (endpoint) do update set account_id = me.id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = now();
+    delete from lelons.push_subs p where p.account_id = me.id and p.endpoint not in
+      (select x.endpoint from lelons.push_subs x where x.account_id = me.id order by x.created_at desc limit 10);
+    return json_build_object('ok', true);
+  elsif what = 'off' then
+    delete from lelons.push_subs p where p.account_id = me.id and p.endpoint = sub->>'endpoint';
+    return json_build_object('ok', true);
+  end if;
+  raise exception 'bad what' using hint = 'bad_input';
+end $$;
+
+-- For the push Edge Function only (it has to show the secret): who to tell about a message or a call, and how.
+-- kind: 'chat' (ref: the message id), 'ring' (ref: room id ':' account id) or 'gone' (ref: an endpoint that stopped working).
+create or replace function public.lelons_push_job(secret text, kind text, ref text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  cfg lelons.push_config;
+  c lelons.chat;
+  g lelons.chat_groups;
+  who text;
+  body text;
+  title text;
+  link text;
+  tag text;
+  people uuid[];
+  rid uuid;
+  aid uuid;
+  starter text;
+begin
+  select * into cfg from lelons.push_config where id = 1;
+  if cfg.id is null or secret is distinct from cfg.secret then
+    raise exception 'denied' using hint = 'denied';
+  end if;
+  if kind = 'gone' then
+    delete from lelons.push_subs p where p.endpoint = ref;
+    return json_build_object('ok', true);
+  elsif kind = 'chat' then
+    select * into c from lelons.chat x where x.id = ref::bigint;
+    if c.id is null or c.auto is not null then
+      return json_build_object('ok', true, 'sends', '[]'::json);
+    end if;
+    select a.username into who from lelons.accounts a where a.id = c.account_id;
+    body := left(coalesce(nullif(lelons.chat_preview(c), ''), case when c.sound_id is not null then 'Sent a sound'
+                 when c.file is not null then 'Sent a clip' else 'Sent a message' end), 180);
+    if c.to_id is not null then  -- a private message
+      people := array[c.to_id];
+      title := who; link := '#chat=' || who; tag := 'chat:' || lower(who);
+    elsif c.group_id is not null then
+      select * into g from lelons.chat_groups x where x.id = c.group_id;
+      if g.server_id is null then  -- a group chat: everyone in it
+        select array_agg(m.account_id) into people from lelons.chat_group_members m where m.group_id = g.id and m.account_id <> c.account_id;
+        title := g.name; body := who || ': ' || body; link := '#chat=g:' || g.id; tag := 'chat:g:' || g.id;
+      else  -- a server channel: only people it @mentions
+        select array_agg(sm.account_id) into people from lelons.server_members sm join lelons.accounts a on a.id = sm.account_id
+        where sm.server_id = g.server_id and sm.account_id <> c.account_id
+          and coalesce(c.message, '') ~* ('@' || regexp_replace(a.username, '([.\\-])', '\\\1', 'g') || '(\W|$)');
+        title := who || ' in #' || g.name; link := '#server=' || g.server_id; tag := 'server:' || g.id;
+      end if;
+    else  -- the chat with everyone: only people it @mentions
+      select array_agg(a.id) into people from lelons.accounts a
+      where a.id <> c.account_id and coalesce(c.message, '') ~* ('@' || regexp_replace(a.username, '([.\\-])', '\\\1', 'g') || '(\W|$)');
+      title := who || ' in Everyone'; link := '#chat='; tag := 'chat:everyone';
+    end if;
+  elsif kind = 'ring' then
+    rid := split_part(ref, ':', 1)::uuid;
+    aid := split_part(ref, ':', 2)::uuid;
+    select a.username into starter from lelons.rooms r join lelons.accounts a on a.id = r.started_by where r.id = rid;
+    select g2.* into g from lelons.rooms r join lelons.chat_groups g2 on g2.id = r.group_id where r.id = rid;
+    if g.id is not null and g.server_id is not null then
+      return json_build_object('ok', true, 'sends', '[]'::json);  -- (voice channels don't ring)
+    end if;
+    people := array[aid];
+    title := case when g.id is null then starter || ' is calling you' else starter || ' started a call' end;
+    body := case when g.id is null then 'Open VaultHub to answer.' else 'In ' || g.name || '. Open VaultHub to join.' end;
+    link := '#call'; tag := 'call:' || rid;
+  else
+    raise exception 'bad kind' using hint = 'bad_input';
+  end if;
+  return json_build_object('ok', true, 'vapid_public', cfg.vapid_public, 'vapid_private', cfg.vapid_private, 'subject', cfg.subject,
+    'sends', coalesce((select json_agg(json_build_object('endpoint', p.endpoint, 'p256dh', p.p256dh, 'auth', p.auth,
+                         'payload', json_build_object('title', title, 'body', body, 'url', link, 'tag', tag)))
+                       from lelons.push_subs p where p.account_id = any (coalesce(people, '{}'))), '[]'::json));
+end $$;
+
+-- Poke the push function (only when it's set up and somebody has notifications on).
+create or replace function lelons.push_poke(kind text, ref text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  cfg lelons.push_config;
+begin
+  select * into cfg from lelons.push_config where id = 1;
+  if cfg.id is null or not exists (select 1 from lelons.push_subs) then
+    return;
+  end if;
+  perform net.http_post(url := cfg.url, body := jsonb_build_object('kind', kind, 'ref', ref),
+                        headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', cfg.secret));
+exception when others then
+  null;  -- (a notification that can't go out never stops the message or the call)
+end $$;
+
+create or replace function lelons.push_on_chat() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform lelons.push_poke('chat', new.id::text);
+  return null;
+end $$;
+drop trigger if exists push_on_chat on lelons.chat;
+create trigger push_on_chat after insert on lelons.chat for each row execute function lelons.push_on_chat();
+
+create or replace function lelons.push_on_ring() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.state = 'ringing' and (tg_op = 'INSERT' or old.state is distinct from 'ringing') then
+    perform lelons.push_poke('ring', new.room_id || ':' || new.account_id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists push_on_ring on lelons.room_people;
+create trigger push_on_ring after insert or update of state on lelons.room_people for each row execute function lelons.push_on_ring();
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -4511,7 +4674,8 @@ begin
     'lelons_playlist(text, text, uuid, text, uuid, text[])', 'lelons_room(text, text, uuid, text, text, text, text, bigint)',
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
     'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)',
-    'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)'] loop
+    'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)',
+    'lelons_push_sub(text, text, jsonb)', 'lelons_push_job(text, text, text)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

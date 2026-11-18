@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.2.0";
+const VERSION = "phone 1.3.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -243,6 +243,7 @@ function logOut(expired) {
   store.set("token", "");
   stopChatPoll();
   if (typeof hangUp === "function") hangUp();
+  if (token && !expired) pushOff(true, token);
   if (token && !expired) rpc("lelons_logout", { token }).catch(() => {});
   renderLogin(expired ? "You were logged out. Log in again." : "");
 }
@@ -260,6 +261,8 @@ async function start() {
   ping();
   await refreshAll();
   render();
+  pushRefresh();
+  openLink(location.hash);
 }
 
 // ---------------------------------------------------------------- the tabs
@@ -315,6 +318,8 @@ function bindPage() {
     if (t.dataset.cat) { S.libCat = t.dataset.cat; S.libGenre = ""; return render(); }
     if (t.dataset.genre !== undefined) { S.libGenre = t.dataset.genre; return render(); }
     if (t.dataset.act === "logout") return logOut(false);
+    if (t.dataset.act === "push-on") return pushOn();
+    if (t.dataset.act === "push-off") return pushOff();
     if (t.dataset.act === "toggle") return togglePlay();
   };
 }
@@ -706,12 +711,14 @@ function moreHtml() {
   const me = S.me || {};
   return `<h1>More</h1>
     <div class="card row">${avatar(me.username, publicUrl(me.avatar), { dot: "#9fd67a" })}<div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")}</div></div></div>
+    <div class="lbl">Notifications</div>
+    <div class="card list">${pushRowHtml()}</div>
     <div class="lbl">Coming soon on the phone</div>
-    <div class="card list">${["Games", "Docs", "Boards", "Film assets", "Notifications"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
+    <div class="card list">${["Games", "Docs", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.2.0</div>
+    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.3.0</div>
     <div class="muted" style="text-align:center;margin-top:4px;font-size:11px">${screenInfo()}</div>`;
 }
 
@@ -725,6 +732,90 @@ function screenInfo() {
   const app = $("#app").getBoundingClientRect();
   return `screen ${screen.width}×${screen.height} · window ${innerWidth}×${innerHeight} · app ${Math.round(app.height)} · safe ${Math.round(r.top)}/${Math.round(innerHeight - r.bottom)}${navigator.standalone ? " · home" : ""}`;
 }
+
+// ---------------------------------------------------------------- notifications
+
+const isStandalone = () => navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+let pushStatus = store.get("push", "off");  // "on" or "off" on this phone
+
+function pushRowHtml() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    return `<div class="row"><div class="grow">${/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()
+      ? "Open VaultHub from your Home Screen to turn on notifications." : "This browser can't show notifications."}</div></div>`;
+  }
+  if (Notification.permission === "denied") {
+    return `<div class="row"><div class="grow">Notifications are blocked<div class="sm muted">Turn them on in Settings > Notifications > VaultHub.</div></div></div>`;
+  }
+  const on = pushStatus === "on" && Notification.permission === "granted";
+  return `<div class="row"><div class="grow">New messages and calls<div class="sm muted">${on ? "On for this phone" : "Off"}</div></div>
+    <button class="btn2 ${on ? "" : "go"}" data-act="${on ? "push-off" : "push-on"}">${on ? "Turn off" : "Turn on"}</button></div>`;
+}
+
+function keyBytes(b64) {
+  const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+
+async function pushOn() {
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { render(); return toast("Notifications weren't allowed."); }
+    const key = await rpcMe("lelons_push_sub", { what: "key" });
+    if (!key || !key.ok || !key.key) return toast("Notifications aren't set up on VaultHub's server yet.");
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key.key) });
+    const r = await rpcMe("lelons_push_sub", { what: "on", sub: sub.toJSON() });
+    if (!r || !r.ok) throw new Error("Couldn't turn on notifications. Try again.");
+    pushStatus = "on"; store.set("push", "on");
+    toast("Notifications are on. You'll get new messages and calls here.");
+  } catch (e) {
+    toast(e.message || "Couldn't turn on notifications.");
+  }
+  render();
+}
+
+async function pushOff(quiet, token) {
+  pushStatus = "off"; store.set("push", "off");
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      rpc("lelons_push_sub", { token: token || S.token, what: "off", sub: sub.toJSON() }).catch(() => {});
+      await sub.unsubscribe();
+    }
+  } catch { /* off anyway */ }
+  if (!quiet) render();
+}
+
+// On every start: tell the library this phone's push address again (it can change, or the account can).
+async function pushRefresh() {
+  if (pushStatus !== "on" || !("PushManager" in window) || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await rpcMe("lelons_push_sub", { what: "on", sub: sub.toJSON() });
+  } catch { /* next time */ }
+}
+
+// A notification was tapped: open what it's about ("#chat=<key>", "#server=<id>" or "#call").
+function openLink(link) {
+  link = String(link || "");
+  if (!link.startsWith("#") || link.includes("access_token=")) return;
+  history.replaceState(null, "", location.pathname);
+  if (link.startsWith("#chat=")) {
+    const key = decodeURIComponent(link.slice(6));
+    const g = key.startsWith("g:") && S.index && (S.index.groups || []).find((x) => "g:" + x.id === key);
+    S.tab = "chat";
+    openChat(key, g ? g.name : key || "Everyone", g ? `${g.people} people` : "");
+  } else if (link.startsWith("#server=")) {
+    S.tab = "chat";
+    openServer(decodeURIComponent(link.slice(8)));
+  } else if (link === "#call" && typeof pollCalls === "function") {
+    pollCalls(100);
+  }
+}
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.open !== undefined && S.me) openLink(e.data.open); });
 
 // ---------------------------------------------------------------- start
 
