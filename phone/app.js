@@ -185,8 +185,12 @@ async function refreshAll() {
   else renderTabsBadge();
 }
 
+// This phone's id for "who's online" (32 letters 0-9 a-f, like the PC app's).
 let pingId = store.get("client", "");
-if (!pingId) { pingId = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); store.set("client", pingId); }
+if (!/^[0-9a-f]{32}$/.test(pingId)) {
+  pingId = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  store.set("client", pingId);
+}
 function ping() { if (S.token && !document.hidden) rpc("lelons_ping", { client_id: pingId, token: S.token }).catch(() => {}); }
 
 // ---------------------------------------------------------------- log in
