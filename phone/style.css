@@ -17,7 +17,9 @@ body { font: 15px/1.4 Inter, system-ui, sans-serif; -webkit-text-size-adjust: 10
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 input { font: inherit; color: var(--text); }
 #app { position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-.screen { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: var(--top); }
+/* (The extra space keeps the top row out of the soft blur iPhones draw under the status bar.) */
+.screen { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: calc(var(--top) + var(--clear, 0px)); }
+@media (display-mode: standalone) { :root { --clear: 16px; } }
 .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px 20px; }
 .muted { color: var(--muted); } .sm { font-size: 13px; }
 h1 { font: 700 30px var(--head); letter-spacing: -1px; margin: 10px 0 14px; }

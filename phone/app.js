@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.0.2";
+const VERSION = "phone 1.0.3";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -703,7 +703,7 @@ function moreHtml() {
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.0.2</div>
+    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.0.3</div>
     <div class="muted" style="text-align:center;margin-top:4px;font-size:11px">${screenInfo()}</div>`;
 }
 
