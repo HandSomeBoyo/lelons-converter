@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.1.0";
+const VERSION = "phone 1.2.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -264,7 +264,7 @@ const TABS = [["home", "Home"], ["chat", "Chat"], ["lib", "Library"], ["live", "
 
 function tabsHtml() {
   const n = unreadChats().length + serverUnread();
-  return `<nav class="tabs">${TABS.map(([k, name]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${I[k]}${name}${k === "chat" && n ? `<span class="badge">${n > 99 ? "99+" : n}</span>` : ""}</button>`).join("")}</nav>`;
+  return `<nav class="tabs glass">${TABS.map(([k, name]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${I[k]}${name}${k === "chat" && n ? `<span class="badge">${n > 99 ? "99+" : n}</span>` : ""}</button>`).join("")}</nav>`;
 }
 
 function renderTabsBadge() {
@@ -285,7 +285,7 @@ function render() {
   if (S.view) return S.view.kind === "chat" ? renderChat() : renderServer();
   const body = { home: homeHtml, chat: chatsHtml, lib: libHtml, live: liveHtml, more: moreHtml }[S.tab] || homeHtml;
   const scrollWas = $(".scroll") && $(".scroll").dataset.tab === S.tab ? $(".scroll").scrollTop : 0;
-  $("#app").innerHTML = `<div class="screen"><div class="scroll" data-tab="${S.tab}">${body()}</div>${S.tab === "lib" ? playerHtml() : ""}</div>${tabsHtml()}`;
+  $("#app").innerHTML = `<div class="screen ${S.tab === "lib" && S.playing ? "has-player" : ""}"><div class="scroll" data-tab="${S.tab}">${body()}</div>${S.tab === "lib" ? playerHtml() : ""}</div>${tabsHtml()}`;
   $(".scroll").scrollTop = scrollWas;
   bindTabs();
   bindPage();
@@ -345,7 +345,7 @@ function homeHtml() {
   if (!rows.length) rows.push(`<div class="muted sm" style="padding:14px 0">All caught up. Nobody is in a voice channel right now.</div>`);
 
   return `<div class="row between" style="margin-top:10px">
-      <div class="row" style="gap:10px"><div class="av s sq" style="background:#000;border:1px solid #333;font-family:var(--head);border-radius:8px">V</div><b style="font:700 19px var(--head)">Vault<span style="font-weight:400;color:var(--muted)">Hub</span></b></div>
+      <div class="row" style="gap:10px"><div class="av s sq" style="background:#1c1c1e;font-family:var(--head);border-radius:10px">V</div><b style="font:700 19px var(--head)">Vault<span style="font-weight:400;color:var(--muted)">Hub</span></b></div>
       ${avatar(me.username, publicUrl(me.avatar), { small: true, dot: "#b98cff" })}</div>
     <h1 style="margin-top:18px">Hey <em>${esc(me.username || "there")}</em>.</h1>
     <div class="lbl">Right now</div>
@@ -435,7 +435,7 @@ async function openServer(id) {
 
 function renderServer() {
   const s = S.servers.find((x) => x.id === S.view.id);
-  if (!s) { $("#app").innerHTML = `<div class="screen"><div class="top"><button class="back" id="back">${I.back}</button></div><div class="spin"></div></div>`; $("#back").onclick = closeView; return; }
+  if (!s) { $("#app").innerHTML = `<div class="screen has-top"><div class="top"><button class="back" id="back">${I.back}</button></div><div class="spin"></div></div>`; $("#back").onclick = closeView; return; }
   const chans = s.channels || [];
   const cats = [];
   for (const c of chans) {
@@ -445,7 +445,7 @@ function renderServer() {
     group.list.push(c);
   }
   const online = (s.members || []).filter((m) => m.online).length;
-  $("#app").innerHTML = `<div class="screen">
+  $("#app").innerHTML = `<div class="screen has-top">
     <div class="top"><button class="back" id="back">${I.back}</button>${avatar(s.name, publicUrl(s.picture), { small: true, square: true, letters: initials(s.name), bg: "#1f7a4a" })}
       <div class="grow"><b class="one" style="display:block">${esc(s.name)}</b><div class="sm muted" style="margin-top:-2px">${(s.members || []).length} members · ${online} online</div></div></div>
     <div class="scroll">${cats.map((g) => `<div class="cat">${esc(g.name)}</div>${g.list.map((c) => c.kind === "voice"
@@ -532,7 +532,7 @@ function scrollDown() { const sc = $("#msgs"); if (sc) sc.scrollTop = sc.scrollH
 
 function renderChat() {
   const v = S.view;
-  $("#app").innerHTML = `<div class="screen">
+  $("#app").innerHTML = `<div class="screen has-top">
     <div class="top"><button class="back" id="back">${I.back}</button>
       <div class="grow"><b class="one" style="display:block">${esc(v.title)}</b>${v.sub ? `<div class="sm muted" style="margin-top:-2px">${esc(v.sub)}</div>` : ""}</div>
       ${v.key && !v.from ? `<button class="back" data-callkey="${esc(v.key)}" data-title="${esc(v.title)}" data-sub="${esc(v.sub || "")}" aria-label="Call">${CALL_ICON}</button>` : ""}</div>
@@ -568,7 +568,7 @@ function messageHtml(m, same) {
   const pinged = S.me && !me && new RegExp(`@${escapeRe(S.me.username)}\\b`, "i").test(m.message || "");
   const name = m.auto ? "VaultHub" : m.username;
   const color = m.auto ? "var(--text)" : me ? "var(--accent)" : NAMECOLORS[hash(m.username) % NAMECOLORS.length];
-  const face = m.auto ? avatar("V", "", { small: true, bg: "#000" }) : avatar(m.username, publicUrl(m.avatar), { small: true });
+  const face = m.auto ? avatar("V", "", { small: true, bg: "#2c2c2e" }) : avatar(m.username, publicUrl(m.avatar), { small: true });
   const parts = [];
   if (m.reply && !m.reply.gone) parts.push(`<div class="reply">↪ ${esc(m.reply.username)}: ${esc(m.reply.message || m.reply.kind || "")}</div>`);
   if (m.message) parts.push(`<div>${formatText(m.message)}${m.edited ? ' <span class="muted sm">(edited)</span>' : ""}</div>`);
@@ -662,7 +662,7 @@ function duration(sec) {
 function playerHtml() {
   if (!S.playing) return "";
   const a = $("#audio");
-  return `<div class="player"><div class="art"></div><div class="grow"><b class="sm one" style="display:block">${esc(S.playing.name)}</b><div class="bar"><i id="pbar"></i></div></div>
+  return `<div class="player glass"><div class="art"></div><div class="grow"><b class="sm one" style="display:block">${esc(S.playing.name)}</b><div class="bar"><i id="pbar"></i></div></div>
     <button class="send" data-act="toggle">${a.paused ? I.play : I.pause}</button></div>`;
 }
 
@@ -711,7 +711,7 @@ function moreHtml() {
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.1.0</div>
+    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.2.0</div>
     <div class="muted" style="text-align:center;margin-top:4px;font-size:11px">${screenInfo()}</div>`;
 }
 

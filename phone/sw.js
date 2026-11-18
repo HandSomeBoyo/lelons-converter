@@ -1,6 +1,6 @@
 // Keeps the app's own files so it opens fast (and opens at all with bad signal).
 // Always asks the network first, so a new version shows up on the next open.
-const CACHE = "vaulthub-phone-5";
+const CACHE = "vaulthub-phone-6";
 const FILES = ["./", "index.html", "style.css", "app.js", "call.js", "manifest.webmanifest", "inter.woff2", "spacegrotesk.woff2", "icon-180.png"];
 
 self.addEventListener("install", (e) => {
