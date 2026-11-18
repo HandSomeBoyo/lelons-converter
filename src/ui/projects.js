@@ -78,12 +78,12 @@ function pjFileUrl(store, path) {
 }
 function pjStill(store, thumb, icon = "film") {
   const box = pjEl("div", "pj-still");
-  if (thumb && store) {
+  if (thumb && (store || thumb.startsWith("data:image/"))) {
     const img = pjEl("img");
     img.alt = "";
     img.loading = "lazy";
     img.onerror = () => { img.remove(); box.insertAdjacentHTML("afterbegin", pjIcon(icon, "")); };
-    img.src = pjFileUrl(store, thumb);
+    img.src = thumb.startsWith("data:image/") ? thumb : pjFileUrl(store, thumb);  // (2.41.0: a small picture kept in the list)
     box.append(img);
   } else {
     box.innerHTML = pjIcon(icon, "");
@@ -110,6 +110,8 @@ function pjEventText(e) {
     case "note": return `${who} left a note: "${e.detail}"`;
     case "stage": return `${who} moved it to ${pjStageName(e.detail)}`;
     case "ask": return `${who} asked ${e.detail === pjMe() ? "you" : e.detail} for a turn`;
+    case "shot": return `${who} added "${e.detail}" to the shot list`;
+    case "shot_done": return `${who} got the shot "${e.detail}"`;
     default: return who;
   }
 }
@@ -386,7 +388,12 @@ function renderPj() {
     b.addEventListener("click", () => pjSetStage(i === at && i === PJ_STAGES.length - 1 ? "done" : s.key));
     steps.append(b);
   });
-  main.append(row, pjEl("div", "pj-head-meta", meta.join(" · ")));
+  const metaLine = pjEl("div", "pj-head-meta", meta.join(" · "));
+  if (pjOpen.files.some((f) => f.p2p) || !pjOpen.files.some((f) => f.kind === "footage")) {
+    metaLine.append(pjEl("span", "pj-p2p", " · ● Shared PC-to-PC, no size limit"));
+    metaLine.lastChild.title = "Footage goes straight from PC to PC. Nothing is stored online.";
+  }
+  main.append(row, metaLine);
   if (p.about) main.append(pjEl("div", "pj-head-meta", p.about));
   main.append(steps);
   head.append(cover, main);
@@ -395,8 +402,9 @@ function renderPj() {
   if (p.editor) parts.push(pjLockBar());
   const tabs = pjEl("div", "pj-subtabs");
   const openNotes = pjOpen.notes.filter((n) => !n.done).length;
-  for (const [key, label, count] of [["overview", "Overview"], ["footage", "Footage", footage.length], ["cuts", "Cuts", pjOpen.cuts.length],
-    ["notes", "Notes", openNotes], ["sounds", "Music & sounds", pjSoundsIn().length]]) {
+  const openShots = (pjOpen.shots || []).filter((t) => !t.done).length;
+  for (const [key, label, count] of [["overview", "Overview"], ["footage", "Footage", footage.length], ["shots", "Shot list", openShots],
+    ["cuts", "Cuts", pjOpen.cuts.length], ["notes", "Notes", openNotes], ["sounds", "Music & sounds", pjSoundsIn().length]]) {
     const b = pjEl("button", key === pjView ? "on" : "", label);
     if (count) b.append(pjEl("em", "", count));
     b.addEventListener("click", () => { pjView = key; renderPj(); });
@@ -404,7 +412,7 @@ function renderPj() {
   }
   parts.push(tabs);
   const view = pjEl("div", "pj-view");
-  ({ overview: pjOverview, footage: pjFootageView, cuts: pjCutsView, notes: pjNotesView, sounds: pjSoundsView })[pjView](view);
+  ({ overview: pjOverview, footage: pjFootageView, shots: pjShotsView, cuts: pjCutsView, notes: pjNotesView, sounds: pjSoundsView })[pjView](view);
   parts.push(view);
   page.replaceChildren(...parts);
   if (pjView === "notes") pjDrawNotesSide();
@@ -462,7 +470,7 @@ function pjOverview(view) {
   const mini = pjEl("div", "pj-mini");
   mini.append(...newest.slice(0, 4).map((f) => pjStill(pjOpen.store, f.thumb)));
   if (footage.length) f1.append(mini);
-  else f1.append(pjEl("p", "pj-help", pjCanAdd() ? "Drop everyone's clips here. They download to each PC by themselves when it's your turn." : "The crew hasn't added footage yet."));
+  else f1.append(pjEl("p", "pj-help", pjCanAdd() ? "Drop everyone's clips here. They go straight to each friend's PC by themselves." : "The crew hasn't added footage yet."));
 
   const f2 = pjFold("doc", "Cuts", "Every saved version of the edit", pjButton("See all", "link pj-small", () => { pjView = "cuts"; renderPj(); }));
   const cuts = pjEl("ul", "pj-list");
@@ -568,7 +576,8 @@ function pjMenu(e) {
   if (pjIsOwner()) add("Invite people", pjInvite);
   if (pjCanEdit()) add("Rename or change it", pjRename);
   add("Open the folder on this PC", () => api("/api/pj-show", { path: pjOpen.folder }));
-  if (pjFootage().some((f) => !f.here) || pjSoundsIn().some((f) => !f.here)) add("Download everything", pjGetAll);
+  if (pjFootage().some((f) => !f.here) || pjSoundsIn().some((f) => !f.here)) add("Get everything now", pjGetAll);
+  add("Sharing settings", () => psSettings());
   if (pjIsOwner()) add("Delete the project", async () => {
     if (!confirm(`Delete "${p.name}" with all its footage and cuts for everyone? This can't be undone. (The files on your PC stay.)`)) return;
     const res = await api("/api/pj-delete", { project: p.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
@@ -688,24 +697,16 @@ function pjFootageView(view) {
     b.addEventListener("click", () => { pjBinFolder = f; renderPj(); });
     list.insertBefore(b, list.lastChild);
   }
-  const here = footage.filter((f) => f.here);
-  const pc = pjEl("div", "pj-card pj-side");
+  const pc = pjEl("div", "pj-card pj-side pj-syncbox");
   pc.style.marginTop = "14px";
-  pc.append(pjEl("b", "", "On your PC"));
-  const bar = pjEl("div", "pj-bar-line done");
-  const fill = pjEl("i");
-  fill.style.width = (footage.length ? Math.round((here.length / footage.length) * 100) : 0) + "%";
-  bar.append(fill);
-  pc.append(bar, pjEl("span", "pj-muted pj-small", footage.length ? `${here.length} of ${footage.length} clips.` : "Nothing yet."));
-  const missing = footage.filter((f) => !f.here);
-  if (missing.length) pc.append(pjButton(`Download ${pjSize(missing.reduce((a, f) => a + f.size, 0))}`, "small-button", pjGetAll, "down"));
+  pjDrawSyncBox(pc);
   side.append(list, pc);
 
   const main = pjEl("div");
   const head = pjEl("div", "pj-hrow");
   head.style.marginBottom = "12px";
   head.append(pjEl("h3", "pj-sec", pjBinFolder || "All footage"),
-    pjEl("span", "pj-muted pj-small", "Shared footage. Everyone in the project sees the same clips."), pjEl("span", "spacer"));
+    pjEl("span", "pj-muted pj-small", "New clips come to your PC by themselves, straight from your friends' PCs."), pjEl("span", "spacer"));
   if (pjCanAdd()) head.append(pjButton("Add footage", "small-button", () => pjPickFootage(), "up"));
   const shown = footage.filter((f) => !pjBinFolder || f.folder === pjBinFolder);
   const grid = pjEl("div", "pj-clips");
@@ -719,8 +720,10 @@ function pjFootageView(view) {
     const name = pjEl("div", "cn");
     name.append(pjEl("span", "", f.name));
     name.lastChild.title = `${f.name} · ${pjSize(f.size)} · added by ${f.by || "?"}${f.folder ? " to " + f.folder : ""}`;
-    name.append(pjEl("span", "pj-sync " + (f.here ? "ok" : "no"), f.here ? "✓" : "↓"));
-    name.lastChild.title = f.here ? "On your PC" : "Not on your PC yet";
+    const state = pjEl("span", "pj-sync");
+    state.dataset.ps = f.id;
+    name.append(state);
+    pjDrawClipState(clip, still, state, f);
     if (f.by === pjMe() || pjIsOwner()) {
       const x = pjButton("", "pj-x", async () => {
         if (!confirm(`Delete ${f.name} from the project for everyone? (A copy on your PC stays.)`)) return;
@@ -735,6 +738,8 @@ function pjFootageView(view) {
     return clip;
   }));
   main.append(head, grid);
+  const offline = pjOfflineNote(shown);
+  if (offline) main.append(offline);
   if (pjCanAdd()) {
     const drop = pjEl("div", "pj-drop");
     drop.innerHTML = `<b>Drop footage here</b> or click to pick files. It goes into <b></b>.`;
@@ -754,18 +759,124 @@ function pjFootageView(view) {
 }
 const pjNewFolders = new Set();
 
-async function pjPickFootage() {
-  const folder = pjBinFolder || "Footage";
-  const res = await api("/api/pj-pick-footage", { project: pjOpen.project.id, folder }).catch(() => ({ ok: false, fallback: true }));
-  if (res.fallback) return pjFileInput(folder);
+// (2.41.0) How a clip is doing on this PC: on it, coming in (from whom, how far), or waiting for someone.
+function pjDrawClipState(clip, still, state, f) {
+  const st = typeof psStateOf === "function" && f.p2p ? psStateOf(f.id) : { state: f.here ? "here" : "off" };
+  if (f.here && st.state !== "here") st.state = "here";
+  clip.dataset.state = st.state;
+  still.querySelectorAll(".pj-from, .pj-pg").forEach((x) => x.remove());
+  if (st.state === "getting") {
+    still.append(pjEl("span", "pj-from", "From " + st.from.join(" + ")));
+    const pg = pjEl("span", "pj-pg");
+    const fill = pjEl("i");
+    fill.style.width = st.pct + "%";
+    pg.append(fill);
+    still.append(pg);
+  }
+  state.className = "pj-sync " + (st.state === "here" ? "ok" : st.state === "getting" ? "dl" : "no");
+  state.textContent = st.state === "here" ? "✓" : st.state === "getting" ? `↓ ${st.pct}%` : st.state === "off" ? "↓" : "Waiting";
+  state.title = st.state === "here" ? "On your PC" : st.state === "getting" ? `Coming in from ${st.from.join(" and ")}` : st.message || "Not on your PC yet";
+}
+
+// The "Syncing" box: how many clips are here, how fast, and who's online to get them from.
+function pjDrawSyncBox(box) {
+  const footage = pjFootage();
+  const here = footage.filter((f) => f.here).length;
+  const st = typeof psProjectState === "function" ? psProjectState(pjOpen.project.id) : null;
+  const head = pjEl("div", "pj-hrow");
+  const busy = st && st.speed > 0;
+  head.append(pjEl("b", "", here === footage.length ? "On your PC" : busy ? "Syncing" : "On your PC"), pjEl("span", "spacer"));
+  if (busy) head.append(pjEl("span", "pj-sync dl", pjSize(st.speed) + "/s"));
+  const bar = pjEl("div", "pj-bar-line" + (here === footage.length ? " done" : ""));
+  const fill = pjEl("i");
+  fill.style.width = (footage.length ? Math.round((here / footage.length) * 100) : 0) + "%";
+  bar.append(fill);
+  let line = footage.length ? `${here} of ${footage.length} clips on your PC.` : "Nothing yet.";
+  if (busy && st.left) line += ` About ${pjWait(st.left / st.speed)} left.`;
+  box.replaceChildren(head, bar, pjEl("span", "pj-muted pj-small", line));
+  if (st && st.why) box.append(pjEl("span", "pj-small pj-slowed", st.why === "live" ? "Slowed down while you're live." : "Slowed down while you're in a call."));
+  if (st && st.people.length) {
+    const list = pjEl("div", "pj-online");
+    for (const x of st.people) {
+      const row = pjEl("div", "pj-src");
+      const state = x.same && x.here ? "Same Wi-Fi · fast" : x.here ? (x.busy ? "Sending" : "Online") : "Offline";
+      row.append(pjFace(x, "tiny"), pjEl("span", "", x.username), pjEl("span", "st " + (x.same && x.here ? "g" : x.here ? "y" : ""), state));
+      list.append(row);
+    }
+    box.append(list);
+  }
+  const missing = footage.filter((f) => !f.here);
+  if (missing.length && typeof psOptions !== "undefined" && !psOptions.auto) box.append(pjButton(`Get ${pjSize(missing.reduce((a, f) => a + f.size, 0))} now`, "small-button", pjGetAll, "down"));
+  if (missing.some((f) => !f.p2p)) box.append(pjButton(`Download ${pjSize(missing.filter((f) => !f.p2p).reduce((a, f) => a + f.size, 0))}`, "small-button", pjGetAll, "down"));
+}
+function pjWait(seconds) {
+  if (!isFinite(seconds) || seconds <= 0) return "a moment";
+  if (seconds < 90) return Math.max(5, Math.round(seconds / 5) * 5) + " seconds";
+  if (seconds < 5400) return Math.round(seconds / 60) + " minutes";
+  return (seconds / 3600).toFixed(1) + " hours";
+}
+
+// "Mats is offline. 2 clips only exist on Mats's PC..."
+function pjOfflineNote(files) {
+  if (typeof psFile !== "function") return null;
+  const stuck = files.filter((f) => f.p2p && !f.here).map((f) => psFile(f.id)).filter((f) => f && !(f.sources || []).length);
+  if (!stuck.length) return null;
+  const who = [...new Set(stuck.flatMap((f) => f.holders || []))];
+  const note = pjEl("div", "pj-card pj-offline");
+  note.append(pjEl("b", "", who.length ? `${who.slice(0, 2).join(" and ")} ${who.length === 1 ? "is" : "are"} offline.` : "Nobody online has these yet."),
+    document.createTextNode(` ${stuck.length} clip${stuck.length === 1 ? "" : "s"} only ${who.length ? `exist on ${who.length === 1 ? who[0] + "'s PC" : "their PCs"}` : "come in once someone with them opens VaultHub"}, so ${stuck.length === 1 ? "it comes" : "they come"} in next time ${who.length === 1 ? who[0] : "they"} open VaultHub. You can start editing now: Resolve shows ${stuck.length === 1 ? "it" : "them"} as missing until then.`));
+  return note;
+}
+
+// The page while files come in: only the parts that changed (called by projectsync.js).
+let pjSyncDrawn = 0;
+function pjSyncChanged() {
+  if (!pjOpen || $("projectsTab").hidden || $("pjPage").hidden) return;
+  const now = Date.now();
+  if (now - pjSyncDrawn < 400) return;
+  pjSyncDrawn = now;
+  for (const state of $("pjPage").querySelectorAll("[data-ps]")) {
+    const f = pjOpen.files.find((x) => x.id === state.dataset.ps);
+    const clip = state.closest(".pj-clip");
+    if (f && clip) pjDrawClipState(clip, clip.querySelector(".pj-still"), state, f);
+  }
+  const box = $("pjPage").querySelector(".pj-syncbox");
+  if (box) pjDrawSyncBox(box);
+  const video = $("pjPage").querySelector(".pj-player .pj-novideo[data-file]");
+  if (video) {
+    const f = typeof psFile === "function" && psFile(video.dataset.file);
+    if (f && f.here) pjRefreshSoon();
+    else if (typeof psStateOf === "function") video.querySelector("small").textContent = pjVideoWait(video.dataset.file);
+  }
+}
+
+let pjRefreshTimer = 0;
+function pjRefreshSoon() {
+  clearTimeout(pjRefreshTimer);
+  pjRefreshTimer = setTimeout(() => { if (pjOpen && !$("projectsTab").hidden && $("pjModal").hidden) openPj(pjOpen.project.id, true); }, 600);
+}
+
+// A little message in the corner ("Night Shift is ready to edit").
+function pjToast(title, text) {
+  const box = pjEl("div", "pj-toast");
+  box.append(pjEl("b", "", title), pjEl("span", "", text));
+  box.addEventListener("click", () => box.remove());
+  document.body.append(box);
+  setTimeout(() => box.classList.add("out"), 7000);
+  setTimeout(() => box.remove(), 7600);
+}
+
+async function pjPickFootage(shot = "", folder = pjBinFolder || "Footage") {
+  const res = await api("/api/pj-pick-footage", { project: pjOpen.project.id, folder, shot }).catch(() => ({ ok: false, fallback: true }));
+  if (res.fallback) return pjFileInput(folder, shot);
   if (!res.ok) return alert(res.error);
   if (res.added) pjPollJobs();
 }
 
-function pjFileInput(folder) {
+function pjFileInput(folder, shot = "") {
   const input = pjEl("input");
   Object.assign(input, { type: "file", multiple: true, accept: "video/*,audio/*,image/*,.mov,.mxf,.braw,.r3d,.exr" });
-  input.addEventListener("change", () => pjSendFiles([...input.files], folder));
+  input.addEventListener("change", () => pjSendFiles([...input.files], folder, shot));
   input.click();
 }
 
@@ -775,11 +886,11 @@ function pjTakesDrop(files) {
   return true;
 }
 
-async function pjSendFiles(files, folder) {
+async function pjSendFiles(files, folder, shot = "") {
   $("pjJobs").hidden = false;
   for (const file of files) {
     const res = await fetch("/api/pj-add", { method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name),
-      "X-Project": pjOpen.project.id, "X-Folder": encodeURIComponent(folder) }, body: file })
+      "X-Project": pjOpen.project.id, "X-Folder": encodeURIComponent(folder), "X-Shot": shot }, body: file })
       .then((r) => r.json()).catch(() => ({ ok: false, error: "Couldn't open " + file.name }));
     if (!res.ok) alert(res.error);
     pjPollJobs();
@@ -787,9 +898,110 @@ async function pjSendFiles(files, folder) {
 }
 
 async function pjGetAll() {
+  if (typeof psGetNow === "function") psGetNow(pjOpen.files.filter((f) => f.p2p && !f.here).map((f) => f.id));  // (2.41.0) PC to PC
+  if (!pjOpen.files.some((f) => !f.here && !f.p2p)) return;
   const res = await api("/api/pj-get-all", { project: pjOpen.project.id }).catch(() => ({ ok: false, error: "Couldn't start the download." }));
   if (!res.ok) return alert(res.error);
   pjPollJobs();
+}
+
+// ---- (2.41.0) the shot list: clips the project still needs, handed out to people
+
+function pjShotsView(view) {
+  const shots = pjOpen.shots || [];
+  const got = shots.filter((t) => t.done).length;
+  const head = pjEl("div", "pj-hrow");
+  head.style.marginBottom = "12px";
+  head.append(pjEl("h3", "pj-sec", "Shot list"),
+    pjEl("span", "pj-muted pj-small", "Clips the project still needs. Add a clip for a shot and it ticks itself off."), pjEl("span", "spacer"));
+  head.append(pjButton("Add shot", "small-button", () => pjShotDialog(), "plus"));
+  view.append(head);
+  if (!shots.length) {
+    view.append(pjEl("p", "pj-empty", "No shots on the list yet. Add what you still need to film, like \"Drone shot of the house\", and who should get it."));
+    return;
+  }
+  const top = pjEl("div", "pj-card pj-shots-top");
+  const bar = pjEl("div", "pj-bar-line" + (got === shots.length ? " done" : ""));
+  const fill = pjEl("i");
+  fill.style.width = Math.round((got / shots.length) * 100) + "%";
+  bar.append(fill);
+  const mine = shots.filter((t) => !t.done && t.who === pjMe()).length;
+  top.append(pjEl("b", "", `${got} of ${shots.length} shots got`), bar,
+    pjEl("span", "pj-muted pj-small", mine ? `${mine} on the list ${mine === 1 ? "is" : "are"} for you.` : got === shots.length ? "Everything on the list is in. Nice!" : "Pick one and film it."));
+  view.append(top);
+  const list = pjEl("div", "pj-shots");
+  for (const t of [...shots.filter((x) => !x.done), ...shots.filter((x) => x.done)]) {
+    const row = pjEl("div", "pj-shot" + (t.done ? " done" : "") + (t.who === pjMe() && !t.done ? " mine" : ""));
+    const tick = pjEl("button", "pj-tick", t.done ? "✓" : "");
+    tick.title = t.done ? "Not got yet" : "Got it (without adding a clip)";
+    tick.addEventListener("click", async () => {
+      await api("/api/pj-shot_done", { project: pjOpen.project.id, id: t.id, done: !t.done }).catch(() => null);
+      openPj(pjOpen.project.id, true);
+    });
+    const text = pjEl("div", "pj-shot-text");
+    text.append(pjEl("b", "", `${t.n}. ${t.title}`));
+    if (t.about) text.append(pjEl("span", "pj-muted pj-small", t.about));
+    const clip = t.file && pjOpen.files.find((f) => f.id === t.file);
+    if (t.done) text.append(pjEl("span", "pj-small pj-got", clip ? `Got it: ${clip.name} by ${clip.by || t.doneBy || "?"}` : `Got it${t.doneBy ? " · " + t.doneBy : ""}`));
+    const who = pjEl("div", "pj-shot-who");
+    if (t.who) {
+      const person = pjOpen.project.people.find((x) => x.username === t.who) || { username: t.who };
+      who.append(pjFace(person, "tiny"), pjEl("span", "", t.who === pjMe() ? "You" : t.who));
+    } else who.append(pjEl("span", "pj-muted", "Anyone"));
+    row.append(tick);
+    if (clip) {
+      const still = pjStill(pjOpen.store, clip.thumb);
+      still.classList.add("pj-shot-still");
+      row.append(still);
+    }
+    row.append(text, who);
+    const buttons = pjEl("div", "pj-buttons");
+    if (!t.done && pjCanAdd()) buttons.append(pjButton("Add clip", "ghost-button", () => pjPickFootage(t.id, "Shots"), "up"));
+    const more = pjButton("", "pj-x", () => pjShotDialog(t), "more");
+    more.title = "Change";
+    buttons.append(more);
+    row.append(buttons);
+    list.append(row);
+  }
+  view.append(list);
+}
+
+async function pjShotDialog(t = null) {
+  const body = pjEl("div", "pj-modal-body");
+  const title = pjEl("input");
+  Object.assign(title, { maxLength: 120, placeholder: "Drone shot of the house", value: t ? t.title : "", autocomplete: "off" });
+  const about = pjEl("textarea");
+  Object.assign(about, { maxLength: 400, placeholder: "Anything that helps (where, when, how long)", value: t ? t.about : "" });
+  const who = pjEl("select");
+  const any = pjEl("option", "", "Anyone");
+  any.value = "";
+  who.append(any);
+  for (const x of pjOpen.project.people.filter((x) => x.joined && x.role !== "notes")) {
+    const o = pjEl("option", "", x.username === pjMe() ? `${x.username} (you)` : x.username);
+    o.value = x.username;
+    who.append(o);
+  }
+  who.value = t ? t.who || "" : "";
+  body.append(pjField("What's the shot?", title), pjField("Who gets it?", who), pjField("Notes (optional)", about));
+  if (t && (t.by === pjMe() || pjIsOwner())) {
+    const del = pjButton("Delete this shot", "link pj-small", async () => {
+      if (!confirm(`Delete "${t.title}" from the shot list?`)) return;
+      await api("/api/pj-shot_delete", { project: pjOpen.project.id, id: t.id }).catch(() => null);
+      pjCloseDialog();
+      openPj(pjOpen.project.id, true);
+    });
+    del.style.color = "var(--red)";
+    body.append(del);
+  }
+  pjDialog({ title: t ? `Shot ${t.n}` : "Add a shot", sub: t ? "" : "It goes on the list. When someone adds a clip for it, it's ticked off.", body, go: t ? "Save" : "Add",
+    onGo: async () => {
+      if (!title.value.trim()) { pjDialogNote("Say what the shot is."); return false; }
+      const data = { project: pjOpen.project.id, title: title.value, about: about.value, who: who.value };
+      const res = await api(t ? "/api/pj-shot_edit" : "/api/pj-shot_add", t ? { ...data, id: t.id } : data).catch(() => ({ ok: false, error: "That didn't work." }));
+      if (!res.ok) { pjDialogNote(res.error); return false; }
+      openPj(pjOpen.project.id, true);
+      return true;
+    } });
 }
 
 // ---- cuts
@@ -809,11 +1021,11 @@ function pjCutsView(view) {
     const notes = pjOpen.notes.filter((n) => n.cut === c.id);
     const text = pjEl("div");
     text.append(pjEl("b", "", `Cut ${c.n}`), document.createTextNode(c.note ? " · " + c.note : ""));
-    text.append(pjEl("div", "pj-muted pj-small", `${c.by || "?"} · ${pjAgo(c.created)}${c.seconds ? " · " + pjClock(c.seconds) : ""} · ${notes.filter((n) => !n.done).length} open notes${c.video ? "" : " · no video to watch"}`));
+    text.append(pjEl("div", "pj-muted pj-small", `${c.by || "?"} · ${pjAgo(c.created)}${c.seconds ? " · " + pjClock(c.seconds) : ""} · ${notes.filter((n) => !n.done).length} open notes${c.video || c.file ? "" : " · no video to watch"}`));
     const icon = pjEl("span", "pj-ic");
     icon.innerHTML = pjIcon("doc");
     const buttons = pjEl("div", "pj-buttons");
-    buttons.append(pjButton(c.video ? "Watch" : "Notes", "ghost-button", () => { pjCutId = c.id; pjView = "notes"; renderPj(); }));
+    buttons.append(pjButton(c.video || c.file ? "Watch" : "Notes", "ghost-button", () => { pjCutId = c.id; pjView = "notes"; renderPj(); }));
     if (pjCanEdit() && !pjOpen.project.editor) buttons.append(pjButton("Edit from this cut", "ghost-button", () => pjYourTurn(false, c.id)));
     if (c.by === pjMe() || pjIsOwner()) {
       const x = pjButton("", "pj-x", async () => {
@@ -842,13 +1054,19 @@ function pjNotesView(view) {
   const two = pjEl("div", "pj-two");
   two.style.gridTemplateColumns = "minmax(0, 1fr) 330px";
   const left = pjEl("div", "pj-card pj-player");
-  if (cut.video && pjOpen.store) {
+  const render = cut.file && pjOpen.files.find((f) => f.id === cut.file);
+  if ((cut.video && pjOpen.store) || (render && render.here)) {
     const video = pjEl("video");
     video.controls = true;
     video.preload = "metadata";
     video.dataset.cut = cut.id;
-    video.src = pjFileUrl(pjOpen.store, cut.video);
+    video.src = render ? `/pj-file/${encodeURIComponent(render.id)}` : pjFileUrl(pjOpen.store, cut.video);
     left.append(video);
+  } else if (render) {  // (2.41.0) the cut's video is still on its way from a friend's PC
+    const wait = pjEl("div", "pj-novideo");
+    wait.dataset.file = render.id;
+    wait.append(pjEl("b", "", "Getting the video of this cut..."), pjEl("small", "", pjVideoWait(render.id)));
+    left.append(wait);
   } else {
     left.append(pjEl("div", "pj-novideo", "This cut has no video to watch. Whoever uploads a cut can add a quick render (File › Quick Export in Resolve) so the crew can watch it here."));
   }
@@ -866,7 +1084,7 @@ function pjNotesView(view) {
   }
   const scrub = pjEl("div", "pj-scrub");
   scrub.title = "Click to jump there";
-  bar.append(top, scrub, pjEl("span", "pj-muted pj-small", cut.video ? "Pause where something should change and write a note. It's saved at that exact second." : "Type the time in the note box, like 1:42 Cut this shorter."));
+  bar.append(top, scrub, pjEl("span", "pj-muted pj-small", cut.video || cut.file ? "Pause where something should change and write a note. It's saved at that exact second." : "Type the time in the note box, like 1:42 Cut this shorter."));
   left.append(bar);
   const right = pjEl("div", "pj-card pj-side pj-notes-side");
   two.append(left, right);
@@ -885,6 +1103,12 @@ function pjNotesView(view) {
 }
 
 const pjVideo = () => $("pjPage").querySelector(".pj-player video");
+function pjVideoWait(fileId) {
+  const st = typeof psStateOf === "function" ? psStateOf(fileId) : null;
+  if (!st) return "";
+  if (st.state === "getting") return `${st.pct}% · from ${st.from.join(" and ")}`;
+  return st.message || "Waiting for someone who has it to come online.";
+}
 function pjLength() {
   const cut = pjOpen && pjOpen.cuts.find((c) => c.id === pjCutId);
   const v = pjVideo();
@@ -1060,7 +1284,8 @@ async function pjYourTurn(force = false, cutId = "") {
     row.append(pjEl("span", "pj-state " + (ok ? "ok" : ""), ok ? "✓" : "↓"), pjEl("span", "", label), pjEl("span", "pj-muted pj-small", state));
     return row;
   };
-  body.append(line("Footage on your PC", missing.some((f) => f.kind === "footage") ? `${pjSize(missing.filter((f) => f.kind === "footage").reduce((a, f) => a + f.size, 0))} to download` : `${footage.length} of ${footage.length}`, !missing.some((f) => f.kind === "footage")));
+  const missingFootage = missing.filter((f) => f.kind === "footage");
+  body.append(line("Footage on your PC", missingFootage.length ? `${footage.length - missingFootage.length} of ${footage.length}${missingFootage.some((f) => f.p2p) ? ", the rest is still coming" : ""}` : `${footage.length} of ${footage.length}`, !missingFootage.length));
   if (sounds.length) body.append(line("Music & sounds from the Library", `${sounds.length} file${sounds.length === 1 ? "" : "s"}`, !missing.some((f) => f.kind === "sound")));
   const markers = pjEl("label", "pj-check");
   const markBox = pjEl("input");
@@ -1074,7 +1299,7 @@ async function pjYourTurn(force = false, cutId = "") {
   body.append(help);
   pjDialog({
     title: force ? "Take over the edit" : "Your turn to edit",
-    sub: cut ? `VaultHub gets everything onto your PC and writes Cut ${cut.n} for this PC, ready for DaVinci Resolve.`
+    sub: cut ? `VaultHub writes Cut ${cut.n} for this PC, ready for DaVinci Resolve. Clips still coming show as missing in Resolve until they're here.`
       : "There's no cut yet, so you start with a timeline of all the footage, one clip after the other.",
     body, go: force ? "Take over" : "Get it ready",
     onGo: async () => {
@@ -1103,6 +1328,7 @@ function pjTurnReady(job) {
   file.append(pjEl("span", "got", (r.file || "").split(/[\\/]/).pop()), pjButton("Show the file", "link pj-small", () => api("/api/pj-show", { path: r.file })));
   body.append(steps, file);
   if (r.missing && r.missing.length) body.append(pjEl("p", "pj-help", `Not in the project, so Resolve will ask where these are: ${r.missing.join(", ")}`));
+  if (r.coming && r.coming.length) body.append(pjEl("p", "pj-help", `Still coming from friends' PCs: ${r.coming.join(", ")}. They show as missing in Resolve until they're here, then right-click them and pick Relink.`));
   pjDialog({ title: "Ready for Resolve!", sub: r.cut ? `Cut ${r.cut} with everything on your PC.` : "A timeline with all the footage to start from.", body, cancel: "Got it" });
 }
 
@@ -1131,7 +1357,7 @@ function pjUploadCut() {
   body.append(help, pickRow("timeline", "The timeline file (.fcpxml)"), pickRow("video", "A video of the cut to watch (optional)", true), pjField("Note (optional)", note));
   const next = (pjOpen.cuts[0] ? pjOpen.cuts[0].n : 0) + 1;
   pjDialog({
-    title: `Upload Cut ${next}`, sub: "Clips you added that the project doesn't have yet go up too. Then it's someone else's turn.", body, go: "Upload",
+    title: `Save Cut ${next}`, sub: "Clips you added that the project doesn't have yet are shared too, straight from your PC. Then it's someone else's turn.", body, go: "Save the cut",
     onGo: async () => {
       if (!picked.timeline) { pjDialogNote("Choose the timeline file first."); return false; }
       const res = await api("/api/pj-upload-cut", { project: p.id, timeline: picked.timeline, video: picked.video, note: note.value })
@@ -1188,11 +1414,11 @@ function drawPjJobs() {
   head.append(clear);
   const label = (j) => {
     const pct = j.total ? Math.min(100, Math.round((j.done / j.total) * 100)) : 0;
-    if (j.status === "done") return { up: "Uploaded", cut: `Cut ${(j.result && j.result.n) || ""} is up`, get: "On your PC", edit: "Ready for Resolve" }[j.kind];
+    if (j.status === "done") return { up: "Added · friends get it from your PC", cut: `Cut ${(j.result && j.result.n) || ""} is saved`, get: "On your PC", edit: "Ready for Resolve" }[j.kind];
     if (j.status === "error") return j.message;
     if (j.status === "waiting") return "Waiting...";
-    if (j.step && !/^Upload|^Download/.test(j.step)) return j.step + "...";
-    return `${j.step || (j.kind === "up" || j.kind === "cut" ? "Uploading" : "Downloading")} ${j.total ? pct + "% · " + pjSize(j.done) + " of " + pjSize(j.total) : ""}`;
+    if (j.step && !/^Upload|^Download|^Checking/.test(j.step)) return j.step + "...";
+    return `${j.step || (j.kind === "up" || j.kind === "cut" ? "Adding" : "Downloading")} ${j.total ? pct + "% · " + pjSize(j.done) + " of " + pjSize(j.total) : ""}`;
   };
   const rows = pjJobs.map((j) => {
     const row = pjEl("div", "fx-job " + j.status);
@@ -1229,6 +1455,7 @@ function pjAccountChanged() {
   renderPjHome();
   if (id) loadPj();  // (for the invitation badge on the side bar)
   else pjBadge();
+  if (typeof psAccountChanged === "function") psAccountChanged();  // (2.41.0) files PC to PC
 }
 
 async function pjTabChanged(tab) {

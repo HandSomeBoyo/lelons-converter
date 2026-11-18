@@ -48,6 +48,7 @@ import docs  # noqa: E402
 import trash  # noqa: E402
 import film  # noqa: E402
 import editprojects  # noqa: E402
+import projectsync  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
 import remote  # noqa: E402
@@ -694,6 +695,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/image/"):
             path = images.thumbnail_path(self.path[len("/image/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/pj-read/"):  # (Projects, 2.41.0) a piece of a project file, for the page to send to a friend
+            url = urllib.parse.urlsplit(self.path)
+            query = urllib.parse.parse_qs(url.query)
+            try:
+                body = projectsync.sync.read(url.path[len("/pj-read/"):], int(query.get("at", ["0"])[0]), int(query.get("n", ["0"])[0]))
+            except (projectsync.Error, OSError, ValueError):
+                return self.send_error(404)
+            return self.send_body(body, "application/octet-stream")
+        if self.path.startswith("/pj-file/"):  # (Projects, 2.41.0) a cut's video on this PC, for the player
+            path = projectsync.sync.local_path(urllib.parse.urlsplit(self.path).path[len("/pj-file/"):])
+            return self.send_media(path, "video/mp4") if path else self.send_error(404)
         if self.path.startswith("/pov-read/"):  # a piece of a POV you share, for the page to send to a friend
             url = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(url.query)
@@ -1419,9 +1431,12 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "delete":
                 p.delete(pid)
                 result = {}
-            elif action in ("note", "note_done", "note_delete", "ask_turn", "move_file"):
+            elif action in ("note", "note_done", "note_delete", "ask_turn", "move_file", "shot_add", "shot_edit", "shot_done", "shot_delete"):
                 keep = {"note": ("cut", "at", "body"), "note_done": ("id", "done"), "note_delete": ("id",),
-                        "ask_turn": (), "move_file": ("id", "folder")}[action]
+                        "ask_turn": (), "move_file": ("id", "folder"), "shot_add": ("title", "about", "who"),
+                        "shot_edit": ("id", "title", "about", "who"), "shot_done": ("id", "done"), "shot_delete": ("id",)}[action]
+                if action == "shot_edit":
+                    keep = tuple(k for k in keep if k in data)
                 p.simple(pid, action, {k: data.get(k) for k in keep})
                 result = {}
             elif action == "delete-file":
@@ -1442,7 +1457,7 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     return self.send_json({"ok": False, "fallback": True})
                 if paths:
-                    p.add_paths(pid, data.get("folder"), paths)
+                    p.add_paths(pid, data.get("folder"), paths, shot=data.get("shot"))
                 result = {"added": len(paths)}
             elif action == "pick-file":  # the timeline or the video for a new cut
                 if os.name != "nt":
@@ -1476,6 +1491,23 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "clear":
                 p.clear_done()
                 result = p.snapshot()
+            # ---- (2.41.0) PC to PC: the page sends and gets the files (projects.js), this PC keeps them (projectsync.py)
+            elif action == "net-sync":
+                result = projectsync.sync.sync(str(data.get("me") or ""))
+            elif action == "net-check":
+                result = editprojects._rpc("check", data={"after": int(data.get("after") or 0)})
+            elif action == "net-signal":
+                editprojects._rpc("signal", pid, {k: str(data.get(k) or "") for k in ("to", "transfer", "kind", "sdp")})
+                result = {}
+            elif action == "net-can-send":
+                result = projectsync.sync.can_send(pid, str(data.get("id") or ""))
+            elif action == "net-start":
+                result = projectsync.sync.start(str(data.get("id") or ""))
+            elif action == "net-forget":
+                projectsync.sync.forget(str(data.get("id") or ""))
+                result = {}
+            elif action == "net-options":
+                result = {"options": projectsync.set_options(data.get("options") or {}) if data.get("options") else projectsync.options()}
             elif action == "show":  # a file or folder inside a project's folder on this PC
                 path = os.path.abspath(str(data.get("path") or ""))
                 root = os.path.abspath(editprojects.base_folder())
@@ -1491,7 +1523,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_error(404)
         except sfx.LoggedOut as e:
             return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
-        except (film.Error, sfx.Error) as e:
+        except (film.Error, sfx.Error, projectsync.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         except OSError:
             return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
@@ -1875,11 +1907,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't save the download. Is the drive full or gone?"})
+        if self.path == "/api/pj-write":  # (Projects, 2.41.0) a piece of a file a friend is sending
+            try:
+                return self.send_json({"ok": True, **projectsync.sync.write(self.headers.get("X-File") or "", int(self.headers.get("X-At") or 0), self.rfile, length)})
+            except projectsync.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save it. Is the drive full or gone?"})
         if self.path == "/api/pj-add":  # (Projects) the body is footage dropped on a project
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "clip")
             try:
                 editprojects.projects.add_stream(self.headers.get("X-Project") or "", urllib.parse.unquote(self.headers.get("X-Folder") or ""),
-                                                 os.path.basename(name), self.rfile, length)
+                                                 os.path.basename(name), self.rfile, length, self.headers.get("X-Shot") or None)
                 return self.send_json({"ok": True})
             except film.Error as e:
                 return self.send_json({"ok": False, "error": str(e)})
