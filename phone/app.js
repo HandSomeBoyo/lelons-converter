@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.3.0";
+const VERSION = "phone 1.4.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -18,6 +18,10 @@ const FRIENDLY = {
   daily: "You've sent a lot today. Try again tomorrow.",
   denied: "You aren't allowed to do that here.",
   nogroup: "That chat is gone, or you're not in it any more.",
+  doc_gone: "That document was deleted, or you're not in it any more.",
+  doc_long: "That document is too long.",
+  doc_big: "That document is too big.",
+  doc_many: "You have too many documents. Delete some on your PC first.",
 };
 
 // ---------------------------------------------------------------- small helpers
@@ -289,7 +293,7 @@ function bindTabs() {
 
 function render() {
   if (!S.token) return renderLogin();
-  if (S.view) return S.view.kind === "chat" ? renderChat() : renderServer();
+  if (S.view) return S.view.kind === "chat" ? renderChat() : S.view.kind === "server" ? renderServer() : renderDocsView();
   const body = { home: homeHtml, chat: chatsHtml, lib: libHtml, live: liveHtml, more: moreHtml }[S.tab] || homeHtml;
   const scrollWas = $(".scroll") && $(".scroll").dataset.tab === S.tab ? $(".scroll").scrollTop : 0;
   $("#app").innerHTML = `<div class="screen ${S.tab === "lib" && S.playing ? "has-player" : ""}"><div class="scroll" data-tab="${S.tab}">${body()}</div>${S.tab === "lib" ? playerHtml() : ""}</div>${tabsHtml()}`;
@@ -313,7 +317,7 @@ function bindPage() {
     if (t.dataset.server) return openServer(t.dataset.server);
     if (t.dataset.voice) return startCall("g:" + t.dataset.voice, t.dataset.title, t.dataset.sub);
     if (t.dataset.callkey) return startCall(t.dataset.callkey, t.dataset.title, t.dataset.sub);
-    if (t.dataset.play) return playSound(t.dataset.play);
+    if (t.dataset.play) return playSound(t.dataset.play, t.classList.contains("track") ? S.libList : null);
     if (t.dataset.seg) { S.chatSeg = t.dataset.seg; store.set("chatSeg", S.chatSeg); return render(); }
     if (t.dataset.cat) { S.libCat = t.dataset.cat; S.libGenre = ""; return render(); }
     if (t.dataset.genre !== undefined) { S.libGenre = t.dataset.genre; return render(); }
@@ -321,6 +325,9 @@ function bindPage() {
     if (t.dataset.act === "push-on") return pushOn();
     if (t.dataset.act === "push-off") return pushOff();
     if (t.dataset.act === "toggle") return togglePlay();
+    if (t.dataset.act === "pl-next") return plStep(1);
+    if (t.dataset.act === "np-open") return plOpen();
+    if (t.dataset.act === "docs") return openDocs();
   };
 }
 
@@ -656,6 +663,7 @@ function libHtml() {
     <div class="chips"><button data-genre="" class="${!S.libGenre ? "on" : ""}">All</button>${GENRES[S.libCat].map((g) => `<button data-genre="${esc(g)}" class="${S.libGenre === g ? "on" : ""}">${esc(g)}</button>`).join("")}</div>`;
   if (!S.sounds) { loadSounds(); return head + '<div class="spin"></div>'; }
   const list = S.sounds.filter((s) => s.category === S.libCat && (!S.libGenre || s.genre === S.libGenre));
+  S.libList = list.map((s) => s.id);
   if (!list.length) return head + '<div class="empty">Nothing here yet.</div>';
   return head + `<div class="list">${list.map((s) => {
     const on = S.playing && S.playing.id === s.id;
@@ -671,40 +679,6 @@ function duration(sec) {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 }
 
-function playerHtml() {
-  if (!S.playing) return "";
-  const a = $("#audio");
-  return `<div class="player glass"><div class="art"></div><div class="grow"><b class="sm one" style="display:block">${esc(S.playing.name)}</b><div class="bar"><i id="pbar"></i></div></div>
-    <button class="send" data-act="toggle">${a.paused ? I.play : I.pause}</button></div>`;
-}
-
-function playSound(id) {
-  const a = $("#audio");
-  if (S.playing && S.playing.id === id) return togglePlay();
-  let s = S.sounds && S.sounds.find((x) => x.id === id);
-  if (!s) {
-    const btn = document.querySelector(`[data-play="${CSS.escape(id)}"]`);
-    if (btn && btn.dataset.url) s = { id, name: btn.dataset.name, url: btn.dataset.url };
-  }
-  if (!s) return;
-  S.playing = { id: s.id, name: s.name };
-  a.src = s.url || publicUrl(s.path);
-  a.play().catch(() => toast("Couldn't play that sound."));
-  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: s.name, artist: s.uploader || "VaultHub" });
-}
-
-function togglePlay() {
-  const a = $("#audio");
-  if (a.paused) a.play().catch(() => {}); else a.pause();
-}
-
-function playingChanged() {
-  if (S.tab === "lib" && !S.view) render();
-  else document.querySelectorAll("[data-play]").forEach((b) => {
-    if (b.classList.contains("play")) b.innerHTML = S.playing && b.dataset.play === S.playing.id && !$("#audio").paused ? I.pause : I.play;
-  });
-}
-
 // ---------------------------------------------------------------- Live and More
 
 function moreHtml() {
@@ -713,8 +687,10 @@ function moreHtml() {
     <div class="card row">${avatar(me.username, publicUrl(me.avatar), { dot: "#9fd67a" })}<div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")}</div></div></div>
     <div class="lbl">Notifications</div>
     <div class="card list">${pushRowHtml()}</div>
+    <div class="lbl">Apps</div>
+    <div class="card list"><button class="row" data-act="docs" style="width:100%"><div class="doc-ic">${DI.doc}</div><div class="grow"><b>Docs</b><div class="sm muted">Your shared documents</div></div><span class="chev">›</span></button></div>
     <div class="lbl">Coming soon on the phone</div>
-    <div class="card list">${["Games", "Docs", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
+    <div class="card list">${["Games", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
@@ -820,11 +796,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("mess
 // ---------------------------------------------------------------- start
 
 (function boot() {
-  const a = $("#audio");
-  a.addEventListener("play", playingChanged);
-  a.addEventListener("pause", playingChanged);
-  a.addEventListener("ended", playingChanged);
-  a.addEventListener("timeupdate", () => { const b = $("#pbar"); if (b && a.duration) b.style.width = (a.currentTime / a.duration * 100) + "%"; });
+  playerSetup();
   document.addEventListener("visibilitychange", () => { if (!document.hidden && S.token && S.me) { ping(); refreshAll(); } });
   setInterval(ping, 60000);
   setInterval(() => { if (!document.hidden && S.me) refreshAll(); }, 20000);
