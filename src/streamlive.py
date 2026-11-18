@@ -396,21 +396,50 @@ def _save(s):
     os.replace(path + ".new", path)
 
 
+# (2.43.1) What each saved stream file says, kept while the file doesn't change. Saved streams hold the
+# whole stream (chat counts, the graph, every event), so reading them all again froze the Live page:
+# the earnings card read up to 60 of them every minute, and the recap check read the newest every poll.
+_file_cache = {}
+
+
+def _file_info(name):
+    """{id, start, end, summary} of one saved stream, or None."""
+    path = os.path.join(STREAMS_DIR, name)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    stamp = (st.st_mtime_ns, st.st_size)
+    hit = _file_cache.get(name)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        info = {"id": data.get("id"), "start": data.get("start", 0), "end": data.get("end"),
+                "summary": data.get("summary") or summary(data)}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        info = None
+    if len(_file_cache) > 200:
+        _file_cache.clear()
+    _file_cache[name] = (stamp, info)
+    return info
+
+
+def _names(n):
+    try:
+        return sorted((x for x in os.listdir(STREAMS_DIR) if x.endswith(".json")), reverse=True)[:n]
+    except OSError:
+        return []
+
+
 def streams():
     """Past streams, newest first (just the numbers)."""
     out = []
-    try:
-        names = sorted((n for n in os.listdir(STREAMS_DIR) if n.endswith(".json")), reverse=True)[:60]
-    except OSError:
-        names = []
-    for n in names:
-        try:
-            with open(os.path.join(STREAMS_DIR, n), encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("end") or not (_session and _session["id"] == data.get("id")):
-                out.append(data.get("summary") or summary(data))
-        except (OSError, ValueError, KeyError):
-            continue
+    for n in _names(60):
+        info = _file_info(n)
+        if info and (info["end"] or not (_session and _session["id"] == info["id"])):
+            out.append(dict(info["summary"]))
     return out
 
 
@@ -435,13 +464,9 @@ def last_ended():
     """The newest stream that ended in the last 12 hours (even before the app was opened again)."""
     if _ended:
         return _ended
-    try:
-        names = sorted((n for n in os.listdir(STREAMS_DIR) if n.endswith(".json")), reverse=True)[:1]
-        with open(os.path.join(STREAMS_DIR, names[0]), encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError, IndexError):
-        return None
-    if data.get("end") and time.time() - data["end"] < 12 * 3600 and data["end"] - data.get("start", 0) >= 300:
+    names = _names(1)
+    data = _file_info(names[0]) if names else None
+    if data and data["end"] and time.time() - data["end"] < 12 * 3600 and data["end"] - (data["start"] or 0) >= 300:
         return {"id": data["id"], "at": data["end"]}
     return None
 

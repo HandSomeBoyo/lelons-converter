@@ -28,7 +28,7 @@ const LV_WIDTHS = [3, 4, 5, 6, 7, 8, 9, 12];
 const LV_CHAT_HEIGHTS = { s: "Short", m: "Medium", l: "Tall" };
 const LV_ROW = 4;  // px per grid row (the bricks are measured in these)
 const LV_GAP = 16;
-const LVL = { editing: false, observer: null, drag: null };
+const LVL = { editing: false, observer: null, drag: null, redraws: null, toolsSoon: 0 };
 const LVL_ICONS = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   less: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h5M15 12h5M7 9l3 3-3 3M17 9l-3 3 3 3"/></svg>',
@@ -61,7 +61,18 @@ function lvLayoutInit() {
   if (LVL.observer) LVL.observer.disconnect();
   LVL.observer = new ResizeObserver((entries) => { for (const e of entries) lvFit(e.target); });
   for (const el of $("lvGrid").children) LVL.observer.observe(el);
-  $("lvcDone").onclick = () => lvLayoutEdit(false);
+  // (2.43.1) Cards draw themselves again with each update, which took their Customize bar (dots, sizes,
+  // X) away after a second or two. Put it back whenever a card redraws while customizing.
+  if (LVL.redraws) LVL.redraws.disconnect();
+  LVL.redraws = new MutationObserver(() => {
+    if (!LVL.editing || LVL.toolsSoon) return;
+    LVL.toolsSoon = requestAnimationFrame(() => {
+      LVL.toolsSoon = 0;
+      const grid = $("lvGrid");
+      if (LVL.editing && grid && [...grid.children].some((el) => LV_CARD[el.dataset.c] && !el.querySelector(":scope > .lv-tools"))) lvDrawLayoutTools(lvLayout());
+    });
+  });
+  for (const el of $("lvGrid").children) LVL.redraws.observe(el, { childList: true });
   $("lvcReset").onclick = () => { savePref("lvLayout", {}); lvLayoutApply(true); };
   lvLayoutApply();
   if (LVL.editing) lvLayoutEdit(true);
@@ -102,11 +113,12 @@ function lvLayoutEdit(on) {
   grid.classList.toggle("lv-editing", on);
   $("lvCbar").hidden = !on;
   if (!on) {
+    if (LVL.drag) lvDragEnd();
     grid.querySelectorAll(".lv-tools").forEach((t) => t.remove());
     const tray = $("lvTray");
     if (tray) tray.remove();
   }
-  lvLayoutApply();
+  try { lvLayoutApply(); } catch (e) { console.error(e); }  // (a card that fails to fit must not keep you stuck in Customize)
   if (on) $("lvCbar").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
@@ -183,6 +195,8 @@ function lvLayoutChange(change) {
   lvLayoutApply(true);
 }
 
+// (2.43.1) Done works even if the console was drawn again since Customize opened.
+document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#lvcDone")) lvLayoutEdit(false); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && LVL.editing && $("liveTab") && !$("liveTab").hidden && !document.querySelector(".modal:not([hidden])")) lvLayoutEdit(false);
 });
