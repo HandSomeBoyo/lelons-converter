@@ -76,8 +76,9 @@ function lvTake(res) {
   LV.seq = res.seq;
   LV.chat = lvRemoved(LV.chat.concat(fresh), res.removed).slice(-400);
   LV.removed = res.removed || [];
-  if (!LV.first) lvAlertFor(fresh.filter((i) => !i.old && !i.own));
+  if (!LV.first) lvAlertFor(fresh.filter((i) => !i.old && !i.own && !i.guest));
   LV.first = false;
+  if (typeof lvRecapCheck === "function") lvRecapCheck(res);
   const live = !!res.session;
   $("lvOnAir").hidden = !live;
   if (!$("liveTab").hidden) lvDrawConsole(fresh);
@@ -104,6 +105,7 @@ function lvDrawConsole(fresh) {
   if (typeof lvDrawObs === "function") lvDrawObs();
   if (typeof lvDrawMulti === "function") lvDrawMulti();
   if (typeof lvDrawAds === "function") lvDrawAds();
+  if (typeof lvDrawCo === "function") lvDrawCo();
   if (typeof lvRefit === "function") lvRefit();
   if (s && s.obs) $("lvRecBox").innerHTML = lvRecordingHtml(s.obs);
 }
@@ -146,7 +148,7 @@ function lvBuildConsole() {
           <h3>Chat</h3><span class="lv-speed" id="lvSpeed"></span><span class="sp"></span>
           <span class="lv-seg" id="lvFilter"><button data-f="both">Both</button><button data-f="tw">${LV_ICONS.tw}Twitch</button><button data-f="yt">${LV_ICONS.yt}YouTube</button></span>
         </div>
-        <div class="lv-msgs" id="lvMsgs"></div>
+        <div class="lv-msgcols" id="lvMsgCols"><div class="lv-msgs" id="lvMsgs"></div></div>
         <button type="button" class="lv-more" id="lvMore" hidden>New messages</button>
         <form class="lv-send" id="lvSend" autocomplete="off">
           <label class="input"><input id="lvSendText" maxlength="500" placeholder="Say something to chat..."></label>
@@ -169,6 +171,7 @@ function lvBuildConsole() {
       <div class="lv-card" data-c="clips" id="lvClips"></div>
       <div class="lv-card" data-c="modes" id="lvModes"></div>
       <div class="lv-card" data-c="newbies" id="lvNewbies"></div>
+      <div class="lv-card lvco" data-c="costream" id="lvCo" hidden></div>
       <div class="lv-card ms-card" data-c="multi" id="lvMulti"></div>
       <div class="lv-card ad-card" data-c="ads" id="lvAds" hidden></div>
     </div>`;
@@ -187,7 +190,7 @@ function lvBuildConsole() {
     if (LV.stick) { LV.newBelow = 0; $("lvMore").hidden = true; }
   });
   $("lvMore").addEventListener("click", () => { const m = $("lvMsgs"); m.scrollTop = m.scrollHeight; });
-  $("lvSendTo").value = LV.sendTo;
+  lvSendOptions();
   $("lvSendTo").addEventListener("change", () => { LV.sendTo = $("lvSendTo").value; savePref("lvSendTo", LV.sendTo); lvDrawSendState(); });
   $("lvSend").addEventListener("submit", lvSendNow);
   $("lvGoalsEdit").addEventListener("click", () => { LV.editGoals = !LV.editGoals; lvDrawGoals(true); });
@@ -399,7 +402,9 @@ function lvDrawEvents() {
 function lvChatTools(item) {
   if (item.type !== "msg" || item.own) return [];
   const c = LV.cfg || {}, s = LV.state || {};
-  const out = [lvToolButton("reply", "Answer", () => { const i = $("lvSendText"); i.value = "@" + item.user + " "; i.focus(); LV.sendTo = item.p; $("lvSendTo").value = item.p; lvDrawSendState(); })];
+  const to = item.guest ? "co:" + item.guest : item.p;
+  const out = [lvToolButton("reply", "Answer", () => { const i = $("lvSendText"); i.value = "@" + item.user + " "; i.focus(); LV.sendTo = to; lvSendOptions(); lvDrawSendState(); })];
+  if (item.guest) return out;  // (a friend's chat: their mods look after it)
   const canTw = item.p === "tw" && c.twitchSignedIn;
   const canYt = item.p === "yt" && s.youtube && s.youtube.canWrite;
   if (canTw || canYt) {
@@ -425,7 +430,10 @@ function confirmBan(item) {
   return false;
 }
 
-function lvShown(item) { return LV.filter === "both" || item.p === LV.filter; }
+function lvShown(item) {
+  if (item.guest && typeof lvCoSide === "function" && lvCoSide()) return false;  // (in its own column)
+  return LV.filter === "both" || item.p === LV.filter;
+}
 
 function lvRedrawChat() {
   const m = $("lvMsgs");
@@ -437,6 +445,7 @@ function lvRedrawChat() {
   $("lvFilter").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.f === LV.filter));
   m.scrollTop = m.scrollHeight;
   LV.stick = true;
+  if (typeof lvCoRedraw === "function") lvCoRedraw();
 }
 function lvChatEmptyText() {
   const s = LV.state || {}, c = LV.cfg || {};
@@ -450,8 +459,9 @@ function lvAppendChat(fresh) {
   if (!m) return;
   if (LV.removed.length) {
     const keep = new Set(LV.chat.map((i) => i.id));
-    m.querySelectorAll(".lv-m").forEach((row) => { if (row.dataset.id && !keep.has(row.dataset.id)) row.remove(); });
+    $("lvMsgCols").querySelectorAll(".lv-m").forEach((row) => { if (row.dataset.id && !keep.has(row.dataset.id)) row.remove(); });
   }
+  if (typeof lvCoAppend === "function") lvCoAppend(fresh);
   const show = fresh.filter(lvShown);
   if (!show.length) return;
   m.querySelector(".lv-chat-empty")?.remove();
@@ -466,13 +476,30 @@ function lvAppendChat(fresh) {
   }
 }
 
+// Where a message can go: Both, Twitch, YouTube, and (2.42.0) each friend's chat when co-streaming.
+function lvSendOptions() {
+  const sel = $("lvSendTo");
+  if (!sel) return;
+  const co = ((LV.state && LV.state.co) || []).map((f) => f.name);
+  const want = ["both", "tw", "yt", ...co.map((n) => "co:" + n)];
+  const have = [...sel.options].map((o) => o.value);
+  if (want.join() !== have.join()) {
+    sel.innerHTML = `<option value="both">Both</option><option value="tw">Twitch</option><option value="yt">YouTube</option>`
+      + co.map((n) => `<option value="co:${lvEsc(n)}">${lvEsc(n)}'s chat</option>`).join("");
+  }
+  if (!want.includes(LV.sendTo)) LV.sendTo = "both";
+  sel.value = LV.sendTo;
+}
+
 function lvDrawSendState() {
   const s = LV.state || {}, c = LV.cfg || {};
   const note = $("lvSendNote");
   if (!note) return;
+  lvSendOptions();
   const to = $("lvSendTo").value;
   let text = "";
-  if ((to === "tw" || to === "both") && c.twitch && !c.twitchSignedIn) text = "Sign in to Twitch in Set up to write in Twitch chat.";
+  if (to.startsWith("co:") && !c.twitchSignedIn) text = "Sign in to Twitch in Set up to write in your friend's chat.";
+  else if ((to === "tw" || to === "both") && c.twitch && !c.twitchSignedIn) text = "Sign in to Twitch in Set up to write in Twitch chat.";
   else if ((to === "yt" || to === "both") && c.youtube && s.youtube && !s.youtube.canWrite) text = "To write in YouTube chat, sign in with Google on the Comments tab.";
   note.textContent = text;
 }
@@ -530,27 +557,35 @@ function lvTwitchSignHtml() {
   if (c.twitchSignedIn) {
     return `<p class="lv-muted">Signed in as <b style="color:var(--text)">${lvEsc(c.twitchLogin)}</b>. You get followers, exact viewers, writing in chat, time-outs and changing your title and game. <button type="button" class="link" id="lvTwOut">Sign out</button></p>`;
   }
-  return `<details class="lv-more-box"><summary>Sign in for followers, writing in chat, time-outs and changing your title (optional, free)</summary>
+  return `<div class="lv-tw-easy">
+      <button type="button" class="small-button lv-tw-btn" id="lvTwEasy">${LV_ICONS.tw}Sign in with Twitch</button>
+      <p class="lv-muted">Optional and free. Gives you followers, writing in chat, time-outs, clips and changing your title and game.</p>
+    </div>
+    <div id="lvTwCode"></div>
+    <details class="lv-more-box lv-tw-own"><summary>Use your own Twitch app instead</summary>
     <ol class="lv-steps">
       <li>Open <button type="button" class="link" data-open="https://dev.twitch.tv/console/apps/create">dev.twitch.tv</button> and log in. (Twitch asks you to turn on two-step login first.)</li>
       <li>Name it <i>VaultHub ${Math.floor(Math.random() * 9000 + 1000)}</i>, type <i>http://localhost</i> as the OAuth Redirect URL, pick <b>Chat Bot</b> as the category and <b>Public</b> as the client type, then press <b>Create</b>.</li>
       <li>Press <b>Manage</b> and copy the <b>Client ID</b> here.</li>
     </ol>
-    <div class="lv-row"><label class="input" style="flex:1"><input id="lvTwClient" placeholder="Client ID" value="${lvEsc(c.twitchClient)}" spellcheck="false" autocomplete="off"></label><button type="button" class="small-button" id="lvTwGo">Sign in</button></div>
-    <div id="lvTwCode"></div></details>`;
+    <div class="lv-row"><label class="input" style="flex:1"><input id="lvTwClient" placeholder="Client ID" value="" spellcheck="false" autocomplete="off"></label><button type="button" class="small-button" id="lvTwGo">Sign in</button></div>
+    </details>`;
 }
 
 function lvWireTwitchSign() {
   const box = $("lvTwSign");
   box.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => api("/api/live-open", { url: b.dataset.open })));
   $("lvTwOut")?.addEventListener("click", async () => { await api("/api/live-twitch-signout", {}); await lvLoadConfig(); box.innerHTML = lvTwitchSignHtml(); lvWireTwitchSign(); });
-  $("lvTwGo")?.addEventListener("click", async () => {
+  const start = async (clientId) => {
     $("lvSetupError").textContent = "";
     const name = $("lvSetTwitch").value.trim();
     if (name) await api("/api/live-setup", { twitch: name }).catch(() => null);
-    const res = await api("/api/live-twitch-signin", { clientId: $("lvTwClient").value }).catch(() => null);
+    const res = await api("/api/live-twitch-signin", { clientId }).catch(() => null);
     if (!res || !res.ok) { $("lvSetupError").textContent = (res && res.error) || "Couldn't reach Twitch."; return; }
-    $("lvTwCode").innerHTML = `<div class="lv-code"><span>Type this code on Twitch:</span><b>${lvEsc(res.userCode)}</b><button type="button" class="small-button" id="lvTwOpen">Open twitch.tv/activate</button></div><p class="lv-muted" id="lvTwWait">Waiting for you to press Authorize on Twitch...</p>`;
+    // (2.42.0) The link Twitch gives already has the code in it: you just press Activate and Authorize.
+    $("lvTwCode").innerHTML = `<div class="lv-code lv-code-easy"><div><b class="w">Twitch opened in your browser.</b><span>Press <b>Activate</b>, then <b>Authorize</b>. VaultHub notices by itself.</span>
+      <small>Didn't open? <button type="button" class="link" id="lvTwOpen">Open it again</button> · the code is <b>${lvEsc(res.userCode)}</b></small></div></div>
+      <p class="lv-muted" id="lvTwWait">Waiting for Twitch...</p>`;
     $("lvTwOpen").addEventListener("click", () => api("/api/live-open", { url: res.url }));
     api("/api/live-open", { url: res.url });
     clearInterval(LV.signTimer);
@@ -562,12 +597,15 @@ function lvWireTwitchSign() {
         await lvLoadConfig();
         box.innerHTML = lvTwitchSignHtml();
         lvWireTwitchSign();
+        lvToast({ emoji: "✅", title: "Signed in to Twitch", text: "Everything Twitch in the console works now." });
       } else if (r && !r.ok) {
         clearInterval(LV.signTimer);
         $("lvSetupError").textContent = r.error;
       }
     }, 3000);
-  });
+  };
+  $("lvTwEasy")?.addEventListener("click", () => start(""));
+  $("lvTwGo")?.addEventListener("click", () => start($("lvTwClient").value));
 }
 
 async function lvSaveSetup() {
@@ -1047,7 +1085,14 @@ async function lvDrawStats() {
           ${s.money ? `<div>Super Chats<span class="n">${lvEsc(s.money)}</span></div>` : ""}
         </div><button type="button" class="link lv-forget" id="lvForget">Delete this stream from the list</button></div>
       </div>
-    </div>`;
+    </div>
+    ${typeof lvRecapParts === "function" ? (() => { const p = lvRecapParts(data); return `<div class="lv-grid lvr-stats">
+      <div class="lv-card"><h3>Top chatters</h3>${p.topHtml}<h3 style="margin-top:16px">New chatters <span class="lv-muted">${lvNum((data.newbies || []).length)}</span></h3>${p.newHtml}</div>
+      <div class="lv-col"><div class="lv-card"><h3>Clips</h3>${p.clipHtml}</div><div class="lv-card"><h3>Stream health</h3>${p.healthHtml}</div>
+        <button type="button" class="ghost-button" id="lvStatsRecap">Show the recap card</button></div>
+    </div>`; })() : ""}`;
+  if (typeof lvRecapWire === "function") lvRecapWire(box);
+  if ($("lvStatsRecap")) $("lvStatsRecap").onclick = () => lvRecapOpen(s.id, false);
   $("lvStatsPick").addEventListener("change", (e) => { LV.statsId = e.target.value; lvDrawStats(); });
   $("lvForget").addEventListener("click", async (e) => {
     if (e.target.dataset.sure !== "1") { e.target.dataset.sure = "1"; e.target.textContent = "Click again to delete it"; return; }

@@ -226,13 +226,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !helpPop
 
 // ---- Settings > Sound: speakers, microphone, call sound quality and noise suppression. The same choices calls use
 // (saved as callSpeaker, callMic, callBitrate, callMusic and callNoise), so picking one here changes it in calls too.
-const NOISE_NAMES = { off: "Off", standard: "Standard", strong: "Strong", max: "Max" };
-const NOISE_NOTES = {
-  off: "Others hear everything your microphone picks up.",
-  standard: "Takes away steady hum, like a fan.",
-  strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",
-  max: "The strongest AI, for loud places. Your voice may sound a little less natural.",
-};
+// (NOISE_NAMES and NOISE_NOTES live in call.js)
 let soundDevices = [];
 let soundAsked = false;
 

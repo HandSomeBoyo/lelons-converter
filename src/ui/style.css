@@ -8581,3 +8581,77 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .pj-shot .pj-buttons { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; flex: none; }
 .pj-shot-who { display: flex; align-items: center; gap: 7px; font-size: 13px; width: 120px; flex: none; }
 @container page (max-width: 720px) { .pj-shot-who { display: none; } }
+
+/* (2.42.0) After-stream recap */
+.dialog.lvr { max-width: 920px; }
+.lvr-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.lvr-head > div { flex: 1; min-width: 0; }
+.lvr-x { all: unset; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); font-size: 15px; }
+.lvr-x:hover { background: var(--panel2); color: var(--text); }
+.lvr .lv-num { background: var(--panel2); }
+.lvr-extra { margin: 12px 0 0; font: 500 13.5px var(--head); color: var(--muted); }
+.lvr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 20px; }
+@container page (max-width: 760px) { .lvr-grid { grid-template-columns: 1fr; } }
+.lvr-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.lvr h3, .lvr-stats h3 { margin: 0 0 10px; font: 600 14px var(--head); display: flex; align-items: center; gap: 8px; }
+.lvr h3 small { color: var(--muted); font-weight: 500; }
+.lvr .lv-moment { margin-bottom: 6px; }
+.lvr-top { display: flex; align-items: center; gap: 9px; padding: 6px 0; font-size: 13.5px; }
+.lvr-top .r { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--panel2); font: 700 11px var(--head); flex: none; }
+.lvr-top:first-child .r { background: var(--accent); color: var(--ink); }
+.lvr-top svg { width: 13px; height: 13px; color: #9146ff; flex: none; }
+.lvr-top b { font-weight: 600; width: 130px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvr-top .bar { flex: 1; height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; }
+.lvr-top .bar i { display: block; height: 100%; border-radius: inherit; background: rgba(var(--accent-rgb), .75); }
+.lvr-top .n { width: 44px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.lvr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lvr-chip { padding: 4px 10px; border-radius: 99px; background: var(--panel2); font: 500 12.5px var(--head); }
+.lvr-chip.more { color: var(--muted); }
+.lvr-ok { padding: 10px 12px; border-radius: var(--r-sm); background: rgba(159, 214, 122, .12); color: var(--green); font-size: 13.5px; margin-bottom: 6px; }
+.lvr-ok.warn { background: rgba(255, 196, 0, .12); color: #f0c040; }
+.lvr-ok.bad { background: rgba(255, 122, 107, .13); color: var(--red); }
+.lvr-ok.none { background: var(--panel2); color: var(--muted); }
+.lvr .lvt-cliprow, .lvr-stats .lvt-cliprow { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+.lvr-stats { margin-top: 16px; }
+.lvr-stats .ghost-button { justify-self: start; }
+
+/* (2.42.0) Co-stream */
+.lvco h3 { display: flex; align-items: center; gap: 8px; }
+.lvco-list { display: grid; gap: 6px; margin-bottom: 12px; }
+.lvco-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--panel2); }
+.lvco-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.lvco-row .t { flex: 1; min-width: 0; display: grid; }
+.lvco-row .t b { font: 600 13.5px var(--head); }
+.lvco-row .t small { color: var(--muted); font-size: 12px; }
+.lvco-live { display: inline-block; padding: 0 5px; border-radius: 4px; background: #e91916; color: #fff; font: 700 10px/16px var(--head); margin-right: 4px; }
+.lvco-x { all: unset; cursor: pointer; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.lvco-x:hover { background: var(--panel); color: var(--text); }
+.lvco-add { display: flex; gap: 8px; }
+.lvco-add .input { flex: 1; min-width: 0; height: 38px; }
+.lvco-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12.5px; }
+.lvco-offer .lvi-chip { display: inline-flex; align-items: center; gap: 5px; }
+.lvco-on { width: 7px; height: 7px; border-radius: 50%; background: #e91916; }
+.lvco-note { margin-top: 10px; font-size: 12.5px; }
+.lv-co-tag { display: inline-block; padding: 0 6px; border-radius: 5px; background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); font: 600 10.5px/16px var(--head); vertical-align: 1px; }
+.lv-m.guest { opacity: .92; }
+.lv-msgcols { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lv-msgcols > .lv-msgs { flex: 1; min-height: 0; }
+.lv-msgcols.side { flex-direction: row; }
+.lv-msgcols.side > * { flex: 1 1 0; min-width: 0; }
+.lv-cocol { display: flex; flex-direction: column; border-left: 1px solid var(--line); min-height: 0; }
+.lv-cocol .lv-msgs { flex: 1; min-height: 0; }
+.lv-cohead { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-bottom: 1px solid var(--line); font: 600 12px var(--head); color: var(--muted); }
+.lv-cohead i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.lv-cohead b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-msgcols.side::before { content: none; }
+
+/* (2.42.0) One-button Twitch sign-in */
+.lv-tw-easy { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.lv-tw-easy p { flex: 1; min-width: 200px; margin: 0; font-size: 13px; }
+.lv-tw-btn { background: #9146ff !important; color: #fff !important; display: inline-flex; align-items: center; gap: 8px; }
+.lv-tw-btn svg { width: 16px; height: 16px; }
+.lv-code-easy div { display: grid; gap: 3px; }
+.lv-code-easy b.w { font: 600 14px var(--head); letter-spacing: 0; color: var(--text); }
+.lv-code-easy span b, .lv-code-easy small b { font: 600 inherit; font-size: inherit; letter-spacing: 0; color: var(--text); }
+.lv-code-easy small { color: var(--muted); font-size: 12.5px; }
+.lv-tw-own { margin-top: 12px; }

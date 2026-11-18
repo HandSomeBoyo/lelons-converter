@@ -101,7 +101,7 @@ if sys.stderr is None:
 
 # ---------------------------------------------------------------- app state
 
-PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg",
+PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg", "lvRecapSeen", "lvCoView",
               "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
 page_pref_lock = threading.Lock()
 
@@ -876,6 +876,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": bool(found), **(found or {"error": "That stream is gone."})})
             elif action == "forget":
                 streamlive.forget(data.get("id"))
+            elif action == "co-set":  # (2.42.0) co-streaming: friends' chats in the console
+                names = data.get("names")
+                return self.send_json({"ok": True, "co": streamlive.set_costream(names if isinstance(names, list) else [])})
+            elif action == "co-friends":
+                import live
+                out = []
+                try:
+                    for c in sfx.library.live_channels():
+                        name = live.twitch_name(c.get("twitch"))
+                        if name:
+                            out.append({"username": c.get("username") or "", "twitch": name, "avatarUrl": c.get("avatarUrl") or ""})
+                except Exception:  # noqa: BLE001 (signed out of VaultHub, no internet...)
+                    out = []
+                return self.send_json({"ok": True, "friends": out})
             elif action == "hotkeys":
                 return self.send_json({"ok": True, "taken": appwindow.set_hotkeys(data.get("keys") or [])})
             elif action == "popout":

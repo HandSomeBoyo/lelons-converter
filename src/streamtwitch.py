@@ -49,6 +49,16 @@ def name_of(text):
     return name.lower() if re.fullmatch(r"[A-Za-z0-9_]{1,25}", name) else ""
 
 
+def guests_of(names):
+    """The friends' channels for co-streaming: plain names, at most 3, no doubles."""
+    out = []
+    for n in names if isinstance(names, list) else []:
+        n = name_of(n)
+        if n and n not in out:
+            out.append(n)
+    return out[:3]
+
+
 # ---------------------------------------------------------------- the chat lines
 
 def _unescape(value):
@@ -124,7 +134,7 @@ def to_item(line, own_login=""):
         msg = {"type": "msg", "p": "tw", "id": tags.get("id") or f"tw{at}{random.random()}", "user": who, "login": login,
                "userId": tags.get("user-id") or "", "color": tags.get("color") or "", "badges": _badges(tags),
                "text": text, "parts": _parts(text, tags.get("emotes")), "at": at, "me": bool(action),
-               "first": tags.get("first-msg") == "1"}
+               "first": tags.get("first-msg") == "1", "sourceId": tags.get("source-id") or ""}
         bits = int(tags.get("bits") or 0)
         if bits:
             return [msg, {"type": "event", "kind": "bits", "p": "tw", "id": "b" + msg["id"], "user": who, "amount": bits,
@@ -210,6 +220,7 @@ class Twitch:
         self.seen_follows = set()
         self.user_id = ""
         self.me_id = ""
+        self.guests = guests_of(settings.load().get("lv_co"))  # (2.42.0) friends' chats shown too (co-streaming)
 
     # ---- setup
 
@@ -257,6 +268,9 @@ class Twitch:
 
     def begin_sign_in(self, client_id):
         client_id = str(client_id or "").strip()
+        if not client_id:  # (2.42.0) VaultHub's own Twitch app: nothing to make or paste
+            import version
+            client_id = getattr(version, "TWITCH_CLIENT_ID", "")
         if not re.fullmatch(r"[a-z0-9]{20,40}", client_id):
             raise Error("That Client ID doesn't look right. It's about 30 letters and numbers, from dev.twitch.tv.")
         r = _http(ID + "device", {"client_id": client_id, "scopes": SCOPES})
@@ -515,6 +529,9 @@ class Twitch:
                     sock.sendall(f"NICK justinfan{random.randint(10000, 99999)}\r\n".encode())
                 sock.sendall(b"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n")
                 sock.sendall(f"JOIN #{self.channel}\r\n".encode())
+                for g in self.guests:
+                    if g != self.channel:
+                        sock.sendall(f"JOIN #{g}\r\n".encode())
                 self.status.update(chat="on", error="")
                 wait = 2
                 buf = b""
@@ -537,6 +554,9 @@ class Twitch:
                             raise OSError("auth")
                         items = to_item(text)
                         if items:
+                            ch = params[0].lstrip("#").lower() if params and params[0].startswith("#") else self.channel
+                            for it in items:
+                                it["ch"] = ch
                             self.emit(items)
             except (OSError, ssl.SSLError):
                 pass
@@ -544,9 +564,30 @@ class Twitch:
             stop.wait(wait)
             wait = min(wait * 2, 60)
 
-    def send(self, text):
+    def set_guests(self, names):
+        """(2.42.0) Show these friends' chats too (joins and leaves them right away)."""
+        new = [g for g in guests_of(names) if g != self.channel]
+        old, self.guests = self.guests, new
+        settings.save(lv_co=new)
+        sock = self.sock
+        if sock:
+            try:
+                for g in old:
+                    if g not in new:
+                        sock.sendall(f"PART #{g}\r\n".encode())
+                for g in new:
+                    if g not in old:
+                        sock.sendall(f"JOIN #{g}\r\n".encode())
+            except OSError:
+                pass
+        return new
+
+    def send(self, text, channel=None):
         c = self.config()
         sock = self.sock
+        channel = channel or self.channel
+        if channel != self.channel and channel not in self.guests:
+            raise Error("That chat isn't open in the console.")
         if not (c["refresh"] and c["login"]):
             raise Error("Sign in to Twitch to write in chat.")
         if not sock:
@@ -554,11 +595,11 @@ class Twitch:
         text = re.sub(r"[\r\n]+", " ", str(text or "")).strip()[:500]
         if not text:
             return None
-        sock.sendall(f"PRIVMSG #{self.channel} :{text}\r\n".encode())
+        sock.sendall(f"PRIVMSG #{channel} :{text}\r\n".encode())
         # Twitch doesn't send your own message back, so it's added here.
         item = {"type": "msg", "p": "tw", "id": f"own{time.time()}", "user": c["login"], "login": c["login"],
-                "color": "", "badges": ["host"] if c["login"] == self.channel else [], "text": text,
-                "parts": [{"t": text}], "at": time.time(), "own": True}
+                "color": "", "badges": ["host"] if c["login"] == channel else [], "text": text,
+                "parts": [{"t": text}], "at": time.time(), "own": True, "ch": channel}
         self.emit([item])
         return item
 
