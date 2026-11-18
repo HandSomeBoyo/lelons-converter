@@ -18,6 +18,10 @@ const FRIENDLY = {
   daily: "You've sent a lot today. Try again tomorrow.",
   denied: "You aren't allowed to do that here.",
   nogroup: "That chat is gone, or you're not in it any more.",
+  doc_gone: "That document was deleted, or you're not in it any more.",
+  doc_long: "That document is too long.",
+  doc_big: "That document is too big.",
+  doc_many: "You have too many documents. Delete some on your PC first.",
 };
 
 // ---------------------------------------------------------------- small helpers
@@ -289,7 +293,7 @@ function bindTabs() {
 
 function render() {
   if (!S.token) return renderLogin();
-  if (S.view) return S.view.kind === "chat" ? renderChat() : renderServer();
+  if (S.view) return S.view.kind === "chat" ? renderChat() : S.view.kind === "server" ? renderServer() : renderDocsView();
   const body = { home: homeHtml, chat: chatsHtml, lib: libHtml, live: liveHtml, more: moreHtml }[S.tab] || homeHtml;
   const scrollWas = $(".scroll") && $(".scroll").dataset.tab === S.tab ? $(".scroll").scrollTop : 0;
   $("#app").innerHTML = `<div class="screen ${S.tab === "lib" && S.playing ? "has-player" : ""}"><div class="scroll" data-tab="${S.tab}">${body()}</div>${S.tab === "lib" ? playerHtml() : ""}</div>${tabsHtml()}`;
@@ -323,6 +327,7 @@ function bindPage() {
     if (t.dataset.act === "toggle") return togglePlay();
     if (t.dataset.act === "pl-next") return plStep(1);
     if (t.dataset.act === "np-open") return plOpen();
+    if (t.dataset.act === "docs") return openDocs();
   };
 }
 
@@ -682,8 +687,10 @@ function moreHtml() {
     <div class="card row">${avatar(me.username, publicUrl(me.avatar), { dot: "#9fd67a" })}<div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")}</div></div></div>
     <div class="lbl">Notifications</div>
     <div class="card list">${pushRowHtml()}</div>
+    <div class="lbl">Apps</div>
+    <div class="card list"><button class="row" data-act="docs" style="width:100%"><div class="doc-ic">${DI.doc}</div><div class="grow"><b>Docs</b><div class="sm muted">Your shared documents</div></div><span class="chev">›</span></button></div>
     <div class="lbl">Coming soon on the phone</div>
-    <div class="card list">${["Games", "Docs", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
+    <div class="card list">${["Games", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
     <div class="lbl">On your PC only</div>
     <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
     <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
