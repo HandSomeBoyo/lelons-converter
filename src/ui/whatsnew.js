@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.43.1", items: [
+    "Live: no more little freezes. VaultHub kept reading all your saved streams again for the Earnings card and the recap. Now it reads each one only once.",
+    "Customize on the Live page: every card keeps its bar with the dots, sizes and X now (some lost it after a second). Done always closes Customize.",
+  ] },
   { version: "2.43.0", items: [
     "Live: new card, Game auto-detect. Start a game and your Twitch game changes by itself. Pick \"Ask me first\" if you'd rather press a button. Wrong guess? Pick the right game once and it remembers.",
     "New card: Earnings. A rough estimate of what this stream and this month made from subs, bits and ads, in kroner (or any money you pick).",
