@@ -47,6 +47,7 @@ import copycheck as copyright_check  # noqa: E402
 import docs  # noqa: E402
 import trash  # noqa: E402
 import film  # noqa: E402
+import editprojects  # noqa: E402
 import games  # noqa: E402
 import povs  # noqa: E402
 import remote  # noqa: E402
@@ -470,6 +471,7 @@ def version_channels():
 
 
 call_recordings = set()  # the recordings saved this time (the only files "Show in folder" may show)
+pj_picked = set()  # (Projects) files picked in the Open window this time (the only ones a cut may upload)
 
 
 def save_call_recording(name, body, length):
@@ -1385,6 +1387,116 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
         self.send_json({"ok": True, **result})
 
+    def handle_projects(self, action, data):
+        """(Beta) Projects: edit videos together. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
+        p = editprojects.projects
+        pid = str(data.get("project") or "") or None
+        try:
+            if action == "list":
+                result = p.list()
+            elif action == "open":
+                result = p.open(pid)
+            elif action == "people":
+                result = {"people": p.people()}
+            elif action == "setup":
+                result = p.setup(data.get("keyId"), data.get("key"))
+            elif action == "create":
+                result = p.create(data)
+            elif action == "edit":
+                result = p.edit(pid, data)
+            elif action == "invite":
+                result = {"people": p.invite(pid, data.get("usernames"), data.get("role"))}
+            elif action == "role":
+                result = {"people": p.set_role(pid, data.get("username"), data.get("role"))}
+            elif action == "remove":
+                result = {"people": p.remove(pid, data.get("username"))}
+            elif action == "leave":
+                p.leave(pid)
+                result = {}
+            elif action == "answer":
+                p.answer(pid, data.get("join"))
+                result = {}
+            elif action == "delete":
+                p.delete(pid)
+                result = {}
+            elif action in ("note", "note_done", "note_delete", "ask_turn", "move_file"):
+                keep = {"note": ("cut", "at", "body"), "note_done": ("id", "done"), "note_delete": ("id",),
+                        "ask_turn": (), "move_file": ("id", "folder")}[action]
+                p.simple(pid, action, {k: data.get(k) for k in keep})
+                result = {}
+            elif action == "delete-file":
+                p.delete_file(pid, data.get("id"))
+                result = {}
+            elif action == "delete-cut":
+                p.delete_cut(pid, data.get("id"))
+                result = {}
+            elif action == "add-sound":
+                p.add_sound(pid, data.get("sound") or {})
+                result = {}
+            elif action == "pick-footage":  # choose footage to upload (Windows' Open window)
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "fallback": True})
+                import folder_picker
+                try:
+                    paths = folder_picker.pick_files("Pick the footage to add", editprojects.PICK_FOOTAGE)
+                except OSError:
+                    return self.send_json({"ok": False, "fallback": True})
+                if paths:
+                    p.add_paths(pid, data.get("folder"), paths)
+                result = {"added": len(paths)}
+            elif action == "pick-file":  # the timeline or the video for a new cut
+                if os.name != "nt":
+                    return self.send_json({"ok": False, "error": "Picking files only works on Windows."})
+                import folder_picker
+                video = data.get("kind") == "video"
+                paths = folder_picker.pick_files("Pick the video of this cut" if video else "Pick the timeline you exported from Resolve",
+                                                 editprojects.PICK_VIDEO if video else editprojects.PICK_TIMELINE)
+                path = paths[0] if paths else ""
+                if path:
+                    pj_picked.add(os.path.normcase(os.path.abspath(path)))
+                result = {"path": path, "name": os.path.basename(path)}
+            elif action == "upload-cut":
+                timeline, video = str(data.get("timeline") or ""), str(data.get("video") or "")
+                for path in filter(None, (timeline, video)):  # (only files picked in the Open window)
+                    if os.path.normcase(os.path.abspath(path)) not in pj_picked:
+                        return self.send_json({"ok": False, "error": "Pick the file again."})
+                result = {"job": p.upload_cut(pid, timeline, video, data.get("note"))}
+            elif action == "get-all":
+                result = {"job": p.get_all(pid)}
+            elif action == "edit-start":
+                result = p.start_editing(pid, str(data.get("cut") or "") or None, data.get("markers") is not False, bool(data.get("force")))
+            elif action == "edit-stop":
+                p.stop_editing(pid)
+                result = {}
+            elif action == "jobs":
+                result = p.snapshot()
+            elif action == "cancel":
+                p.cancel(str(data.get("id") or ""))
+                result = p.snapshot()
+            elif action == "clear":
+                p.clear_done()
+                result = p.snapshot()
+            elif action == "show":  # a file or folder inside a project's folder on this PC
+                path = os.path.abspath(str(data.get("path") or ""))
+                root = os.path.abspath(editprojects.base_folder())
+                known = [os.path.abspath(v) for v in (settings.load().get("projects_dirs") or {}).values() if isinstance(v, str)]
+                inside = any(os.path.normcase(path) == os.path.normcase(r) or os.path.normcase(path).startswith(os.path.normcase(r) + os.sep)
+                             for r in [root, *known])
+                if inside and os.path.isdir(path):
+                    open_folder(path)
+                elif inside and os.path.isfile(path):
+                    show_in_folder(path)
+                result = {}
+            else:
+                return self.send_error(404)
+        except sfx.LoggedOut as e:
+            return self.send_json({"ok": False, "error": str(e), "loggedOut": True})
+        except (film.Error, sfx.Error) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't open that file or folder."})
+        self.send_json({"ok": True, **result})
+
     def handle_games(self, action, data):
         """The Games tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         g = games.games
@@ -1763,6 +1875,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't save the download. Is the drive full or gone?"})
+        if self.path == "/api/pj-add":  # (Projects) the body is footage dropped on a project
+            name = urllib.parse.unquote(self.headers.get("X-File-Name") or "clip")
+            try:
+                editprojects.projects.add_stream(self.headers.get("X-Project") or "", urllib.parse.unquote(self.headers.get("X-Folder") or ""),
+                                                 os.path.basename(name), self.rfile, length)
+                return self.send_json({"ok": True})
+            except film.Error as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't open this file."})
         if self.path == "/api/fx-add":  # the body is a clip for a Film assets pack
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "clip")
             try:
@@ -2025,6 +2147,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_boards(self.path[len("/api/boards-"):], data)
         elif self.path.startswith("/api/trash-"):
             self.handle_trash(self.path[len("/api/trash-"):], data)
+        elif self.path.startswith("/api/pj-"):
+            self.handle_projects(self.path[len("/api/pj-"):], data)
         elif self.path.startswith("/api/fx-"):
             self.handle_film(self.path[len("/api/fx-"):], data)
         elif self.path.startswith("/api/ch-"):

@@ -103,6 +103,7 @@ function setSfxAccount(account) {
   if (typeof chatAccountChanged === "function") chatAccountChanged();
   if (typeof homeAccountChanged === "function") homeAccountChanged(!sfxUser() || sfxUser().id !== was);
   if (typeof fxAccountChanged === "function") fxAccountChanged();
+  if (typeof pjAccountChanged === "function") pjAccountChanged();
   if (typeof gamesAccountChanged === "function") gamesAccountChanged();
   if (typeof povsAccountChanged === "function") povsAccountChanged();
   if (typeof feedAccountChanged === "function") feedAccountChanged();

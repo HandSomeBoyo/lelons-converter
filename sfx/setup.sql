@@ -4643,6 +4643,437 @@ end $$;
 drop trigger if exists push_on_ring on lelons.room_people;
 create trigger push_on_ring after insert or update of state on lelons.room_people for each row execute function lelons.push_on_ring();
 
+-- ---- (2.40.0, Beta) Projects: edit videos together. One shared folder per video: the footage, every saved
+-- cut (Resolve timeline files), notes at an exact second of a cut, and music and sounds from the Library.
+-- The big files (footage, cut videos) live in the owner's own free Backblaze B2 storage (a bucket of its own,
+-- not the Film assets one), like Film assets. Here: the projects, the crew, the lists, and the Backblaze keys
+-- (only the app reads them, through lelons_project, and only for people in a project).
+-- Only one person edits at a time: whoever presses "Edit in Resolve" holds the project until they upload
+-- their cut or let go, so two people never change the same timeline at once.
+alter table lelons.config add column if not exists proj_storage jsonb;
+create table if not exists lelons.projects (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references lelons.accounts (id) on delete cascade,
+  name text not null check (length(name) between 1 and 80),
+  about text not null default '' check (length(about) <= 600),
+  kind text not null default 'video' check (kind in ('video', 'short', 'film', 'vlog', 'stream', 'other')),
+  stage text not null default 'footage' check (stage in ('footage', 'rough', 'fine', 'color', 'sound', 'export', 'done')),
+  editor_id uuid references lelons.accounts (id) on delete set null,
+  editing_since timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists lelons.project_members (
+  project_id uuid not null references lelons.projects (id) on delete cascade,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  role text not null default 'editor' check (role in ('editor', 'footage', 'notes')),
+  joined boolean not null default false,
+  invited_by uuid references lelons.accounts (id) on delete set null,
+  invited_at timestamptz not null default now(),
+  seen_at timestamptz,
+  primary key (project_id, account_id)
+);
+create index if not exists project_members_account on lelons.project_members (account_id);
+create table if not exists lelons.project_files (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references lelons.projects (id) on delete cascade,
+  kind text not null default 'footage' check (kind in ('footage', 'sound')),
+  folder text not null default 'Footage' check (length(folder) between 1 and 40),
+  name text not null check (length(name) between 1 and 160),
+  path text not null check (length(path) <= 300),        -- in Backblaze (footage) or the Library (sound)
+  file_id text check (length(file_id) <= 300),            -- Backblaze's id (footage only)
+  size bigint not null default 0,
+  seconds real not null default 0,
+  width int not null default 0,
+  height int not null default 0,
+  thumb text check (length(thumb) <= 300),
+  thumb_id text check (length(thumb_id) <= 300),
+  by_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists project_files_project on lelons.project_files (project_id, created_at);
+create table if not exists lelons.project_cuts (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references lelons.projects (id) on delete cascade,
+  n int not null,
+  note text not null default '' check (length(note) <= 300),
+  timeline text not null check (length(timeline) <= 3000000),   -- the FCPXML Resolve exported
+  timeline_name text not null default 'timeline.fcpxml' check (length(timeline_name) <= 160),
+  video text check (length(video) <= 300),                       -- a video of the cut to watch (optional)
+  video_id text check (length(video_id) <= 300),
+  video_size bigint not null default 0,
+  seconds real not null default 0,
+  by_id uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (project_id, n)
+);
+create table if not exists lelons.project_notes (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references lelons.projects (id) on delete cascade,
+  cut_id uuid not null references lelons.project_cuts (id) on delete cascade,
+  at real not null default 0 check (at >= 0),
+  body text not null check (length(body) between 1 and 1000),
+  by_id uuid references lelons.accounts (id) on delete set null,
+  done boolean not null default false,
+  done_by uuid references lelons.accounts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists project_notes_cut on lelons.project_notes (cut_id, at);
+create table if not exists lelons.project_events (
+  id bigint generated always as identity primary key,
+  project_id uuid not null references lelons.projects (id) on delete cascade,
+  by_id uuid references lelons.accounts (id) on delete set null,
+  kind text not null check (length(kind) <= 30),
+  detail text not null default '' check (length(detail) <= 200),
+  at timestamptz not null default now()
+);
+create index if not exists project_events_project on lelons.project_events (project_id, id desc);
+alter table lelons.projects enable row level security;
+alter table lelons.project_members enable row level security;
+alter table lelons.project_files enable row level security;
+alter table lelons.project_cuts enable row level security;
+alter table lelons.project_notes enable row level security;
+alter table lelons.project_events enable row level security;
+revoke all on lelons.projects, lelons.project_members, lelons.project_files, lelons.project_cuts, lelons.project_notes,
+  lelons.project_events from anon, authenticated;
+
+create or replace function lelons.proj_people(p uuid, owner uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select coalesce(json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'owner', a.id = owner,
+                                             'role', m.role, 'joined', m.joined,
+                                             'here', coalesce(m.seen_at > now() - interval '20 seconds', false))
+                           order by a.id <> owner, not m.joined, lower(a.username)), '[]'::json)
+  from lelons.project_members m join lelons.accounts a on a.id = m.account_id
+  where m.project_id = p
+$$;
+
+create or replace function lelons.proj_card(x lelons.projects, me uuid) returns json
+language sql stable security definer set search_path = '' as $$
+  select json_build_object('id', x.id, 'name', x.name, 'about', x.about, 'kind', x.kind, 'stage', x.stage,
+    'mine', x.owner_id = me, 'created', extract(epoch from x.created_at), 'updated', extract(epoch from x.updated_at),
+    'editor', (select a.username from lelons.accounts a where a.id = x.editor_id),
+    'cuts', (select count(*) from lelons.project_cuts c where c.project_id = x.id),
+    'clips', (select count(*) from lelons.project_files f where f.project_id = x.id and f.kind = 'footage'),
+    'size', (select coalesce(sum(f.size), 0) from lelons.project_files f where f.project_id = x.id and f.kind = 'footage'),
+    'seconds', (select c.seconds from lelons.project_cuts c where c.project_id = x.id order by c.n desc limit 1),
+    'cover', (select f.thumb from lelons.project_files f where f.project_id = x.id and f.thumb is not null
+              order by f.created_at limit 1),
+    'last', (select json_build_object('by', a.username, 'kind', e.kind, 'detail', e.detail, 'at', extract(epoch from e.at))
+             from lelons.project_events e left join lelons.accounts a on a.id = e.by_id
+             where e.project_id = x.id order by e.id desc limit 1),
+    'people', lelons.proj_people(x.id, x.owner_id))
+$$;
+
+-- Everything about Projects. what (data):
+--   list                          your projects, the invitations waiting for you, whether the storage is set up
+--   people                        everyone you could invite
+--   setup (bucket, keys)          the owner of the app, once
+--   create (name, about, kind)
+--   answer (join: true / false)   an invitation
+--   open                          the whole project: crew, footage, sounds, cuts, notes, what happened
+--   edit (name, about, kind, stage)          editors
+--   invite (usernames, role) / role (username, role) / remove (username)   the project's owner
+--   leave / delete (the owner: the files to delete from Backblaze come back)
+--   upload_key                    editors and footage people
+--   add_file (kind, folder, name, path, file_id, size, seconds, width, height, thumb, thumb_id)
+--   move_file (id, folder) / delete_file (id)   who added it, or the owner
+--   lock (take: true/false, force)              Edit in Resolve / done (force: the owner takes it over)
+--   add_cut (note, timeline, timeline_name, video, video_id, video_size, seconds)   editors; lets go of the lock
+--   delete_cut (id)                             who made it, or the owner
+--   note (cut, at, body) / note_done (id, done) / note_delete (id)
+--   ask_turn                                    tells the one editing that you'd like a turn
+create or replace function public.lelons_project(token text, what text, project_id uuid default null, data jsonb default '{}')
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  store jsonb := (select c.proj_storage from lelons.config c where c.id = 1);
+  p lelons.projects;
+  member lelons.project_members;
+  them uuid;
+  new_id uuid;
+  gone json;
+  role_in text;
+  n int;
+begin
+  data := coalesce(data, '{}'::jsonb);
+  if what = 'list' then
+    return json_build_object(
+      'projects', coalesce((select json_agg(lelons.proj_card(x, me.id) order by x.updated_at desc)
+                            from lelons.projects x join lelons.project_members m on m.project_id = x.id
+                            where m.account_id = me.id and m.joined), '[]'::json),
+      'invites', coalesce((select json_agg(json_build_object('id', x.id, 'name', x.name, 'kind', x.kind, 'role', m.role,
+                                             'from', coalesce(a.username, '?'), 'avatar', a.avatar,
+                                             'at', extract(epoch from m.invited_at)) order by m.invited_at desc)
+                           from lelons.project_members m join lelons.projects x on x.id = m.project_id
+                           left join lelons.accounts a on a.id = m.invited_by
+                           where m.account_id = me.id and not m.joined), '[]'::json),
+      'ready', store is not null, 'can_setup', me.role = 'owner',
+      'storage', case when store is not null and exists (select 1 from lelons.project_members m where m.account_id = me.id and m.joined)
+                      then json_build_object('bucket', store->>'bucket', 'key_id', store->>'read_id', 'key', store->>'read_key') end);
+  elsif what = 'people' then
+    return coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar) order by lower(a.username))
+                     from lelons.accounts a where a.id <> me.id), '[]'::json);
+  elsif what = 'setup' then
+    if me.role <> 'owner' then
+      raise exception 'owner only' using hint = 'denied';
+    end if;
+    if jsonb_typeof(data) <> 'object' or coalesce(data->>'bucket', '') = '' or coalesce(data->>'read_key', '') = ''
+       or coalesce(data->>'write_key', '') = '' or length(data::text) > 4000 then
+      raise exception 'bad storage' using hint = 'bad_input';
+    end if;
+    update lelons.config set proj_storage = data where id = 1;
+    return '{}'::json;
+  elsif what = 'create' then
+    if store is null then
+      raise exception 'no storage' using hint = 'pj_nostorage';
+    end if;
+    if (select count(*) from lelons.projects x where x.owner_id = me.id) >= 100 then
+      raise exception 'too many' using hint = 'pj_many';
+    end if;
+    insert into lelons.projects (owner_id, name, about, kind)
+    values (me.id, left(coalesce(nullif(btrim(data->>'name'), ''), 'Untitled project'), 80), left(coalesce(data->>'about', ''), 600),
+            case when data->>'kind' in ('video', 'short', 'film', 'vlog', 'stream', 'other') then data->>'kind' else 'video' end)
+    returning id into new_id;
+    insert into lelons.project_members (project_id, account_id, role, joined, invited_by, seen_at)
+    values (new_id, me.id, 'editor', true, me.id, now());
+    insert into lelons.project_events (project_id, by_id, kind) values (new_id, me.id, 'made');
+    return json_build_object('id', new_id);
+  elsif what = 'answer' then
+    if coalesce((data->>'join')::boolean, false) then
+      update lelons.project_members m set joined = true, seen_at = now()
+      where m.project_id = lelons_project.project_id and m.account_id = me.id and not m.joined;
+      if found then
+        insert into lelons.project_events (project_id, by_id, kind) values (lelons_project.project_id, me.id, 'joined');
+      end if;
+    else
+      delete from lelons.project_members m where m.project_id = lelons_project.project_id and m.account_id = me.id and not m.joined;
+    end if;
+    if not found then
+      raise exception 'no invite' using hint = 'pj_gone';
+    end if;
+    return '{}'::json;
+  end if;
+
+  -- Everything else needs a project you're in.
+  select x.* into p from lelons.projects x where x.id = lelons_project.project_id;
+  select m.* into member from lelons.project_members m where m.project_id = p.id and m.account_id = me.id and m.joined;
+  if p.id is null or member.account_id is null then
+    raise exception 'no such project' using hint = 'pj_gone';
+  end if;
+
+  if what = 'open' then
+    update lelons.project_members m set seen_at = now() where m.project_id = p.id and m.account_id = me.id;
+    return json_build_object(
+      'project', lelons.proj_card(p, me.id), 'role', member.role, 'me', me.username,
+      'editing_since', extract(epoch from p.editing_since),
+      'storage', case when store is null then null
+                      else json_build_object('bucket', store->>'bucket', 'key_id', store->>'read_id', 'key', store->>'read_key') end,
+      'files', coalesce((select json_agg(json_build_object('id', f.id, 'kind', f.kind, 'folder', f.folder, 'name', f.name,
+                                           'path', f.path, 'size', f.size, 'seconds', f.seconds, 'width', f.width, 'height', f.height,
+                                           'thumb', f.thumb, 'by', a.username, 'created', extract(epoch from f.created_at))
+                                         order by f.folder, f.name)
+                         from lelons.project_files f left join lelons.accounts a on a.id = f.by_id where f.project_id = p.id), '[]'::json),
+      'cuts', coalesce((select json_agg(json_build_object('id', c.id, 'n', c.n, 'note', c.note, 'name', c.timeline_name,
+                                          'video', c.video, 'videoSize', c.video_size, 'seconds', c.seconds, 'by', a.username,
+                                          'created', extract(epoch from c.created_at)) order by c.n desc)
+                        from lelons.project_cuts c left join lelons.accounts a on a.id = c.by_id where c.project_id = p.id), '[]'::json),
+      'notes', coalesce((select json_agg(json_build_object('id', o.id, 'cut', o.cut_id, 'at', o.at, 'body', o.body, 'by', a.username,
+                                           'done', o.done, 'doneBy', d.username, 'created', extract(epoch from o.created_at))
+                                         order by o.at, o.created_at)
+                         from lelons.project_notes o left join lelons.accounts a on a.id = o.by_id
+                         left join lelons.accounts d on d.id = o.done_by where o.project_id = p.id), '[]'::json),
+      'events', coalesce((select json_agg(e) from (
+                           select json_build_object('by', a.username, 'kind', x.kind, 'detail', x.detail, 'at', extract(epoch from x.at)) e
+                           from lelons.project_events x left join lelons.accounts a on a.id = x.by_id
+                           where x.project_id = p.id order by x.id desc limit 30) s), '[]'::json));
+  elsif what = 'edit' then
+    if member.role <> 'editor' then
+      raise exception 'editors only' using hint = 'denied';
+    end if;
+    update lelons.projects x set
+      name = left(coalesce(nullif(btrim(data->>'name'), ''), x.name), 80),
+      about = case when data ? 'about' then left(coalesce(data->>'about', ''), 600) else x.about end,
+      kind = case when data->>'kind' in ('video', 'short', 'film', 'vlog', 'stream', 'other') then data->>'kind' else x.kind end,
+      stage = case when data->>'stage' in ('footage', 'rough', 'fine', 'color', 'sound', 'export', 'done') then data->>'stage' else x.stage end,
+      updated_at = now()
+    where x.id = p.id;
+    if data->>'stage' is not null and data->>'stage' is distinct from p.stage then
+      insert into lelons.project_events (project_id, by_id, kind, detail) values (p.id, me.id, 'stage', left(data->>'stage', 20));
+    end if;
+    return '{}'::json;
+  elsif what = 'invite' then
+    if p.owner_id <> me.id then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    role_in := case when data->>'role' in ('editor', 'footage', 'notes') then data->>'role' else 'editor' end;
+    insert into lelons.project_members (project_id, account_id, role, invited_by)
+    select p.id, a.id, role_in, me.id from lelons.accounts a
+    where lower(a.username) in (select lower(btrim(u)) from jsonb_array_elements_text(
+            case when jsonb_typeof(data->'usernames') = 'array' then data->'usernames' else '[]'::jsonb end) u)
+      and a.id <> me.id
+    on conflict on constraint project_members_pkey do nothing;
+    if (select count(*) from lelons.project_members m where m.project_id = p.id) > 30 then
+      raise exception 'too many people' using hint = 'pj_people';
+    end if;
+    return lelons.proj_people(p.id, p.owner_id);
+  elsif what = 'role' then
+    if p.owner_id <> me.id then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    update lelons.project_members m set role = data->>'role'
+    where m.project_id = p.id and data->>'role' in ('editor', 'footage', 'notes') and m.account_id <> p.owner_id
+      and m.account_id = (select a.id from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', ''))));
+    return lelons.proj_people(p.id, p.owner_id);
+  elsif what in ('remove', 'leave') then
+    them := case when what = 'leave' then me.id else
+      (select a.id from lelons.accounts a where lower(a.username) = lower(btrim(coalesce(data->>'username', '')))) end;
+    if them is null or them = p.owner_id or (p.owner_id <> me.id and them <> me.id) then
+      raise exception 'not allowed' using hint = 'denied';
+    end if;
+    delete from lelons.project_members m where m.project_id = p.id and m.account_id = them;
+    update lelons.projects x set editor_id = null, editing_since = null where x.id = p.id and x.editor_id = them;
+    return lelons.proj_people(p.id, p.owner_id);
+  elsif what = 'delete' then
+    if p.owner_id <> me.id then
+      raise exception 'not yours' using hint = 'denied';
+    end if;
+    select json_agg(json_build_object('path', f.path, 'id', f.id)) into gone from (
+      select x.path, x.file_id id from lelons.project_files x where x.project_id = p.id and x.file_id is not null
+      union all select x.thumb, x.thumb_id from lelons.project_files x where x.project_id = p.id and x.thumb_id is not null
+      union all select c.video, c.video_id from lelons.project_cuts c where c.project_id = p.id and c.video_id is not null) f;
+    delete from lelons.projects x where x.id = p.id;
+    return json_build_object('files', coalesce(gone, '[]'::json));
+  elsif what = 'note' then
+    if not exists (select 1 from lelons.project_cuts c where c.id = (data->>'cut')::uuid and c.project_id = p.id) then
+      raise exception 'no cut' using hint = 'pj_nocut';
+    end if;
+    insert into lelons.project_notes (project_id, cut_id, at, body, by_id)
+    values (p.id, (data->>'cut')::uuid, greatest(0, coalesce((data->>'at')::real, 0)), left(btrim(data->>'body'), 1000), me.id);
+    insert into lelons.project_events (project_id, by_id, kind, detail)
+    values (p.id, me.id, 'note', left(btrim(data->>'body'), 120));
+    update lelons.projects x set updated_at = now() where x.id = p.id;
+    return '{}'::json;
+  elsif what = 'note_done' then
+    update lelons.project_notes o set done = coalesce((data->>'done')::boolean, true),
+      done_by = case when coalesce((data->>'done')::boolean, true) then me.id end
+    where o.id = (data->>'id')::uuid and o.project_id = p.id;
+    return '{}'::json;
+  elsif what = 'note_delete' then
+    delete from lelons.project_notes o where o.id = (data->>'id')::uuid and o.project_id = p.id
+      and (o.by_id = me.id or p.owner_id = me.id);
+    return '{}'::json;
+  elsif what = 'ask_turn' then
+    if p.editor_id is not null and p.editor_id <> me.id then
+      insert into lelons.project_events (project_id, by_id, kind, detail)
+      values (p.id, me.id, 'ask', coalesce((select a.username from lelons.accounts a where a.id = p.editor_id), ''));
+    end if;
+    return '{}'::json;
+  end if;
+
+  -- The rest changes files or the timeline: not for "notes only".
+  if member.role = 'notes' then
+    raise exception 'notes only' using hint = 'denied';
+  end if;
+  if what = 'upload_key' then
+    if store is null then
+      raise exception 'no storage' using hint = 'pj_nostorage';
+    end if;
+    return json_build_object('bucket', store->>'bucket', 'bucket_id', store->>'bucket_id',
+                             'key_id', store->>'write_id', 'key', store->>'write_key');
+  elsif what = 'add_file' then
+    if coalesce(data->>'path', '') = '' or (data->>'kind' = 'footage' and coalesce(data->>'file_id', '') = '')
+       or (data->>'kind' = 'footage' and left(data->>'path', 37) <> p.id::text || '/') then
+      raise exception 'bad file' using hint = 'bad_input';
+    end if;
+    if data->>'kind' = 'sound' and exists (select 1 from lelons.project_files f where f.project_id = p.id and f.path = data->>'path') then
+      return '{}'::json;  -- (already in)
+    end if;
+    insert into lelons.project_files (project_id, kind, folder, name, path, file_id, size, seconds, width, height, thumb, thumb_id, by_id)
+    values (p.id, case when data->>'kind' = 'sound' then 'sound' else 'footage' end,
+            left(coalesce(nullif(btrim(data->>'folder'), ''), 'Footage'), 40), left(coalesce(nullif(btrim(data->>'name'), ''), 'Clip'), 160),
+            data->>'path', nullif(data->>'file_id', ''), greatest(0, coalesce((data->>'size')::bigint, 0)),
+            greatest(0, coalesce((data->>'seconds')::real, 0)), greatest(0, coalesce((data->>'width')::int, 0)),
+            greatest(0, coalesce((data->>'height')::int, 0)), nullif(data->>'thumb', ''), nullif(data->>'thumb_id', ''), me.id);
+    -- (lots of clips at once: one line "added 6 clips" instead of six)
+    update lelons.project_events e set detail = ((split_part(e.detail, ' ', 1))::int + 1)::text || ' ' || split_part(e.detail, ' ', 2), at = now()
+    where e.id = (select x.id from lelons.project_events x where x.project_id = p.id order by x.id desc limit 1)
+      and e.by_id = me.id and e.kind = 'files' and e.at > now() - interval '30 minutes'
+      and split_part(e.detail, ' ', 2) = left(coalesce(nullif(btrim(data->>'folder'), ''), 'Footage'), 40)
+      and split_part(e.detail, ' ', 1) ~ '^\d+$';
+    if not found then
+      insert into lelons.project_events (project_id, by_id, kind, detail)
+      values (p.id, me.id, case when data->>'kind' = 'sound' then 'sound' else 'files' end,
+              case when data->>'kind' = 'sound' then left(coalesce(data->>'name', ''), 120)
+                   else '1 ' || left(coalesce(nullif(btrim(data->>'folder'), ''), 'Footage'), 40) end);
+    end if;
+    update lelons.projects x set updated_at = now() where x.id = p.id;
+    return '{}'::json;
+  elsif what = 'move_file' then
+    update lelons.project_files f set folder = left(coalesce(nullif(btrim(data->>'folder'), ''), 'Footage'), 40)
+    where f.id = (data->>'id')::uuid and f.project_id = p.id;
+    return '{}'::json;
+  elsif what = 'delete_file' then
+    with d as (delete from lelons.project_files f where f.id = (data->>'id')::uuid and f.project_id = p.id
+                 and (f.by_id = me.id or p.owner_id = me.id) returning f.*)
+    select json_agg(json_build_object('path', x.path, 'id', x.id)) into gone
+    from d, lateral (values (d.path, d.file_id), (d.thumb, d.thumb_id)) x(path, id) where x.id is not null;
+    return json_build_object('files', coalesce(gone, '[]'::json));
+  elsif what = 'lock' then
+    if member.role <> 'editor' then
+      raise exception 'editors only' using hint = 'denied';
+    end if;
+    if coalesce((data->>'take')::boolean, false) then
+      if p.editor_id is not null and p.editor_id <> me.id and not (coalesce((data->>'force')::boolean, false) and p.owner_id = me.id) then
+        return json_build_object('busy', (select a.username from lelons.accounts a where a.id = p.editor_id),
+                                 'since', extract(epoch from p.editing_since));
+      end if;
+      update lelons.projects x set editor_id = me.id, editing_since = case when x.editor_id = me.id then x.editing_since else now() end
+      where x.id = p.id;
+      if p.editor_id is distinct from me.id then
+        insert into lelons.project_events (project_id, by_id, kind) values (p.id, me.id, 'editing');
+      end if;
+    else
+      update lelons.projects x set editor_id = null, editing_since = null where x.id = p.id and x.editor_id = me.id;
+      if found then
+        insert into lelons.project_events (project_id, by_id, kind) values (p.id, me.id, 'stopped');
+      end if;
+    end if;
+    return '{}'::json;
+  elsif what = 'add_cut' then
+    if member.role <> 'editor' then
+      raise exception 'editors only' using hint = 'denied';
+    end if;
+    if p.editor_id is not null and p.editor_id <> me.id then
+      raise exception 'someone else is editing' using hint = 'pj_busy';
+    end if;
+    if coalesce(data->>'timeline', '') = '' or length(data->>'timeline') > 3000000 then
+      raise exception 'bad timeline' using hint = 'pj_timeline';
+    end if;
+    if coalesce(data->>'video', '') <> '' and (coalesce(data->>'video_id', '') = '' or left(data->>'video', 37) <> p.id::text || '/') then
+      raise exception 'bad video' using hint = 'bad_input';
+    end if;
+    n := coalesce((select max(c.n) from lelons.project_cuts c where c.project_id = p.id), 0) + 1;
+    insert into lelons.project_cuts (project_id, n, note, timeline, timeline_name, video, video_id, video_size, seconds, by_id)
+    values (p.id, n, left(coalesce(data->>'note', ''), 300), data->>'timeline', left(coalesce(nullif(data->>'timeline_name', ''), 'timeline.fcpxml'), 160),
+            nullif(data->>'video', ''), nullif(data->>'video_id', ''), greatest(0, coalesce((data->>'video_size')::bigint, 0)),
+            greatest(0, coalesce((data->>'seconds')::real, 0)), me.id)
+    returning id into new_id;
+    update lelons.projects x set editor_id = null, editing_since = null, updated_at = now(),
+      stage = case when x.stage = 'footage' then 'rough' else x.stage end where x.id = p.id;
+    insert into lelons.project_events (project_id, by_id, kind, detail) values (p.id, me.id, 'cut', 'Cut ' || n);
+    return json_build_object('id', new_id, 'n', n);
+  elsif what = 'timeline' then
+    return (select json_build_object('timeline', c.timeline, 'name', c.timeline_name, 'n', c.n)
+            from lelons.project_cuts c where c.id = (data->>'id')::uuid and c.project_id = p.id);
+  elsif what = 'delete_cut' then
+    with d as (delete from lelons.project_cuts c where c.id = (data->>'id')::uuid and c.project_id = p.id
+                 and (c.by_id = me.id or p.owner_id = me.id) returning c.*)
+    select json_agg(json_build_object('path', d.video, 'id', d.video_id)) into gone from d where d.video_id is not null;
+    return json_build_object('files', coalesce(gone, '[]'::json));
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -4675,7 +5106,7 @@ begin
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
     'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)',
     'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)',
-    'lelons_push_sub(text, text, jsonb)', 'lelons_push_job(text, text, text)'] loop
+    'lelons_push_sub(text, text, jsonb)', 'lelons_push_job(text, text, text)', 'lelons_project(text, text, uuid, jsonb)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

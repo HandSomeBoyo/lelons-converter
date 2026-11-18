@@ -109,6 +109,7 @@
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
       <button data-section="convert" data-tab="video" title="Convert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><span>Convert</span><b class="tab-dot" hidden></b></button>
       <button data-section="library" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span><b class="tab-dot" hidden></b></button>
+      <button data-tab="projects" title="Projects: edit videos together"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M10.5 11.2v4.6l4-2.3z"/></svg><span>Projects</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="projectsTabBadge" hidden></b></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
       <button data-section="recording" data-tab="games" title="Recording"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg><span>Recording</span><b class="tab-dot" hidden></b></button>
@@ -1342,6 +1343,46 @@
     <div class="bd-board" id="bdBoard" hidden></div>
   </section>
 
+  <section class="tab-page" id="projectsTab" hidden>
+    <div id="pjHome">
+      <div class="pj-top">
+        <h1 class="headline">Projects<br><em>Edit videos together. Footage, cuts, notes and music for each video in one shared folder.</em></h1>
+        <button type="button" class="convert small-button pj-new-button" id="pjNew" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>New project</span>
+        </button>
+      </div>
+      <p class="fx-status" id="pjStatus" hidden></p>
+      <div class="fx-out" id="pjOut" hidden>
+        <p>Log in to see your projects and the ones friends invited you to.</p>
+        <button type="button" class="small-button" id="pjLogin">Log in</button>
+      </div>
+      <div class="fx-setup" id="pjSetup" hidden>
+        <h2>Set up the storage (once)</h2>
+        <p>Footage is big, so it goes in your own free Backblaze storage: 10 GB free, no card needed. Projects get a folder of their own there, apart from Film assets.</p>
+        <ol>
+          <li>Make a free account on <button type="button" class="link" id="pjB2Site">backblaze.com</button> (pick <b>B2 Cloud Storage</b>), or use the one you made for Film assets.</li>
+          <li>On the left click <b>Application Keys</b>, then <b>Generate New Master Application Key</b>.</li>
+          <li>Copy the <b>keyID</b> and the <b>applicationKey</b> into the boxes here and click Set up.</li>
+        </ol>
+        <div class="fx-setup-keys">
+          <label class="input"><input id="pjKeyId" placeholder="keyID" autocomplete="off" spellcheck="false"></label>
+          <label class="input"><input id="pjKey" type="password" placeholder="applicationKey" autocomplete="off" spellcheck="false"></label>
+          <button type="button" class="convert small-button" id="pjSetupGo">Set up</button>
+        </div>
+        <p class="fx-setup-note" id="pjSetupNote">The app makes a private folder there and two keys only for it. Your master key isn't saved anywhere.</p>
+      </div>
+      <p class="fx-wait" id="pjWait" hidden>The owner is setting up the storage for Projects. You can still join projects friends invite you to.</p>
+      <div class="pj-invites" id="pjInvites"></div>
+      <div class="pj-bar" id="pjBar" hidden>
+        <div class="pj-seg" id="pjFilter" role="tablist"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="mine">Mine</button><button type="button" data-f="shared">Shared with me</button><button type="button" data-f="done">Done</button></div>
+        <span class="pj-muted pj-small">Newest changes first</span>
+      </div>
+      <div class="pj-grid" id="pjGrid"></div>
+    </div>
+    <div class="pj-page" id="pjPage" hidden></div>
+    <div class="fx-jobs pj-jobs" id="pjJobs" hidden></div>
+  </section>
+
   <section class="tab-page" id="fxTab" hidden>
     <div class="fx-page" id="fxPage">
       <div class="fx-hero" id="fxHero">
@@ -1754,6 +1795,20 @@
         <button type="submit" class="small-button" id="fxPackSave">Make the pack</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="pjModal" hidden>
+  <div class="dialog pj-dialog" role="dialog" aria-labelledby="pjModalHeading">
+    <h2 id="pjModalHeading"></h2>
+    <p class="sub" id="pjModalSub"></p>
+    <div class="pj-modal-body" id="pjModalBody"></div>
+    <p class="acct-note" id="pjModalNote"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="pjModalCancel">Cancel</button>
+      <button type="button" class="small-button" id="pjModalGo">OK</button>
+    </div>
   </div>
 </div>
 
@@ -2530,6 +2585,7 @@
   <script src="pdfedit.js"></script>
 <script src="boards.js"></script>
 <script src="fx.js"></script>
+<script src="projects.js"></script>
 <script src="games.js"></script>
 <script src="povs.js"></script>
 <!-- feed.js (the Friends page) is off for now: add <script src="feed.js"></script> and the side bar button back to bring it back -->

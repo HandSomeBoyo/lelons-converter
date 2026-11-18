@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.40.0", items: [
+    "New (Beta): Projects. Edit videos together with friends. Each video gets a shared folder with everyone's footage, every saved cut, notes and music from the Library.",
+    "Press Edit in Resolve and VaultHub downloads what you need and makes a timeline for DaVinci Resolve (File › Import › Timeline). Your friends' notes show up as markers.",
+    "When you're done, export the timeline from Resolve and press Upload new cut. Only one person edits at a time, so nobody's work gets overwritten.",
+    "Watch each cut in the app and click to leave a note at the exact second.",
+  ] },
   { version: "2.39.0", items: [
     "Servers: drag channels to move them, like on Discord. Drop one on a category name to move it there.",
     "Drag yourself into another voice channel to switch. The owner and mods can drag other people into another voice channel too.",
