@@ -284,8 +284,17 @@ const AUDIO_MUSIC_NOTES = {
 const AUDIO_MUSIC_NOISE = "Off in Music mode, so your music comes through clean.";
 
 // Noise suppression: "off", "standard" (the one built into Windows' browser engine), "strong" (RNNoise, an AI
-// that keeps only voices) or "max" (GTCRN, a newer AI for really loud places). Runs on your computer.
-const NOISE_LEVELS = ["off", "standard", "strong", "max"];
+// that keeps only voices), "max" (GTCRN, a newer AI for really loud places) or "deep" (DeepFilterNet 3, the
+// best sounding AI, but it needs more of the computer). All run on your computer.
+const NOISE_LEVELS = ["off", "standard", "strong", "max", "deep"];
+const NOISE_NAMES = { off: "Off", standard: "Standard", strong: "Strong", max: "Max", deep: "DeepFilter" };
+const NOISE_NOTES = {
+  off: "Others hear everything your microphone picks up.",
+  standard: "Takes away steady hum, like a fan.",
+  strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",
+  max: "A stronger AI, for loud places. Your voice may sound a little less natural.",
+  deep: "The best sounding AI (DeepFilterNet). Takes away more noise and keeps your voice natural, but uses more of your computer. Takes a second to start.",
+};
 function callNoise() {
   const level = loadPref("callNoise");
   return NOISE_LEVELS.includes(level) ? level : "strong";
@@ -362,26 +371,51 @@ async function callAudioBitrateNow(p, again) {
 async function callOpenMic() {
   const raw = await navigator.mediaDevices.getUserMedia(callMicConstraints());
   const level = callNoiseUsed();
-  if (level !== "strong" && level !== "max") return { stream: raw, parts: { raw } };
-  let ctx = null;
-  try {
-    const kind = level === "max" ? "gtcrn" : "rnnoise";
-    ctx = new AudioContext({ sampleRate: 48000 }); // (both AIs work on 48 kHz sound)
-    const [wasmBinary] = await Promise.all([callNoiseWasm(kind), ctx.audioWorklet.addModule(`noise/${kind}.js`)]);
-    const node = new AudioWorkletNode(ctx, "@sapphi-red/web-noise-suppressor/" + kind, {
-      processorOptions: { maxChannels: 1, wasmBinary }, channelCount: 1, channelCountMode: "explicit",
-    });
-    const out = ctx.createMediaStreamDestination();
-    out.channelCount = 1;
-    ctx.createMediaStreamSource(raw).connect(node).connect(out);
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    return { stream: out.stream, parts: { raw, ctx, node } };
-  } catch (e) {
-    // The AI couldn't start here: use the built-in one instead (and let go of its sound engine).
-    if (ctx) ctx.close().catch(() => {});
-    raw.getAudioTracks().forEach((t) => t.applyConstraints({ ...callMicConstraints().audio, noiseSuppression: true }).catch(() => {}));
-    return { stream: raw, parts: { raw } };
+  if (level !== "strong" && level !== "max" && level !== "deep") return { stream: raw, parts: { raw } };
+  // DeepFilter falls back to Strong (RNNoise) if it can't start here, and that falls back to the built-in one.
+  const kinds = level === "deep" ? ["deepfilter", "rnnoise"] : [level === "max" ? "gtcrn" : "rnnoise"];
+  for (const kind of kinds) {
+    let ctx = null;
+    try {
+      ctx = new AudioContext({ sampleRate: 48000 }); // (all the AIs work on 48 kHz sound)
+      const node = await callNoiseNode(ctx, kind);
+      const out = ctx.createMediaStreamDestination();
+      out.channelCount = 1;
+      ctx.createMediaStreamSource(raw).connect(node).connect(out);
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      return { stream: out.stream, parts: { raw, ctx, node } };
+    } catch (e) {
+      // (let go of its sound engine and try the next one)
+      if (ctx) ctx.close().catch(() => {});
+    }
   }
+  // No AI could start here: use the built-in one instead.
+  raw.getAudioTracks().forEach((t) => t.applyConstraints({ ...callMicConstraints().audio, noiseSuppression: true }).catch(() => {}));
+  return { stream: raw, parts: { raw } };
+}
+
+// One noise suppression AI in a sound engine, ready to use.
+async function callNoiseNode(ctx, kind) {
+  if (kind === "deepfilter") {
+    const [files] = await Promise.all([callDeepFilterFiles(), ctx.audioWorklet.addModule("noise/deepfilter.js")]);
+    const node = new AudioWorkletNode(ctx, "vaulthub/deepfilter", {
+      processorOptions: { wasmModule: files.wasmModule, model: files.model }, channelCount: 1, channelCountMode: "explicit",
+      numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+    });
+    // (it takes a second or two to get going: wait, so a computer it can't run on gets RNNoise instead)
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("DeepFilter took too long")), 20000);
+      node.port.onmessage = (e) => {
+        clearTimeout(timer);
+        if (e.data && e.data.ready) resolve(); else reject(new Error((e.data && e.data.failed) || "DeepFilter failed"));
+      };
+    }).catch((e) => { try { node.port.postMessage("destroy"); } catch (x) { /* gone */ } throw e; });
+    return node;
+  }
+  const [wasmBinary] = await Promise.all([callNoiseWasm(kind), ctx.audioWorklet.addModule(`noise/${kind}.js`)]);
+  return new AudioWorkletNode(ctx, "@sapphi-red/web-noise-suppressor/" + kind, {
+    processorOptions: { maxChannels: 1, wasmBinary }, channelCount: 1, channelCountMode: "explicit",
+  });
 }
 
 const callNoiseFiles = {};
@@ -397,6 +431,21 @@ function callNoiseWasm(kind) {
     callNoiseFiles[kind].catch(() => { delete callNoiseFiles[kind]; });
   }
   return callNoiseFiles[kind];
+}
+
+// DeepFilterNet: the program (made ready once, it's big) and its model.
+let callDeepFilter = null;
+function callDeepFilterFiles() {
+  if (!callDeepFilter) {
+    const get = (file) => fetch("noise/" + file).then((r) => {
+      if (!r.ok) throw new Error("no " + file);
+      return r.arrayBuffer();
+    });
+    callDeepFilter = Promise.all([get("deepfilter.wasm").then((b) => WebAssembly.compile(b)), get("deepfilter_model.tar.gz")])
+      .then(([wasmModule, model]) => ({ wasmModule, model }));
+    callDeepFilter.catch(() => { callDeepFilter = null; });
+  }
+  return callDeepFilter;
 }
 
 function callMicClose(stream, parts) {
@@ -1296,17 +1345,12 @@ async function drawCallPop() {
     els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: AUDIO_MUSIC_NOTES[music ? "on" : "off"] }));
     const noise = callNoise();
     els.push(title("Noise suppression"));
-    const noiseChips = chips(NOISE_LEVELS, music ? "off" : noise, (v) => ({ off: "Off", standard: "Standard", strong: "Strong", max: "Max" })[v], callSetNoise);
+    const noiseChips = chips(NOISE_LEVELS, music ? "off" : noise, (v) => NOISE_NAMES[v], callSetNoise);
     if (music) noiseChips.querySelectorAll("button").forEach((b) => { b.disabled = true; });
     els.push(noiseChips);
     els.push(Object.assign(document.createElement("p"), {
       className: "call-pop-note",
-      textContent: music ? AUDIO_MUSIC_NOISE : {
-        off: "Others hear everything your microphone picks up.",
-        standard: "Takes away steady hum, like a fan.",
-        strong: "AI that keeps your voice and takes away keyboard clicks, fans and background noise.",
-        max: "The strongest AI, for loud places. Your voice may sound a little less natural.",
-      }[noise],
+      textContent: music ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise],
     }));
     els.push(title("Push to talk"), callPttRows("call-chips"));
     els.push(Object.assign(document.createElement("p"), { className: "call-pop-note", textContent: PTT_NOTE }));

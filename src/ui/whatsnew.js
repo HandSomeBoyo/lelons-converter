@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "2.42.0", items: [
+    "Calls: new noise suppression choice, DeepFilter. It's a stronger, free AI (DeepFilterNet) that takes away more background noise and keeps your voice sounding natural.",
+    "Pick it in Settings › Sound or in a call's sound menu. It uses more of your computer than Strong and takes a second to start. If it can't run on a PC, VaultHub uses Strong instead.",
+  ] },
   { version: "2.41.0", items: [
     "Projects (Beta): footage now goes straight from PC to PC. Nothing is stored online, so there's no size limit and it's free. No more Backblaze setup.",
     "New clips come to your PC by themselves while you and your friends have VaultHub open. If two friends have a clip, you get it from both at once.",
