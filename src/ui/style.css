@@ -8734,3 +8734,13 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
   box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
 .fx-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .fx-icon.sure, .ghost-button.fx-danger.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+/* The category buttons sit above the genres: picking Music no longer pushes them 200px to the right */
+#sfxMain > .lib-cats { grid-column: 1 / -1; }
+#sfxMain.has-genres > .lib-cats { margin-bottom: -8px; }
+/* Film assets: a slim banner instead of a big one that repeated the first pack */
+.fx-hero { min-height: 150px; align-items: center; }
+.fx-hero-text { padding: 22px 28px; }
+.fx-hero-text .headline { margin: 0 0 14px; }
+.fx-hero-buttons:empty, .fx-hero-buttons[hidden] { display: none; }
+.fx-hero-text > [hidden] { display: none; }
+#fxHeroOpen { height: 36px; padding: 0 16px; font-size: 13.5px; }

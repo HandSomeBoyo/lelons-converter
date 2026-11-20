@@ -295,19 +295,19 @@ function renderFxPage() {
 }
 
 function renderFxHero() {
+  // (3.0) A slim banner: the newest pack's video plays behind the title, but its name and facts aren't repeated
+  // here (they're the first card just below). A pack from this week gets one small "New" button.
   const pack = fxData && fxData.ready && (typeof sfxUser !== "function" || sfxUser()) && fxData.packs[0];
   const video = $("fxHeroVideo");
-  $("fxHeroButtons").hidden = !pack;
-  if (pack) {
-    $("fxHeroKicker").textContent = fxIsNew(pack) ? "New pack" : "Newest pack";
-    $("fxHeroTitle").replaceChildren(document.createTextNode(pack.name), document.createElement("br"), fxEl("em", "", fxCatName(pack.category)));
-    $("fxHeroAbout").textContent = pack.about || "Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.";
-    $("fxHeroMeta").textContent = `${pack.clips} ${pack.clips === 1 ? "clip" : "clips"} · ${fxSize(pack.size)}${pack.by ? " · by " + pack.by : ""}`;
+  const fresh = pack && fxIsNew(pack);
+  $("fxHeroButtons").hidden = !fresh;
+  $("fxHeroKicker").hidden = true;
+  $("fxHeroAbout").hidden = true;
+  $("fxHeroMeta").hidden = true;
+  $("fxHeroTitle").replaceChildren(document.createTextNode("Film assets."), document.createElement("br"), fxEl("em", "", "Make it go boom."));
+  if (fresh) {
+    $("fxHeroOpen").textContent = "New: " + pack.name;
     $("fxHeroOpen").onclick = () => openFxPack(pack.id);
-  } else {
-    $("fxHeroKicker").textContent = "Film assets";
-    $("fxHeroTitle").replaceChildren(document.createTextNode("Film assets."), document.createElement("br"), fxEl("em", "", "Make it go boom."));
-    $("fxHeroAbout").textContent = "Explosions, fire, smoke, sparks and more. Drop them right into Resolve or Premiere.";
   }
   const src = pack && pack.cover ? fxUrl(pack.cover.preview) : "";
   const poster = pack && pack.cover ? fxUrl(pack.cover.thumb) : "";
@@ -348,7 +348,6 @@ function fxCard(pack) {
   card.type = "button";
   const thumb = fxThumb(pack.cover && pack.cover.thumb, pack.cover && pack.cover.preview, card, pack.category);
   thumb.append(fxBadges(pack));
-  if (pack.cover && pack.cover.preview) thumb.append(fxEl("span", "fx-play", "Hover to play"));
   const info = fxEl("div", "fx-info");
   info.append(fxEl("strong", "", pack.name), fxEl("span", "", `${fxCatName(pack.category)} · ${pack.clips} ${pack.clips === 1 ? "clip" : "clips"} · ${fxSize(pack.size)}`));
   const dl = fxEl("span", "fx-dl");

@@ -992,9 +992,10 @@
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
+      <!-- (above the genres, so the buttons stay where they are when the genres open) -->
+      <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
       <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
-        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
         <div class="lib-tools">
           <label class="input history-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>

@@ -399,13 +399,7 @@ const GENRE_ICONS = {
 };
 function drawGenres() {
   if (sfxCategory === "playlists" && typeof drawPlaylistSide === "function") return drawPlaylistSide($("sfxGenres"));
-  const genres = (sfxAccount.genres || {})[sfxCategory] || [];
   const box = $("sfxGenres");
-  const open = genres.length > 0;
-  if (!open) sfxGenre = "";
-  else if (sfxGenre && !genres.includes(sfxGenre)) sfxGenre = "";
-  $("sfxMain").classList.toggle("has-genres", open);
-  if (!open) { box.hidden = true; return; }
   const counts = {};
   let all = 0;
   for (const s of sfxSounds) {
@@ -413,6 +407,13 @@ function drawGenres() {
     all++;
     if (s.genre) counts[s.genre] = (counts[s.genre] || 0) + 1;
   }
+  // Only genres that have sounds (9 genres with 5 empty ones was a lot to look at). The picked one stays.
+  // (The upload and edit windows still offer every genre.)
+  const genres = ((sfxAccount.genres || {})[sfxCategory] || []).filter((g) => counts[g] || g === sfxGenre);
+  const open = genres.length > 0;
+  if (!open || !genres.includes(sfxGenre)) sfxGenre = "";
+  $("sfxMain").classList.toggle("has-genres", open);
+  if (!open) { box.hidden = true; return; }
   const label = (sfxAccount.categories || {})[sfxCategory] || "";
   const head = box._head || (box._head = document.createElement("h3"));
   head.className = "lib-genres-head";
