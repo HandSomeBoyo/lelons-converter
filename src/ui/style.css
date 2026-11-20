@@ -8715,3 +8715,16 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ---- 3.0: Boards: calmer home and soft touches */
+.bd-home-login { display: flex; align-items: center; gap: 8px; margin: 26px 0 0; color: var(--muted); font-size: 13.5px; }
+.bd-home-login > span:first-child { display: grid; color: var(--muted); }
+.bd-home-login svg { width: 16px; height: 16px; }
+.bd-home-login button { all: unset; cursor: pointer; color: var(--text); font-weight: 600; border-bottom: 1px solid transparent; transition: border-color .15s, color .15s; }
+.bd-home-login button:hover { color: var(--accent); border-bottom-color: currentColor; }
+.bd-card { transition: transform .15s ease, box-shadow .15s ease, background .15s; }
+.bd-card:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 2px #388bff, 0 4px 10px rgba(0, 0, 0, .22); }
+body.bd-dragging .bd-card:hover { transform: none; }
+@keyframes bd-in { from { opacity: 0; } to { opacity: 1; } }
+.bd-in { animation: bd-in .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { .bd-in { animation: none; } .bd-card:hover { transform: none; } }

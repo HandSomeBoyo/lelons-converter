@@ -445,20 +445,17 @@ function bdDrawHome() {
   box.replaceChildren();
   const team = bdTeamBoards || [];
   const all = [...bdBoards, ...team];
-  const starred = all.filter((b) => b.starred);
-  const recent = [...all].filter((b) => b.opened).sort((a, b) => b.opened - a.opened).slice(0, 4);
+  // (3.0) Each board shows once: starred ones first in their own group (no separate Starred and Recently viewed rows).
+  const starFirst = (list) => [...list.filter((b) => b.starred), ...list.filter((b) => !b.starred)];
   const head = (icon, text, note) => bdEl("h3", { class: "bd-home-head" }, bdEl("span", { html: BD_ICONS[icon] }), bdEl("span", { text }), note ? bdEl("small", { text: note }) : null);
   if (bdInvites.length) box.append(head("plus", "Invitations"), bdEl("div", { class: "bd-invites" }, bdInvites.map(bdInviteCard)));
-  if (starred.length) box.append(head("star", "Starred boards"), bdEl("div", { class: "bd-grid" }, starred.map(bdTile)));
-  if (recent.length && all.length > 4) box.append(head("clock", "Recently viewed"), bdEl("div", { class: "bd-grid" }, recent.map(bdTile)));
   const add = (forTeam) => bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: (e) => bdCreatePop(e.currentTarget, forTeam) },
     bdEl("span", { text: "Create new board" }));
-  box.append(head("card", "Your boards", "Just you, saved on this computer"), bdEl("div", { class: "bd-grid" }, bdBoards.map(bdTile), add(false)));
-  box.append(head("people", "Team boards", "Shared with people you invite"));
-  if (bdTeamBoards) box.append(bdEl("div", { class: "bd-grid" }, team.map(bdTile), add(true)));
-  else if (bdTeamError) box.append(bdEl("p", { class: "bd-home-empty", text: bdTeamError }));
-  else box.append(bdEl("div", { class: "bd-grid" }, bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: () => openLogin("login") },
-    bdEl("span", { text: "Log in to make boards with your friends" }))));
+  box.append(head("card", "Your boards", "Just you, saved on this computer"), bdEl("div", { class: "bd-grid" }, starFirst(bdBoards).map(bdTile), add(false)));
+  if (bdTeamBoards) box.append(head("people", "Team boards", "Shared with people you invite"), bdEl("div", { class: "bd-grid" }, starFirst(team).map(bdTile), add(true)));
+  else if (bdTeamError) box.append(head("people", "Team boards", "Shared with people you invite"), bdEl("p", { class: "bd-home-empty", text: bdTeamError }));
+  else box.append(bdEl("p", { class: "bd-home-login" }, bdEl("span", { html: BD_ICONS.people }), bdEl("span", { text: "Want to plan with friends? " }),
+    bdEl("button", { type: "button", text: "Log in for team boards", onclick: () => openLogin("login") })));  // (3.0) one line, not a big empty tile
   if (!all.length && !bdInvites.length) box.append(bdEl("p", { class: "bd-home-empty", text: "Make a board for a video, a project or your week. Put lists on it (like To do, Doing, Done) and cards in the lists, then drag the cards along as things get done." }));
 }
 
@@ -562,6 +559,15 @@ function bdShow(board, team) {
   $("bdBoard").hidden = false;
   document.body.classList.add("board-open");
   bdDraw();
+  bdFadeIn($("bdBoard"));
+}
+
+// (3.0) A board or the Boards home fades in softly when you open it.
+function bdFadeIn(el) {
+  el.classList.remove("bd-in");
+  void el.offsetWidth;
+  el.classList.add("bd-in");
+  el.addEventListener("animationend", () => el.classList.remove("bd-in"), { once: true });
 }
 
 async function bdClose() {
@@ -575,6 +581,7 @@ async function bdClose() {
   $("bdBoard").hidden = true;
   $("bdBoard").replaceChildren();
   $("bdHome").hidden = false;
+  bdFadeIn($("bdHome"));
   document.body.classList.remove("board-open");
   bdLoadHome();
 }
