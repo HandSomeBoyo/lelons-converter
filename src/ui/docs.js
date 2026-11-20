@@ -112,6 +112,7 @@ const DOC_ICONS = {
   check: '<path d="M5.5 12.5l4 4 9-9"/>',
   moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  moreH: '<circle cx="6" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/>',
   more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   pdf: '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
@@ -1460,6 +1461,9 @@ function drawTabs() {
   for (const t of kids("")) row(t, 0);
   box.replaceChildren(...rows);
   $("docTabsHint").hidden = list.length > 0;
+  // (3.0) With only one page the list just repeats the tab over the page, so it hides until there are more
+  // ("Add a page" over the page is still there).
+  $("docTabs").hidden = list.length === 0;
 }
 $("docTitle").addEventListener("input", () => {
   const name = $("docTitle").value.trim() || "Untitled document";
@@ -1744,6 +1748,7 @@ drawDarkButton();
 
 // ---------------------------------------------------------------- the writing guide (next to the page)
 
+const docGuideCounted = new Set(); // "<doc id>:<kind>" counted this time the app is open
 function drawGuide() {
   const t = docTypeOf(doc), g = t.guide;
   docsText.dataset.hint = t.hint || "";
@@ -1751,6 +1756,14 @@ function drawGuide() {
   docEmptyCheck();
   $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1" || !$("docNotes").hidden;
   if (!g) return;
+  // (3.0) Once you've seen a kind's guide in 3 documents, it starts folded to one line ("Show how" opens it).
+  if (!$("docGuide").hidden && !docGuideCounted.has(doc.id + ":" + t.key)) {
+    docGuideCounted.add(doc.id + ":" + t.key);
+    savePref("docGuideSeen:" + t.key, String((Number(loadPref("docGuideSeen:" + t.key)) || 0) + 1));
+  }
+  $("docGuide").classList.toggle("folded", (Number(loadPref("docGuideSeen:" + t.key)) || 0) > 3);
+  $("docGuide").classList.remove("open");
+  $("docGuideFold").textContent = "Show how";
   $("docGuideTitle").textContent = g.title;
   $("docGuideIntro").textContent = g.intro;
   $("docGuideSteps").replaceChildren(...g.steps.map(([name, text], i) => {
@@ -2500,26 +2513,25 @@ function buildToolbar() {
   if (pdfeIsPage(docTab)) return pdfeToolbar();
   const script = doc.kind === "script";
   const sep = '<span class="doc-sep"></span>';
-  const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), tb("print", "print", "Print or save as PDF (Ctrl+P)"), sep];
+  // (3.0) Fewer buttons: the ones you need less often (print, page break, indent...) wait under "More" at the end.
+  const more = `<button type="button" class="doc-tool doc-more" data-pop="more" title="More">${docIcon("moreH")}</button>`;
+  const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), sep];
   if (script) {
     parts.push(`<button type="button" class="doc-select doc-element" data-pop="element" title="What this line is (Tab changes it)"><span>Action</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`,
       `<button type="button" class="doc-select doc-font" data-pop="font" title="Font"><span>Courier Prime</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
       tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"), sep,
-      tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("numbers-scene", "numbersScene", "Scene numbers"), sep,
-      tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Scenes"));
+      tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Scenes"), more);
   } else {
     parts.push(`<button type="button" class="doc-select doc-style" data-pop="style" title="Text style"><span>Normal text</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`,
       `<button type="button" class="doc-select doc-font" data-pop="font" title="Font"><span>Inter</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
       tb("smaller", "minus", "Smaller text"), `<input class="doc-size" id="docSize" value="11" title="Text size" inputmode="numeric" maxlength="3">`, tb("bigger", "plus", "Bigger text"), sep,
-      tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"), tb("strikeThrough", "strike", "Strikethrough"),
+      tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"),
       `<button type="button" class="doc-tool doc-color" data-pop="color" title="Text color">${docIcon("color")}<i></i></button>`,
       `<button type="button" class="doc-tool doc-color hl" data-pop="highlight" title="Highlight">${docIcon("highlight")}<i></i></button>`, sep,
       tb("link", "link", "Link (Ctrl+K)"), tb("image", "image", "Picture"), `<button type="button" class="doc-tool" data-pop="table" title="Table">${docIcon("table")}</button>`, sep,
       `<button type="button" class="doc-tool doc-align" data-pop="align" title="Line up the text">${docIcon("left")}</button>`,
       `<button type="button" class="doc-tool" data-pop="spacing" title="Line spacing">${docIcon("spacing")}</button>`, sep,
-      tb("checklist", "checklist", "Checklist"), tb("insertUnorderedList", "bullets", "Bullets"), tb("insertOrderedList", "numbers", "Numbered list"),
-      tb("outdent", "outdent", "Less indent"), tb("indent", "indent", "More indent"), sep,
-      tb("removeFormat", "clear", "Clear formatting (Ctrl+\\)"), tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Outline"));
+      tb("checklist", "checklist", "Checklist"), tb("insertUnorderedList", "bullets", "Bullets"), tb("insertOrderedList", "numbers", "Numbered list"), more);
   }
   $("docToolbar").innerHTML = parts.join("");
   $("docToolbar").querySelectorAll("button").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault())); // keep the selection
@@ -2801,6 +2813,24 @@ function docOpenPop(kind, button) {
       item(entry.label, entry.fn, { icon: entry.icon || "blank", key: entry.key, on: entry.on, more: entry.more, cls: entry.danger ? "danger" : "", disabled: entry.disabled });
     }
     if (pop.lastChild && pop.lastChild.classList.contains("lib-menu-line")) pop.lastChild.remove();
+  } else if (kind === "more") {
+    // (3.0) the toolbar buttons you need less often
+    const on = (cmd) => { try { return !!docKeepRange && document.queryCommandState(cmd); } catch (e) { return false; } };
+    if (doc.kind === "script") {
+      item("Scene numbers", () => docCommand("numbers-scene"), { icon: "numbersScene", on: docsText.classList.contains("numbers") });
+      item("Page break", () => docCommand("pagebreak"), { icon: "pagebreak", key: "Ctrl+Enter" });
+    } else {
+      item("Strikethrough", () => docCommand("strikeThrough"), { icon: "strike", on: on("strikeThrough") });
+      item("Less indent", () => docCommand("outdent"), { icon: "outdent" });
+      item("More indent", () => docCommand("indent"), { icon: "indent" });
+      item("Clear formatting", () => docCommand("removeFormat"), { icon: "clear", key: "Ctrl+\\" });
+      item("Page break", () => docCommand("pagebreak"), { icon: "pagebreak", key: "Ctrl+Enter" });
+      line();
+      item("Find and replace", () => docCommand("find"), { icon: "find", key: "Ctrl+F" });
+      item("Outline", () => docCommand("outline"), { icon: "outline", on: !$("docOutline").hidden });
+    }
+    line();
+    item("Print or save as PDF", () => docCommand("print"), { icon: "print", key: "Ctrl+P" });
   } else if (kind === "spacing") {
     head("Line spacing");
     const now = docSettings().line;
