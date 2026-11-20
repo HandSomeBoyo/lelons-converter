@@ -599,6 +599,7 @@ function docCard(d) {
     const open = () => openDoc(collab ? "collab" : "local", d.id);
     card.addEventListener("click", open);
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+    card.addEventListener("contextmenu", (e) => { e.preventDefault(); docCardMenu(d, collab, more); }); // (3.0) right-click = the ... menu
     return card;
   });
 }
@@ -795,6 +796,7 @@ function folderCard(f, docs) {
     more.addEventListener("click", (e) => { e.stopPropagation(); const now = folderById(f.id); if (now) folderMenu(now, more); });
     card.addEventListener("click", () => openFolder(f.id));
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") openFolder(f.id); });
+    card.addEventListener("contextmenu", (e) => { e.preventDefault(); const now = folderById(f.id); if (now) folderMenu(now, more); });
     card.draggable = true;
     card.addEventListener("dragstart", (e) => { docsDrag = { folder: f.id }; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-vh-folder", f.id); card.classList.add("dragging"); document.body.classList.add("docs-dragging"); });
     card.addEventListener("dragend", () => { docsDrag = null; card.classList.remove("dragging"); document.body.classList.remove("docs-dragging"); });
@@ -867,6 +869,15 @@ async function deleteFolder(f) {
   drawDocsHome();
 }
 
+// Puts the "..." menu of a card or folder under its button. (3.0) Near the bottom of the window it
+// opens upward instead, so it isn't cut off below the edge.
+function docsPlaceMenu(menu, button) {
+  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
+  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
+  const up = r.bottom + 6 + menu.offsetHeight > innerHeight - 8 && r.top - 6 - menu.offsetHeight > 8;
+  menu.style.top = (up ? r.top - box.top - 6 - menu.offsetHeight : r.bottom - box.top + 6) + "px";
+}
+
 function folderMenu(f, button) {
   const menu = $("docsCardMenu");
   if (!menu.hidden && menu.dataset.id === "folder:" + f.id) { menu.hidden = true; return; }
@@ -885,9 +896,7 @@ function folderMenu(f, button) {
   menu.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
   item("trash", "Delete folder", () => deleteFolder(f), "danger");
   menu.hidden = false;
-  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
-  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
-  menu.style.top = r.bottom - box.top + 6 + "px";
+  docsPlaceMenu(menu, button);
 }
 
 // "Move to folder": every folder, as a tree.
@@ -1568,7 +1577,7 @@ function docShowTab(id) {
     drawMenubar();
     drawGuide();
     $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
-    docHint("");
+    $("docHint").textContent = ""; // (3.0) not docHint(""): that's the "Title page." hint, which showed on every new page
   }
   docApplySettings();
   drawTabs();
@@ -1770,6 +1779,11 @@ function docShowGuide(on) {
   docFit();
 }
 $("docGuideClose").addEventListener("click", () => docShowGuide(false));
+// (3.0) In a small window the guide sits over the page, folded to one line until you open it.
+$("docGuideFold").addEventListener("click", () => {
+  const open = $("docGuide").classList.toggle("open");
+  $("docGuideFold").textContent = open ? "Show less" : "Show how";
+});
 
 // An empty table with just the column names (the rest is up to you).
 function docGuideTable(cols, rows) {
@@ -2601,7 +2615,9 @@ function docBlockHeld(key) {
 
 // Which buttons are "on" for where the caret is.
 function docToolState() {
-  if (!doc || !$("docSize")) return; // PDF pages have their own toolbar
+  // PDF pages have their own toolbar. (3.0) Script pages have no size box, so this used to stop
+  // here for them too, and "Action" and the hint at the bottom never changed as you moved around.
+  if (!doc || !$("docToolbar").querySelector("#docSize, .doc-element")) return;
   const sel = getSelection();
   const inside = sel.rangeCount && docsText.contains(sel.anchorNode);
   const q = (cmd) => { try { return inside && document.queryCommandState(cmd); } catch (e) { return false; } };
@@ -4727,9 +4743,7 @@ function docCardMenu(d, collab, button) {
   if (collab && !d.mine) item("leave", "Leave this document", () => docCardRemove(d, collab), "danger");
   else item("trash", "Delete", () => docCardRemove(d, collab), "danger");
   menu.hidden = false;
-  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
-  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
-  menu.style.top = r.bottom - box.top + 6 + "px";
+  docsPlaceMenu(menu, button);
 }
 document.addEventListener("mousedown", (e) => {
   const menu = $("docsCardMenu");

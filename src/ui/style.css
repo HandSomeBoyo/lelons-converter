@@ -8710,3 +8710,23 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ---------------------------------------------------------------- 3.0: Docs page fixes */
+/* the dark page button is the same height as Saved and Only you next to it */
+.doc-top .doc-notes-button { box-sizing: border-box; width: 36px; height: 36px; padding: 0; }
+.doc-top .doc-notes-button svg { width: 17px; height: 17px; }
+/* the bar under the page is solid, so the white page doesn't show through it as a grey block */
+.doc-status { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* the guide's "Show how" only shows in a small window (see below) */
+.doc-guide-fold { display: none; }
+/* small window: the guide sits over the page, folded to one line, so the page stays in view */
+@container page (max-width: 960px) {
+  #docGuide { animation: none; padding: 12px 14px; }
+  #docGuide .doc-guide-head { align-items: center; }
+  #docGuide .doc-guide-head h4 { margin: 0; }
+  #docGuide .doc-guide-fold { display: inline; font-size: 13px; }
+  #docGuide:not(.open) > :not(.doc-guide-head) { display: none; }
+  #docGuide .doc-guide-head .icon-button { margin: 0 -4px 0 0; }
+}
+/* the "What do you want to write?" picker is a bit wider, so no note gets cut off with "..." */
+.doc-type-dialog { width: min(700px, 100%); }
