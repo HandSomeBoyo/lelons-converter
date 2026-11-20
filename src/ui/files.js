@@ -324,14 +324,10 @@ function fileRow(el, file) {
       clear.innerHTML = FILE_ICONS.remove;
       clear.onclick = () => { fileTrims.delete(file.id); drawFiles(); };
       trimBox.append(edit, clear);
-    } else {
-      const button = document.createElement("button");
-      button.className = "link";
-      button.textContent = fmt === "gif" ? "Pick the part for the GIF (first 10 seconds if you don't)" : "Trim";
-      button.onclick = () => trimFile(file);
-      trimBox.append(button);
     }
+    // (3.0) Nothing trimmed yet: the Trim button sits with the row's buttons and shows on hover.
   }
+  const canTrim = idle && fits(file, fmt) && !part;
 
   const bar = el.querySelector(".bar");
   bar.hidden = file.status !== "active";
@@ -341,10 +337,20 @@ function fileRow(el, file) {
 
   const actions = el.querySelector(".actions");
   const wanted = file.status === "active" ? (file.cancel ? [] : ["stop"]) : file.status === "queued" && file.id ? ["stop"] : file.canShow && file.status === "done" ? ["folder", "remove"] : ["remove"];
+  if (canTrim) wanted.unshift("trim:" + fmt);
   if (actions.dataset.kind !== wanted.join()) {
     actions.dataset.kind = wanted.join();
     actions.innerHTML = "";
     for (const kind of wanted) {
+      if (kind.startsWith("trim:")) {
+        const t = document.createElement("button");
+        t.className = "ghost-button row-hover";
+        t.textContent = fmt === "gif" ? "Pick part" : "Trim";
+        t.title = fmt === "gif" ? "Pick the part for the GIF (the first 10 seconds if you don't)" : "Keep only a part";
+        t.onclick = () => trimFile(file);
+        actions.append(t);
+        continue;
+      }
       const b = document.createElement("button");
       b.className = "icon-button";
       b.title = { folder: "Show in folder", stop: "Stop converting" }[kind] || "Remove from list";
@@ -673,6 +679,9 @@ function watchRow(w) {
 
 function drawWatches() {
   const list = $("watchList");
+  // (3.0) No watched folders yet: just a small link, not a whole section.
+  $("watchBox").hidden = !watchList.length;
+  $("watchAddSmall").hidden = !!watchList.length;
   const key = JSON.stringify([watchList, [...watchOpen], Math.floor(Date.now() / 60000)]);
   $("filesWatchError").hidden = !watchError;
   $("filesWatchError").textContent = watchError;
@@ -693,6 +702,8 @@ function renderWatches(list) {
   for (const id of watchOpen) if (!list.some((w) => w.id === id)) watchOpen.delete(id);
   drawWatches();
 }
+
+$("watchAddSmall").addEventListener("click", () => $("watchAdd").click());
 
 drawFiles();
 drawWatches();

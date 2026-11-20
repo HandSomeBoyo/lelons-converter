@@ -102,7 +102,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg", "lvRecapSeen", "lvCoView",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed", "dragTipSeen")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 def live_or_recording():

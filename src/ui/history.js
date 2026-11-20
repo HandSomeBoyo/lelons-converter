@@ -83,7 +83,7 @@ function historyRow(item) {
 // "Download again" for a link.
 function againButton(item) {
   const again = document.createElement("button");
-  again.className = "outline-button again";
+  again.className = "outline-button again row-hover";
   again.textContent = "Download again";
   again.onclick = async () => {
     const folder = await whereToSave();
@@ -113,7 +113,7 @@ function drawHistory() {
   const rows = shown.slice(0, 300);
   setChildren(list, rows.map((item) => keptNode(historyEls, item.id, JSON.stringify([item, whenText(item.date)]), () => historyRow(item))));
   forgetNodes(historyEls, historyItems.map((item) => item.id));
-  $("historyClear").hidden = !historyItems.length;
+  $("historyMoreWrap").hidden = !historyItems.length;
   $("historyEmpty").hidden = shown.length > 0;
   const kindName = { link: "links", file: "files", image: "pictures" }[historyKind];
   $("historyEmpty").textContent = !historyItems.length
@@ -144,8 +144,15 @@ $("historyClear").addEventListener("click", () => {
   clearTimer = null;
   button.textContent = "Clear history";
   historyItems = [];
+  $("historyMenu").hidden = true;
   drawHistory();
   api("/api/history-clear", {});
+});
+
+// (3.0) The ⋯ menu holds "Clear history", so it isn't always on the page.
+$("historyMore").addEventListener("click", () => { $("historyMenu").hidden = !$("historyMenu").hidden; });
+document.addEventListener("pointerdown", (e) => {
+  if (!$("historyMenu").hidden && !e.target.closest(".hist-menu-wrap")) $("historyMenu").hidden = true;
 });
 
 if (!$("historyTab").hidden) loadHistory();

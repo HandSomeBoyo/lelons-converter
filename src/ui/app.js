@@ -205,17 +205,37 @@ function showFormatExtras() {
   updateConvertText();
 }
 
+// (3.0) The one format button: "MP3 · 320 kbps", "MP4 · 1080p · Trimmed" and so on.
+function fmtButtonText() {
+  const q = $("quality").selectedOptions[0];
+  const quality = q ? q.textContent.replace(/\s*\(.*\)\s*/, "").trim() : "";
+  const parts = [format.toUpperCase(), quality];
+  if (AUDIO_FORMATS.includes(format) && $("normalize").checked) parts.push("Even volume");
+  $("fmtButtonText").textContent = parts.filter(Boolean).join(" · ");
+}
+function openFmt(open) {
+  $("fmtPop").hidden = !open;
+  $("fmtButton").classList.toggle("open", open);
+  $("fmtButton").setAttribute("aria-expanded", String(open));
+}
+$("fmtButton").addEventListener("click", () => openFmt($("fmtPop").hidden));
+document.addEventListener("pointerdown", (e) => {
+  if (!$("fmtPop").hidden && !e.target.closest(".fmt-wrap")) openFmt(false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("fmtPop").hidden) openFmt(false); });
+
 function updateConvertText() {
+  fmtButtonText();
   $("convertText").textContent = playlist ? `Convert ${picked.size} video${picked.size === 1 ? "" : "s"}` : "Convert";
   $("convert").disabled = !!playlist && picked.size === 0;
 }
 
 $("normalize").addEventListener("change", async () => render(await api("/api/normalize", { on: $("normalize").checked })));
 
-document.querySelectorAll("#toggle button").forEach((btn) => {
+document.querySelectorAll("#fmtPop button[data-format]").forEach((btn) => {
   btn.addEventListener("click", () => {
     format = btn.dataset.format;
-    document.querySelectorAll("#toggle button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("#fmtPop button[data-format]").forEach((b) => b.classList.toggle("active", b === btn));
     showFormatExtras();
     if (previewSeconds && $("preview").classList.contains("show")) prefetchWave(previewUrl, previewSeconds);
     refresh();
@@ -1092,10 +1112,21 @@ function renderJob(el, job) {
   return el;
 }
 
+const DRAG_TIP_TIMES = 3;
+const tipCounted = new Set(); // finished downloads already counted for the tip
+
 function renderQueue(jobs) {
   $("queue").classList.toggle("show", jobs.length > 0);
   $("clear").hidden = !jobs.some((j) => j.status === "done" || j.status === "error");
-  $("dragTip").hidden = !jobs.some((j) => j.status === "done");
+  // (3.0) The drag tip shows for the first few finished downloads, then it's known.
+  for (const j of jobs) {
+    if (j.status === "done" && !tipCounted.has(j.id)) {
+      tipCounted.add(j.id);
+      if ((loadPref("dragTipSeen") || 0) < DRAG_TIP_TIMES) savePref("dragTipSeen", (loadPref("dragTipSeen") || 0) + 1);
+      else tipCounted.late = true;
+    }
+  }
+  $("dragTip").hidden = !jobs.some((j) => j.status === "done") || !!tipCounted.late;
   const list = $("jobs");
   const existing = new Map([...list.children].map((el) => [el.dataset.id, el]));
   const ordered = [...jobs].reverse(); // newest on top
@@ -1152,6 +1183,7 @@ function render(s) {
     $("quality").value = s.quality[format];
     shownQuality = key;
   }
+  fmtButtonText();
   $("checkNow").disabled = s.checking;
   settingsCheckDone(s);
   $("autoUpdate").checked = s.autoUpdate;

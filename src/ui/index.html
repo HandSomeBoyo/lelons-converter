@@ -627,6 +627,39 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </label>
+    <!-- (3.0) One button for the format, quality and volume: the choices open under it -->
+    <div class="fmt-wrap">
+      <button type="button" class="fmt-button" id="fmtButton" aria-haspopup="true" aria-expanded="false" title="Format and quality">
+        <span id="fmtButtonText">MP3</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="fmt-pop" id="fmtPop" hidden>
+        <div class="fmt-section">
+          <span class="fmt-label">Sound</span>
+          <div class="toggle" id="toggle">
+            <button type="button" class="active" data-format="mp3">MP3</button>
+            <button type="button" data-format="m4a">M4A</button>
+            <button type="button" data-format="wav">WAV</button>
+            <button type="button" data-format="flac">FLAC</button>
+          </div>
+        </div>
+        <div class="fmt-section">
+          <span class="fmt-label">Video</span>
+          <div class="toggle" id="toggleVideo">
+            <button type="button" data-format="mp4">MP4</button>
+            <button type="button" data-format="gif">GIF</button>
+          </div>
+        </div>
+        <div class="fmt-section">
+          <span class="fmt-label">Quality</span>
+          <label class="quality">
+            <select id="quality" aria-label="Quality"></select>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+        </div>
+        <label class="check volume-check" id="normalizeBox" title="Makes quiet and loud songs about as loud as each other"><input type="checkbox" id="normalize"> Even out volume</label>
+      </div>
+    </div>
     <button class="convert" id="convert" type="submit">
       <span id="convertText">Convert</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -644,23 +677,6 @@
     <button type="button" class="icon-button" id="copiedNo" title="No thanks">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
-  </div>
-
-  <div class="options">
-    <div class="toggle" id="toggle">
-      <button class="active" data-format="mp3">MP3</button>
-      <button data-format="m4a">M4A</button>
-      <button data-format="wav">WAV</button>
-      <button data-format="flac">FLAC</button>
-      <button data-format="mp4">MP4</button>
-      <button data-format="gif">GIF</button>
-    </div>
-    <label class="quality">
-      <span>Quality</span>
-      <select id="quality" aria-label="Quality"></select>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-    </label>
-    <label class="check volume-check" id="normalizeBox" title="Makes quiet and loud songs about as loud as each other"><input type="checkbox" id="normalize"> Even out volume</label>
   </div>
 
   <div class="preview" id="preview">
@@ -932,8 +948,7 @@
     <label class="dropzone" id="fileDrop">
       <input type="file" id="mediaFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav,.ogg,.opus,.wma,.aac" multiple hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-      <span class="drop-text"><strong>Drop videos, songs or a whole folder here</strong> or <span class="link">choose files</span> · <button type="button" class="link" id="fileFolderPick">choose a folder</button></span>
-      <span class="drop-hint">MP4, MKV, MOV, AVI, WEBM, MP3, WAV, FLAC, M4A and more. Folders bring everything inside them, subfolders too.</span>
+      <span class="drop-text"><strong>Drop videos, songs or a folder here</strong> or <span class="link">choose files</span> · <button type="button" class="link" id="fileFolderPick">choose a folder</button></span>
     </label>
 
     <div class="file-scans" id="fileScans"></div>
@@ -984,6 +999,11 @@
         </button>
       </div>
     </div>
+
+    <button type="button" class="link files-watch-link" id="watchAddSmall" hidden title="Every new video or song you put in that folder gets converted by itself">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      Watch a folder
+    </button>
 
     <div class="watch-box" id="watchBox">
       <div class="watch-head">
@@ -1566,7 +1586,14 @@
         <button type="button" data-kind="file">Files</button>
         <button type="button" data-kind="image">Images</button>
       </div>
-      <button type="button" class="link" id="historyClear" hidden>Clear history</button>
+      <div class="hist-menu-wrap" id="historyMoreWrap" hidden>
+        <button type="button" class="icon-button" id="historyMore" title="More" aria-haspopup="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        </button>
+        <div class="hist-menu" id="historyMenu" hidden>
+          <button type="button" id="historyClear">Clear history</button>
+        </div>
+      </div>
     </div>
     <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you make in Link, Files and Images shows up here.</p>
     <div class="jobs history-list" id="historyList"></div>
@@ -1613,6 +1640,11 @@
           <span>px</span>
         </div>
       </div>
+      <button type="button" class="link img-more-toggle" id="imgMoreToggle" aria-expanded="false">
+        <span id="imgMoreText">More options</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="img-more" id="imgMore" hidden>
       <div class="opt-row" id="qualityRow">
         <span class="opt-label">Quality</span>
         <input type="range" id="imgQuality" min="10" max="100" step="5" value="90">
@@ -1635,6 +1667,7 @@
           <button class="toggle-chip" id="imgGray">Black &amp; white</button>
         </div>
         <button class="link opt-reset" id="imgReset">Reset</button>
+      </div>
       </div>
       <div class="image-go">
         <button class="link" id="imgClear">Remove all</button>

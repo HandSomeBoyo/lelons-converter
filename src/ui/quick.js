@@ -36,7 +36,7 @@ const qkList = (get) => { try { return get() || []; } catch (e) { return []; } }
 // ---------------------------------------------------------------- converting a link
 
 function quickConvert(text, fmt) {
-  const btn = document.querySelector(`#toggle button[data-format="${fmt}"]`);
+  const btn = document.querySelector(`#fmtPop button[data-format="${fmt}"]`);
   if (btn && !btn.classList.contains("active")) btn.click();
   homeConvert(text, true);
 }

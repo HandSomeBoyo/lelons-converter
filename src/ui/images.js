@@ -191,6 +191,14 @@ $("imgSquare").addEventListener("click", () => { imageOptions.square = !imageOpt
 $("imgGray").addEventListener("click", () => { imageOptions.gray = !imageOptions.gray; renderImages(); });
 $("imgReset").addEventListener("click", () => { imageOptions = { ...DEFAULT_IMAGE_OPTIONS, format: imageOptions.format }; renderImages(); });
 
+// (3.0) Quality, turning and extras sit behind "More options".
+let imgMoreOpen = false;
+$("imgMoreToggle").addEventListener("click", () => { imgMoreOpen = !imgMoreOpen; renderImages(); });
+function imgMoreChanged() {
+  const o = imageOptions;
+  return [o.rotate !== 0, o.flipH, o.flipV, o.square, o.gray, ["jpg", "webp"].includes(o.format) && o.quality !== 90].filter(Boolean).length;
+}
+
 $("imgClear").addEventListener("click", () => {
   for (const item of imageItems.splice(0)) if (item.id) api("/api/image-remove", { id: item.id });
   renderImages();
@@ -338,6 +346,11 @@ function renderImages() {
   if ($("imgWidth").value !== o.width) $("imgWidth").value = o.width;
   if ($("imgHeight").value !== o.height) $("imgHeight").value = o.height;
   $("qualityRow").hidden = !["jpg", "webp"].includes(o.format);
+  $("imgMore").hidden = !imgMoreOpen;
+  $("imgMoreToggle").classList.toggle("open", imgMoreOpen);
+  $("imgMoreToggle").setAttribute("aria-expanded", String(imgMoreOpen));
+  const changed = imgMoreChanged();
+  $("imgMoreText").textContent = imgMoreOpen ? "Fewer options" : changed ? `More options (${changed} on)` : "More options";
   $("imgQuality").value = o.quality;
   $("imgQualityValue").textContent = o.quality;
   $("imgSquare").classList.toggle("active", o.square);
