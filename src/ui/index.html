@@ -294,6 +294,16 @@
         <div class="home-files" id="homeRecent"></div>
       </div>
 
+      <div class="hw home-card" data-w="since">
+        <div class="home-card-head"><h3 id="hwSinceHead">Since you were last here</h3><button type="button" class="link" id="hwSinceDone">Got it</button></div>
+        <div class="hw-since" id="hwSince"></div>
+      </div>
+
+      <div class="hw home-card" data-w="twitch">
+        <div class="home-card-head"><h3><span class="hw-tw-logo" aria-hidden="true"></span>Your Twitch</h3><button type="button" class="link" id="hwTwOpen">Live</button></div>
+        <div id="hwTwitch"></div>
+      </div>
+
       <div class="hw home-card" data-w="crew">
         <div class="home-card-head"><h3>Crew this week</h3><button type="button" class="link" id="hwCrewOpen">See stats</button></div>
         <div class="hw-list" id="hwCrew"></div>
@@ -304,6 +314,11 @@
         <div class="hw-list" id="hwProjects"></div>
       </div>
     </div>
+
+    <button type="button" class="hw-add-hint" id="hwAddHint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span><b>Add widgets</b><small>Make Home yours: friends, chat, your Twitch, docs, game sales and more.</small></span>
+    </button>
 
     <div class="hw-tray" id="hwTray" hidden>
       <h3 class="home-sub">Add a widget</h3>

@@ -8780,3 +8780,41 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .hw-pj-faces { flex: none; display: inline-flex; min-width: 30px; }
 .hw-pj-faces .avatar { width: 26px; height: 26px; font-size: 11px; box-shadow: 0 0 0 2px var(--panel); }
 .hw-pj-faces .avatar + .avatar { margin-left: -8px; }
+
+/* 3.0 round 2: empty widgets hide (shown in Customize with a note), Since you were last here, Your Twitch, Add widgets */
+.hw-grid:not(.hw-editing) > .hw.hw-blank { display: none; }
+.hw-editing > .hw.hw-blank::after { content: "Hidden for now: nothing to show yet"; position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  white-space: nowrap; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 3px 10px; border-radius: 99px; background: var(--panel2); }
+.hw-editing > .hw.hw-blank { padding-bottom: 40px; }
+.hw-since { display: flex; flex-wrap: wrap; gap: 8px; }
+.hw-since-item { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px;
+  border-radius: var(--r-sm); background: var(--panel2); font-size: 13.5px; font-weight: 600; transition: background-color .15s; }
+.hw-since-item:hover { background: color-mix(in srgb, var(--text) 12%, var(--panel2)); }
+.hw-since-icon { color: var(--accent); font-size: 13px; }
+.hw-tw-logo { width: 14px; height: 14px; border-radius: 3px; background: #9146ff; }
+.hw-tw-head { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 12px; }
+.hw-tw-face { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #9146ff; color: #fff; font: 700 15px var(--head); }
+.hw-add-hint { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 14px; width: 100%; margin-top: 16px; padding: 16px 18px;
+  border-radius: var(--r); border: 1.5px dashed color-mix(in srgb, var(--text) 16%, transparent); color: var(--muted); transition: border-color .2s, background-color .2s, color .2s; }
+.hw-add-hint:hover { border-color: var(--accent); background: rgba(var(--accent-rgb), .05); color: var(--text); }
+.hw-add-hint svg { flex: none; width: 20px; height: 20px; color: var(--accent); }
+.hw-add-hint span { display: flex; flex-direction: column; gap: 2px; }
+.hw-add-hint b { font-size: 14px; color: var(--text); }
+.hw-add-hint small { font-size: 12.5px; }
+.hw-add-hint[hidden] { display: none; }
+
+/* Newest uploads: three even cards (picture on top), or a tidy list when the widget is narrow */
+.hw-grid .upload-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; align-items: stretch; }
+.hw-grid .upload-card, .hw-grid .upload-card.newest { flex-direction: column; padding: 0; overflow: hidden; grid-row: auto; gap: 0; }
+.hw-grid .upload-card .upload-thumb { width: 100%; border-radius: 0; }
+.hw-grid .upload-card .upload-body { padding: 12px 14px 14px; }
+.hw-grid .upload-card .upload-title { font-size: 14.5px; }
+.hw-grid .upload-card .upload-actions { margin-top: auto; padding-top: 10px; }
+.upload-actions button, .hw-grid .upload-card:not(.hero) .upload-actions button { box-sizing: border-box; height: 32px; padding: 0 14px; font-size: 12.5px;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+@container hw (max-width: 760px) {
+  .hw-grid .upload-grid { grid-template-columns: minmax(0, 1fr); }
+  .hw-grid .upload-card, .hw-grid .upload-card.newest { flex-direction: row; gap: 12px; padding: 10px; }
+  .hw-grid .upload-card .upload-thumb { width: 128px; border-radius: var(--r-sm); }
+  .hw-grid .upload-card .upload-body { padding: 0; }
+}

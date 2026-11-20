@@ -869,6 +869,14 @@ class Handler(BaseHTTPRequestHandler):
                     data.get("title"), data.get("gameId"), tags if isinstance(tags, list) else None)})
             elif action == "twitch-signout":
                 streamlive.twitch().sign_out()
+            elif action == "home":  # (3.0) the Your Twitch widget on Home: no channel set up, nothing is started
+                channel = streamlive.config()["twitch"]
+                if not channel:
+                    return self.send_json({"ok": True, "channel": ""})
+                tw = dict(streamlive.twitch().status)
+                past = streamlive.streams()
+                return self.send_json({"ok": True, "channel": channel, "last": past[0] if past else None,
+                                       "twitch": {k: tw.get(k) for k in ("live", "viewers", "title", "game", "started", "followers", "signedIn")}})
             elif action == "streams":
                 return self.send_json({"ok": True, "streams": streamlive.streams()})
             elif action == "stream":

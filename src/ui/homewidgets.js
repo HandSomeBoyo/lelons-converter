@@ -24,6 +24,8 @@ const HW_WIDGETS = [
   { id: "activity", name: "Activity", desc: "New sounds, new people and new videos.", size: "m", sizes: HW_ALL, login: true },
   { id: "chat", name: "Live chat", desc: "The newest messages in the crew chat.", size: "s", sizes: HW_ALL, login: true },
   { id: "calls", name: "Calls", desc: "Calls going on in your groups, to jump in.", size: "s", sizes: ["s", "m"], login: true },
+  { id: "since", name: "Since you were last here", desc: "What's new since you last opened VaultHub. Hides when there's nothing.", size: "l", sizes: ["m", "l"], login: true },
+  { id: "twitch", name: "Your Twitch", desc: "Your Twitch channel: live or not, followers and your last stream.", size: "m", sizes: HW_ALL },
   { id: "crew", name: "Crew this week", desc: "Who gained the most subscribers in the last 7 days.", size: "s", sizes: HW_ALL },
   { id: "projects", name: "Projects", desc: "The video projects you're making with friends.", size: "m", sizes: HW_ALL, login: true },
   { id: "sales", name: "Game sales", desc: "Games on the Games list that are on sale.", size: "s", sizes: HW_ALL, login: true },
@@ -40,21 +42,24 @@ const HW_GAP = 12;
 
 // The ready-made layouts: [widget, size, column (0-2, left out: wherever it fits best)]
 const HW_PRESETS = [
+  { id: "clean", name: "Clean", items: [["now", "l"], ["since", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"]] },
   { id: "classic", name: "Classic", items: [["start", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"],
     ["activity", "m", 0], ["online", "s", 2], ["chat", "s", 2], ["crew", "s", 2], ["projects", "m", 0], ["sales", "s", 2],
     ["docs", "s", 0], ["stats", "s", 1], ["recent", "s", 2]] },
-  { id: "now", name: "Right now", items: [["now", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"],
+  { id: "now", name: "Right now", items: [["now", "l"], ["since", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"],
     ["activity", "m", 0], ["online", "s", 2], ["chat", "s", 2], ["crew", "s", 2], ["projects", "m", 0], ["sales", "s", 2],
     ["docs", "s", 0], ["due", "s", 1], ["recent", "s", 2]] },
-  { id: "columns", name: "Two columns", items: [["now", "l"], ["live", "l"], ["paste", "m", 0], ["online", "s", 2],
+  { id: "columns", name: "Two columns", items: [["now", "l"], ["since", "l"], ["live", "l"], ["paste", "m", 0], ["online", "s", 2], ["twitch", "s", 2],
     ["channels", "m", 0], ["chat", "s", 2], ["notes", "s", 2], ["calls", "s", 2], ["crew", "s", 2], ["activity", "m", 0],
     ["sales", "s", 2], ["projects", "m", 0], ["docs", "s", 2], ["due", "s", 2], ["recent", "m", 0], ["stats", "s", 2]] },
-  { id: "me", name: "You first", items: [["mychannel", "l"], ["paste", "l"], ["channels", "m", 0], ["crew", "s", 2],
+  { id: "me", name: "You first", items: [["since", "l"], ["mychannel", "m", 0], ["twitch", "s", 2], ["paste", "l"], ["channels", "m", 0], ["crew", "s", 2],
     ["online", "s", 2], ["activity", "m", 0], ["chat", "s", 2], ["projects", "m", 0], ["docs", "s", 2], ["stats", "s", 2],
     ["recent", "s", 0], ["sales", "s", 1]] },
 ];
 const hwPresetItems = (p) => p.items.map(([id, size, x]) => ({ id, size, x: x == null ? null : x }));
-const HW_DEFAULT = HW_PRESETS[0];
+const HW_DEFAULT = HW_PRESETS[0]; // (3.0) Home starts clean: you add what you want
+// Widgets that came with an update are added to layouts made before it only if they're here (the rest wait in the tray).
+const HW_ADD_NEW = ["now", "since"];
 const HW_ICONS = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -86,7 +91,7 @@ function hwLayout() {
   items = items.filter((it, i, all) => it && HW_BY_ID[it.id] && all.findIndex((o) => o.id === it.id) === i).map(hwFix);
   // Widgets that came with an update are added once, where they'd be in a fresh layout.
   if (saved && Array.isArray(saved.known)) {
-    HW_DEFAULT.items.forEach(([id], i) => {
+    HW_ADD_NEW.forEach((id, i) => {
       if (!saved.known.includes(id) && !items.some((it) => it.id === id)) items.splice(Math.min(i, items.length), 0, hwFix({ id, x: null }));
     });
   }
@@ -186,6 +191,15 @@ function hwApply() {
   hwRender(list);
 }
 
+// (3.0) A widget with nothing to show hides (except in Customize), and comes back when it has something.
+function hwMarkBlank(id, blank) {
+  const slot = hwSlot(id);
+  if (!slot || slot.classList.contains("hw-blank") === !!blank) return;
+  slot.classList.toggle("hw-blank", !!blank);
+  hwRelayout();
+}
+const hwBlankIf = (id, blank) => { hwMarkBlank(id, blank); return blank; };
+
 // ---------------------------------------------------------------- Customize
 
 function hwSetEditing(on) {
@@ -194,6 +208,7 @@ function hwSetEditing(on) {
   $("hwBar").hidden = !on;
   $("hwTray").hidden = !on;
   $("homeCustomize").hidden = on;
+  $("hwAddHint").hidden = on;
   if (!on) document.querySelectorAll("#homeWidgets .hw-tools").forEach((t) => t.remove());
   hwApply();
   if (on) $("hwBar").scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -280,6 +295,7 @@ function hwUsePreset(id) {
 }
 
 $("homeCustomize").addEventListener("click", () => hwSetEditing(true));
+$("hwAddHint").addEventListener("click", () => { hwSetEditing(true); setTimeout(() => $("hwTray").scrollIntoView({ block: "center", behavior: "smooth" }), 120); });
 $("hwDone").addEventListener("click", () => hwSetEditing(false));
 $("hwReset").addEventListener("click", () => hwUsePreset(HW_DEFAULT.id));
 document.addEventListener("keydown", (e) => {
@@ -403,6 +419,8 @@ function hwDrawAll() {
     hwApply();
   }
   hwDrawNow();
+  hwDrawSince();
+  hwDrawTwitch();
   hwDrawCalls();
   hwDrawCrew();
   hwDrawProjects();
@@ -431,6 +449,7 @@ function hwDrawCalls() {
       sub: g.people === 1 ? "1 person in the call" : `${g.people} people in the call`,
       button: "Join", onbutton: () => callJoin(g.room, "g:" + g.group), onclick: () => openChat("g:" + g.group) }));
   }
+  hwMarkBlank("calls", !rows.length);
   setChildren($("hwCalls"), rows.length ? rows : [hwEmpty("Nobody's in a call right now. Start one from any chat.", "Open the chat", () => openChat(""))]);
 }
 setInterval(() => { if (!document.hidden) { hwDrawCalls(); hwDrawNow(); } }, 4000);
@@ -449,6 +468,7 @@ async function hwDrawSales() {
   }
   const sale = games.filter((g) => g.info && gmOnSale(g))
     .sort((a, b) => !!b.info.free - !!a.info.free || ((b.info.price || {}).discount || 0) - ((a.info.price || {}).discount || 0)).slice(0, 4);
+  hwMarkBlank("sales", !sale.length);
   setChildren($("hwSales"), sale.length ? sale.map((g) => hwRow({
     pic: g.info.header || "", title: g.info.name,
     sub: g.info.free ? "Free right now" : [g.info.price.text ? "Now " + g.info.price.text : "", g.info.price.was ? "was " + g.info.price.was : ""].filter(Boolean).join(", "),
@@ -469,7 +489,7 @@ async function hwDrawChannel() {
   }
   const box = $("hwChannel");
   if (!hwCh) return setChildren(box, [hwEmpty("Loading...")]);
-  if (hwCh.mode === "none") return setChildren(box, [hwEmpty("Add your channel to see how it's doing.", "Add my channel", () => showTab("channel"))]);
+  if (hwBlankIf("mychannel", hwCh.mode === "none")) return setChildren(box, [hwEmpty("Add your channel to see how it's doing.", "Add my channel", () => showTab("channel"))]);
   const c = hwCh.channel || {}, t = hwCh.totals || {};
   const head = hwEl("div", "hw-ch-head");
   head.append(avatarEl(c.avatar, c.name || "?"), hwEl("span", "hw-row-text"));
@@ -506,6 +526,7 @@ async function hwDrawDocs() {
   const when = (d) => typeof d.updated_at === "number" ? d.updated_at * 1000 : Date.parse(d.updated_at) || 0;
   const top = all.sort((a, b) => when(b) - when(a)).slice(0, 5);
   const kinds = { script: "Movie script", doc: "Document", pdf: "PDF" };
+  hwMarkBlank("docs", !top.length);
   setChildren($("hwDocs"), top.length ? top.map((d) => hwRow({
     face: hwEl("span", "hw-doc-icon " + (d.where === "collab" ? "collab" : "")),
     title: d.title || "Untitled", sub: [kinds[d.kind] || "Document", d.where === "collab" ? "Shared" : "", when(d) ? sfxAgo(when(d)) : ""].filter(Boolean).join(" · "),
@@ -529,6 +550,7 @@ async function hwDrawDue() {
   await hwLoadDue();
   if (!hwDue) return;
   const date = (v) => new Date(v.length <= 10 ? v + "T12:00" : v);
+  hwMarkBlank("due", !hwDue.length);
   setChildren($("hwDue"), hwDue.length ? hwDue.slice(0, 5).map((c) => {
     const d = date(c.due), left = d - Date.now();
     const state = left < 0 ? "overdue" : left < 86400000 ? "soon" : "";
@@ -546,6 +568,7 @@ $("hwDueOpen").addEventListener("click", () => showTab("boards"));
 function hwDrawNotes() {
   if (!hwOn("notes") || typeof noteData === "undefined") return;
   const list = noteData.list.slice(0, 4);
+  hwMarkBlank("notes", !list.length);
   setChildren($("hwNotes"), list.length ? list.map((n) => noteRow(n)) : [hwEmpty("Nothing new. Messages, invitations, sales and new POVs show up here.")]);
 }
 $("hwNotesOpen").addEventListener("click", (e) => { e.stopPropagation(); noteToggle(true); });
@@ -619,6 +642,104 @@ function hwDrawNowChips() {
 if (typeof liveDraw === "function") { const was = liveDraw; liveDraw = function () { was(); hwDrawNow(); }; }
 if (typeof drawUnread === "function") { const was = drawUnread; drawUnread = function () { was(); hwDrawNow(); }; }
 
+// ---- since you were last here (3.0): what's new since VaultHub was open last time
+
+// When you were here last: kept per account, the time of the last look while the app was open.
+const hwSinceKey = () => "seen:" + hwKey();
+let hwSinceFrom = null; // (this time) what counts as new: since this
+let hwSinceGone = false; // "Got it"
+function hwSinceStart() {
+  if (hwSinceFrom != null || !hwLoggedIn()) return;
+  const all = loadPref("homeSince") || {};
+  hwSinceFrom = all[hwSinceKey()] || 0; // 0: the first time, nothing to compare with
+  hwSinceTick();
+}
+function hwSinceTick() {
+  if (!hwLoggedIn()) return;
+  const all = { ...(loadPref("homeSince") || {}) };
+  all[hwSinceKey()] = Date.now();
+  savePref("homeSince", all);
+}
+setInterval(() => { if (!document.hidden && hwSinceFrom != null) hwSinceTick(); }, 5 * 60000);
+addEventListener("pagehide", hwSinceTick);
+
+function hwDrawSince() {
+  if (!hwOn("since") || !hwLoggedIn()) return;
+  hwSinceStart();
+  const from = hwSinceFrom;
+  const items = [];
+  if (from && !hwSinceGone && homeData) {
+    const newer = (homeData.activity || []).filter((a) => Date.parse(a.at) > from);
+    const count = (kind) => newer.filter((a) => a.kind === kind).length;
+    const sounds = count("upload"), people = count("joined"), milestones = count("milestone");
+    let videos = 0;
+    for (const c of homeData.channels || []) for (const v of ((c.info && c.info.uploads) || [])) if (v.when && v.when * 1000 > from) videos++;
+    const unread = typeof unreadIn === "function" && typeof chatPrivate !== "undefined"
+      ? (unreadIn("") ? 1 : 0) + chatPrivate.filter((p) => unreadIn(p.username)).length + chatGroups.filter((g) => unreadIn("g:" + g.id)).length : 0;
+    const add = (n, one, many, go, icon) => { if (n) items.push({ text: n === 1 ? one : many.replace("#", n), go, icon }); };
+    add(videos, "1 new video", "# new videos", () => $("homeChannels").scrollIntoView({ block: "center", behavior: "smooth" }), "▶");
+    add(sounds, "1 new sound", "# new sounds", () => showTab("sfx"), "♪");
+    add(unread, "1 chat with new messages", "# chats with new messages", () => openChat(""), "💬");
+    add(people, "1 new member", "# new members", () => openChat(""), "👋");
+    add(milestones, "1 channel passed a milestone", "# channels passed a milestone", () => showTab("stats"), "🎉");
+  }
+  $("hwSinceHead").textContent = from ? `Since you were here ${sfxAgo(from).replace(/^just now$/, "a moment ago")}` : "Since you were last here";
+  hwMarkBlank("since", !items.length);
+  setChildren($("hwSince"), items.length ? items.map((it) => {
+    const b = hwEl("button", "hw-since-item");
+    b.type = "button";
+    b.append(hwEl("span", "hw-since-icon", it.icon), hwEl("span", "", it.text));
+    b.onclick = it.go;
+    return b;
+  }) : [hwEmpty(from ? "Nothing new since last time." : "Next time you open VaultHub, what's new since now shows up here.")]);
+}
+$("hwSinceDone").addEventListener("click", () => { hwSinceGone = true; hwDrawSince(); });
+
+// ---- your Twitch (3.0): the channel from the Live page's setup
+
+let hwTw = null, hwTwAt = 0;
+async function hwDrawTwitch() {
+  if (!hwOn("twitch")) return;
+  if (Date.now() - hwTwAt > (hwTw && hwTw.channel && hwTw.twitch && hwTw.twitch.followers == null ? 8000 : 60000)) {
+    hwTwAt = Date.now();
+    const res = await api("/api/live-home", {}).catch(() => null);
+    if (res && res.ok) hwTw = res;
+  }
+  const box = $("hwTwitch");
+  if (!hwTw) return setChildren(box, [hwEmpty("Loading...")]);
+  if (hwBlankIf("twitch", !hwTw.channel)) return setChildren(box, [hwEmpty("Add your Twitch channel on the Live page to see it here.", "Set up Live", () => showTab("live"))]);
+  const t = hwTw.twitch || {}, last = hwTw.last;
+  const head = hwEl("button", "hw-tw-head");
+  head.type = "button";
+  head.title = "Open your channel on Twitch";
+  head.onclick = () => api("/api/games-open", { url: "https://www.twitch.tv/" + hwTw.channel }).catch(() => {});
+  const text = hwEl("span", "hw-row-text");
+  text.append(hwEl("b", "", hwTw.channel), hwEl("small", "", t.live ? (t.title || "Live now") : "Offline"));
+  head.append(hwEl("span", "hw-tw-face", hwTw.channel.slice(0, 1).toUpperCase()), text,
+    hwEl("span", "hw-tag " + (t.live ? "live" : ""), t.live ? (t.viewers != null ? `Live · ${shortNumber(t.viewers)}` : "Live") : "Offline"));
+  const nums = hwEl("div", "hw-ch-nums");
+  const num = (label, n, sub) => {
+    const el = hwEl("div");
+    el.append(hwEl("b", "", n == null ? "–" : typeof n === "number" ? shortNumber(n) : n), hwEl("span", "", label));
+    if (sub) el.append(hwEl("small", "up", sub));
+    return el;
+  };
+  nums.append(num("followers", t.followers, last && last.followers ? `+${shortNumber(last.followers)} last stream` : ""));
+  if (last) {
+    nums.append(num("peak viewers, last stream", last.peak), num("average viewers", last.average));
+  }
+  const out = [head, nums];
+  if (last) {
+    const mins = last.minutes || 0;
+    out.push(hwEl("p", "home-muted hw-note", `Last stream: ${last.title || "Stream"} · ${mins >= 60 ? Math.floor(mins / 60) + " h " + (mins % 60) + " min" : mins + " min"} · ${sfxAgo(last.start * 1000)}`));
+  } else {
+    out.push(hwEl("p", "home-muted hw-note", "Stream with the Live page open and your stream's numbers show up here."));
+  }
+  if (t.followers == null && !t.signedIn) out.push(hwEl("p", "home-muted hw-note", "Sign in with Twitch on the Live page to see your followers."));
+  setChildren(box, out);
+}
+$("hwTwOpen").addEventListener("click", () => showTab("live"));
+
 // ---- crew this week: the crew's channels by subscribers gained in 7 days
 
 let hwCrew = null, hwCrewAt = 0;
@@ -645,6 +766,7 @@ async function hwDrawCrew() {
     row.insertBefore(avatarEl(r.avatar, r.name), row.children[1]);
     return row;
   });
+  hwMarkBlank("crew", !list.length);
   const out = list.length ? list : [hwEmpty("No channels picked yet.")];
   if (list.length && !byGain) out.push(hwEl("p", "home-muted hw-note", hwCrew.loggedIn ? "The gains fill in over the week." : "Log in to see who gained the most."));
   setChildren($("hwCrew"), out);
@@ -663,6 +785,9 @@ async function hwDrawProjects() {
   }
   const d = hwPj || (typeof pjData !== "undefined" ? pjData : null);
   if (!d) return setChildren($("hwProjects"), [hwEmpty("Loading...")]);
+  if (hwBlankIf("projects", !d.ready || (!(d.projects || []).length && !(d.invites || []).length))) {
+    if (!d.ready) return setChildren($("hwProjects"), [hwEmpty("Projects isn't set up yet.", "Open Projects", () => showTab("projects"))]);
+  }
   if (!d.ready) return setChildren($("hwProjects"), [hwEmpty("Projects isn't set up yet.", "Open Projects", () => showTab("projects"))]);
   const stage = (p) => typeof pjStageName === "function" ? pjStageName(p.stage) : p.stage;
   const list = [...(d.projects || [])].slice(0, 4).map((p) => {
