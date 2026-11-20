@@ -523,24 +523,20 @@ function drawDocsHome() {
   $("docsMain").hidden = collab && !user;
   drawInvites();
   if (collab && !user) return;
-  // The "New document" button (it asks what kind)
+  // (3.0) One slim row: New document (it asks what kind), New folder, Import a PDF. Before, these were three big
+  // boxes that pushed your documents down the page.
   if (!$("docsTemplates").children.length) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "doc-template";
-    b.innerHTML = `<span class="doc-thumb"><span class="doc-thumb-page"><span class="doc-plus">${docIcon("plus")}</span></span></span><b class="doc-name-line">New document</b><small class="doc-note-line">Choose what to write</small>`;
-    b.addEventListener("click", () => openDocTypes());
-    const f = document.createElement("button");
-    f.type = "button";
-    f.className = "doc-template";
-    f.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus">${docIcon("folder")}</span></span><b class="doc-name-line">New folder</b><small class="doc-note-line">Keep a project together</small>`;
-    f.addEventListener("click", () => newFolder());
-    const pdf = document.createElement("button");
-    pdf.type = "button";
-    pdf.className = "doc-template";
-    pdf.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus doc-pdf-badge">${docIcon("pdf")}<em>PDF</em></span></span><b class="doc-name-line">Import a PDF</b><small class="doc-note-line">Edit it like any doc</small>`;
-    pdf.addEventListener("click", () => pickPdf(importPdfAsDoc));
-    $("docsTemplates").append(b, f, pdf);
+    const button = (cls, icon, label, title, fn) => {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "docs-new " + cls, title });
+      b.innerHTML = docIcon(icon) + "<span></span>";
+      b.querySelector("span").textContent = label;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    $("docsTemplates").append(
+      button("main", "plus", "New document", "Choose what to write", () => openDocTypes()),
+      button("", "folder", "New folder", "Keep a project together", () => newFolder()),
+      button("", "pdf", "Import a PDF", "Edit it like any doc", () => pickPdf(importPdfAsDoc)));
   }
   if (!docsF().folders.some((f) => f.id === docsFolderAt)) docsFolderAt = "";
   drawCrumbs();
@@ -561,6 +557,7 @@ function drawDocsHome() {
   const here = docsF().folders.find((f) => f.id === docsFolderAt);
   $("docsListTitle").textContent = here && !search ? `In ${here.name}` : collab ? "Shared with you" : "On this computer";
   setChildren($("docsGrid"), list.map(docCard));
+  drawRecent(all, search);
   $("docsEmpty").hidden = list.length > 0 || (folders.length > 0 && !search);
   $("docsEmpty").textContent = search ? "Nothing with that name."
     : here ? "This folder is empty. Start a document above, or drag documents onto the folder."
@@ -568,6 +565,34 @@ function drawDocsHome() {
     : collab && !docsCollab ? "Loading..."
     : collab ? "No shared documents yet. Start one above, then invite people with the Invite button."
     : "No documents yet. Start one above.";
+}
+
+// (3.0) "Jump back in": the last 3 documents you opened (on this computer), on the top of the Docs home.
+const docsRecentKey = () => "docsRecent" + (docsWhere === "collab" ? "Collab" : "Local");
+function docsRecent() { try { const v = JSON.parse(loadPref(docsRecentKey()) || "[]"); return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } }
+function docsRemember(where, id) {
+  const key = "docsRecent" + (where === "collab" ? "Collab" : "Local");
+  let v = [];
+  try { v = JSON.parse(loadPref(key) || "[]"); } catch (e) { /* start again */ }
+  savePref(key, JSON.stringify([id, ...(Array.isArray(v) ? v : []).filter((x) => x !== id)].slice(0, 6)));
+}
+function drawRecent(all, search) {
+  const box = $("docsRecent");
+  const byId = new Map(all.map((d) => [d.id, d]));
+  const recent = docsRecent().map((id) => byId.get(id)).filter(Boolean).slice(0, 3);
+  // Only on the top of the Docs home, and only when there are enough documents for it to help.
+  const show = !search && !docsFolderAt && recent.length > 0 && all.length > 4;
+  box.hidden = !show;
+  if (!show) return;
+  const collab = docsWhere === "collab";
+  $("docsRecentList").replaceChildren(...recent.map((d) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "docs-recent-item" });
+    b.innerHTML = `<span class="doc-card-icon">${docIcon(docTypeOf(d).icon)}</span><span><b></b><small></small></span>`;
+    b.querySelector("b").textContent = d.title;
+    b.querySelector("small").textContent = timeAgo(whenOf(d));
+    b.addEventListener("click", () => openDoc(collab ? "collab" : "local", d.id));
+    return b;
+  }));
 }
 
 const docCards = new Map();
@@ -953,6 +978,7 @@ async function openDoc(where, id, opts = {}) {
     return;
   }
   const d = res.doc;
+  if (!opts.fresh) docsRemember(where, id);
   doc = { where, id, kind: d.kind === "script" ? "script" : "doc", baseKind: d.kind === "script" ? "script" : "doc", title: d.title, mine: where === "local" || d.mine,
           people: d.people || [], rev: d.rev || 0, settings: docCleanSettings(d.settings), fresh: !!opts.fresh };
   docPending.clear(); docDeleted.clear(); docInFlight.clear();
