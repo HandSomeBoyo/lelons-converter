@@ -1,96 +1,189 @@
 // Home widgets: Home is a grid of widgets you pick yourself and drag around (Customize at the top).
-// Each widget is a <div class="hw" data-w="..."> in #homeWidgets. This file only shows, hides, moves
-// and sizes those, and draws the widgets that home.js doesn't (calls, game sales, your channel,
-// recent docs, boards due, notifications). The layout is remembered per account on this PC.
+// (3.0) The grid has 3 columns. A widget is small (1 column), medium (2) or large (the whole row).
+// Drag one anywhere: it snaps to the nearest column, and every widget slides up as far as it can,
+// so there are no holes. Ready-made layouts (Classic, Right now, Two columns, You first) are a click away.
+// Each widget is a <div class="hw" data-w="..."> in #homeWidgets. This file places, sizes and moves
+// those, and draws the widgets that home.js doesn't (right now, calls, game sales, your channel,
+// recent docs, boards due, notifications, crew this week, projects). The layout is remembered per account on this PC.
 // Uses $, api() from app.js, loadPref()/savePref() from theme.js, setChildren()/keptNode() from motion.js,
 // sfxUser()/avatarEl()/sfxAgo()/openLogin() from sfx.js, showTab() from images.js, shortNumber() from home.js,
-// openChat()/chatGroups from chat.js, call/callLiveGroups/callJoin()/callIsLive() from call.js,
+// openChat()/chatGroups/chatPrivate/unreadIn() from chat.js, call/callLiveGroups/callJoin()/callIsLive() from call.js,
 // gmGames/gmOnSale/gmPrice from games.js, docsLocal/docsCollab from docs.js, noteData/noteRow()/noteToggle()
-// from notify.js, qkOpenDoc()/qkOpenBoard()/qkOpenGame() from quick.js.
+// from notify.js, qkOpenDoc()/qkOpenBoard()/qkOpenGame() from quick.js, liveNow/liveWatch() from live.js,
+// statsSeries() from stats.js, openPj()/pjStageName()/pjKindName()/pjEventText() from projects.js.
 
-// size: "full" (the whole width) or "half". sizes: what you may switch between. login: only when logged in.
+// size: the size it gets when added. sizes: the ones you may pick (s, m, l). login: only when logged in.
+const HW_ALL = ["s", "m", "l"];
 const HW_WIDGETS = [
-  { id: "live", name: "Live now", desc: "Friends streaming right now.", size: "full", sizes: ["full"], login: true },
-  { id: "paste", name: "Quick convert", desc: "Paste a link to convert it right away.", size: "full", sizes: ["full"] },
-  { id: "channels", name: "Our channels", desc: "The crew's subscriber counters and newest uploads.", size: "full", sizes: ["full"] },
-  { id: "online", name: "Who's online", desc: "Friends in the app right now.", size: "half", login: true },
-  { id: "activity", name: "Activity", desc: "New sounds, new people and new videos.", size: "half", login: true },
-  { id: "chat", name: "Live chat", desc: "The newest messages in the crew chat.", size: "half", login: true },
-  { id: "calls", name: "Calls", desc: "Calls going on in your groups, to jump in.", size: "half", login: true },
-  { id: "sales", name: "Game sales", desc: "Games on the Games list that are on sale.", size: "half", login: true },
-  { id: "mychannel", name: "Your channel", desc: "Subscribers, views and watch time of your own channel.", size: "half" },
-  { id: "docs", name: "Recent docs", desc: "The documents you worked on last.", size: "half" },
-  { id: "due", name: "Due on your boards", desc: "Cards with a due date coming up.", size: "half" },
-  { id: "notes", name: "Notifications", desc: "The newest from the bell.", size: "half" },
-  { id: "stats", name: "Your stats", desc: "Files converted, hours and your favorite format.", size: "half" },
-  { id: "recent", name: "Recent downloads", desc: "The last things you converted.", size: "half" },
+  { id: "now", name: "Right now", desc: "Who's live, who's online, unread chats and what's due, in one row.", size: "l", sizes: ["m", "l"], login: true },
+  { id: "start", name: "Start buttons", desc: "Big buttons to convert, write, plan or find a sound.", size: "l", sizes: ["m", "l"] },
+  { id: "live", name: "Live now", desc: "Friends streaming right now.", size: "l", sizes: ["m", "l"], login: true },
+  { id: "paste", name: "Quick convert", desc: "Paste a link to convert it right away.", size: "l", sizes: ["m", "l"] },
+  { id: "channels", name: "Our channels", desc: "The crew's subscriber counters and newest uploads.", size: "l", sizes: ["m", "l"] },
+  { id: "online", name: "Who's online", desc: "Friends in the app right now.", size: "s", sizes: HW_ALL, login: true },
+  { id: "activity", name: "Activity", desc: "New sounds, new people and new videos.", size: "m", sizes: HW_ALL, login: true },
+  { id: "chat", name: "Live chat", desc: "The newest messages in the crew chat.", size: "s", sizes: HW_ALL, login: true },
+  { id: "calls", name: "Calls", desc: "Calls going on in your groups, to jump in.", size: "s", sizes: ["s", "m"], login: true },
+  { id: "crew", name: "Crew this week", desc: "Who gained the most subscribers in the last 7 days.", size: "s", sizes: HW_ALL },
+  { id: "projects", name: "Projects", desc: "The video projects you're making with friends.", size: "m", sizes: HW_ALL, login: true },
+  { id: "sales", name: "Game sales", desc: "Games on the Games list that are on sale.", size: "s", sizes: HW_ALL, login: true },
+  { id: "mychannel", name: "Your channel", desc: "Subscribers, views and watch time of your own channel.", size: "m", sizes: HW_ALL },
+  { id: "docs", name: "Recent docs", desc: "The documents you worked on last.", size: "s", sizes: HW_ALL },
+  { id: "due", name: "Due on your boards", desc: "Cards with a due date coming up.", size: "s", sizes: HW_ALL },
+  { id: "notes", name: "Notifications", desc: "The newest from the bell.", size: "s", sizes: HW_ALL },
+  { id: "stats", name: "Your stats", desc: "Files converted, hours and your favorite format.", size: "s", sizes: HW_ALL },
+  { id: "recent", name: "Recent downloads", desc: "The last things you converted.", size: "s", sizes: HW_ALL },
 ];
 const HW_BY_ID = Object.fromEntries(HW_WIDGETS.map((w) => [w.id, w]));
-const HW_DEFAULT = ["live", "paste", "channels", "online", "activity", "chat", "sales", "docs", "stats", "recent"];
+const HW_SPAN = { s: 1, m: 2, l: 3 };
+const HW_GAP = 12;
+
+// The ready-made layouts: [widget, size, column (0-2, left out: wherever it fits best)]
+const HW_PRESETS = [
+  { id: "classic", name: "Classic", items: [["start", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"],
+    ["activity", "m", 0], ["online", "s", 2], ["chat", "s", 2], ["crew", "s", 2], ["projects", "m", 0], ["sales", "s", 2],
+    ["docs", "s", 0], ["stats", "s", 1], ["recent", "s", 2]] },
+  { id: "now", name: "Right now", items: [["now", "l"], ["live", "l"], ["paste", "l"], ["channels", "l"],
+    ["activity", "m", 0], ["online", "s", 2], ["chat", "s", 2], ["crew", "s", 2], ["projects", "m", 0], ["sales", "s", 2],
+    ["docs", "s", 0], ["due", "s", 1], ["recent", "s", 2]] },
+  { id: "columns", name: "Two columns", items: [["now", "l"], ["live", "l"], ["paste", "m", 0], ["online", "s", 2],
+    ["channels", "m", 0], ["chat", "s", 2], ["notes", "s", 2], ["calls", "s", 2], ["crew", "s", 2], ["activity", "m", 0],
+    ["sales", "s", 2], ["projects", "m", 0], ["docs", "s", 2], ["due", "s", 2], ["recent", "m", 0], ["stats", "s", 2]] },
+  { id: "me", name: "You first", items: [["mychannel", "l"], ["paste", "l"], ["channels", "m", 0], ["crew", "s", 2],
+    ["online", "s", 2], ["activity", "m", 0], ["chat", "s", 2], ["projects", "m", 0], ["docs", "s", 2], ["stats", "s", 2],
+    ["recent", "s", 0], ["sales", "s", 1]] },
+];
+const hwPresetItems = (p) => p.items.map(([id, size, x]) => ({ id, size, x: x == null ? null : x }));
+const HW_DEFAULT = HW_PRESETS[0];
 const HW_ICONS = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
-  wide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
-  narrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h6M15 12h6M6 8l4 4-4 4M18 8l-4 4 4 4"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
 };
 
-const hwSlot = (id) => document.querySelector(`#homeWidgets > .hw[data-w="${id}"]`);
-const hwThere = (id) => !!hwSlot(id); // (a widget whose part of the app isn't in this version)
+const hwSlot = (id) => id === "login" ? $("homeCrewOut") : document.querySelector(`#homeWidgets > .hw[data-w="${id}"]`);
+const hwThere = (id) => !!document.querySelector(`#homeWidgets > .hw[data-w="${id}"]`); // (a widget whose part of the app isn't in this version)
 const hwLoggedIn = () => typeof sfxUser === "function" && !!sfxUser();
+const hwSizes = (w) => w.sizes || HW_ALL;
 let hwEditing = false;
 
-// ---------------------------------------------------------------- the layout: {order: [ids], wide: {id: true/false}}
+// ---------------------------------------------------------------- the layout: {items: [{id, size, x}]}
 
 function hwKey() { return hwLoggedIn() ? "u:" + sfxUser().username.toLowerCase() : ""; }
+function hwFix(it) {
+  const w = HW_BY_ID[it.id];
+  const size = hwSizes(w).includes(it.size) ? it.size : w.size;
+  const x = Number.isInteger(it.x) ? Math.max(0, Math.min(it.x, 3 - HW_SPAN[size])) : null;
+  return { id: it.id, size, x };
+}
 function hwLayout() {
   const saved = (loadPref("homeWidgets") || {})[hwKey()];
-  const order = saved && Array.isArray(saved.order) ? saved.order.filter((id, i, all) => HW_BY_ID[id] && all.indexOf(id) === i) : HW_DEFAULT.slice();
+  let items;
+  if (saved && Array.isArray(saved.items)) items = saved.items;
+  // (before 3.0) {order, wide}: the same widgets in the same order, wide ones large.
+  else if (saved && Array.isArray(saved.order)) items = saved.order.map((id) => ({ id, size: saved.wide && saved.wide[id] ? "l" : null, x: null }));
+  else items = hwPresetItems(HW_DEFAULT);
+  items = items.filter((it, i, all) => it && HW_BY_ID[it.id] && all.findIndex((o) => o.id === it.id) === i).map(hwFix);
   // Widgets that came with an update are added once, where they'd be in a fresh layout.
   if (saved && Array.isArray(saved.known)) {
-    for (const id of HW_DEFAULT) {
-      if (!saved.known.includes(id) && !order.includes(id)) order.splice(Math.min(HW_DEFAULT.indexOf(id), order.length), 0, id);
-    }
+    HW_DEFAULT.items.forEach(([id], i) => {
+      if (!saved.known.includes(id) && !items.some((it) => it.id === id)) items.splice(Math.min(i, items.length), 0, hwFix({ id, x: null }));
+    });
   }
-  return { order, wide: (saved && saved.wide) || {} };
+  return { items, preset: saved ? saved.preset || "" : HW_DEFAULT.id };
 }
 function hwSave(layout) {
   const all = { ...(loadPref("homeWidgets") || {}) };
-  all[hwKey()] = { order: layout.order, wide: layout.wide, known: HW_WIDGETS.map((w) => w.id) };
+  all[hwKey()] = { items: layout.items, preset: layout.preset || "", known: HW_WIDGETS.map((w) => w.id) };
   savePref("homeWidgets", all);
 }
-function hwIsWide(w, layout) {
-  if ((w.sizes || ["half", "full"]).length === 1) return w.size === "full";
-  return w.id in layout.wide ? !!layout.wide[w.id] : w.size === "full";
+
+// The widgets that show, in order. Logged out: the ones that need an account give way to one "Log in"
+// card, after Our channels (or where the first of them was).
+function hwShown(layout = hwLayout()) {
+  const loggedIn = !!(homeData ? homeData.loggedIn : hwLoggedIn());
+  const list = layout.items.filter((it) => hwThere(it.id));
+  if (!loggedIn && !hwEditing) {
+    const first = list.findIndex((it) => HW_BY_ID[it.id].login);
+    if (first >= 0) {
+      const ch = list.findIndex((it) => it.id === "channels");
+      list.splice(ch >= 0 && ch >= first ? ch + 1 : first, 0, { id: "login", size: "l", x: 0 });
+    }
+  }
+  return list;
 }
 
-// Put the widgets in order, show the ones you picked (and that may show now), size them.
-function hwApply() {
+// Put the widgets in place: each goes in its column (or where it fits best), as high as it can.
+function hwPack(list, cols, heightOf) {
+  const tops = new Array(cols).fill(0);
+  const out = new Map();
+  for (const it of list) {
+    const span = Math.min(cols, HW_SPAN[it.size] || 1);
+    const topAt = (c) => Math.max(...tops.slice(c, c + span));
+    let x = it.x;
+    if (x != null && cols === 2) x = it.x > 0 ? 1 : 0;
+    if (x == null || cols === 1) {
+      x = 0;
+      for (let c = 1; c <= cols - span; c++) if (topAt(c) < topAt(x)) x = c;
+    }
+    x = Math.max(0, Math.min(x, cols - span));
+    const top = topAt(x), h = heightOf(it.id);
+    for (let c = x; c < x + span; c++) tops[c] = top + h + HW_GAP;
+    out.set(it.id, { x, span, top, h });
+  }
+  out.height = Math.max(0, Math.max(0, ...tops) - HW_GAP);
+  return out;
+}
+
+let hwPos = new Map(), hwCols = 3, hwColW = 0, hwList = [];
+function hwRender(list = hwShown()) {
   const grid = $("homeWidgets");
+  const width = grid.clientWidth;
+  hwList = list;
+  if (!width || $("homeTab").hidden) return;
+  hwCols = width >= 760 ? 3 : width >= 460 ? 2 : 1;
+  hwColW = (width - HW_GAP * (hwCols - 1)) / hwCols;
+  const visible = list.filter((it) => { const el = hwSlot(it.id); return el && !el.hidden && getComputedStyle(el).display !== "none"; });
+  for (const it of visible) {
+    const el = hwSlot(it.id), span = Math.min(hwCols, HW_SPAN[it.size]);
+    el.style.width = span * hwColW + (span - 1) * HW_GAP + "px";
+    el.dataset.size = it.size;
+  }
+  const heights = new Map(visible.map((it) => [it.id, hwSlot(it.id).offsetHeight]));
+  hwPos = hwPack(visible, hwCols, (id) => heights.get(id));
+  for (const it of visible) {
+    const el = hwSlot(it.id), p = hwPos.get(it.id);
+    el.style.left = p.x * (hwColW + HW_GAP) + "px";
+    el.style.top = p.top + "px";
+  }
+  grid.style.height = hwPos.height + "px";
+  if (!grid.classList.contains("hw-ready")) requestAnimationFrame(() => grid.classList.add("hw-ready")); // glide from now on
+}
+// Something got taller or shorter (new messages, a picture loaded, the window changed): place them again.
+let hwRenderSoon = 0;
+function hwRelayout() {
+  if (hwRenderSoon) return;
+  hwRenderSoon = requestAnimationFrame(() => { hwRenderSoon = 0; hwRender(hwDrag ? hwDrag.list : hwList.length ? hwList : undefined); });
+}
+const hwSizeWatch = new ResizeObserver(hwRelayout);
+hwSizeWatch.observe($("homeWidgets"));
+for (const el of $("homeWidgets").children) hwSizeWatch.observe(el);
+
+// Show the widgets you picked (and that may show now), and place them.
+function hwApply() {
   const layout = hwLayout();
   const loggedIn = !!(homeData ? homeData.loggedIn : hwLoggedIn());
-  const showing = layout.order.filter(hwThere);
-  // Logged out: the widgets that need an account give way to one "Log in" card, where the first of them was.
-  const firstLogin = showing.find((id) => HW_BY_ID[id].login);
-  const nodes = [];
-  for (const id of showing) {
-    if (id === firstLogin && !loggedIn) nodes.push($("homeCrewOut"));
-    nodes.push(hwSlot(id));
-  }
-  for (const w of HW_WIDGETS) if (hwThere(w.id) && !showing.includes(w.id)) nodes.push(hwSlot(w.id));
-  nodes.push($("homeCrewOut"));
-  setChildren(grid, [...new Set(nodes)]);
+  const on = new Set(layout.items.map((it) => it.id));
   for (const w of HW_WIDGETS) {
     const slot = hwSlot(w.id);
     if (!slot) continue;
-    const on = showing.includes(w.id);
-    slot.classList.toggle("hw-off", !on);
-    slot.classList.toggle("hw-needs-login", on && !!w.login && !loggedIn);
-    slot.classList.toggle("wide", hwIsWide(w, layout));
+    slot.classList.toggle("hw-off", !on.has(w.id));
+    slot.classList.toggle("hw-needs-login", on.has(w.id) && !!w.login && !loggedIn);
   }
-  $("homeCrewOut").hidden = loggedIn || !firstLogin || hwEditing;
-  $("homeCrewOut").classList.add("wide");
+  const list = hwShown(layout);
+  $("homeCrewOut").hidden = !list.some((it) => it.id === "login");
   if (hwEditing) hwDrawEdit(layout);
+  hwRender(list);
 }
 
 // ---------------------------------------------------------------- Customize
@@ -118,25 +211,38 @@ function hwDrawEdit(layout) {
       grip.addEventListener("pointerdown", (e) => hwDragStart(e, slot));
       const name = Object.assign(document.createElement("span"), { className: "hw-name", textContent: w.name });
       tools.append(grip, name);
-      if ((w.sizes || ["half", "full"]).length > 1) {
-        const size = Object.assign(document.createElement("button"), { type: "button", className: "hw-size" });
-        size.addEventListener("click", () => hwToggleWide(w.id));
-        tools.append(size);
+      if (hwSizes(w).length > 1) {
+        const sizes = Object.assign(document.createElement("span"), { className: "hw-sizes" });
+        for (const s of hwSizes(w)) {
+          const b = Object.assign(document.createElement("button"), { type: "button", textContent: s.toUpperCase(),
+            title: { s: "Small", m: "Medium", l: "Large" }[s] });
+          b.dataset.s = s;
+          b.addEventListener("click", () => hwSetSize(w.id, s));
+          sizes.append(b);
+        }
+        tools.append(sizes);
       }
       const x = Object.assign(document.createElement("button"), { type: "button", className: "hw-x", innerHTML: HW_ICONS.x, title: "Take it off Home" });
       x.addEventListener("click", () => hwRemove(w.id));
       tools.append(x);
       slot.prepend(tools);
     }
-    const size = tools.querySelector(".hw-size");
-    if (size) {
-      const wide = hwIsWide(w, layout);
-      size.innerHTML = wide ? HW_ICONS.narrow : HW_ICONS.wide;
-      size.title = wide ? "Make it narrow" : "Make it wide";
+    const item = layout.items.find((it) => it.id === w.id);
+    tools.querySelectorAll(".hw-sizes button").forEach((b) => b.classList.toggle("active", !!item && b.dataset.s === item.size));
+  }
+  // The ready-made layouts.
+  const bar = $("hwPresets");
+  if (bar.children.length < 2) {
+    for (const p of HW_PRESETS) {
+      const b = Object.assign(document.createElement("button"), { type: "button", textContent: p.name });
+      b.dataset.p = p.id;
+      b.addEventListener("click", () => hwUsePreset(p.id));
+      bar.append(b);
     }
   }
+  bar.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.p === layout.preset));
   // The tray: the widgets that aren't on Home.
-  const off = HW_WIDGETS.filter((w) => hwThere(w.id) && !layout.order.includes(w.id));
+  const off = HW_WIDGETS.filter((w) => hwThere(w.id) && !layout.items.some((it) => it.id === w.id));
   $("hwTrayEmpty").hidden = off.length > 0;
   setChildren($("hwTrayList"), off.map((w) => {
     const b = document.createElement("button");
@@ -153,54 +259,38 @@ function hwDrawEdit(layout) {
 function hwChange(change) {
   const layout = hwLayout();
   change(layout);
+  layout.items = layout.items.map(hwFix);
+  layout.preset = layout.preset || "";
   hwSave(layout);
-  hwFlip(() => hwApply());
+  hwApply();
   hwDrawAll();
 }
 function hwAdd(id) {
-  hwChange((l) => { l.order = [...l.order.filter((x) => x !== id), id]; });
+  hwChange((l) => { l.items = [...l.items.filter((it) => it.id !== id), { id, size: HW_BY_ID[id].size, x: null }]; l.preset = ""; });
   const slot = hwSlot(id);
-  if (slot) { slot.classList.add("hw-new"); setTimeout(() => slot.classList.remove("hw-new"), 900); slot.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  if (slot) { slot.classList.add("hw-new"); setTimeout(() => slot.classList.remove("hw-new"), 900); setTimeout(() => slot.scrollIntoView({ block: "nearest", behavior: "smooth" }), 380); }
 }
-function hwRemove(id) { hwChange((l) => { l.order = l.order.filter((x) => x !== id); }); }
-function hwToggleWide(id) { hwChange((l) => { l.wide[id] = !hwIsWide(HW_BY_ID[id], l); }); }
+function hwRemove(id) { hwChange((l) => { l.items = l.items.filter((it) => it.id !== id); l.preset = ""; }); }
+function hwSetSize(id, size) {
+  hwChange((l) => { const it = l.items.find((x) => x.id === id); if (it && it.size !== size) { it.size = size; l.preset = ""; } });
+}
+function hwUsePreset(id) {
+  const p = HW_PRESETS.find((x) => x.id === id);
+  hwChange((l) => { l.items = hwPresetItems(p); l.preset = p.id; });
+}
 
 $("homeCustomize").addEventListener("click", () => hwSetEditing(true));
 $("hwDone").addEventListener("click", () => hwSetEditing(false));
-$("hwReset").addEventListener("click", () => {
-  const all = { ...(loadPref("homeWidgets") || {}) };
-  delete all[hwKey()];
-  savePref("homeWidgets", all);
-  hwFlip(() => hwApply());
-  hwDrawAll();
-});
+$("hwReset").addEventListener("click", () => hwUsePreset(HW_DEFAULT.id));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && hwEditing && !$("homeTab").hidden && !document.querySelector(".modal:not([hidden])")) hwSetEditing(false);
 });
 
-// Widgets glide to their new places instead of jumping (FLIP: note where they were, move, then slide).
-function hwFlip(move) {
-  const slots = [...$("homeWidgets").children];
-  const before = new Map(slots.map((el) => [el, el.getBoundingClientRect()]));
-  move();
-  if (typeof reduceMotion !== "undefined" && reduceMotion.matches) return;
-  for (const el of slots) {
-    const a = before.get(el), b = el.getBoundingClientRect();
-    if (!a.width || !b.width || el.classList.contains("hw-dragging")) continue;
-    const dx = a.left - b.left, dy = a.top - b.top;
-    if (!dx && !dy) continue;
-    el.style.transition = "none";
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
-    requestAnimationFrame(() => {
-      el.style.transition = "transform .32s var(--ease-out)";
-      el.style.transform = "";
-      setTimeout(() => { el.style.transition = ""; }, 340);
-    });
-  }
-}
-
 // ---------------------------------------------------------------- dragging a widget by its handle
 
+// While you drag, the widget's spot (a dashed box) moves to where it would go, and the others slide out
+// of the way. Where it goes: the column under the widget you're holding, before the first widget there
+// whose middle is below the pointer.
 let hwDrag = null;
 function hwDragStart(e, slot) {
   if (e.button !== 0) return;
@@ -213,7 +303,12 @@ function hwDragStart(e, slot) {
   Object.assign(ghost.style, { width: r.width + "px", height: r.height + "px", left: r.left + "px", top: r.top + "px" });
   document.body.append(ghost);
   slot.classList.add("hw-dragging");
-  hwDrag = { slot, ghost, dx: e.clientX - r.left, dy: e.clientY - r.top, last: 0 };
+  const id = slot.dataset.w;
+  const list = hwShown();
+  const others = list.filter((it) => it.id !== id);
+  const heights = new Map(others.map((it) => [it.id, (hwPos.get(it.id) || {}).h || 0]));
+  hwDrag = { slot, ghost, id, list, item: list.find((it) => it.id === id), others,
+    spots: hwPack(others.filter((it) => heights.get(it.id)), hwCols, (x) => heights.get(x)), dx: e.clientX - r.left, dy: e.clientY - r.top, key: "" };
   document.documentElement.classList.add("hw-grabbing");
   addEventListener("pointermove", hwDragMove);
   addEventListener("pointerup", hwDragEnd, { once: true });
@@ -229,20 +324,24 @@ function hwDragMove(e) {
   const page = $("homeTab").closest("main") || document.scrollingElement;
   const edge = 60;
   if (e.clientY < edge) page.scrollTop -= 14; else if (e.clientY > innerHeight - edge) page.scrollTop += 14;
-  if (Date.now() - d.last < 60) return;
-  // The widget under the pointer: go before it on its left/top half, after it on the other half.
-  const others = [...$("homeWidgets").querySelectorAll(":scope > .hw:not(.hw-off):not([hidden]):not(.hw-dragging)")];
-  for (const el of others) {
-    const r = el.getBoundingClientRect();
-    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
-    const wide = el.classList.contains("wide");
-    const after = wide ? e.clientY > r.top + r.height / 2 : e.clientX > r.left + r.width / 2;
-    const target = after ? el.nextElementSibling : el;
-    if (target === d.slot || target === d.slot.nextElementSibling) return; // already there
-    d.last = Date.now();
-    hwFlip(() => $("homeWidgets").insertBefore(d.slot, target));
-    return;
+  const grid = $("homeWidgets").getBoundingClientRect();
+  const span = Math.min(hwCols, HW_SPAN[d.item.size]);
+  const left = e.clientX - d.dx - grid.left;
+  let x = Math.max(0, Math.min(hwCols - span, Math.round(left / (hwColW + HW_GAP))));
+  const y = e.clientY - grid.top;
+  let at = d.others.length;
+  for (let i = 0; i < d.others.length; i++) {
+    const p = d.spots.get(d.others[i].id);
+    if (!p || p.x >= x + span || p.x + p.span <= x) continue; // not in these columns
+    if (p.top + p.h / 2 > y) { at = i; break; }
   }
+  const key = x + ":" + at;
+  if (key === d.key) return;
+  d.key = key;
+  // In a narrow window the columns are fewer: only the order changes.
+  const col = hwCols === 3 ? (span === 3 ? 0 : x) : d.item.x;
+  d.list = [...d.others.slice(0, at), { ...d.item, x: col }, ...d.others.slice(at)];
+  hwRender(d.list);
 }
 
 function hwDragEnd() {
@@ -253,19 +352,23 @@ function hwDragEnd() {
   if (!d) return;
   const r = d.slot.getBoundingClientRect();
   d.ghost.classList.add("hw-ghost-drop");
-  Object.assign(d.ghost.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
-  setTimeout(() => { d.ghost.remove(); d.slot.classList.remove("hw-dragging"); }, 200);
+  const grid = $("homeWidgets").getBoundingClientRect(), p = hwPos.get(d.id);
+  const to = p ? { left: grid.left + p.x * (hwColW + HW_GAP), top: grid.top + p.top } : r;
+  Object.assign(d.ghost.style, { left: to.left + "px", top: to.top + "px", width: r.width + "px", height: r.height + "px" });
+  setTimeout(() => { d.ghost.remove(); d.slot.classList.remove("hw-dragging"); }, 220);
+  if (!d.key) return;
+  // The new order (and column); widgets that aren't on the page right now keep their place at the end.
   const layout = hwLayout();
-  const placed = [...$("homeWidgets").querySelectorAll(":scope > .hw[data-w]:not(.hw-off)")].map((el) => el.dataset.w).filter((id) => HW_BY_ID[id]);
-  // The widgets on the page take the new order; ones that aren't on the page right now keep their spot.
-  const queue = placed.slice();
-  layout.order = layout.order.map((id) => placed.includes(id) ? queue.shift() : id);
+  const placed = d.list.filter((it) => it.id !== "login");
+  layout.items = [...placed, ...layout.items.filter((it) => !placed.some((p2) => p2.id === it.id))];
+  layout.preset = "";
   hwSave(layout);
+  hwApply();
 }
 
 // ---------------------------------------------------------------- the widgets' own content
 
-const hwOn = (id) => !$("homeTab").hidden && hwThere(id) && (hwEditing || hwLayout().order.includes(id));
+const hwOn = (id) => !$("homeTab").hidden && hwThere(id) && (hwEditing || hwLayout().items.some((it) => it.id === id));
 const hwEl = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
 const hwEmpty = (text, button, onclick) => {
   const box = hwEl("div", "hw-empty");
@@ -299,7 +402,10 @@ function hwDrawAll() {
     hwDocsAt = hwGamesAt = hwDueAt = hwChAt = 0;
     hwApply();
   }
+  hwDrawNow();
   hwDrawCalls();
+  hwDrawCrew();
+  hwDrawProjects();
   hwDrawSales();
   hwDrawChannel();
   hwDrawDocs();
@@ -327,7 +433,7 @@ function hwDrawCalls() {
   }
   setChildren($("hwCalls"), rows.length ? rows : [hwEmpty("Nobody's in a call right now. Start one from any chat.", "Open the chat", () => openChat(""))]);
 }
-setInterval(() => { if (!document.hidden) hwDrawCalls(); }, 4000);
+setInterval(() => { if (!document.hidden) { hwDrawCalls(); hwDrawNow(); } }, 4000);
 $("hwCallsOpen").addEventListener("click", () => openChat(""));
 
 // ---- game sales
@@ -411,13 +517,16 @@ $("hwDocsOpen").addEventListener("click", () => showTab("docs"));
 // ---- boards due
 
 let hwDue = null, hwDueAt = 0;
+let hwDueLoading = null;
+function hwLoadDue() {
+  if (Date.now() - hwDueAt < 60000) return hwDueLoading || Promise.resolve();
+  hwDueAt = Date.now();
+  hwDueLoading = api("/api/boards-due", {}).then((res) => { if (res && res.ok) hwDue = res.cards; }).catch(() => {});
+  return hwDueLoading;
+}
 async function hwDrawDue() {
   if (!hwOn("due")) return;
-  if (Date.now() - hwDueAt > 60000) {
-    hwDueAt = Date.now();
-    const res = await api("/api/boards-due", {}).catch(() => null);
-    if (res && res.ok) hwDue = res.cards;
-  }
+  await hwLoadDue();
   if (!hwDue) return;
   const date = (v) => new Date(v.length <= 10 ? v + "T12:00" : v);
   setChildren($("hwDue"), hwDue.length ? hwDue.slice(0, 5).map((c) => {
@@ -447,6 +556,133 @@ if (typeof noteDraw === "function") {
 }
 
 $("hwStatsHistory").addEventListener("click", () => showTab("history"));
+
+// ---- right now: one row of what's going on
+
+const hwNowIcons = {
+  online: '<i class="online-dot"></i>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></svg>',
+  call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.8 2z"/></svg>',
+  due: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>',
+};
+let hwNowSig = "";
+async function hwDrawNow() {
+  if (!hwOn("now") || !hwLoggedIn()) return;
+  hwLoadDue().then(() => { if (hwDue && hwNowSig) hwDrawNowChips(); });
+  hwDrawNowChips();
+}
+function hwDrawNowChips() {
+  const chips = [];
+  const chip = (kind, html, text, onclick, hot) => chips.push({ kind, html, text, onclick, hot });
+  const live = typeof liveNow !== "undefined" ? liveNow : [];
+  if (live.length) {
+    chip("live", '<i class="live-dot"></i>', live.length === 1 ? `${live[0].username} is live` : `${live.length} friends live`,
+      () => live.length === 1 && typeof liveWatch === "function" ? liveWatch(live[0]) : $("homeLive") && $("homeLive").scrollIntoView({ block: "center", behavior: "smooth" }), true);
+  }
+  const online = (homeData && homeData.online) || { online: 0, people: [] };
+  chip("online", hwNowIcons.online, online.online ? `${online.online} online` : "Nobody online", () => openChat(""));
+  if (typeof unreadIn === "function" && typeof chatPrivate !== "undefined") {
+    const unread = (unreadIn("") ? 1 : 0) + chatPrivate.filter((p) => unreadIn(p.username)).length + chatGroups.filter((g) => unreadIn("g:" + g.id)).length;
+    if (unread) chip("chat", hwNowIcons.chat, unread === 1 ? "1 unread chat" : `${unread} unread chats`, () => openChat(""), true);
+  }
+  const calls = typeof callLiveGroups !== "undefined" ? callLiveGroups.length : 0;
+  if (calls) chip("call", hwNowIcons.call, calls === 1 ? "A call is going on" : `${calls} calls going on`, () => openChat(""), true);
+  if (hwDue) {
+    const soon = hwDue.filter((c) => new Date(c.due.length <= 10 ? c.due + "T23:59" : c.due) - Date.now() < 86400000).length;
+    if (soon) chip("due", hwNowIcons.due, soon === 1 ? "1 card due today" : `${soon} cards due today`, () => showTab("boards"), true);
+  }
+  const bell = typeof noteData !== "undefined" ? noteData.list.filter((n) => !n.read).length : 0;
+  if (bell) chip("bell", hwNowIcons.bell, bell === 1 ? "1 new notification" : `${bell} new notifications`, () => noteToggle(true));
+  const sig = JSON.stringify(chips.map((c) => [c.kind, c.text, c.hot])) + JSON.stringify((online.people || []).slice(0, 3));
+  if (sig === hwNowSig) return;
+  hwNowSig = sig;
+  const box = $("hwNow");
+  const nodes = [hwEl("span", "hw-now-title", "Right now")];
+  for (const c of chips) {
+    const b = hwEl("button", "hw-chip " + c.kind + (c.hot ? " hot" : ""));
+    b.type = "button";
+    b.innerHTML = c.html;
+    if (c.kind === "online" && online.people && online.people.length) {
+      const faces = hwEl("span", "hw-chip-faces");
+      faces.append(...online.people.slice(0, 3).map((p) => avatarEl(p.avatarUrl, p.username, "tiny")));
+      b.append(faces);
+    }
+    b.append(hwEl("span", "", c.text));
+    b.addEventListener("click", (e) => { e.stopPropagation(); c.onclick(); });
+    nodes.push(b);
+  }
+  if (chips.length === 1) nodes.push(hwEl("span", "home-muted hw-now-quiet", "All quiet. Nothing new right now."));
+  setChildren(box, nodes);
+}
+// Live friends and unread chats change outside Home: the row follows.
+if (typeof liveDraw === "function") { const was = liveDraw; liveDraw = function () { was(); hwDrawNow(); }; }
+if (typeof drawUnread === "function") { const was = drawUnread; drawUnread = function () { was(); hwDrawNow(); }; }
+
+// ---- crew this week: the crew's channels by subscribers gained in 7 days
+
+let hwCrew = null, hwCrewAt = 0;
+async function hwDrawCrew() {
+  if (!hwOn("crew")) return;
+  if (Date.now() - hwCrewAt > (hwCrew && hwCrew.channels.some((c) => c.loading) ? 5000 : 10 * 60000)) {
+    hwCrewAt = Date.now();
+    const res = await api("/api/stats", { days: 7 }).catch(() => null);
+    if (res && res.ok) hwCrew = res;
+  }
+  if (!hwCrew) return setChildren($("hwCrew"), [hwEmpty("Loading...")]);
+  const rows = hwCrew.channels.map((c) => {
+    const pts = typeof statsSeries === "function" ? statsSeries(c) : [];
+    return { ...c, gained: pts.length >= 2 ? pts[pts.length - 1][1] - pts[0][1] : null };
+  });
+  const byGain = rows.some((r) => r.gained != null);
+  rows.sort((a, b) => byGain ? (b.gained ?? -Infinity) - (a.gained ?? -Infinity) || (b.subscribers || 0) - (a.subscribers || 0)
+    : (b.subscribers || 0) - (a.subscribers || 0));
+  const list = rows.slice(0, 5).map((r, i) => {
+    const face = hwEl("span", "hw-rank" + (i === 0 ? " first" : ""), String(i + 1));
+    const row = hwRow({ face, title: r.name, sub: r.loading ? "Loading..." : r.subscribers == null ? "–" : shortNumber(r.subscribers) + " subscribers",
+      tag: r.gained == null ? "" : (r.gained > 0 ? "+" : r.gained < 0 ? "−" : "") + shortNumber(Math.abs(r.gained)),
+      tagKind: r.gained > 0 ? "up" : r.gained < 0 ? "down" : "", onclick: () => api("/api/open-youtube", { url: r.url }) });
+    row.insertBefore(avatarEl(r.avatar, r.name), row.children[1]);
+    return row;
+  });
+  const out = list.length ? list : [hwEmpty("No channels picked yet.")];
+  if (list.length && !byGain) out.push(hwEl("p", "home-muted hw-note", hwCrew.loggedIn ? "The gains fill in over the week." : "Log in to see who gained the most."));
+  setChildren($("hwCrew"), out);
+}
+$("hwCrewOpen").addEventListener("click", () => showTab("stats"));
+
+// ---- projects: the video projects you're in
+
+let hwPj = null, hwPjAt = 0;
+async function hwDrawProjects() {
+  if (!hwOn("projects") || !hwLoggedIn()) return;
+  if (Date.now() - hwPjAt > 2 * 60000) {
+    hwPjAt = Date.now();
+    const res = await api("/api/pj-list", {}).catch(() => null);
+    if (res && res.ok) hwPj = res;
+  }
+  const d = hwPj || (typeof pjData !== "undefined" ? pjData : null);
+  if (!d) return setChildren($("hwProjects"), [hwEmpty("Loading...")]);
+  if (!d.ready) return setChildren($("hwProjects"), [hwEmpty("Projects isn't set up yet.", "Open Projects", () => showTab("projects"))]);
+  const stage = (p) => typeof pjStageName === "function" ? pjStageName(p.stage) : p.stage;
+  const list = [...(d.projects || [])].slice(0, 4).map((p) => {
+    const joined = (p.people || []).filter((x) => x.joined);
+    const faces = hwEl("span", "hw-pj-faces");
+    faces.append(...joined.slice(0, 3).map((x) => avatarEl(x.avatarUrl || "", x.username || "?", "tiny")));
+    const who = joined.length === 1 ? "Just you" : `${joined.length} people`;
+    const last = p.editor ? `${p.editor} is editing now` : p.last && typeof pjEventText === "function" ? pjEventText(p.last) : "";
+    const row = hwRow({ face: faces, title: p.name, sub: [who, last].filter(Boolean).join(" · "), tag: stage(p),
+      tagKind: p.stage === "done" ? "up" : p.stage === "footage" ? "" : "soon",
+      onclick: () => { showTab("projects"); if (typeof openPj === "function") openPj(p.id); } });
+    return row;
+  });
+  const invites = (d.invites || []).length;
+  const out = list.length ? list : [hwEmpty("No projects yet. Make a video together with friends.", "Start one", () => showTab("projects"))];
+  if (invites) out.unshift(hwRow({ face: hwEl("span", "hw-due-dot soon"), title: invites === 1 ? "1 invitation" : `${invites} invitations`,
+    sub: "Someone wants you in a project", onclick: () => showTab("projects") }));
+  setChildren($("hwProjects"), out);
+}
+$("hwPjOpen").addEventListener("click", () => showTab("projects"));
 
 // ---------------------------------------------------------------- start
 

@@ -8710,3 +8710,73 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ================================================================ 3.0: Home is a snap grid (homewidgets.js places every widget).
+   3 columns: small = 1, medium = 2, large = the whole row. Widgets slide up so there are no holes. */
+.hw-grid { display: block; position: relative; min-height: 40px; }
+.hw-grid > .hw, .hw-grid > .hw.home-card, .hw-grid > .hw-plain[data-w="channels"] { position: absolute; left: 0; top: 0; margin: 0; box-sizing: border-box;
+  min-width: 0; container: hw / inline-size; }
+.hw-grid.hw-ready > .hw { transition: left .34s var(--ease-out), top .34s var(--ease-out); }
+.hw-grid > .hw-plain[data-w="channels"] { padding-top: 14px; }
+.hw-grid > .hw[hidden] { display: none; }
+.hw-grid .home-start { margin: 0; }
+.hw-editing > .hw-plain[data-w="channels"] { padding-top: 46px; }
+
+/* sizes: widgets shrink their insides to fit */
+@container hw (max-width: 760px) {
+  .channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .upload-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-start { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container hw (max-width: 420px) {
+  .home-stats, .hw-grid > .hw:not(.wide) .home-stats { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .hw-grid .home-stats div { display: flex; flex-direction: row; align-items: baseline; gap: 10px; padding: 10px 12px; }
+  .hw-grid .home-stats b { font-size: 20px; }
+  .channel-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-chat-msg small { display: none; }
+  .hw-pic { width: 56px; }
+}
+/* Who's online: full names (wrapping under the picture, not cut short) */
+.home-person { width: auto; min-width: 58px; max-width: 120px; }
+.home-person > span:last-child { max-width: 120px; }
+
+/* Customize: S M L, the layouts */
+.hw-sizes { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.hw-tools .hw-sizes button { width: 24px; height: 24px; font-size: 11px; font-weight: 700; }
+.hw-tools .hw-sizes button.active { background: var(--accent); color: #111; }
+.hw-editing > .hw.home-card > .hw-tools .hw-name { display: none; }
+.hw-presets { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.hw-presets-label { font-size: 12.5px; color: var(--muted); margin-right: 4px; }
+.hw-presets button { all: unset; cursor: pointer; font-size: 12.5px; font-weight: 600; padding: 6px 11px; border-radius: 99px; background: var(--panel2);
+  color: var(--muted); transition: background-color .15s, color .15s; }
+.hw-presets button:hover { color: var(--text); }
+.hw-presets button.active { background: rgba(var(--accent-rgb), .16); color: var(--accent); }
+.hw-bar { flex-wrap: wrap; }
+.hw-bar p { flex: 1 1 320px; }
+.hw-bar .hw-presets { order: 3; flex-basis: 100%; }
+
+/* Right now: one row of chips */
+.hw-now-card.home-card { padding: 12px 14px; }
+.hw-now { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; }
+.hw-now-title { font: 600 14px var(--head); margin-right: 6px; }
+.hw-chip { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px;
+  border-radius: 99px; background: var(--panel2); font-size: 13px; font-weight: 600; transition: background-color .15s, transform .15s; }
+.hw-chip:hover { background: color-mix(in srgb, var(--text) 12%, var(--panel2)); }
+.hw-chip:active { transform: scale(.97); }
+.hw-chip svg { width: 15px; height: 15px; color: var(--muted); }
+.hw-chip.hot svg { color: var(--accent); }
+.hw-chip.live { background: color-mix(in srgb, var(--red) 16%, var(--panel2)); }
+.hw-chip-faces { display: inline-flex; }
+.hw-chip-faces .avatar { width: 20px; height: 20px; font-size: 10px; box-shadow: 0 0 0 2px var(--panel2); }
+.hw-chip-faces .avatar + .avatar { margin-left: -6px; }
+.hw-now-quiet { margin: 0 0 0 4px; font-size: 13px; }
+
+/* Crew this week and Projects */
+.hw-rank { flex: none; width: 18px; text-align: center; font: 700 13px var(--head); color: var(--muted); }
+.hw-rank.first { color: var(--accent); }
+.hw-tag.up { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.hw-tag.down { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.hw-note { margin: 8px 0 0; font-size: 12px; padding: 0 8px; }
+.hw-pj-faces { flex: none; display: inline-flex; min-width: 30px; }
+.hw-pj-faces .avatar { width: 26px; height: 26px; font-size: 11px; box-shadow: 0 0 0 2px var(--panel); }
+.hw-pj-faces .avatar + .avatar { margin-left: -8px; }
