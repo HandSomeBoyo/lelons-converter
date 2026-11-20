@@ -683,6 +683,7 @@ function bdBar() {
 
 function bdCanvas() {
   const canvas = bdEl("div", { class: "bd-canvas" });
+  bdPanning(canvas);
   for (const list of bdOpenLists()) canvas.append(bdListEl(list));
   if (bdAddingList === null) {
     canvas.append(bdEl("button", { type: "button", class: "bd-add-list", onclick: () => { bdAddingList = ""; bdDraw(); } },
@@ -706,6 +707,41 @@ function bdCanvas() {
       bdEl("button", { type: "button", class: "bd-x", html: BD_ICONS.close, title: "Cancel", onclick: () => { bdAddingList = null; bdDraw(); } }))));
   }
   return canvas;
+}
+
+// (3.0) Moving around a big board: hold the mouse on the background and drag the board around, and the
+// mouse wheel over the background scrolls it sideways (the wheel still scrolls a list's cards over a list).
+function bdPanning(canvas) {
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target !== canvas) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, left = canvas.scrollLeft;
+    const lists = [...canvas.querySelectorAll(".bd-cards")].map((c) => [c, c.scrollTop]);
+    canvas.classList.add("panning");
+    canvas.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      canvas.scrollLeft = left - (ev.clientX - sx);
+      // dragging up and down moves the cards in every list too (handy for long lists)
+      for (const [c, top] of lists) c.scrollTop = top - (ev.clientY - sy);
+    };
+    const up = () => {
+      canvas.classList.remove("panning");
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", up);
+      canvas.removeEventListener("pointercancel", up);
+    };
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerup", up);
+    canvas.addEventListener("pointercancel", up);
+  });
+  canvas.addEventListener("wheel", (e) => {
+    if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const box = e.target.closest(".bd-cards");
+    if (box && box.scrollHeight > box.clientHeight) return;  // let the list scroll its own cards
+    if (canvas.scrollWidth <= canvas.clientWidth) return;
+    e.preventDefault();
+    canvas.scrollLeft += e.deltaY;
+  }, { passive: false });
 }
 
 function bdListEl(list) {
