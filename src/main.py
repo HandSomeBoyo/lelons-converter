@@ -2152,8 +2152,10 @@ class Handler(BaseHTTPRequestHandler):
                 quality = state.quality.get(fmt) or settings.DEFAULT_QUALITY[fmt]
             trim = item.get("trim")
             trim = (float(trim[0]), float(trim[1])) if isinstance(trim, list) and len(trim) == 2 else None
+            # (Downloads saved before 3.0 don't say whether the volume was evened out: use the switch as it is now.)
+            normalize = bool(item["normalize"]) if isinstance(item.get("normalize"), bool) else state.normalize
             queue.add(item["url"], fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
-                      state.normalize, preview=item)
+                      normalize, preview=item)
             self.send_json({"ok": True})
         elif self.path == "/api/history-show":
             item = history.find(str(data.get("id")))

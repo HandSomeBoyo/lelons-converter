@@ -8710,3 +8710,8 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* (3.0 Convert) A thumbnail box with no picture: a small icon instead of an empty grey box. */
+.thumb.empty { display: grid; place-items: center; color: var(--muted); }
+.thumb.empty svg { width: 18px; height: 18px; opacity: .7; }
+.history-list .job.done .msg:not(.gone) { color: var(--muted); }

@@ -12,7 +12,7 @@ HISTORY_FILE = os.path.join(settings.DATA_DIR, "history.json")
 STATS_FILE = os.path.join(settings.DATA_DIR, "stats.json")
 KEEP = 300  # newest downloads kept
 KEYS = ("url", "title", "channel", "duration", "seconds", "thumbnail", "format", "quality",
-        "qualityLabel", "trim", "trimLabel", "file")
+        "qualityLabel", "trim", "trimLabel", "file", "normalize")
 
 _lock = threading.Lock()
 _items = None  # newest first, loaded the first time it's needed

@@ -12,6 +12,20 @@ const ICONS = {
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
 };
 
+// A thumbnail box: the picture, or (no picture, like many sites other than YouTube) a small note or film icon.
+const THUMB_ICONS = {
+  sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
+};
+function setThumb(el, url, fmt) {
+  el.style.backgroundImage = url ? `url("${url}")` : "";
+  const kind = url ? "" : ["mp4", "gif"].includes(fmt) ? "video" : fmt ? "sound" : "video";
+  if (el.dataset.icon === kind) return;
+  el.dataset.icon = kind;
+  el.classList.toggle("empty", !!kind);
+  el.innerHTML = kind ? THUMB_ICONS[kind] : "";
+}
+
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
@@ -223,7 +237,12 @@ function showPreview(kind, title, meta, thumbnail) {
   box.className = "preview show " + kind;
   $("previewTitle").textContent = title;
   $("previewMeta").textContent = meta || "";
-  $("previewThumb").style.backgroundImage = thumbnail ? `url("${thumbnail}")` : "";
+  if (kind === "loading" || kind === "error") {
+    $("previewThumb").style.backgroundImage = "";
+    $("previewThumb").classList.remove("empty");
+    $("previewThumb").innerHTML = "";
+    $("previewThumb").dataset.icon = "none";
+  } else setThumb($("previewThumb"), thumbnail, format);
   $("wholePlaylist").hidden = true;
   showFormatExtras();
 }
@@ -270,7 +289,7 @@ function showPlaylist(list, keep = false) {
       row.classList.toggle("bad", !!entry.note);
       row.classList.toggle("looking", !!entry.looking);
       row.querySelector(".number").textContent = i + 1;
-      row.querySelector(".thumb").style.backgroundImage = entry.thumbnail ? `url("${entry.thumbnail}")` : "";
+      if (entry.thumbnail || !entry.looking) setThumb(row.querySelector(".thumb"), entry.thumbnail, format);
       row.querySelector(".title").textContent = entry.title;
       row.querySelector(".meta").textContent = entry.note || (entry.looking ? "Looking it up..."
         : [entry.channel, entry.duration].filter(Boolean).join(" · "));
@@ -286,16 +305,21 @@ function showPlaylist(list, keep = false) {
   showFormatExtras();
 }
 
+// The videos that can be picked (links that didn't work can't).
+const pickable = () => (playlist ? playlist.entries.filter((e) => !e.note) : []);
+
 function updatePlaylistBits() {
   if (playlist) {
-    $("playlistAll").textContent = picked.size === playlist.entries.length ? "Select none" : "Select all";
-    $("playlistTitle").textContent = `${picked.size} of ${playlist.entries.length} videos picked`;
+    const can = pickable().length;
+    $("playlistAll").textContent = can && picked.size >= can ? "Select none" : "Select all";
+    $("playlistAll").hidden = !can;
+    $("playlistTitle").textContent = `${picked.size} of ${can} video${can === 1 ? "" : "s"} picked`;
   }
   updateConvertText();
 }
 
 $("playlistAll").addEventListener("click", () => {
-  const all = picked.size !== playlist.entries.length;
+  const all = picked.size < pickable().length;
   $("playlistList").querySelectorAll("input").forEach((box, i) => {
     if (box.disabled) return;
     box.checked = all;
@@ -380,8 +404,17 @@ async function lookUp(url) {
   }
 }
 
+// An old "that didn't work" message goes away once you type or paste something new.
+function clearNotice() {
+  if ($("notice").classList.contains("error")) {
+    $("notice").className = "notice";
+    $("notice").textContent = "";
+  }
+}
+
 $("url").addEventListener("input", () => {
   clearTimeout(previewTimer);
+  clearNotice();
   const url = $("url").value.trim();
   if (url && url === previewUrl) return;
   const links = linksIn(url);
@@ -912,7 +945,7 @@ function renderJob(el, job) {
   el.className = "job " + job.status;
   setDrag(el, job.status === "done" ? { kind: "job", id: job.id } : null);
   el.title = job.status === "done" ? DRAG_HINT : "";
-  el.querySelector(".thumb").style.backgroundImage = job.thumbnail ? `url("${job.thumbnail}")` : "";
+  setThumb(el.querySelector(".thumb"), job.thumbnail, job.format);
   el.querySelector(".title").textContent = job.title;
   el.querySelector(".title").title = job.title;
   el.querySelector(".badge").textContent = [job.format.toUpperCase(), job.qualityLabel.replace(/ \(.*\)/, ""), job.trimLabel]

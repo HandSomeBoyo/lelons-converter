@@ -1,4 +1,4 @@
-// The History tab: everything downloaded in the Video tab, to find or get again.
+// The History tab: everything downloaded in the Link tab, to find or get again.
 // Uses $, api(), refresh(), ICONS from app.js and showTab() from images.js.
 
 const historyEls = new Map(); // item id -> {el, sig}, so typing in the search doesn't rebuild every row
@@ -49,7 +49,7 @@ function historyRow(item) {
     setDrag(el, { kind: "history", id: item.id });
     el.title = DRAG_HINT;
   }
-  el.querySelector(".thumb").style.backgroundImage = item.thumbnail ? `url("${item.thumbnail}")` : "";
+  setThumb(el.querySelector(".thumb"), item.thumbnail, item.format);
   el.querySelector(".title").textContent = el.querySelector(".title").title = item.title || item.url;
   el.querySelector(".badge").textContent = [(item.format || "").toUpperCase(), (item.qualityLabel || "").replace(/ \(.*\)/, ""), item.trimLabel]
     .filter(Boolean).join(" · ");
@@ -72,6 +72,7 @@ function historyRow(item) {
       refresh();
     } else {
       again.textContent = res.error || "Didn't work";
+      setTimeout(() => { again.textContent = "Download again"; }, 4000);
     }
   };
   actions.append(again);
@@ -106,7 +107,7 @@ function drawHistory() {
   $("historyEmpty").hidden = shown.length > 0;
   $("historyEmpty").textContent = historyItems.length
     ? "Nothing matches that search."
-    : "Nothing here yet. Everything you download in the Video tab shows up here.";
+    : "Nothing here yet. Everything you download in the Link tab shows up here.";
 }
 
 $("historySearch").addEventListener("input", drawHistory);
