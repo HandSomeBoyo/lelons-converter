@@ -13,6 +13,9 @@ const SFX_ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
 };
 
+// (3.0) The playing sound's button shows 3 little bars moving; pointing at it shows the pause sign.
+const SFX_PLAYING_ICON = '<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="pz">' + SFX_ICONS.pause + "</span>";
+
 let sfxAccount = null;
 let sfxSounds = [];
 let sfxCategory = "all";
@@ -322,7 +325,7 @@ function sideButton(label, count, active, onclick, extraClass = "", key = extraC
   b.className = "side-item " + extraClass + (active ? " active" : "");
   b.querySelector(".side-label").textContent = label;
   b.querySelector(".count").textContent = count;
-  b.onclick = () => { onclick(); sfxLimit = 200; drawSfx(); };
+  b.onclick = () => { onclick(); sfxLimit = 200; drawSfx(); sfxListIn(); };
   return b;
 }
 
@@ -507,7 +510,7 @@ function markSfxPlaying(el, sound) {
   el.classList.toggle("playing", current);
   el.classList.toggle("paused", current && !playing);
   const play = el.querySelector(".play");
-  play.innerHTML = playing ? SFX_ICONS.pause : SFX_ICONS.play;
+  play.innerHTML = playing ? SFX_PLAYING_ICON : SFX_ICONS.play;
   play.title = playing ? "Pause" : "Play";
   if (!current) {
     el.querySelectorAll(".bars i.on").forEach((bar) => bar.classList.remove("on"));
@@ -566,6 +569,17 @@ function drawSfx() {
       : "No sounds in this category yet.");
 }
 
+// (3.0) The list fades in, row after row, when you switch what's shown (not while typing in the search).
+function sfxListIn() {
+  const list = $("sfxList");
+  [...list.children].slice(0, 14).forEach((row, i) => row.style.setProperty("--in", i));
+  list.classList.remove("list-in");
+  void list.offsetWidth;
+  list.classList.add("list-in");
+  clearTimeout(list._in);
+  list._in = setTimeout(() => list.classList.remove("list-in"), 900);
+}
+
 function sfxSep() {
   return Object.assign(document.createElement("span"), { className: "sep", textContent: "·" });
 }
@@ -603,7 +617,7 @@ function sfxRow(sound) {
     <div class="sound-wave" title="Click to play from here"><div class="bars"></div><span class="time"></span></div>
     <div class="actions"></div>`;
   const play = el.querySelector(".play");
-  play.innerHTML = sfxPlaying === sound.id ? SFX_ICONS.pause : SFX_ICONS.play;
+  play.innerHTML = sfxPlaying === sound.id && !sfxAudio.paused ? SFX_PLAYING_ICON : SFX_ICONS.play;
   play.onclick = () => playSfx(sound);
   el.querySelector(".title").textContent = el.querySelector(".title").title = sound.name;
   const song = sfxSongMatch(sound);
@@ -649,6 +663,18 @@ function sfxRow(sound) {
   const wave = el.querySelector(".sound-wave");
   drawSoundWave(wave, sound);
   wave.querySelector(".time").textContent = sfxLength(sound.seconds);
+  wave.onmousemove = (e) => {
+    const box = wave.querySelector(".bars").getBoundingClientRect();
+    const bars = wave.querySelectorAll(".bars i");
+    const upTo = Math.round(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * bars.length);
+    if (wave._peek === upTo) return;
+    wave._peek = upTo;
+    bars.forEach((bar, i) => bar.classList.toggle("peek", i < upTo));
+  };
+  wave.onmouseleave = () => {
+    wave._peek = -1;
+    wave.querySelectorAll(".bars i.peek").forEach((bar) => bar.classList.remove("peek"));
+  };
   wave.onclick = (e) => {
     const box = wave.querySelector(".bars").getBoundingClientRect();
     playSfx(sound, Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
@@ -836,7 +862,9 @@ sfxAudio.addEventListener("timeupdate", () => {
   const done = sfxAudio.currentTime / sfxAudio.duration;
   const bars = row.querySelectorAll(".bars i");
   bars.forEach((bar, i) => bar.classList.toggle("on", i / bars.length < done));
-  row.querySelector(".time").textContent = sfxAudio.duration < 10 ? (Math.round(sfxAudio.currentTime * 10) / 10) + "s" : clock(sfxAudio.currentTime, false);
+  const playing = sfxSounds.find((x) => x.id === sfxPlaying);
+  const short = (playing ? playing.seconds : sfxAudio.duration) < 10; // (the same look as its length)
+  row.querySelector(".time").textContent = short ? (Math.round(sfxAudio.currentTime * 10) / 10) + "s" : clock(sfxAudio.currentTime, false);
 });
 
 // ---- waveforms (made by the app the first time a sound is shown, then remembered)

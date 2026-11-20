@@ -8744,3 +8744,24 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .fx-hero-buttons:empty, .fx-hero-buttons[hidden] { display: none; }
 .fx-hero-text > [hidden] { display: none; }
 #fxHeroOpen { height: 36px; padding: 0 16px; font-size: 13.5px; }
+
+/* ---- 3.0 visual touches on Sounds */
+/* hovering a waveform lights it up to the mouse: where the sound starts if you click */
+.sound .bars i.peek { background: color-mix(in srgb, var(--accent) 35%, var(--bars-hover)); }
+.sound .bars i.on, .sound:hover .bars i.on { background: var(--accent); }
+/* the playing sound: 3 bars moving instead of the pause sign (pointing at it shows pause) */
+.sound .play .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+.sound .play .eq i { width: 3px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: bottom; animation: sfx-eq .9s ease-in-out infinite; }
+.sound .play .eq i:nth-child(2) { animation-delay: -.3s; animation-duration: .75s; }
+.sound .play .eq i:nth-child(3) { animation-delay: -.55s; animation-duration: 1.05s; }
+@keyframes sfx-eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.sound .play .pz { display: none; }
+.sound .play:hover .eq, .sound .play:focus-visible .eq { display: none; }
+.sound .play:hover .pz, .sound .play:focus-visible .pz { display: contents; }
+/* switching category: the rows fade in one after another */
+#sfxList.list-in > .sound:nth-child(-n+14) { animation: sfx-row-in .38s var(--ease) both; animation-delay: calc(var(--in, 0) * 22ms); }
+@keyframes sfx-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sound .play .eq i { animation: none; transform: scaleY(.7); }
+  #sfxList.list-in > .sound { animation: none; }
+}
