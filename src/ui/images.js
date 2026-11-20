@@ -66,6 +66,7 @@ function showTab(tab) {
   if (typeof commentsTabChanged === "function") commentsTabChanged(tab);
   if (typeof titlesTabChanged === "function") titlesTabChanged(tab);
   if (typeof liveTabChanged === "function") liveTabChanged(tab);
+  if (typeof linkTabChanged === "function") linkTabChanged(tab);
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }

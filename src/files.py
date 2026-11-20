@@ -274,8 +274,20 @@ class Files:
                 self._finished(item)
             else:
                 self._update(item, status="done", progress=100, out=path, message=message, doneAs=item["job"].get("sig", ""))
-                trim = item["job"]["trim"]
-                history.count(item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                job = item["job"]
+                trim = job["trim"]
+                history.count(job["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                try:  # (3.0) the History tab lists it too
+                    quality = job["quality"]
+                    label = (f"Under {job['targetMb']:g} MB" if job["targetMb"] else
+                             f"{quality} px" if job["format"] == "gif" and quality else
+                             f"{quality}p" if job["format"] == "mp4" and quality else
+                             f"{quality} kbps" if job["format"] in ("mp3", "m4a") and quality else "")
+                    history.add_local("file", os.path.splitext(item["name"])[0] or item["name"], path, job["format"], label,
+                                      (trim[1] - trim[0]) if trim else item.get("seconds") or 0, item["trimLabel"],
+                                      item["thumbPath"])
+                except Exception:
+                    pass
                 self._finished(item)
 
     def _finished(self, item):

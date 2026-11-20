@@ -619,12 +619,32 @@
   <form class="row" id="form">
     <label class="input">
       <input id="url" placeholder="Paste a link (or a bunch at once) from YouTube, TikTok and more" autocomplete="off" spellcheck="false" autofocus>
+      <button type="button" class="url-tool" id="urlPaste" title="Paste the link you copied">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+        <span id="urlPasteText">Paste</span>
+      </button>
+      <button type="button" class="url-tool url-clear" id="urlClear" title="Clear the box" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </label>
     <button class="convert" id="convert" type="submit">
       <span id="convertText">Convert</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
   </form>
+
+  <!-- (3.0) A link you just copied: one click to use it -->
+  <div class="copied-offer" id="copiedOffer" hidden>
+    <div class="thumb" id="copiedThumb"></div>
+    <div class="copied-text">
+      <span>Use the link you copied?</span>
+      <b id="copiedTitle"></b>
+    </div>
+    <button type="button" class="small-button" id="copiedUse">Use it</button>
+    <button type="button" class="icon-button" id="copiedNo" title="No thanks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
 
   <div class="options">
     <div class="toggle" id="toggle">
@@ -657,7 +677,13 @@
         </button>
       </div>
     </div>
-    <button type="button" class="outline-button trim-toggle" id="trimToggle">Trim</button>
+    <div class="preview-actions">
+      <button type="button" class="ghost-button thumb-get" id="thumbGet" title="Save the video's thumbnail as a picture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+        <span id="thumbGetText">Thumbnail</span>
+      </button>
+      <button type="button" class="outline-button trim-toggle" id="trimToggle">Trim</button>
+    </div>
   </div>
 
   <div class="playlist" id="playlist" hidden>
@@ -1532,11 +1558,17 @@
     <div class="history-tools">
       <label class="input history-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <input id="historySearch" placeholder="Search your downloads" autocomplete="off" spellcheck="false">
+        <input id="historySearch" placeholder="Search everything you made" autocomplete="off" spellcheck="false">
       </label>
+      <div class="chips history-kinds" id="historyKinds">
+        <button type="button" data-kind="" class="active">All</button>
+        <button type="button" data-kind="link">Links</button>
+        <button type="button" data-kind="file">Files</button>
+        <button type="button" data-kind="image">Images</button>
+      </div>
       <button type="button" class="link" id="historyClear" hidden>Clear history</button>
     </div>
-    <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you download in the Link tab shows up here.</p>
+    <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you make in Link, Files and Images shows up here.</p>
     <div class="jobs history-list" id="historyList"></div>
   </section>
 

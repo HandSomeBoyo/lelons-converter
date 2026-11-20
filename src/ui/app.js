@@ -19,7 +19,7 @@ const THUMB_ICONS = {
 };
 function setThumb(el, url, fmt) {
   el.style.backgroundImage = url ? `url("${url}")` : "";
-  const kind = url ? "" : ["mp4", "gif"].includes(fmt) ? "video" : fmt ? "sound" : "video";
+  const kind = url ? "" : ["mp4", "gif", "jpg"].includes(fmt) ? "video" : fmt ? "sound" : "video";
   if (el.dataset.icon === kind) return;
   el.dataset.icon = kind;
   el.classList.toggle("empty", !!kind);
@@ -244,6 +244,7 @@ function showPreview(kind, title, meta, thumbnail) {
     $("previewThumb").dataset.icon = "none";
   } else setThumb($("previewThumb"), thumbnail, format);
   $("wholePlaylist").hidden = true;
+  $("thumbGet").hidden = !thumbnail;
   showFormatExtras();
 }
 
@@ -415,6 +416,7 @@ function clearNotice() {
 $("url").addEventListener("input", () => {
   clearTimeout(previewTimer);
   clearNotice();
+  urlBoxChanged();
   const url = $("url").value.trim();
   if (url && url === previewUrl) return;
   const links = linksIn(url);
@@ -872,14 +874,126 @@ $("form").addEventListener("submit", async (e) => {
   try {
     const folder = await whereToSave();
     if (!folder) return;
+    linksIn(url).concat(url).forEach((l) => offerSeen.add(l)); // don't offer it again afterwards
     $("url").value = "";
     hidePreview();
+    urlBoxChanged();
     $("url").focus();
     const res = items ? await api("/api/convert-many", { format, items, folder }) : await api("/api/convert", { url, format, folder, ...part });
     $("notice").className = res.ok ? "notice" : "notice error";
     $("notice").textContent = res.ok ? "" : res.error;
   } finally {
     convertBusy = false;
+  }
+  refresh();
+});
+
+// ---- (3.0) Paste and clear in the link box, "Use the link you copied?", and the Thumbnail button
+
+// The text on the clipboard. The app reads it (no permission popup); ask: may the window ask itself
+// (only when Paste is clicked, never by itself, since it could show a permission popup).
+async function clipboardText(ask) {
+  const res = await api("/api/clipboard-text", {}).catch(() => ({ ok: false }));
+  if (res.ok) return String(res.text || "");
+  if (ask && res.fallback && navigator.clipboard) {
+    try { return await navigator.clipboard.readText(); } catch (e) { /* not allowed */ }
+  }
+  return "";
+}
+
+// Paste when the box is empty, clear (x) when it isn't.
+function urlBoxChanged() {
+  const filled = !!$("url").value;
+  $("urlPaste").hidden = filled;
+  $("urlClear").hidden = !filled;
+  if (filled) hideOffer();
+}
+
+let pasteTimer = null;
+$("urlPaste").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const text = (await clipboardText(true)).trim();
+  if (!text) {
+    $("urlPasteText").textContent = "Nothing copied";
+    $("urlPaste").classList.add("flash");
+    clearTimeout(pasteTimer);
+    pasteTimer = setTimeout(() => { $("urlPasteText").textContent = "Paste"; $("urlPaste").classList.remove("flash"); }, 1800);
+    return;
+  }
+  const links = linksIn(text);
+  offerSeen.add(text);
+  $("url").value = links.length > 1 ? links.join(" ") : links[0] || text;
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+$("urlClear").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("url").value = "";
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+
+// A link copied in another app (like YouTube in the browser): offered under the box when you come
+// to the Link page. Only links to video and music sites, and each one only once.
+const offerSeen = new Set();
+let offerText = "";
+const MEDIA_SITE = /^https?:\/\/([\w-]+\.)*(youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|x\.com|twitter\.com|vimeo\.com|soundcloud\.com|reddit\.com|facebook\.com|fb\.watch|kick\.com|dailymotion\.com|bandcamp\.com|streamable\.com|bilibili\.com)\//i;
+
+function hideOffer() {
+  if (offerText) offerSeen.add(offerText);
+  offerText = "";
+  $("copiedOffer").hidden = true;
+}
+
+async function checkCopied() {
+  if ($("videoTab").hidden || document.hidden || $("url").value.trim() || convertBusy) return;
+  const text = (await clipboardText(false)).trim();
+  const links = linksIn(text).filter((l) => MEDIA_SITE.test(l));
+  if (!links.length || offerSeen.has(text) || links.every((l) => offerSeen.has(l)) || text === offerText) return;
+  if ($("videoTab").hidden || $("url").value.trim()) return;
+  offerText = text;
+  const short = (l) => l.replace(/^https?:\/\/(www\.)?/i, "").slice(0, 70);
+  $("copiedTitle").textContent = links.length > 1 ? `${links.length} links` : short(links[0]);
+  setThumb($("copiedThumb"), "", "mp4");
+  $("copiedOffer").hidden = false;
+  if (links.length === 1) {
+    // Its title and picture (the lookup is kept, so "Use it" opens straight away).
+    const res = await api("/api/info", { url: links[0] }).catch(() => null);
+    if (offerText !== text || !res || !res.ok) return;
+    $("copiedTitle").textContent = res.preview.title || short(links[0]);
+    setThumb($("copiedThumb"), res.preview.thumbnail, "mp4");
+  }
+}
+$("copiedUse").addEventListener("click", () => {
+  const links = linksIn(offerText).filter((l) => MEDIA_SITE.test(l));
+  hideOffer();
+  if (!links.length) return;
+  $("url").value = links.join(" ");
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+$("copiedNo").addEventListener("click", hideOffer);
+window.addEventListener("focus", () => setTimeout(checkCopied, 150));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(checkCopied, 150); });
+function linkTabChanged(tab) { if (tab === "video") setTimeout(checkCopied, 100); else hideOfferQuietly(); }
+// Leaving the page doesn't count as "no thanks": it can be offered again when you come back.
+function hideOfferQuietly() {
+  offerText = "";
+  $("copiedOffer").hidden = true;
+}
+
+// The video's thumbnail, saved as a JPG (it shows up in Downloads like the rest).
+$("thumbGet").addEventListener("click", async () => {
+  if (!previewUrl || playlist) return;
+  const url = previewUrl;
+  const folder = await whereToSave();
+  if (!folder) return;
+  const res = await api("/api/thumbnail", { url, folder }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  $("notice").className = res.ok ? "notice" : "notice error";
+  $("notice").textContent = res.ok ? "" : res.error;
+  if (res.ok) {
+    $("thumbGetText").textContent = "Saving...";
+    setTimeout(() => { $("thumbGetText").textContent = "Thumbnail"; }, 1500);
   }
   refresh();
 });

@@ -692,6 +692,9 @@ class Handler(BaseHTTPRequestHandler):
             item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
             path = item and item["thumbPath"]
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/history-thumb/"):  # (3.0) a file or picture in the History tab
+            path = history.thumb_path(self.path[len("/history-thumb/"):])
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/image/"):
             path = images.thumbnail_path(self.path[len("/image/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -2062,7 +2065,14 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             data = {}
 
-        if self.path == "/api/info":
+        if self.path == "/api/clipboard-text":  # (3.0) the Link page's Paste button, and "Use the link you copied?"
+            if os.name != "nt":
+                return self.send_json({"ok": False, "fallback": True})
+            try:
+                self.send_json({"ok": True, "text": windows.clipboard_text()})
+            except OSError:
+                self.send_json({"ok": False, "fallback": True})
+        elif self.path == "/api/info":
             url = str(data.get("url", "")).strip()
             try:
                 self.send_json({"ok": True, "preview": queue.preview(url)})
@@ -2125,6 +2135,12 @@ class Handler(BaseHTTPRequestHandler):
             queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim, state.normalize)
             state.set(notice=None)
             self.send_json({"ok": True})
+        elif self.path == "/api/thumbnail":  # (3.0) the Thumbnail button next to a looked-up video
+            url = str(data.get("url", "")).strip()
+            if not url:
+                return self.send_json({"ok": False, "error": "Paste a link first."})
+            queue.add(url, "jpg", "", "Thumbnail", save_folder(data, "pictures"))
+            self.send_json({"ok": True})
         elif self.path == "/api/convert-many":
             # Videos picked from a playlist.
             fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
@@ -2145,6 +2161,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/history-again":
             item = history.find(str(data.get("id")))
+            if item and item.get("url") and item.get("format") == "jpg":  # (3.0) a thumbnail
+                queue.add(item["url"], "jpg", "", "Thumbnail", save_folder(data, "pictures"), preview=item)
+                return self.send_json({"ok": True})
             if not item or item.get("format") not in settings.QUALITIES:
                 return self.send_json({"ok": False, "error": "That download isn't in the list anymore."})
             fmt, quality = item["format"], str(item.get("quality"))
@@ -2366,6 +2385,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/image-convert":
             try:
                 made = images.convert(str(data.get("id")), data.get("options") or {}, save_folder(data, "pictures"))
+                try:  # (3.0) the History tab lists it too
+                    fmt = (data.get("options") or {}).get("format")
+                    history.add_local("image", os.path.splitext(made["name"])[0], made["path"],
+                                      fmt if fmt in images.FORMATS else "png", f"{made['width']} × {made['height']}",
+                                      picture=images.thumbnail_path(str(data.get("id"))))
+                except Exception:
+                    pass
                 self.send_json({"ok": True, **made})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't save this picture."})

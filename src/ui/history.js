@@ -1,10 +1,13 @@
-// The History tab: everything downloaded in the Link tab, to find or get again.
+// The History tab: everything made in the Link, Files and Images tabs, to find or get again.
+// (Links can be downloaded again; files and pictures can be shown in their folder.)
 // Uses $, api(), refresh(), ICONS from app.js and showTab() from images.js.
 
 const historyEls = new Map(); // item id -> {el, sig}, so typing in the search doesn't rebuild every row
 let historyItems = [];
 let historyVersion = -1;
 let historyLoading = false;
+let historyKind = ""; // the filter: "", "link", "file" or "image"
+const kindOf = (item) => item.source || "link";
 
 async function loadHistory() {
   if (historyLoading) return;
@@ -50,32 +53,16 @@ function historyRow(item) {
     el.title = DRAG_HINT;
   }
   setThumb(el.querySelector(".thumb"), item.thumbnail, item.format);
-  el.querySelector(".title").textContent = el.querySelector(".title").title = item.title || item.url;
+  el.querySelector(".title").textContent = el.querySelector(".title").title = item.title || item.url || "";
   el.querySelector(".badge").textContent = [(item.format || "").toUpperCase(), (item.qualityLabel || "").replace(/ \(.*\)/, ""), item.trimLabel]
     .filter(Boolean).join(" · ");
   const msg = el.querySelector(".msg");
-  msg.textContent = [whenText(item.date), item.exists ? "" : "File moved or deleted", item.exists ? item.channel : ""].filter(Boolean).join(" · ");
+  const from = { file: "From Files", image: "From Images" }[kindOf(item)] || "";
+  msg.textContent = [whenText(item.date), item.exists ? "" : "File moved or deleted", item.exists ? item.channel || from : ""].filter(Boolean).join(" · ");
   msg.classList.toggle("gone", !item.exists);
 
   const actions = el.querySelector(".actions");
-  const again = document.createElement("button");
-  again.className = "outline-button again";
-  again.textContent = "Download again";
-  again.onclick = async () => {
-    const folder = await whereToSave();
-    if (!folder) return;
-    again.disabled = true;
-    const res = await api("/api/history-again", { id: item.id, folder }).catch(() => ({ ok: false }));
-    again.disabled = false;
-    if (res.ok) {
-      showTab("video");
-      refresh();
-    } else {
-      again.textContent = res.error || "Didn't work";
-      setTimeout(() => { again.textContent = "Download again"; }, 4000);
-    }
-  };
-  actions.append(again);
+  if (item.url) actions.append(againButton(item));
   const buttons = item.exists ? ["folder", "remove"] : ["remove"];
   for (const kind of buttons) {
     const b = document.createElement("button");
@@ -93,10 +80,33 @@ function historyRow(item) {
   return el;
 }
 
+// "Download again" for a link.
+function againButton(item) {
+  const again = document.createElement("button");
+  again.className = "outline-button again";
+  again.textContent = "Download again";
+  again.onclick = async () => {
+    const folder = await whereToSave();
+    if (!folder) return;
+    again.disabled = true;
+    const res = await api("/api/history-again", { id: item.id, folder }).catch(() => ({ ok: false }));
+    again.disabled = false;
+    if (res.ok) {
+      showTab("video");
+      refresh();
+    } else {
+      again.textContent = res.error || "Didn't work";
+      setTimeout(() => { again.textContent = "Download again"; }, 4000);
+    }
+  };
+  return again;
+}
+
 function drawHistory() {
   const words = $("historySearch").value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = historyItems.filter((item) => {
-    const text = `${item.title} ${item.channel} ${item.format} ${item.url}`.toLowerCase();
+    if (historyKind && kindOf(item) !== historyKind) return false;
+    const text = `${item.title} ${item.channel || ""} ${item.format} ${item.url || ""} ${item.file || ""}`.toLowerCase();
     return words.every((w) => text.includes(w));
   });
   const list = $("historyList");
@@ -105,10 +115,19 @@ function drawHistory() {
   forgetNodes(historyEls, historyItems.map((item) => item.id));
   $("historyClear").hidden = !historyItems.length;
   $("historyEmpty").hidden = shown.length > 0;
-  $("historyEmpty").textContent = historyItems.length
-    ? "Nothing matches that search."
-    : "Nothing here yet. Everything you download in the Link tab shows up here.";
+  const kindName = { link: "links", file: "files", image: "pictures" }[historyKind];
+  $("historyEmpty").textContent = !historyItems.length
+    ? "Nothing here yet. Everything you make in Link, Files and Images shows up here."
+    : words.length ? "Nothing matches that search."
+    : kindName ? `No ${kindName} yet.` : "Nothing matches that search.";
+  $("historyKinds").hidden = !historyItems.length;
 }
+
+$("historyKinds").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  historyKind = b.dataset.kind;
+  $("historyKinds").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+  drawHistory();
+}));
 
 $("historySearch").addEventListener("input", drawHistory);
 
