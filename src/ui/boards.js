@@ -511,7 +511,7 @@ function bdCreatePop(anchor, forTeam) {
       bdShow(res.board);
     }
     paint();
-    box.append(preview, bdEl("label", { class: "bd-label-text", text: "Background" }), swatches(BD_BG_GRADIENTS, "big"), swatches(BD_BG_COLORS, ""),
+    box.append(preview, bdEl("label", { class: "bd-label-text", text: "Background" }), swatches([...BD_BG_GRADIENTS, ...BD_BG_COLORS], "all"),
       bdEl("label", { class: "bd-label-text", text: "Board title" }), title,
       bdEl("label", { class: "bd-label-text", text: "Who can see it" }), whoPick, whoNote,
       bdEl("label", { class: "bd-label-text", text: "Start with" }), pick, go);

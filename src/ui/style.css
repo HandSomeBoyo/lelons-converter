@@ -4588,6 +4588,8 @@ textarea.bd-input, textarea.bd-inline { resize: vertical; line-height: 20px; }
 select.bd-input { cursor: pointer; }
 .bd-inline { color: var(--bd-title); }
 .bd-title-edit { color: #172b4d; background: #fff; }
+/* (3.0) the board's name box while renaming: as big as the name and dark like the bar (it stretched over the whole bar in small text) */
+.bd-inline.bd-title-edit { width: min(420px, 40vw); min-height: 0; padding: 3px 10px; font: 700 18px var(--head); color: #fff; background: rgba(0, 0, 0, .32); border-color: rgba(255, 255, 255, .25); }
 
 /* the menu on the right */
 .bd-menu { flex: none; width: 340px; display: flex; flex-direction: column; background: var(--bd-pop); color: var(--bd-text); font: 14px Inter, "Segoe UI", sans-serif;
@@ -4649,6 +4651,9 @@ select.bd-input { cursor: pointer; }
 .bd-swatch:hover { transform: scale(1.06); }
 .bd-swatch.on { box-shadow: 0 0 0 2px var(--bd-pop), 0 0 0 4px #388bff; }
 .bd-swatches.small .bd-swatch { width: 44px; height: 28px; }
+/* (3.0) Create board: all 16 backgrounds in two even rows (the gradients left a gap) */
+.bd-swatches.all { display: grid; grid-template-columns: repeat(8, 1fr); }
+.bd-swatches.all .bd-swatch { width: auto; height: 30px; }
 .bd-create-preview { height: 120px; border-radius: 6px; display: flex; justify-content: center; gap: 7px; padding-top: 14px; box-sizing: border-box; margin-top: 4px; }
 .bd-create-preview i { width: 46px; height: 64px; border-radius: 4px; background: rgba(255, 255, 255, .45); }
 .bd-create-preview i:nth-child(2) { height: 80px; }
