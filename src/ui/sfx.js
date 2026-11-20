@@ -24,7 +24,25 @@ const sfxSure = new Set(); // sounds whose bin was clicked once
 const sfxDragReady = new Set(); // sounds with a copy ready to drag into other apps
 const sfxNotes = new Map(); // id -> {text, kind, path}: "Saved as ..." under a sound
 let sfxLastLoad = 0;
+
+// A red note under a sound (something didn't work) goes away by itself after a while; it stuck there before.
+const sfxNoteTimers = new Map();
+function sfxBadNote(id, text, ms = 7000) {
+  sfxNotes.set(id, { text, kind: "bad" });
+  clearTimeout(sfxNoteTimers.get(id));
+  sfxNoteTimers.set(id, setTimeout(() => {
+    sfxNoteTimers.delete(id);
+    const note = sfxNotes.get(id);
+    if (note && note.text === text) { sfxNotes.delete(id); drawSfx(); }
+  }, ms));
+}
 let sfxFromCache = false; // the account shown is from last time (the fresh one is on its way)
+
+// How long a sound is. Short ones get tenths ("0.4s"): a click or a boom showed as 0:00.
+function sfxLength(seconds) {
+  const t = Math.max(0, +seconds || 0);
+  return t < 10 ? (Math.round(t * 10) / 10 || 0.1) + "s" : clock(t, false);
+}
 
 function sfxAgo(when) {
   const seconds = (Date.now() - new Date(when).getTime()) / 1000;
@@ -492,7 +510,7 @@ function markSfxPlaying(el, sound) {
   play.title = playing ? "Pause" : "Play";
   if (!current) {
     el.querySelectorAll(".bars i.on").forEach((bar) => bar.classList.remove("on"));
-    el.querySelector(".time").textContent = clock(sound.seconds, false);
+    el.querySelector(".time").textContent = sfxLength(sound.seconds);
   }
 }
 
@@ -629,7 +647,7 @@ function sfxRow(sound) {
   }
   const wave = el.querySelector(".sound-wave");
   drawSoundWave(wave, sound);
-  wave.querySelector(".time").textContent = clock(sound.seconds, false);
+  wave.querySelector(".time").textContent = sfxLength(sound.seconds);
   wave.onclick = (e) => {
     const box = wave.querySelector(".bars").getBoundingClientRect();
     playSfx(sound, Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
@@ -684,7 +702,7 @@ function sfxRow(sound) {
         sfxSounds = sfxSounds.filter((s) => s.id !== sound.id);
         if (sfxPlaying === sound.id) stopSfx();
       } else {
-        sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
+        sfxBadNote(sound.id, res.error);
       }
       drawSfx();
     });
@@ -706,7 +724,7 @@ async function toggleSfxFavorite(sound) {
     const now = sfxSounds.find((x) => x.id === sound.id);
     if (now) now.favorite = !on;
     sound.favorite = !on;
-    sfxNotes.set(sound.id, { text: res.error, kind: "bad" });
+    sfxBadNote(sound.id, res.error);
     drawSfx();
   }
 }
@@ -722,12 +740,12 @@ async function downloadSfx(sound) {
   const res = await api("/api/sfx-download", { url: sound.url, name: sound.name, folder })
     .catch(() => ({ ok: false, error: "Couldn't download that sound." }))
     .finally(() => sfxDownloading.delete(sound.id));
-  sfxNotes.set(sound.id, res.ok ? { text: "Saved as " + res.fileName, kind: "saved", path: res.path }
-    : { text: res.error, kind: "bad" });
+  if (res.ok) sfxNotes.set(sound.id, { text: "Saved as " + res.fileName, kind: "saved", path: res.path });
+  else sfxBadNote(sound.id, res.error);
   drawSfx();
 }
 
-$("sfxSearch").addEventListener("input", drawSfx);
+$("sfxSearch").addEventListener("input", () => { sfxLimit = 200; drawSfx(); });
 
 // ---- playing
 
@@ -785,7 +803,7 @@ function playSfx(sound, from = null) {
   sfxAudio.play().catch((e) => {
     // Another sound was clicked before this one started: not an error.
     if (e && e.name === "AbortError" || sfxPlaying !== sound.id) return;
-    sfxNotes.set(sound.id, { text: "Couldn't play it. Check your internet connection.", kind: "bad" });
+    sfxBadNote(sound.id, "Couldn't play it. Check your internet connection.");
     stopSfx();
   });
 }
@@ -817,7 +835,7 @@ sfxAudio.addEventListener("timeupdate", () => {
   const done = sfxAudio.currentTime / sfxAudio.duration;
   const bars = row.querySelectorAll(".bars i");
   bars.forEach((bar, i) => bar.classList.toggle("on", i / bars.length < done));
-  row.querySelector(".time").textContent = clock(sfxAudio.currentTime, false);
+  row.querySelector(".time").textContent = sfxAudio.duration < 10 ? (Math.round(sfxAudio.currentTime * 10) / 10) + "s" : clock(sfxAudio.currentTime, false);
 });
 
 // ---- waveforms (made by the app the first time a sound is shown, then remembered)
@@ -1028,6 +1046,9 @@ $("sfxTrim").addEventListener("click", () => {
 });
 
 $("sfxUploadOpen").addEventListener("click", openSfxUpload);
+$("sfxModal").addEventListener("click", (e) => { if (e.target === $("sfxModal")) closeSfxUpload(); });
+// (looked at before the trim window's own Esc runs, so Esc there only closes the trim window)
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sfxModal").hidden && $("trimModal").hidden) closeSfxUpload(); }, true);
 $("sfxCancel").addEventListener("click", closeSfxUpload);
 
 $("sfxSend").addEventListener("click", async () => {

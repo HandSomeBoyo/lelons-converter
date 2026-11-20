@@ -821,7 +821,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 /* Favorites in the Library */
 .sound .actions .star.on { color: var(--accent); }
 .sound:has(.star.on) .actions { opacity: 1; }
-.sound:has(.star.on) .actions button:not(.star) { opacity: .55; }
+.sound:has(.star.on) .actions button:not(.star):not(.extra) { opacity: .55; }
 .sound:hover .actions button { opacity: 1 !important; }
 
 /* Send feedback, and the owner's inbox */
@@ -8710,3 +8710,27 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ---------------------------------------------------------------- Library for 3.0 */
+/* (a starred sound showed its hover-only buttons all the time, half see-through) */
+.sound:has(.star.on):not(:hover):not(:focus-within) .actions .extra:not(.sure) { opacity: 0 !important; }
+/* The search row: when there's less room (the genres are open, or a small window), "Find sounds & music"
+   becomes just its globe, so Upload doesn't fall onto a line of its own. */
+.lib-main { container: libmain / inline-size; min-width: 0; }
+@container libmain (max-width: 860px) {
+  .lib-tools .find-open { padding: 0 12px; gap: 0; }
+  .lib-tools .find-open .find-text { display: none; }
+}
+@container libmain (max-width: 560px) {
+  .lib-tools .history-search { flex: 1 1 100%; }
+}
+/* Film assets: the search looks like the one on Sounds, and the row has one height */
+.fx-browse > .fx-tools { align-items: center; }
+.fx-browse > .fx-tools > .input, .fx-browse > .fx-tools > .quality, .fx-browse > .fx-tools > .fx-new { height: 44px; box-sizing: border-box; }
+.fx-browse .fx-new { display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; }
+.fx-browse .fx-new svg { width: 16px; height: 16px; }
+.fx-toast { position: fixed; z-index: 200; left: 50%; bottom: 26px; transform: translate(-50%, 16px); max-width: min(520px, 90vw); padding: 11px 16px;
+  border-radius: 10px; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); font-size: 13.5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
+.fx-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.fx-icon.sure, .ghost-button.fx-danger.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }

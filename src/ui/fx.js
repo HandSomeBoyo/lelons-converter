@@ -238,6 +238,35 @@ function fxBadges(pack) {
   return b;
 }
 
+// A short note at the bottom of the window (Windows' own pop-up boxes were used before: they looked out of place).
+function fxToast(text) {
+  let t = $("fxToast");
+  if (!t) document.body.append(t = fxEl("div", "fx-toast"));
+  t.id = "fxToast";
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 4200);
+}
+
+// Deleting needs a second click on the same button (like the bin on Sounds), not a pop-up box.
+function fxSure(button, label, go) {
+  const back = () => {
+    clearTimeout(button._sure);
+    delete button.dataset.sure;
+    button.classList.remove("sure");
+    button.title = button._title || button.title;
+    if (button._label) button._label.textContent = button._label.dataset.text;
+  };
+  if (button.dataset.sure) { back(); return go(); }
+  button.dataset.sure = "1";
+  button.classList.add("sure");
+  button._title = button.title;
+  button.title = label;
+  if (button._label) button._label.textContent = label;
+  button._sure = setTimeout(back, 3500);
+}
+
 async function loadFx() {
   if (fxLoading) return;
   fxLoading = true;
@@ -289,7 +318,7 @@ function renderFxHero() {
       if (src) video.src = src; else video.removeAttribute("src");
     }
     video.hidden = false;
-    if (src && !$("fxTab").hidden) video.play().catch(() => {});
+    if (src && !$("fxTab").hidden && !fxOpen) video.play().catch(() => {});
     fxStop(fxHeroArt);
     $("fxHeroArt").hidden = true;
   } else {
@@ -352,7 +381,7 @@ async function openFxPack(packId, quiet) {
   const res = await api("/api/fx-pack", { pack: packId }).catch(() => ({ ok: false, error: "Couldn't open the pack." }));
   if (!res.ok) {
     if (typeof sfxLoggedOut === "function" && sfxLoggedOut(res)) return closeFxPack();
-    if (!quiet) alert(res.error);
+    if (!quiet) fxToast(res.error);
     return;
   }
   if (res.files && fxData) fxData.files = res.files;
@@ -413,8 +442,10 @@ function drawFxPack() {
     const del = fxEl("button", "ghost-button fx-danger");
     del.type = "button";
     del.innerHTML = FX_ICONS.trash;
-    del.append("Delete");
-    del.addEventListener("click", () => deleteFxPack(pack));
+    del._label = fxEl("span", "", "Delete");
+    del._label.dataset.text = "Delete";
+    del.append(del._label);
+    del.addEventListener("click", () => fxSure(del, "Click again to delete the pack", () => deleteFxPack(pack)));
     buttons.append(edit, del);
   }
   side.append(facts, buttons);
@@ -446,13 +477,12 @@ function fxClip(pack, clip, canEdit) {
     del.type = "button";
     del.title = "Delete this clip";
     del.innerHTML = FX_ICONS.trash;
-    del.addEventListener("click", async () => {
-      if (!confirm(`Delete "${clip.name}"?`)) return;
+    del.addEventListener("click", () => fxSure(del, "Click again to delete this clip", async () => {
       const res = await api("/api/fx-delete-clip", { pack: pack.id, clip: clip.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
-      if (!res.ok) return alert(res.error);
+      if (!res.ok) return fxToast(res.error);
       openFxPack(pack.id, true);
       loadFx();
-    });
+    }));
     tools.append(del);
   }
   thumb.append(tools);
@@ -483,7 +513,7 @@ function fxDropzone(packId) {
     e.preventDefault();
     const res = await api("/api/fx-pick", { pack: packId }).catch(() => ({ ok: false, fallback: true }));
     if (res.fallback) input.click();
-    else if (!res.ok) alert(res.error);
+    else if (!res.ok) fxToast(res.error);
     else if (res.added) fxPollJobs();
   });
   input.addEventListener("change", () => { fxSendFiles(packId, [...input.files]); input.value = ""; });
@@ -502,7 +532,7 @@ async function fxSendFiles(packId, files) {
   for (const file of files) {
     const res = await fetch("/api/fx-add", { method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name), "X-Pack": packId }, body: file })
       .then((r) => r.json()).catch(() => ({ ok: false, error: "Couldn't open " + file.name }));
-    if (!res.ok) alert(res.error);
+    if (!res.ok) fxToast(res.error);
     fxPollJobs();
   }
 }
@@ -582,7 +612,7 @@ async function fxDownload(packId, clipId) {
   const folder = await whereToSave();
   if (!folder) return;
   const res = await api("/api/fx-download", { pack: packId, clip: clipId || "", folder }).catch(() => ({ ok: false, error: "Couldn't start the download." }));
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return fxToast(res.error);
   fxShowJobs();
   fxPollJobs();
 }
@@ -621,9 +651,8 @@ $("fxPackModal").addEventListener("click", (e) => { if (e.target === $("fxPackMo
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("fxPackModal").hidden) closeFxPackModal(); });
 
 async function deleteFxPack(pack) {
-  if (!confirm(`Delete the pack "${pack.name}" and all its clips? This can't be undone.`)) return;
   const res = await api("/api/fx-delete-pack", { pack: pack.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return fxToast(res.error);
   closeFxPack();
   loadFx();
 }
