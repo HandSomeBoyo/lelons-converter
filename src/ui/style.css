@@ -9133,3 +9133,68 @@ body.bd-dragging .bd-card:hover { transform: none; }
 .bd-rule-label.on { box-shadow: 0 0 0 2px var(--bd-pop), 0 0 0 4px #388bff; }
 .bd-rule-on { color: #f5cd47 !important; }
 .bd-confetti { position: fixed; z-index: 170; width: 7px; height: 10px; border-radius: 2px; pointer-events: none; }
+
+
+/* ================================================================ 3.0: Recording page (Games + POVs) polish */
+/* A short note at the bottom instead of Windows pop-up boxes (recToast in games.js) */
+.rec-toast { position: fixed; z-index: 300; left: 50%; bottom: 26px; transform: translate(-50%, 16px); max-width: min(520px, 90vw); padding: 11px 16px;
+  border-radius: 10px; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); font-size: 13.5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
+.rec-toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* Delete / Cancel / Stop sharing: the first click turns the button red and asks again (recSure) */
+.gm-danger.sure, .pv-remove.sure, .pv-act .ghost-button.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); border-radius: 8px; }
+.gm-danger.sure { padding: 4px 8px; margin: -4px -8px; }
+/* The game's note is written right there */
+.gm-note-edit { margin-top: 0; }
+.gm-note-edit .ghost-button { height: 38px; padding: 0 14px; }
+/* New video window: "Name" looks like the other labels */
+.pv-add-dialog .fx-field > span:first-child { font: 600 11px var(--head); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.gm-danger.sure { text-decoration: none; }
+/* (all six timer buttons on one line) */
+.pv-add-dialog { max-width: 510px; }
+/* Game and POV pictures fade in instead of popping in */
+.fade-pic { opacity: 0; transition: opacity .35s var(--ease), transform .6s var(--ease); }
+.fade-pic.in { opacity: 1; }
+/* "Open in Steam" is grey: the only yellow button in a game is "I want to record this" */
+.gm-buy .gm-steam { box-sizing: border-box; width: 100%; display: inline-flex; align-items: center; }
+/* A thin download bar under the POVs button */
+.sub-tabs .tab-bar { position: absolute; left: 12px; right: 12px; bottom: 3px; height: 3px; border-radius: 99px; background: var(--line2); overflow: hidden; }
+.sub-tabs .tab-bar[hidden] { display: none; }
+.sub-tabs .tab-bar span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .4s linear; }
+.sub-tabs .tab-bar.paused span { background: var(--muted); }
+.gm-buy .gm-steam { background: var(--panel); border: 1px solid var(--line2); color: var(--text); }
+.gm-buy .gm-steam:hover { border-color: var(--muted); }
+/* Post game: just the link box until there's a link, then "Why this one?" slides in */
+.gm-add:not(.has-link) .gm-note { display: none; }
+.gm-add.has-link .gm-note { animation: gm-note-in .25s var(--ease); }
+@keyframes gm-note-in { from { opacity: 0; transform: translateX(-8px); } }
+/* One Filter button instead of four pills */
+.gm-filter { position: relative; margin-left: auto; }
+.gm-filter-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--line2); font: 500 13px var(--head); color: var(--muted); transition: border-color .2s, color .2s, background-color .2s; }
+.gm-filter-btn:hover, .gm-filter-btn[aria-expanded="true"] { color: var(--text); }
+.gm-filter-btn svg { width: 15px; height: 15px; }
+.gm-filter-btn.on { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb), .1); }
+.gm-filter-btn b { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 99px; background: var(--accent); color: #111;
+  font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+.gm-filter-btn b[hidden] { display: none; }
+.gm-filter-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 6px; border-radius: 12px;
+  background: var(--panel2); border: 1px solid var(--line2); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); animation: gm-note-in .15s var(--ease); }
+.gm-filter-pop[hidden] { display: none; }
+.gm-filter-row { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px;
+  font: 500 13px var(--head); color: var(--text); }
+.gm-filter-row:hover { background: var(--panel); }
+.gm-check { width: 16px; height: 16px; flex: none; border-radius: 5px; border: 1.5px solid var(--line2); box-sizing: border-box; display: grid; place-items: center; }
+.gm-filter-row.on .gm-check { background: var(--accent); border-color: var(--accent); }
+.gm-filter-row.on .gm-check::after { content: ""; width: 7px; height: 4px; border: solid #111; border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+/* POVs: the info is one short line, no box */
+.pv-top { padding: 0; background: none; border: 0; margin-bottom: 18px; }
+.pv-how { font-size: 14px; }
+/* Download while nobody who has it is online: grey */
+.pv-act .ghost-button.pv-get { background: var(--panel2); color: var(--muted); }
+.pv-act .ghost-button.pv-get:hover { color: var(--text); }
+.pv-act .ghost-button.pv-get svg { width: 16px; height: 16px; }
+/* (small window: with only the link box, Post game stays next to it) */
+.gm-add:not(.has-link) .gm-link { flex: 1 1 0; }
+/* A sale price no longer breaks onto two lines ("99,50 / kr") */
+.gm-amounts strong, .gm-amounts s { white-space: nowrap; }

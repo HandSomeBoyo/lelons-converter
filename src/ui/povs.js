@@ -13,7 +13,7 @@ const PV_AHEAD = 48 * 1024 * 1024; // how far the sender may be ahead of what's 
 const PV_BUFFERED = 8 * 1024 * 1024; // how much may wait in the data channel
 const PV_MAX_SENDS = 4; // friends one PC sends to at once
 const PV_RETRY = [5, 10, 20, 30, 60]; // seconds before trying again after the connection broke
-const PV_TIMER_NAMES = { 1: "1 hour", 6: "6 hours", 24: "1 day", 72: "3 days", 168: "1 week", 0: "Until I remove it" };
+const PV_TIMER_NAMES = { 1: "1 hour", 6: "6 hours", 24: "1 day", 72: "3 days", 168: "1 week", 0: "No timer" }; // (same words as on the cards)
 const pvSvg = (d, fill) => `<svg viewBox="0 0 24 24" fill="${fill ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const PV_ICONS = {
   down: pvSvg('<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>'),
@@ -76,8 +76,9 @@ function pvLeft(expires) { // the timer on a POV
 }
 function pvQuality(f) {
   if (!f.height) return "";
-  const p = Math.min(f.width, f.height) >= 2000 ? "4K" : (f.height >= 1400 ? "1440p" : f.height >= 1000 ? "1080p" : f.height >= 700 ? "720p" : f.height + "p");
-  return p;
+  // (the short side: a phone recording held upright is 1080 x 1920, which is 1080p, not 1440p)
+  const short = f.width ? Math.min(f.width, f.height) : f.height;
+  return short >= 2000 ? "4K" : short >= 1400 ? "1440p" : short >= 1000 ? "1080p" : short >= 700 ? "720p" : short + "p";
 }
 const pvFiles = () => pvSessions.flatMap((s) => s.files.map((f) => ({ ...f, sessionTitle: s.title })));
 const pvFile = (id) => pvFiles().find((f) => f.id === id);
@@ -115,8 +116,26 @@ function pvListPoll() {
   pvListTimer = setTimeout(async () => {
     if (!pvTabOpen() || !pvLoggedIn()) return;
     if (!document.hidden) await loadPovs(true);
+    pvTimersTick();
     pvListPoll();
   }, 15000);
+}
+
+// The "20 h left" tags count down while you look (the list only drew them again when something
+// else changed), and a video whose time ran out leaves the list.
+function pvTimersTick() {
+  if (!pvTabOpen()) return;
+  const cards = [...document.querySelectorAll("#pvGrid .pv-card")];
+  if (cards.some((c) => { const f = pvFile(c.dataset.id); return f && !pvAlive(f); })) return renderPovs();
+  for (const card of cards) {
+    const f = pvFile(card.dataset.id), tag = card.querySelector(".pv-timer");
+    if (!f || !tag || !f.expires) continue;
+    const text = pvLeft(f.expires);
+    if (tag.lastChild && tag.lastChild.nodeType === 3 && tag.lastChild.textContent !== text) tag.lastChild.textContent = text;
+    tag.classList.toggle("soon", f.expires - Date.now() / 1000 < 3600);
+    const keep = card.querySelector(".pv-timer-pick option[value='']");
+    if (keep) keep.textContent = text;
+  }
 }
 
 // ---- drawing
@@ -144,8 +163,10 @@ function pvCardEl(f) {
   card.dataset.id = f.id;
   const pic = pvEl("div", "pv-pic");
   if (f.thumb) {
-    const img = pvEl("img");
+    const img = pvEl("img", "fade-pic");
+    img.addEventListener("load", () => img.classList.add("in"));
     img.src = f.thumb;
+    if (img.complete && img.naturalWidth) img.classList.add("in");
     img.alt = "";
     pic.append(img);
   } else {
@@ -200,7 +221,7 @@ function pvDrawAct(card, f) {
     select.addEventListener("change", () => pvSetTimer(f, +select.value));
     pick.append(select);
     pick.insertAdjacentHTML("beforeend", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>');
-    row.append(pick, pvButton("icon-button pv-remove", PV_ICONS.trash, "", () => pvRemove(f)));
+    row.append(pick, pvButton("icon-button pv-remove", PV_ICONS.trash, "", (e) => recSure(e.currentTarget, "Click again to stop sharing it (the video stays on your PC)", () => pvRemove(f))));
     row.lastChild.title = "Stop sharing it";
     parts.push(row);
     return act.replaceChildren(...parts);
@@ -230,7 +251,7 @@ function pvDrawAct(card, f) {
     const row = pvEl("div", "pv-row");
     if (g.status === "paused") row.append(pvButton("convert small-button", PV_ICONS.play, "Go on", () => pvDownload(f)));
     else row.append(pvButton("small-button", PV_ICONS.pause, "Pause", () => pvPause(f.id)));
-    row.append(pvButton("ghost-button", "", "Cancel", () => pvCancel(f)));
+    row.append(pvButton("ghost-button", "", "Cancel", (e) => pvCancel(f, e.currentTarget)));
     act._getting = { status: g.status, message: g.message, fill, line };
     return act.replaceChildren(bar, line, row);
   }
@@ -253,9 +274,11 @@ function pvDrawAct(card, f) {
     : `${f.by} is offline. They (or a friend who has it) need VaultHub open.`);
   const row = pvEl("div", "pv-row");
   const partly = d && d.state === "part" && d.have > 0;
-  row.append(pvButton("convert small-button pv-get", PV_ICONS.down,
+  // (grey while nobody who has it is online: yellow ones work right now)
+  const canNow = f.ready || from !== f.by;
+  row.append(pvButton((canNow ? "convert" : "ghost-button") + " small-button pv-get", PV_ICONS.down,
     partly ? `Go on (${Math.floor((d.have / f.size) * 100)}%)` : `Download ${pvSize(f.size)}`, () => pvDownload(f)));
-  if (partly) row.append(pvButton("ghost-button", "", "Cancel", () => pvCancel(f)));
+  if (partly) row.append(pvButton("ghost-button", "", "Cancel", (e) => pvCancel(f, e.currentTarget)));
   act.replaceChildren(line, row);
 }
 
@@ -271,6 +294,16 @@ function pvDrawBadge() {
   const badge = $("povsTabBadge");
   badge.hidden = !n;
   badge.textContent = n;
+  // A thin bar under the POVs button: how far your downloads are, all together.
+  const gets = [...pvGets.values()].filter((g) => g.status !== "done" && g.size);
+  const bar = $("povsTabBar");
+  if (!bar) return;
+  bar.hidden = !gets.length;
+  if (!gets.length) return;
+  const got = gets.reduce((a, g) => a + g.got, 0), size = gets.reduce((a, g) => a + g.size, 0);
+  bar.firstChild.style.width = Math.min(100, (got / size) * 100).toFixed(1) + "%";
+  bar.classList.toggle("paused", !gets.some((g) => g.status === "getting" || g.status === "connecting"));
+  bar.title = `Downloading: ${Math.floor((got / size) * 100)}%`;
 }
 
 // What you're sending, at the bottom right of the tab.
@@ -394,7 +427,7 @@ async function pvDownload(f) {
   }
   const res = await api("/api/pov-start", { id: f.id, folder, name: f.name, size: f.size, session: f.sessionTitle, by: f.by })
     .catch(() => ({ ok: false, error: "Couldn't start the download." }));
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return recToast(res.error);
   if (!g) {
     g = { file: f, size: f.size, have: 0, got: 0, tries: 0 };
     pvGets.set(f.id, g);
@@ -544,8 +577,13 @@ function pvPause(id) {
   pvTick();
 }
 
-async function pvCancel(f) {
-  if (!confirm(`Stop downloading "${f.sessionTitle}"? What came so far is deleted.`)) return;
+// Cancel asks with a second click on the same button (what came so far is deleted).
+function pvCancel(f, button) {
+  if (button) return recSure(button, "Click again to delete it", () => pvCancelNow(f));
+  pvCancelNow(f);
+}
+
+async function pvCancelNow(f) {
   const g = pvGets.get(f.id);
   if (g) { pvClose(g); clearTimeout(g.retry); pvGets.delete(f.id); }
   await api("/api/pov-cancel", { id: f.id, delete: true }).catch(() => {});
@@ -720,22 +758,21 @@ async function pvSave(e) {
 }
 
 async function pvRelink(f) {
-  const res = await api("/api/pov-relink", { id: f.id, size: f.size });
+  const res = await api("/api/pov-relink", { id: f.id, size: f.size }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (res.cancelled) return;
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return recToast(res.error);
   loadPovs();
 }
 
 async function pvSetTimer(f, hours) {
-  const res = await api("/api/pov-timer", { id: f.id, hours });
-  if (!res.ok) return alert(res.error);
+  const res = await api("/api/pov-timer", { id: f.id, hours }).catch(() => ({ ok: false, error: "Couldn't change the timer." }));
+  if (!res.ok) { recToast(res.error); return renderPovs(); } // (puts the box back to what it was)
   loadPovs();
 }
 
 async function pvRemove(f) {
-  if (!confirm("Stop sharing this video? It leaves the list. The video stays on your PC.")) return;
-  const res = await api("/api/pov-remove", { id: f.id });
-  if (!res.ok) return alert(res.error);
+  const res = await api("/api/pov-remove", { id: f.id }).catch(() => ({ ok: false, error: "Couldn't remove it." }));
+  if (!res.ok) return recToast(res.error);
   for (const x of pvSends.values()) if (x.file === f.id) pvSendEnded(x, "You stopped sharing it.");
   const s = pvSessions.find((x) => x.id === f.session);
   if (s && s.can_edit && s.files.every((x) => x.id === f.id)) await api("/api/pov-delete-session", { id: s.id }).catch(() => {});

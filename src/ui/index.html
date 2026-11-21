@@ -131,7 +131,7 @@
 </div>
 <div class="sub-tabs" data-section="recording" role="tablist">
       <button type="button" role="tab" data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
-      <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
+      <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b><i class="tab-bar" id="povsTabBar" hidden><span></span></i></button>
 </div>
 <div class="sub-tabs" data-section="youtube" role="tablist">
       <button type="button" role="tab" data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
@@ -1576,7 +1576,10 @@
       </div>
       <div class="gm-bar">
         <div class="gm-pills" id="gmPills" role="tablist" aria-label="Show"></div>
-        <div class="gm-chips" id="gmChips"></div>
+        <div class="gm-filter">
+          <button type="button" class="gm-filter-btn" id="gmFilterBtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filter</span><b id="gmFilterCount" hidden></b></button>
+          <div class="gm-filter-pop" id="gmChips" hidden></div>
+        </div>
       </div>
       <div class="fx-tools gm-tools">
         <label class="input fx-search">
@@ -1602,7 +1605,7 @@
     </div>
     <div class="pv-main" id="pvMain" hidden>
       <div class="pv-top">
-        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they (or a friend who already got it) need VaultHub open while you download.</p>
+        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from PC to PC.</p>
         <button type="button" class="convert small-button" id="pvNew">+ New video</button>
       </div>
       <div class="pv-grid" id="pvGrid"></div>
