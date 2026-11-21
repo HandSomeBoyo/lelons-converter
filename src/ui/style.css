@@ -8710,3 +8710,35 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ================================================================ 3.0: Chat page polish */
+/* The page you came from isn't lit up in the side bar while the chat covers it. */
+body.chat-page .sidebar .tabs .tab-line { opacity: 0; }
+body.chat-page .sidebar .tabs button.active { color: var(--muted); font-weight: inherit; }
+body.chat-page .sidebar .tabs button.active svg { color: currentColor; }
+/* Long names at the top of a chat end in "..." instead of running under the buttons. */
+.chat-room-text h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-room-tools { flex: none; }
+/* Pinned, under another message from the same person */
+.pinned-tag.solo { display: flex; margin: 2px 0 1px; }
+/* Leaving a voice channel looks like leaving, not like "you're in". */
+.call-start.leave { color: #f87171; background: color-mix(in srgb, #ef4444 14%, transparent); }
+.call-start.leave:hover { color: #fff; background: #dc2626; }
+/* The chat's columns go by the chat's own width (chat.js sets cw-m), not the window's. */
+body .chat-panel.with-rail.has-pane.cw-m { grid-template-columns: 72px 76px minmax(0, 1fr) minmax(280px, 340px); }
+.chat-panel.has-pane.cw-m .chat-side-head h3, .chat-panel.has-pane.cw-m .chat-row-text, .chat-panel.has-pane.cw-m .chat-sec span,
+.chat-panel.has-pane.cw-m .chat-sec-empty, .chat-panel.has-pane.cw-m .chat-side-online, .chat-panel.has-pane.cw-m .chat-me-text { display: none; }
+.chat-panel.has-pane.cw-m .chat-sec { justify-content: center; margin: 10px 0 2px; }
+body .chat-panel.with-rail.srv-on.cw-m { grid-template-columns: 72px 232px minmax(0, 1fr); }
+.chat-panel.srv-on.cw-m > .srv-members { display: none; }
+body .chat-panel.with-rail.srv-on.has-pane.cw-m { grid-template-columns: 72px minmax(0, 1fr) minmax(280px, 340px); }
+.chat-panel.srv-on.has-pane.cw-m > .srv-side { display: none; }
+/* Call tiles keep a screen's shape (16:9) instead of stretching into tall strips. */
+.call-stage:not(.small) .call-tiles:not(.strip) { align-content: center; grid-auto-rows: auto; }
+.call-stage:not(.small) .call-tiles:not(.strip) .call-tile { aspect-ratio: 16 / 9; min-height: 0; }
+/* A small chat (the app's first window size): a thread or search takes the chat's place, and buttons drop their words. */
+body .chat-panel.with-rail.cw-s:not(.srv-on) { grid-template-columns: 72px 220px minmax(0, 1fr); }
+body .chat-panel.with-rail.has-pane.cw-s { grid-template-columns: 72px 76px minmax(0, 1fr); }
+body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px minmax(0, 1fr); }
+.chat-panel.has-pane.cw-s > .chat-main { display: none; }
+.chat-panel.cw-s .chat-room-tools .call-start { font-size: 0; gap: 0; padding: 0 10px; }

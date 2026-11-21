@@ -994,6 +994,8 @@ create or replace function lelons.chat_preview(c lelons.chat) returns text
                  when c.voice then 'Voice message'
                  when c.gif is not null then 'GIF'
                  when c.sticker is not null then 'Sticker'
+                 when c.call_seconds > 0 then 'Call'
+                 when c.call_seconds is not null then 'Missed call'
                  else c.message end $$;
 
 -- (2.4.0) Your group chats, newest message first, and one group with the people in it.
@@ -3885,7 +3887,7 @@ language sql stable security definer set search_path = '' as $$
                                        where g.server_id = s.id and g.kind = 'text' and lelons.srv_sees(g, me.id)),
                           'voice', (select count(*) from lelons.rooms r join lelons.chat_groups g on g.id = r.group_id
                                     join lelons.room_people p on p.room_id = r.id and p.state = 'in'
-                                    where g.server_id = s.id and r.ended_at is null))
+                                    where g.server_id = s.id and r.ended_at is null and p.seen_at > now() - interval '30 seconds'))
                           order by m.joined_at)
                          from lelons.server_members m join lelons.servers s on s.id = m.server_id where m.account_id = me.id), '[]'::jsonb),
     'asks', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'picture', s.picture, 'banner', s.banner,
@@ -3932,7 +3934,7 @@ begin
                                select jsonb_agg(jsonb_build_object('username', a.username, 'avatar', a.avatar) order by p.rang_at)
                                from lelons.rooms r join lelons.room_people p on p.room_id = r.id and p.state = 'in'
                                join lelons.accounts a on a.id = p.account_id
-                               where r.group_id = g.id and r.ended_at is null), '[]'::jsonb) end)
+                               where r.group_id = g.id and r.ended_at is null and p.seen_at > now() - interval '30 seconds'), '[]'::jsonb) end)
                           order by g.position, g.created_at)
                           from lelons.chat_groups g where g.server_id = sid and lelons.srv_sees(g, me.id)), '[]'::jsonb),
     'members', coalesce((select jsonb_agg(jsonb_build_object('username', a.username, 'avatar', a.avatar, 'mode', a.mode, 'status', a.status,

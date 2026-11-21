@@ -971,7 +971,10 @@ function callRing(kind) {
   callRinging = kind;
   clearInterval(callRingTimer);
   callRingTimer = null;
-  if (!kind) return;
+  if (!kind) {
+    if (typeof notifyUnpop === "function") notifyUnpop((k) => k.startsWith("call:")); // (3.0) "calling you" goes once it stops ringing
+    return;
+  }
   const beep = (notes) => {
     try {
       callRingCtx = callRingCtx || appSinkCtx(new AudioContext());
