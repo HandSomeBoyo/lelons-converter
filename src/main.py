@@ -2519,10 +2519,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
             key, value = data.get("key"), data.get("value")
-            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < (40000 if key in ("notes", "lvPads") else 4000):
+            # (3.0) Any plain name is kept now. Only the names on the PAGE_PREFS list were kept before, so
+            # things added later without being put on it (the Home layout, chat GIFs, Remote's settings...)
+            # were forgotten whenever the app closed.
+            if isinstance(key, str) and re.fullmatch(r"[A-Za-z][\w:.-]{0,60}", key) and len(json.dumps(value)) < 40000:
                 with page_pref_lock:
                     saved = settings.load().get("page") or {}
-                    settings.save(page={**saved, key: value})
+                    if key in saved or len(saved) < 600:
+                        settings.save(page={**saved, key: value})
             self.send_json({"ok": True})
         elif self.path == "/api/settings":  # the Settings window
             changes = {}
