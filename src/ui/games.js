@@ -172,7 +172,10 @@ function gameCard(game) {
   const img = gmEl("img");
   img.alt = "";
   img.loading = "lazy";
+  img.className = "fade-pic";
+  img.addEventListener("load", () => img.classList.add("in"));
   img.src = info.header;
+  if (img.complete && img.naturalWidth) img.classList.add("in");
   img.addEventListener("error", () => { img.remove(); pic.classList.add("none"); pic.prepend(gmEl("span", "", info.name)); }); // (keeps the tags on the picture)
   pic.append(img);
   if (game.status !== "idea") {
@@ -552,7 +555,7 @@ function drawGameSide() {
   if (!side) return;
   const buy = gmEl("div", "gm-buy");
   buy.append(gmPrice(info, true));
-  buy.append(gmButton("convert small-button gm-steam", GM_ICONS.steam, "Open in Steam", () => api("/api/games-open", { app: game.app_id })));
+  buy.append(gmButton("ghost-button small-button gm-steam", GM_ICONS.steam, "Open in Steam", () => api("/api/games-open", { app: game.app_id })));
   if (info.reviews) {
     const r = gmEl("p", "gm-review-line");
     r.append(gmReviews(info.reviews), ` ${info.reviews.percent}% of ${info.reviews.total.toLocaleString()} reviews`);

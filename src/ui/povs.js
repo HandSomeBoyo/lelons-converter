@@ -163,8 +163,10 @@ function pvCardEl(f) {
   card.dataset.id = f.id;
   const pic = pvEl("div", "pv-pic");
   if (f.thumb) {
-    const img = pvEl("img");
+    const img = pvEl("img", "fade-pic");
+    img.addEventListener("load", () => img.classList.add("in"));
     img.src = f.thumb;
+    if (img.complete && img.naturalWidth) img.classList.add("in");
     img.alt = "";
     pic.append(img);
   } else {
@@ -290,6 +292,16 @@ function pvDrawBadge() {
   const badge = $("povsTabBadge");
   badge.hidden = !n;
   badge.textContent = n;
+  // A thin bar under the POVs button: how far your downloads are, all together.
+  const gets = [...pvGets.values()].filter((g) => g.status !== "done" && g.size);
+  const bar = $("povsTabBar");
+  if (!bar) return;
+  bar.hidden = !gets.length;
+  if (!gets.length) return;
+  const got = gets.reduce((a, g) => a + g.got, 0), size = gets.reduce((a, g) => a + g.size, 0);
+  bar.firstChild.style.width = Math.min(100, (got / size) * 100).toFixed(1) + "%";
+  bar.classList.toggle("paused", !gets.some((g) => g.status === "getting" || g.status === "connecting"));
+  bar.title = `Downloading: ${Math.floor((got / size) * 100)}%`;
 }
 
 // What you're sending, at the bottom right of the tab.
