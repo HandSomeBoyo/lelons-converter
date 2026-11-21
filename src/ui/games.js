@@ -42,6 +42,36 @@ const gmCents = (g) => (g.info.free ? 0 : g.info.price ? g.info.price.cents : In
 const gmReviewKind = (r) => (!r ? "" : r.percent >= 70 ? "good" : r.percent >= 40 ? "mixed" : "bad");
 const gmLoggedIn = () => typeof sfxUser === "function" && !!sfxUser();
 
+// A short note at the bottom of the window, instead of a Windows pop-up box (POVs uses it too).
+function recToast(text) {
+  let t = $("recToast");
+  if (!t) document.body.append(t = gmEl("div", "rec-toast"));
+  t.id = "recToast";
+  t.textContent = text || "That didn't work. Try again.";
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 4200);
+}
+
+// Deleting asks with a second click on the same button (it turns red and says so), not a pop-up box.
+function recSure(button, label, go) {
+  const text = [...button.childNodes].reverse().find((n) => n.nodeType === 3 && n.textContent.trim());
+  const back = () => {
+    clearTimeout(button._sure);
+    delete button.dataset.sure;
+    button.classList.remove("sure");
+    button.title = button._title || "";
+    if (text && button._text != null) text.textContent = button._text;
+  };
+  if (button.dataset.sure) { back(); return go(); }
+  button.dataset.sure = "1";
+  button.classList.add("sure");
+  button._title = button.title;
+  button.title = label;
+  if (text) { button._text = text.textContent; text.textContent = label; }
+  button._sure = setTimeout(back, 3500);
+}
+
 // ---- loading
 
 async function loadGames(quiet) {
@@ -212,7 +242,13 @@ function renderGames() {
   list = list.slice().sort(by[sort] || by.new);
   $("gmGrid").replaceChildren(...list.map(gameCard));
   $("gmEmpty").hidden = list.length > 0;
-  $("gmEmpty").textContent = gmGames.length ? "No games match that. Try another word or filter." : "No games yet. Paste a Steam link above to post the first one.";
+  if (!gmGames.length) $("gmEmpty").textContent = "No games yet. Paste a Steam link above to post the first one.";
+  else $("gmEmpty").replaceChildren("No games match that. ", gmButton("link", "", "Show all games", () => {
+    gmStatus = "";
+    gmChips.clear();
+    gmQuery = $("gmSearch").value = "";
+    renderGames();
+  }));
 }
 
 // ---- posting games
@@ -251,7 +287,7 @@ $("gmLink").addEventListener("input", () => { $("gmAddMsg").textContent = ""; })
 async function gmVote(game) {
   const on = !game.voted;
   const res = await api("/api/games-vote", { game: game.id, on }).catch(() => ({ ok: false, error: "Couldn't save that." }));
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return recToast(res.error);
   gmReplace(res.game);
 }
 
@@ -560,21 +596,22 @@ function drawGameSide() {
 
   const tools = gmEl("div", "gm-tools-row");
   tools.append(gmButton("link gm-refresh", GM_ICONS.refresh, "Check the price again", async (e) => {
-    e.currentTarget.disabled = true;
+    const button = e.currentTarget;
+    button.disabled = true;
     const res = await api("/api/games-refresh", { game: game.id }).catch(() => ({ ok: false, error: "Couldn't reach Steam." }));
-    if (!res.ok) return alert(res.error);
+    if (!res.ok) { button.disabled = false; return recToast(res.error); } // (it stayed greyed out for good)
     gmReplace(res.game);
     drawGame();
     loadGameComments();
   }));
   if (game.can_edit) {
-    tools.append(gmButton("link gm-danger", GM_ICONS.trash, "Delete", async () => {
-      if (!confirm(`Take ${info.name} off the list?`)) return;
+    tools.append(gmButton("link gm-danger", GM_ICONS.trash, "Delete", (e) => recSure(e.currentTarget, "Click again to take it off the list", async () => {
       const res = await api("/api/games-delete", { game: game.id }).catch(() => ({ ok: false, error: "Couldn't delete it." }));
-      if (!res.ok) return alert(res.error);
+      if (!res.ok) return recToast(res.error);
       closeGame();
+      recToast(`Took ${info.name} off the list.`);
       loadGames();
-    }));
+    })));
   }
   side.replaceChildren(buy, vote, st, facts, tools);
   drawGameNote();
@@ -587,11 +624,7 @@ function drawGameNote() {
   if (!game.note && !game.can_edit) return;
   const head = gmEl("div", "gm-note-head");
   head.append(gmEl("small", "gm-label", game.note ? `Why ${game.by || "they"} posted it` : "Note"));
-  if (game.can_edit) head.append(gmButton("link", GM_ICONS.pencil, game.note ? "Change" : "Add a note", () => {
-    const text = prompt("Why this game? (optional)", game.note || "");
-    if (text === null) return;
-    api("/api/games-note", { game: game.id, note: text }).then((res) => (res.ok ? gmReplace(res.game) : alert(res.error)));
-  }));
+  if (game.can_edit) head.append(gmButton("link", GM_ICONS.pencil, game.note ? "Change" : "Add a note", () => gmEditNote(box, game)));
   box.append(head);
   if (game.note) {
     const q = gmEl("div", "gm-note-line big");
@@ -600,11 +633,33 @@ function drawGameNote() {
   }
 }
 
+// Writing the note right there (it was a Windows pop-up box).
+function gmEditNote(box, game) {
+  const form = gmEl("form", "gm-say gm-note-edit");
+  const input = gmEl("input");
+  Object.assign(input, { placeholder: "Why this game? (optional)", value: game.note || "", maxLength: 300, spellcheck: true });
+  const save = gmButton("small-button", "", "Save");
+  save.type = "submit";
+  form.append(input, gmButton("ghost-button", "", "Cancel", () => drawGameNote()), save);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    const res = await api("/api/games-note", { game: game.id, note: input.value }).catch(() => ({ ok: false, error: "Couldn't save that." }));
+    save.disabled = false;
+    if (!res.ok) return recToast(res.error);
+    gmReplace(res.game);
+  });
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); drawGameNote(); } });
+  box.replaceChildren(box.firstChild, form);
+  input.focus();
+  input.select();
+}
+
 async function gmSetStatus(status, video) {
   const body = { game: gmOpen.id, status };
   if (video !== undefined) body.video = video;
   const res = await api("/api/games-status", body).catch(() => ({ ok: false, error: "Couldn't save that." }));
-  if (!res.ok) return alert(res.error);
+  if (!res.ok) return recToast(res.error);
   gmReplace(res.game);
 }
 
@@ -613,7 +668,8 @@ async function gmSetStatus(status, video) {
 async function loadGameComments() {
   const game = gmOpen;
   const res = await api("/api/games-comments", { game: game.id }).catch(() => null);
-  if (res && res.ok && gmOpen === game) drawGameTalk(res.comments);
+  // (by id: a vote or the YouTube look swaps gmOpen for a fresh copy of the same game while this loads)
+  if (res && res.ok && gmOpen && gmOpen.id === game.id) drawGameTalk(res.comments);
 }
 
 function drawGameTalk(comments) {
@@ -643,7 +699,7 @@ function drawGameTalk(comments) {
     e.preventDefault();
     if (!input.value.trim()) return;
     const res = await api("/api/games-comment", { game: gmOpen.id, text: input.value }).catch(() => ({ ok: false, error: "Couldn't send it." }));
-    if (!res.ok) return alert(res.error);
+    if (!res.ok) return recToast(res.error);
     drawGameTalk(res.comments);
     gmCountComments(res.comments.length);
     const again = $("gmDialog").querySelector(".gm-say input");

@@ -8710,3 +8710,21 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lvx-meter { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-bottom: 6px; }
 .lvx-meter i { display: block; height: 100%; width: 0; background: #7ec8ff; border-radius: inherit; transition: width .1s linear; }
 .lvx-meter.mic i { background: var(--green); }
+
+/* ================================================================ 3.0: Recording page (Games + POVs) polish */
+/* A short note at the bottom instead of Windows pop-up boxes (recToast in games.js) */
+.rec-toast { position: fixed; z-index: 300; left: 50%; bottom: 26px; transform: translate(-50%, 16px); max-width: min(520px, 90vw); padding: 11px 16px;
+  border-radius: 10px; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); font-size: 13.5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
+.rec-toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* Delete / Cancel / Stop sharing: the first click turns the button red and asks again (recSure) */
+.gm-danger.sure, .pv-remove.sure, .pv-act .ghost-button.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); border-radius: 8px; }
+.gm-danger.sure { padding: 4px 8px; margin: -4px -8px; }
+/* The game's note is written right there */
+.gm-note-edit { margin-top: 0; }
+.gm-note-edit .ghost-button { height: 38px; padding: 0 14px; }
+/* New video window: "Name" looks like the other labels */
+.pv-add-dialog .fx-field > span:first-child { font: 600 11px var(--head); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.gm-danger.sure { text-decoration: none; }
+/* (all six timer buttons on one line) */
+.pv-add-dialog { max-width: 510px; }
