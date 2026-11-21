@@ -4142,6 +4142,17 @@ label.set-row, .set-choice-label { cursor: pointer; }
 .set2 .theme-picks button { width: auto; }
 .set2 .volume-row, .set2 .size-row { padding: 0; background: none; margin: 0; }
 .set2 .accent-picks { margin: 0; }
+/* (3.0) Settings polish: an "off" switch shows its track, the rainbow dot is as big as the others and sits in line,
+   the device buttons are one width so the two lists line up, and the lists match the rest of the window. */
+.set2 .accent-picks { align-items: center; }
+.set2 .accent-custom { width: 34px; height: 34px; }
+.set2 .check input[type=checkbox]:not(:checked) { background: color-mix(in srgb, var(--text) 18%, transparent); }
+:root[data-theme="light"] .set2 .check input[type=checkbox]:not(:checked) { background: #dcdce2; }
+.set-device-row .ghost-button { min-width: 150px; justify-content: center; }
+.set2 .call-select { background-color: color-mix(in srgb, var(--text) 5%, transparent); border-color: var(--gl-line); }
+:root[data-theme="light"] .set2 .call-select { background-color: #fff; border-color: rgba(20, 25, 40, .14); }
+.set2 .call-select option { background: var(--panel); color: var(--text); }
+.trash-empty[hidden] { display: none; }
 /* (2.35.0) Settings > Trash */
 .trash-link { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; margin: 22px 0 8px; font-size: 13px; color: var(--muted); }
 .trash-link:hover { color: var(--text); }

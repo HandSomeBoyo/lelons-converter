@@ -52,6 +52,7 @@ function drawTrash() {
   document.querySelectorAll("#trashFilters button").forEach((b) => b.classList.toggle("active", b.dataset.kind === trashKind));
   const shown = trashItems.filter((i) => !trashKind || i.kind === trashKind);
   $("trashEmpty").disabled = !trashItems.length;
+  $("trashEmpty").hidden = !trashItems.length;  // (3.0) nothing to empty: no button
   $("trashEmpty").textContent = trashSure.has("*") ? "Click again to empty" : "Empty Trash";
   $("trashEmpty").classList.toggle("sure", trashSure.has("*"));
   if (!shown.length) {
