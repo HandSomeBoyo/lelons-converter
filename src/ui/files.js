@@ -191,9 +191,18 @@ function fits(file, fmt) {
   return ["mp4", "gif"].includes(fmt) ? file.video : file.audio;
 }
 
+// The choices a file would be converted with now. A file already made with exactly these
+// is left out of Convert (clicking it again would only make "name (2)").
+function fileSig(file) {
+  const fmt = fileOptions.format, part = fileTrims.get(file.id);
+  return JSON.stringify([fmt, fileOptions.quality[fmt] ?? "", targetMb(), fmt !== "gif" && !!fileOptions.normalize,
+    part ? [part.start.toFixed(2), part.end.toFixed(2)] : null]);
+}
+const madeAlready = (file) => file.status === "done" && !!file.doneAs && file.doneAs === fileSig(file);
+
 function readyFiles() {
   // (Files from a watched folder already use that folder's own choices.)
-  return serverFiles.filter((f) => !f.watch && f.status !== "active" && f.status !== "queued" && fits(f, fileOptions.format));
+  return serverFiles.filter((f) => !f.watch && f.status !== "active" && f.status !== "queued" && fits(f, fileOptions.format) && !madeAlready(f));
 }
 
 $("fileConvert").addEventListener("click", async () => {
@@ -201,7 +210,7 @@ $("fileConvert").addEventListener("click", async () => {
   if (!ready.length) return;
   const items = ready.map((f) => {
     const part = fileTrims.get(f.id);
-    return { id: f.id, ...(part ? { start: part.start.toFixed(2), end: part.end.toFixed(2) } : {}) };
+    return { id: f.id, sig: fileSig(f), ...(part ? { start: part.start.toFixed(2), end: part.end.toFixed(2) } : {}) };
   });
   const fmt = fileOptions.format;
   if (fmt === "mp4" && fileOptions.fit === "custom" && !(targetMb() >= 0.5 && targetMb() <= 4000)) {
@@ -249,7 +258,9 @@ function fileRow(el, file) {
       <div class="pct"></div>
       <div class="actions"></div>`;
   }
-  el.className = "image-row file-row " + file.status + (file.id && !file.watch && !fits(file, fileOptions.format) ? " skipped" : "");
+  // Finished, but the choices changed since: it looks ready to convert again (not "Saved as" the old one).
+  const madeOther = file.status === "done" && !file.watch && !madeAlready(file);
+  el.className = "image-row file-row " + (madeOther ? "ready" : file.status) + (file.id && !file.watch && !fits(file, fileOptions.format) ? " skipped" : "");
   const draggable = file.status === "done" && file.canShow;
   setDrag(el, draggable ? { kind: "file", id: file.id } : null);
   el.title = draggable ? DRAG_HINT : "";
@@ -282,7 +293,7 @@ function fileRow(el, file) {
   }
 
   const idle = file.id && !file.watch && !["queued", "active"].includes(file.status);
-  let message = file.message;
+  let message = madeOther ? "" : file.message;
   if (idle && !fits(file, fmt)) {
     const an = fmt.startsWith("m") ? "an" : "a"; // "an MP4", "a GIF"
     message = `This has no ${["mp4", "gif"].includes(fmt) ? "video" : "sound"}, so it can't be ${an} ${fmt.toUpperCase()}.`;
@@ -313,14 +324,10 @@ function fileRow(el, file) {
       clear.innerHTML = FILE_ICONS.remove;
       clear.onclick = () => { fileTrims.delete(file.id); drawFiles(); };
       trimBox.append(edit, clear);
-    } else {
-      const button = document.createElement("button");
-      button.className = "link";
-      button.textContent = fmt === "gif" ? "Pick the part for the GIF (first 10 seconds if you don't)" : "Trim";
-      button.onclick = () => trimFile(file);
-      trimBox.append(button);
     }
+    // (3.0) Nothing trimmed yet: the Trim button sits with the row's buttons and shows on hover.
   }
+  const canTrim = idle && fits(file, fmt) && !part;
 
   const bar = el.querySelector(".bar");
   bar.hidden = file.status !== "active";
@@ -330,10 +337,20 @@ function fileRow(el, file) {
 
   const actions = el.querySelector(".actions");
   const wanted = file.status === "active" ? (file.cancel ? [] : ["stop"]) : file.status === "queued" && file.id ? ["stop"] : file.canShow && file.status === "done" ? ["folder", "remove"] : ["remove"];
+  if (canTrim) wanted.unshift("trim:" + fmt);
   if (actions.dataset.kind !== wanted.join()) {
     actions.dataset.kind = wanted.join();
     actions.innerHTML = "";
     for (const kind of wanted) {
+      if (kind.startsWith("trim:")) {
+        const t = document.createElement("button");
+        t.className = "ghost-button row-hover";
+        t.textContent = fmt === "gif" ? "Pick part" : "Trim";
+        t.title = fmt === "gif" ? "Pick the part for the GIF (the first 10 seconds if you don't)" : "Keep only a part";
+        t.onclick = () => trimFile(file);
+        actions.append(t);
+        continue;
+      }
       const b = document.createElement("button");
       b.className = "icon-button";
       b.title = { folder: "Show in folder", stop: "Stop converting" }[kind] || "Remove from list";
@@ -408,15 +425,15 @@ function drawFiles() {
     flac: "FLAC keeps the sound perfect like WAV, at about half the size.",
     gif: "GIFs have no sound and can be up to 60 seconds.",
   };
-  $("fileNote").classList.toggle("error", !!fileError);
-  $("fileNote").textContent = fileError || (fmt === "mp4" && targetMb()
-    ? `Videos are made just small enough to stay under ${targetMb()} MB. Long videos get a smaller picture to fit.`
-    : notes[fmt] || "");
-
   const ready = readyFiles().length;
   const busy = serverFiles.some((f) => f.status === "active" || f.status === "queued");
+  const allMade = !ready && !busy && serverFiles.some(madeAlready);
+  $("fileNote").classList.toggle("error", !!fileError);
+  $("fileNote").textContent = fileError || (allMade ? "All of these are made. Pick another format or size to make more."
+    : fmt === "mp4" && targetMb() ? `Videos are made just small enough to stay under ${targetMb()} MB. Long videos get a smaller picture to fit.`
+    : notes[fmt] || "");
   $("fileConvert").disabled = !ready;
-  $("fileConvertText").textContent = !ready && busy ? "Converting..." : ready > 1 ? `Convert ${ready} files` : "Convert";
+  $("fileConvertText").textContent = !ready && busy ? "Converting..." : allMade ? "All done" : ready > 1 ? `Convert ${ready} files` : "Convert";
   $("fileClear").hidden = busy;
 }
 
@@ -662,6 +679,9 @@ function watchRow(w) {
 
 function drawWatches() {
   const list = $("watchList");
+  // (3.0) No watched folders yet: just a small link, not a whole section.
+  $("watchBox").hidden = !watchList.length;
+  $("watchAddSmall").hidden = !!watchList.length;
   const key = JSON.stringify([watchList, [...watchOpen], Math.floor(Date.now() / 60000)]);
   $("filesWatchError").hidden = !watchError;
   $("filesWatchError").textContent = watchError;
@@ -682,6 +702,8 @@ function renderWatches(list) {
   for (const id of watchOpen) if (!list.some((w) => w.id === id)) watchOpen.delete(id);
   drawWatches();
 }
+
+$("watchAddSmall").addEventListener("click", () => $("watchAdd").click());
 
 drawFiles();
 drawWatches();

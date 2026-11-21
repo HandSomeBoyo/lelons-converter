@@ -17,6 +17,7 @@ import gamedetect
 import multistream
 import obsstats
 import settings
+import streamoverlay
 import streamtwitch
 import streamyt
 
@@ -75,6 +76,8 @@ def emit(items):
             _seq += 1
             item["seq"] = _seq
             _items.append((_seq, item))
+            if item.get("type") == "event":
+                streamoverlay.push(item)  # (3.0) the alert on your stream (also before VaultHub sees you're live)
             s = _session
             if not s or item.get("old") or item.get("guest"):
                 continue
@@ -90,7 +93,8 @@ def emit(items):
                 if who in talk or len(talk) < 5000:
                     t = talk.setdefault(who, [item.get("user") or "", 0])
                     t[0], t[1] = item.get("user") or t[0], t[1] + 1
-                if item.get("first"):  # (their very first message in your Twitch chat)
+                if item.get("first") and not any(f.get("login") == item.get("login") for f in s["first"]):
+                    # (their very first message in your Twitch chat; once each, even if Twitch says it twice)
                     s["first"].append({k: item.get(k) for k in ("p", "user", "login", "text", "at")})
                     del s["first"][:-300]
             elif item.get("type") == "event" and item.get("kind") in EVENT_KINDS:
@@ -115,18 +119,31 @@ def _start():
     if not (_ticker and _ticker.is_alive()):
         _ticker = threading.Thread(target=_tick_loop, daemon=True)
         _ticker.start()
+        threading.Thread(target=_wake_overlay, daemon=True).start()
+
+
+def _wake_overlay():
+    """(3.0) The alerts page in OBS stays blank if OBS opened before VaultHub: tell OBS to load it again."""
+    if not streamoverlay.start():
+        return
+    import obsctl
+    try:
+        obsctl.ask_once("PressInputPropertiesButton", {"inputName": streamoverlay.SOURCE, "propertyName": "refreshnocache"})
+    except Exception:  # noqa: BLE001 (OBS closed, or the alerts aren't in OBS)
+        pass
 
 
 def config():
     s = settings.load()
     try:
         import channelstats
-        google = bool(channelstats._config()["refresh"])
+        ch = channelstats._config()
+        google, google_name = bool(ch["refresh"]), ch["google_name"] if ch["refresh"] else ""
     except Exception:
-        google = False
+        google, google_name = False, ""
     return {"twitch": streamtwitch.name_of(s.get("lv_twitch")), "youtube": s.get("lv_youtube") or "",
             "twitchClient": s.get("lv_tw_client") or "", "twitchLogin": s.get("lv_tw_login") or "",
-            "twitchSignedIn": bool(s.get("lv_tw_refresh")), "google": google,
+            "twitchSignedIn": bool(s.get("lv_tw_refresh")), "google": google, "googleName": google_name,
             "obsOn": s.get("lv_obs_on", True), "obsPort": s.get("lv_obs_port") or 4455, "obsPassword": bool(s.get("lv_obs_password")),
             "goals": s.get("lv_goals") if isinstance(s.get("lv_goals"), list) else [],
             "set": bool(s.get("lv_twitch") or s.get("lv_youtube") or s.get("lv_obs_set"))}
@@ -259,7 +276,9 @@ def _tick():
                 h["slow"] = h.get("slow", 0) + 10  # (seconds: one look every 10)
             if "lag" in keys or "gpu" in keys:
                 h["lag"] = h.get("lag", 0) + 10
-        if now - s["minute"]["at"] >= SAMPLE:
+        if now - s["minute"]["at"] >= SAMPLE and not live:
+            s["minute"] = {"chat": 0, "at": now}  # (3.0) the minutes after the stream ended: no 0 on the graph, no lower average
+        elif now - s["minute"]["at"] >= SAMPLE:
             s["series"].append({"t": round(now - s["start"]), "tw": tw.get("viewers") or 0, "yt": yt.get("viewers") or 0,
                                 "chat": s["minute"]["chat"], "kbps": obs.get("bitrate") or 0})
             s["minute"] = {"chat": 0, "at": now}

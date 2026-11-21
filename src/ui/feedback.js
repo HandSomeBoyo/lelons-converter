@@ -123,5 +123,5 @@ function drawInbox() {
 
 $("libInboxOpen").addEventListener("click", () => {
   showTab("account");
-  setTimeout(() => $("acctInbox").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  acctPane("inbox");
 });

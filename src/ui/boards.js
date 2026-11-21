@@ -70,6 +70,7 @@ const BD_ICONS = {
   collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l-4 7 4 7M15 5l4 7-4 7"/></svg>',
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><path d="M16 11v6M13 14h6"/></svg>',
   person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.5 3.6-5.5 7-5.5s6.2 2 7 5.5"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -445,20 +446,17 @@ function bdDrawHome() {
   box.replaceChildren();
   const team = bdTeamBoards || [];
   const all = [...bdBoards, ...team];
-  const starred = all.filter((b) => b.starred);
-  const recent = [...all].filter((b) => b.opened).sort((a, b) => b.opened - a.opened).slice(0, 4);
+  // (3.0) Each board shows once: starred ones first in their own group (no separate Starred and Recently viewed rows).
+  const starFirst = (list) => [...list.filter((b) => b.starred), ...list.filter((b) => !b.starred)];
   const head = (icon, text, note) => bdEl("h3", { class: "bd-home-head" }, bdEl("span", { html: BD_ICONS[icon] }), bdEl("span", { text }), note ? bdEl("small", { text: note }) : null);
   if (bdInvites.length) box.append(head("plus", "Invitations"), bdEl("div", { class: "bd-invites" }, bdInvites.map(bdInviteCard)));
-  if (starred.length) box.append(head("star", "Starred boards"), bdEl("div", { class: "bd-grid" }, starred.map(bdTile)));
-  if (recent.length && all.length > 4) box.append(head("clock", "Recently viewed"), bdEl("div", { class: "bd-grid" }, recent.map(bdTile)));
   const add = (forTeam) => bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: (e) => bdCreatePop(e.currentTarget, forTeam) },
     bdEl("span", { text: "Create new board" }));
-  box.append(head("card", "Your boards", "Just you, saved on this computer"), bdEl("div", { class: "bd-grid" }, bdBoards.map(bdTile), add(false)));
-  box.append(head("people", "Team boards", "Shared with people you invite"));
-  if (bdTeamBoards) box.append(bdEl("div", { class: "bd-grid" }, team.map(bdTile), add(true)));
-  else if (bdTeamError) box.append(bdEl("p", { class: "bd-home-empty", text: bdTeamError }));
-  else box.append(bdEl("div", { class: "bd-grid" }, bdEl("button", { type: "button", class: "bd-tile bd-tile-new", onclick: () => openLogin("login") },
-    bdEl("span", { text: "Log in to make boards with your friends" }))));
+  box.append(head("card", "Your boards", "Just you, saved on this computer"), bdEl("div", { class: "bd-grid" }, starFirst(bdBoards).map(bdTile), add(false)));
+  if (bdTeamBoards) box.append(head("people", "Team boards", "Shared with people you invite"), bdEl("div", { class: "bd-grid" }, starFirst(team).map(bdTile), add(true)));
+  else if (bdTeamError) box.append(head("people", "Team boards", "Shared with people you invite"), bdEl("p", { class: "bd-home-empty", text: bdTeamError }));
+  else box.append(bdEl("p", { class: "bd-home-login" }, bdEl("span", { html: BD_ICONS.people }), bdEl("span", { text: "Want to plan with friends? " }),
+    bdEl("button", { type: "button", text: "Log in for team boards", onclick: () => openLogin("login") })));  // (3.0) one line, not a big empty tile
   if (!all.length && !bdInvites.length) box.append(bdEl("p", { class: "bd-home-empty", text: "Make a board for a video, a project or your week. Put lists on it (like To do, Doing, Done) and cards in the lists, then drag the cards along as things get done." }));
 }
 
@@ -511,7 +509,7 @@ function bdCreatePop(anchor, forTeam) {
       bdShow(res.board);
     }
     paint();
-    box.append(preview, bdEl("label", { class: "bd-label-text", text: "Background" }), swatches(BD_BG_GRADIENTS, "big"), swatches(BD_BG_COLORS, ""),
+    box.append(preview, bdEl("label", { class: "bd-label-text", text: "Background" }), swatches([...BD_BG_GRADIENTS, ...BD_BG_COLORS], "all"),
       bdEl("label", { class: "bd-label-text", text: "Board title" }), title,
       bdEl("label", { class: "bd-label-text", text: "Who can see it" }), whoPick, whoNote,
       bdEl("label", { class: "bd-label-text", text: "Start with" }), pick, go);
@@ -562,6 +560,15 @@ function bdShow(board, team) {
   $("bdBoard").hidden = false;
   document.body.classList.add("board-open");
   bdDraw();
+  bdFadeIn($("bdBoard"));
+}
+
+// (3.0) A board or the Boards home fades in softly when you open it.
+function bdFadeIn(el) {
+  el.classList.remove("bd-in");
+  void el.offsetWidth;
+  el.classList.add("bd-in");
+  el.addEventListener("animationend", () => el.classList.remove("bd-in"), { once: true });
 }
 
 async function bdClose() {
@@ -575,6 +582,7 @@ async function bdClose() {
   $("bdBoard").hidden = true;
   $("bdBoard").replaceChildren();
   $("bdHome").hidden = false;
+  bdFadeIn($("bdHome"));
   document.body.classList.remove("board-open");
   bdLoadHome();
 }
@@ -676,6 +684,7 @@ function bdBar() {
 
 function bdCanvas() {
   const canvas = bdEl("div", { class: "bd-canvas" });
+  bdPanning(canvas);
   for (const list of bdOpenLists()) canvas.append(bdListEl(list));
   if (bdAddingList === null) {
     canvas.append(bdEl("button", { type: "button", class: "bd-add-list", onclick: () => { bdAddingList = ""; bdDraw(); } },
@@ -701,6 +710,41 @@ function bdCanvas() {
   return canvas;
 }
 
+// (3.0) Moving around a big board: hold the mouse on the background and drag the board around, and the
+// mouse wheel over the background scrolls it sideways (the wheel still scrolls a list's cards over a list).
+function bdPanning(canvas) {
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target !== canvas) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, left = canvas.scrollLeft;
+    const lists = [...canvas.querySelectorAll(".bd-cards")].map((c) => [c, c.scrollTop]);
+    canvas.classList.add("panning");
+    canvas.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      canvas.scrollLeft = left - (ev.clientX - sx);
+      // dragging up and down moves the cards in every list too (handy for long lists)
+      for (const [c, top] of lists) c.scrollTop = top - (ev.clientY - sy);
+    };
+    const up = () => {
+      canvas.classList.remove("panning");
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", up);
+      canvas.removeEventListener("pointercancel", up);
+    };
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerup", up);
+    canvas.addEventListener("pointercancel", up);
+  });
+  canvas.addEventListener("wheel", (e) => {
+    if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const box = e.target.closest(".bd-cards");
+    if (box && box.scrollHeight > box.clientHeight) return;  // let the list scroll its own cards
+    if (canvas.scrollWidth <= canvas.clientWidth) return;
+    e.preventDefault();
+    canvas.scrollLeft += e.deltaY;
+  }, { passive: false });
+}
+
 function bdListEl(list) {
   const cards = list.cards.filter((c) => !c.archived);
   const shown = cards.filter(bdShows);
@@ -713,6 +757,8 @@ function bdListEl(list) {
     bdEl("button", { type: "button", class: "bd-list-title", text: list.title,
       onclick: (e) => { if (!bdDragged) bdInlineEdit(e.currentTarget, list.title, (v) => { bdLog(`renamed list "${list.title}" to "${v}"`); list.title = v; bdChanged(); }, { multi: true, cls: "bd-list-title-edit", max: "120" }); } }),
     bdFiltering() ? bdEl("span", { class: "bd-list-count", text: `${shown.length}/${cards.length}` }) : null,
+    bdRuleCount(list) ? bdEl("button", { type: "button", class: "bd-icon-btn bd-rule-on", title: "This list has automation. Click to change it", html: BD_ICONS.bolt,
+      onclick: (e) => { bdListPop(e.currentTarget, list); bdRulesPop(list); } }) : null,
     bdEl("button", { type: "button", class: "bd-icon-btn", title: "Fold this list", html: BD_ICONS.collapse, onclick: () => { list.collapsed = true; bdChanged(); } }),
     bdEl("button", { type: "button", class: "bd-icon-btn", title: "List actions", html: BD_ICONS.dots, onclick: (e) => bdListPop(e.currentTarget, list) }));
   head.addEventListener("pointerdown", (e) => bdListDragStart(e, list));
@@ -759,6 +805,9 @@ function bdBadges(card) {
     badge.querySelector("span").textContent = text;
     if (card.due) badge.addEventListener("click", (e) => { e.stopPropagation(); if (bdDragged) return; card.done = !card.done; bdLog(card.done ? `marked the due date on "${card.title}" complete` : `marked the due date on "${card.title}" not complete`, card); bdChanged(); });
     badges.push(badge);
+  } else if (card.done) {  // (3.0) marked done (by a list's automation) without a due date
+    badges.push(bdEl("button", { type: "button", class: "bd-badge bd-due done", title: "Done. Click to undo", html: BD_ICONS.check + "<span>Done</span>",
+      onclick: (e) => { e.stopPropagation(); if (bdDragged) return; card.done = false; bdLog(`marked "${card.title}" not done`, card); bdChanged(); } }));
   }
   if (card.desc.trim()) badges.push(bdEl("span", { class: "bd-badge", title: "This card has a description", html: BD_ICONS.text }));
   if (card.comments.length) badges.push(bdEl("span", { class: "bd-badge", title: "Comments", html: BD_ICONS.comment + `<span>${card.comments.length}</span>` }));
@@ -884,7 +933,10 @@ function bdCardDragStart(e, card, el) {
     const [moved] = from.list.cards.splice(from.index, 1); // (the card as it is now, with any teammate's changes)
     const at = next ? to.cards.findIndex((c) => c.id === next.dataset.id) : -1;
     to.cards.splice(at < 0 ? to.cards.length : at, 0, moved);
-    if (from.list !== to) bdLog(`moved "${card.title}" from ${from.list.title} to ${to.title}`, card);
+    if (from.list !== to) {
+      bdLog(`moved "${card.title}" from ${from.list.title} to ${to.title}`, card);
+      bdRunRules(moved, to, bd, { x: drag.x, y: drag.y });
+    }
     bdChanged();
   });
 }
@@ -1033,10 +1085,11 @@ async function bdMovePop(anchor, card, keep) {
       if (board === bd) {
         from.list.cards.splice(from.index, 1);
         bdInsertAt(list, card, n);
-        if (from.list !== list) bdLog(`moved "${card.title}" from ${from.list.title} to ${list.title}`, card);
+        if (from.list !== list) { bdLog(`moved "${card.title}" from ${from.list.title} to ${list.title}`, card); bdRunRules(card, list, bd); }
       } else {
         bdLog(`moved "${card.title}" to the board ${board.title}`, card);
         bdInsertAt(list, card, n);
+        bdRunRules(card, list, board);
         if (!(await bdSaveOther(board))) return;
         from.list.cards.splice(from.index, 1);
         bdCardClose();
@@ -1209,6 +1262,85 @@ function bdQuickEdit(el, card, list) {
   void list;
 }
 
+// ---------------------------------------------------------------- (3.0) automation: things that happen when a card is moved into a list
+
+// list.rules = {done, label (a label id), checklist, clearDue, place ("" | "top" | "bottom"), confetti}
+const BD_RULES = [["done", "Mark it done (turns green)"], ["checklist", "Tick off all its checklist items"], ["clearDue", "Remove the due date"], ["confetti", "Confetti pop 🎉"]];
+const bdRuleCount = (list) => { const r = list.rules || {}; return BD_RULES.filter(([k]) => r[k]).length + (r.label ? 1 : 0) + (r.place ? 1 : 0); };
+
+// A card just landed in this list from another list: do what the list says. (board: the board the list is on)
+function bdRunRules(card, list, board, at, quiet) {
+  const r = list.rules;
+  if (!r || !bdRuleCount(list)) return;
+  if (r.done) card.done = true;
+  if (r.label && (board.labels || []).some((l) => l.id === r.label) && !card.labels.includes(r.label)) card.labels.push(r.label);
+  if (r.checklist) for (const cl of card.checklists) for (const i of cl.items) i.done = true;
+  if (r.clearDue) { card.due = ""; card.start = ""; }
+  if (r.place) {
+    const i = list.cards.indexOf(card);
+    if (i >= 0) {
+      list.cards.splice(i, 1);
+      if (r.place === "top") list.cards.unshift(card); else list.cards.push(card);
+    }
+  }
+  if (board === bd) bdLog(`automation in ${list.title} ran on "${card.title}"`, card);
+  if (r.confetti && !quiet && board === bd) {
+    if (at) bdConfetti(at.x, at.y);
+    else setTimeout(() => bdConfettiAt(list), 50);
+  }
+}
+
+function bdConfettiAt(list) {
+  const el = $("bdBoard").querySelector(`.bd-list[data-id="${CSS.escape(list.id)}"] .bd-list-head`);
+  if (el) { const r = el.getBoundingClientRect(); bdConfetti(r.left + r.width / 2, r.bottom); }
+}
+
+// A small, quick burst of colored bits (nothing at all if the PC asks for less motion).
+function bdConfetti(x, y) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["#f5cd47", "#4bce97", "#579dff", "#f87168", "#9f8fef", "#e774bb"];
+  for (let i = 0; i < 26; i++) {
+    const bit = bdEl("i", { class: "bd-confetti", style: { left: x + "px", top: y + "px", background: colors[i % colors.length] } });
+    document.body.append(bit);
+    const angle = Math.random() * Math.PI * 2, dist = 50 + Math.random() * 70;
+    const dx = Math.cos(angle) * dist, dy = Math.sin(angle) * dist - 40;
+    bit.animate([
+      { transform: "translate(-50%, -50%) rotate(0deg)", opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${Math.random() * 360}deg)`, opacity: 1, offset: 0.6 },
+      { transform: `translate(calc(-50% + ${dx * 1.1}px), calc(-50% + ${dy + 60}px)) rotate(${Math.random() * 540}deg)`, opacity: 0 },
+    ], { duration: 900 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.3,1)" }).onfinish = () => bit.remove();
+  }
+}
+
+function bdRulesPop(list) {
+  bdPop(null, "Automation", (b) => {
+    if (!list.rules) list.rules = {};
+    const r = list.rules;
+    const changed = () => { bdChanged(); bdPopAgain(); };
+    b.append(bdEl("p", { class: "bd-pop-note", text: `When a card is moved into ${list.title}:` }));
+    const tick = (k, text) => bdEl("label", { class: "bd-check bd-rule" },
+      bdEl("input", { type: "checkbox", checked: !!r[k], onchange: (e) => { r[k] = e.currentTarget.checked; changed(); } }), bdEl("span", { text }));
+    const [done, ...rest] = BD_RULES;
+    b.append(tick(...done));
+    // add a label (a "sticker"): one of the board's labels
+    const labelOn = bdEl("input", { type: "checkbox", checked: !!r.label, onchange: (e) => { r.label = e.currentTarget.checked ? (bd.labels[0] || {}).id || "" : ""; changed(); } });
+    b.append(bdEl("label", { class: "bd-check bd-rule" }, labelOn, bdEl("span", { text: "Add a label" })));
+    if (r.label) {
+      b.append(bdEl("div", { class: "bd-rule-labels" }, bd.labels.map((l) => bdEl("button", { type: "button", class: "bd-rule-label" + (l.id === r.label ? " on" : ""),
+        style: { background: bdColor(l.color), color: bdDarkText(l.color) ? "#172b4d" : "#fff" }, text: l.name || " ", title: l.name || l.color,
+        onclick: () => { r.label = l.id; changed(); } }))));
+    }
+    for (const [k, text] of rest.slice(0, 2)) b.append(tick(k, text));
+    const place = bdEl("select", { class: "bd-input" },
+      bdEl("option", { value: "", text: "Where I drop it", selected: !r.place }),
+      bdEl("option", { value: "top", text: "Move it to the top", selected: r.place === "top" }),
+      bdEl("option", { value: "bottom", text: "Move it to the bottom", selected: r.place === "bottom" }));
+    place.addEventListener("change", () => { r.place = place.value; changed(); });
+    b.append(tick(...rest[2]), bdEl("label", { class: "bd-label-text", text: "Put the card" }), place,
+      bdEl("p", { class: "bd-pop-note bd-small-note", text: "Only runs when a card comes from another list, not for new cards." }));
+  }, true);
+}
+
 // ---------------------------------------------------------------- list actions
 
 function bdListPop(anchor, list) {
@@ -1258,10 +1390,13 @@ function bdListPop(anchor, list) {
         list.cards = list.cards.filter((c) => c.archived);
         other.cards.push(...moving);
         bdLog(`moved ${moving.length} cards from ${list.title} to ${other.title}`);
+        for (const c of moving) bdRunRules(c, other, bd, null, true);
+        if (moving.length && other.rules && other.rules.confetti) bdConfettiAt(other);
         bdPopClose();
         bdChanged();
       }, other === list ? "off" : ""));
     }, true)),
+    bdMenuItem("bolt", bdRuleCount(list) ? `Automation (${bdRuleCount(list)} on)` : "Automation", () => bdRulesPop(list)),
     bdMenuItem("filter", "Sort by...", () => bdPop(null, "Sort list", (b) => {
       const sort = (fn, what) => () => {
         const archived = list.cards.filter((c) => c.archived);

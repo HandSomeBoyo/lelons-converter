@@ -96,3 +96,40 @@ def stop_helpers(names=("ffmpeg.exe", "deno.exe")):
             if handle:
                 kernel32.TerminateProcess(handle, 1)
                 kernel32.CloseHandle(handle)
+
+
+def clipboard_text(limit=4000):
+    """The text on the clipboard ("" if there's none, or it isn't text). Read here, in the app,
+    so the window doesn't have to ask for permission to read it."""
+    if not IS_WINDOWS:
+        return ""
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.GetClipboardData.argtypes = [wintypes.UINT]
+    user32.GetClipboardData.restype = wintypes.HANDLE
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalSize.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalSize.restype = ctypes.c_size_t
+    CF_UNICODETEXT = 13
+    if not user32.IsClipboardFormatAvailable(CF_UNICODETEXT) or not user32.OpenClipboard(None):
+        return ""
+    try:
+        handle = user32.GetClipboardData(CF_UNICODETEXT)
+        if not handle:
+            return ""
+        pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            return ""
+        try:
+            chars = min(kernel32.GlobalSize(handle) // 2, limit)
+            text = ctypes.wstring_at(pointer, chars)
+        finally:
+            kernel32.GlobalUnlock(handle)
+        return text.split("\0", 1)[0]
+    finally:
+        user32.CloseClipboard()

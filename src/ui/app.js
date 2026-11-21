@@ -12,6 +12,20 @@ const ICONS = {
   folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
 };
 
+// A thumbnail box: the picture, or (no picture, like many sites other than YouTube) a small note or film icon.
+const THUMB_ICONS = {
+  sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
+};
+function setThumb(el, url, fmt) {
+  el.style.backgroundImage = url ? `url("${url}")` : "";
+  const kind = url ? "" : ["mp4", "gif", "jpg"].includes(fmt) ? "video" : fmt ? "sound" : "video";
+  if (el.dataset.icon === kind) return;
+  el.dataset.icon = kind;
+  el.classList.toggle("empty", !!kind);
+  el.innerHTML = kind ? THUMB_ICONS[kind] : "";
+}
+
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
@@ -191,17 +205,37 @@ function showFormatExtras() {
   updateConvertText();
 }
 
+// (3.0) The one format button: "MP3 · 320 kbps", "MP4 · 1080p · Trimmed" and so on.
+function fmtButtonText() {
+  const q = $("quality").selectedOptions[0];
+  const quality = q ? q.textContent.replace(/\s*\(.*\)\s*/, "").trim() : "";
+  const parts = [format.toUpperCase(), quality];
+  if (AUDIO_FORMATS.includes(format) && $("normalize").checked) parts.push("Even volume");
+  $("fmtButtonText").textContent = parts.filter(Boolean).join(" · ");
+}
+function openFmt(open) {
+  $("fmtPop").hidden = !open;
+  $("fmtButton").classList.toggle("open", open);
+  $("fmtButton").setAttribute("aria-expanded", String(open));
+}
+$("fmtButton").addEventListener("click", () => openFmt($("fmtPop").hidden));
+document.addEventListener("pointerdown", (e) => {
+  if (!$("fmtPop").hidden && !e.target.closest(".fmt-wrap")) openFmt(false);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("fmtPop").hidden) openFmt(false); });
+
 function updateConvertText() {
+  fmtButtonText();
   $("convertText").textContent = playlist ? `Convert ${picked.size} video${picked.size === 1 ? "" : "s"}` : "Convert";
   $("convert").disabled = !!playlist && picked.size === 0;
 }
 
 $("normalize").addEventListener("change", async () => render(await api("/api/normalize", { on: $("normalize").checked })));
 
-document.querySelectorAll("#toggle button").forEach((btn) => {
+document.querySelectorAll("#fmtPop button[data-format]").forEach((btn) => {
   btn.addEventListener("click", () => {
     format = btn.dataset.format;
-    document.querySelectorAll("#toggle button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("#fmtPop button[data-format]").forEach((b) => b.classList.toggle("active", b === btn));
     showFormatExtras();
     if (previewSeconds && $("preview").classList.contains("show")) prefetchWave(previewUrl, previewSeconds);
     refresh();
@@ -223,8 +257,14 @@ function showPreview(kind, title, meta, thumbnail) {
   box.className = "preview show " + kind;
   $("previewTitle").textContent = title;
   $("previewMeta").textContent = meta || "";
-  $("previewThumb").style.backgroundImage = thumbnail ? `url("${thumbnail}")` : "";
+  if (kind === "loading" || kind === "error") {
+    $("previewThumb").style.backgroundImage = "";
+    $("previewThumb").classList.remove("empty");
+    $("previewThumb").innerHTML = "";
+    $("previewThumb").dataset.icon = "none";
+  } else setThumb($("previewThumb"), thumbnail, format);
   $("wholePlaylist").hidden = true;
+  $("thumbGet").hidden = !thumbnail;
   showFormatExtras();
 }
 
@@ -270,7 +310,7 @@ function showPlaylist(list, keep = false) {
       row.classList.toggle("bad", !!entry.note);
       row.classList.toggle("looking", !!entry.looking);
       row.querySelector(".number").textContent = i + 1;
-      row.querySelector(".thumb").style.backgroundImage = entry.thumbnail ? `url("${entry.thumbnail}")` : "";
+      if (entry.thumbnail || !entry.looking) setThumb(row.querySelector(".thumb"), entry.thumbnail, format);
       row.querySelector(".title").textContent = entry.title;
       row.querySelector(".meta").textContent = entry.note || (entry.looking ? "Looking it up..."
         : [entry.channel, entry.duration].filter(Boolean).join(" · "));
@@ -286,16 +326,21 @@ function showPlaylist(list, keep = false) {
   showFormatExtras();
 }
 
+// The videos that can be picked (links that didn't work can't).
+const pickable = () => (playlist ? playlist.entries.filter((e) => !e.note) : []);
+
 function updatePlaylistBits() {
   if (playlist) {
-    $("playlistAll").textContent = picked.size === playlist.entries.length ? "Select none" : "Select all";
-    $("playlistTitle").textContent = `${picked.size} of ${playlist.entries.length} videos picked`;
+    const can = pickable().length;
+    $("playlistAll").textContent = can && picked.size >= can ? "Select none" : "Select all";
+    $("playlistAll").hidden = !can;
+    $("playlistTitle").textContent = `${picked.size} of ${can} video${can === 1 ? "" : "s"} picked`;
   }
   updateConvertText();
 }
 
 $("playlistAll").addEventListener("click", () => {
-  const all = picked.size !== playlist.entries.length;
+  const all = picked.size < pickable().length;
   $("playlistList").querySelectorAll("input").forEach((box, i) => {
     if (box.disabled) return;
     box.checked = all;
@@ -380,8 +425,18 @@ async function lookUp(url) {
   }
 }
 
+// An old "that didn't work" message goes away once you type or paste something new.
+function clearNotice() {
+  if ($("notice").classList.contains("error")) {
+    $("notice").className = "notice";
+    $("notice").textContent = "";
+  }
+}
+
 $("url").addEventListener("input", () => {
   clearTimeout(previewTimer);
+  clearNotice();
+  urlBoxChanged();
   const url = $("url").value.trim();
   if (url && url === previewUrl) return;
   const links = linksIn(url);
@@ -839,14 +894,126 @@ $("form").addEventListener("submit", async (e) => {
   try {
     const folder = await whereToSave();
     if (!folder) return;
+    linksIn(url).concat(url).forEach((l) => offerSeen.add(l)); // don't offer it again afterwards
     $("url").value = "";
     hidePreview();
+    urlBoxChanged();
     $("url").focus();
     const res = items ? await api("/api/convert-many", { format, items, folder }) : await api("/api/convert", { url, format, folder, ...part });
     $("notice").className = res.ok ? "notice" : "notice error";
     $("notice").textContent = res.ok ? "" : res.error;
   } finally {
     convertBusy = false;
+  }
+  refresh();
+});
+
+// ---- (3.0) Paste and clear in the link box, "Use the link you copied?", and the Thumbnail button
+
+// The text on the clipboard. The app reads it (no permission popup); ask: may the window ask itself
+// (only when Paste is clicked, never by itself, since it could show a permission popup).
+async function clipboardText(ask) {
+  const res = await api("/api/clipboard-text", {}).catch(() => ({ ok: false }));
+  if (res.ok) return String(res.text || "");
+  if (ask && res.fallback && navigator.clipboard) {
+    try { return await navigator.clipboard.readText(); } catch (e) { /* not allowed */ }
+  }
+  return "";
+}
+
+// Paste when the box is empty, clear (x) when it isn't.
+function urlBoxChanged() {
+  const filled = !!$("url").value;
+  $("urlPaste").hidden = filled;
+  $("urlClear").hidden = !filled;
+  if (filled) hideOffer();
+}
+
+let pasteTimer = null;
+$("urlPaste").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const text = (await clipboardText(true)).trim();
+  if (!text) {
+    $("urlPasteText").textContent = "Nothing copied";
+    $("urlPaste").classList.add("flash");
+    clearTimeout(pasteTimer);
+    pasteTimer = setTimeout(() => { $("urlPasteText").textContent = "Paste"; $("urlPaste").classList.remove("flash"); }, 1800);
+    return;
+  }
+  const links = linksIn(text);
+  offerSeen.add(text);
+  $("url").value = links.length > 1 ? links.join(" ") : links[0] || text;
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+$("urlClear").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("url").value = "";
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+
+// A link copied in another app (like YouTube in the browser): offered under the box when you come
+// to the Link page. Only links to video and music sites, and each one only once.
+const offerSeen = new Set();
+let offerText = "";
+const MEDIA_SITE = /^https?:\/\/([\w-]+\.)*(youtube\.com|youtu\.be|tiktok\.com|twitch\.tv|instagram\.com|x\.com|twitter\.com|vimeo\.com|soundcloud\.com|reddit\.com|facebook\.com|fb\.watch|kick\.com|dailymotion\.com|bandcamp\.com|streamable\.com|bilibili\.com)\//i;
+
+function hideOffer() {
+  if (offerText) offerSeen.add(offerText);
+  offerText = "";
+  $("copiedOffer").hidden = true;
+}
+
+async function checkCopied() {
+  if ($("videoTab").hidden || document.hidden || $("url").value.trim() || convertBusy) return;
+  const text = (await clipboardText(false)).trim();
+  const links = linksIn(text).filter((l) => MEDIA_SITE.test(l));
+  if (!links.length || offerSeen.has(text) || links.every((l) => offerSeen.has(l)) || text === offerText) return;
+  if ($("videoTab").hidden || $("url").value.trim()) return;
+  offerText = text;
+  const short = (l) => l.replace(/^https?:\/\/(www\.)?/i, "").slice(0, 70);
+  $("copiedTitle").textContent = links.length > 1 ? `${links.length} links` : short(links[0]);
+  setThumb($("copiedThumb"), "", "mp4");
+  $("copiedOffer").hidden = false;
+  if (links.length === 1) {
+    // Its title and picture (the lookup is kept, so "Use it" opens straight away).
+    const res = await api("/api/info", { url: links[0] }).catch(() => null);
+    if (offerText !== text || !res || !res.ok) return;
+    $("copiedTitle").textContent = res.preview.title || short(links[0]);
+    setThumb($("copiedThumb"), res.preview.thumbnail, "mp4");
+  }
+}
+$("copiedUse").addEventListener("click", () => {
+  const links = linksIn(offerText).filter((l) => MEDIA_SITE.test(l));
+  hideOffer();
+  if (!links.length) return;
+  $("url").value = links.join(" ");
+  $("url").dispatchEvent(new Event("input"));
+  $("url").focus();
+});
+$("copiedNo").addEventListener("click", hideOffer);
+window.addEventListener("focus", () => setTimeout(checkCopied, 150));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(checkCopied, 150); });
+function linkTabChanged(tab) { if (tab === "video") setTimeout(checkCopied, 100); else hideOfferQuietly(); }
+// Leaving the page doesn't count as "no thanks": it can be offered again when you come back.
+function hideOfferQuietly() {
+  offerText = "";
+  $("copiedOffer").hidden = true;
+}
+
+// The video's thumbnail, saved as a JPG (it shows up in Downloads like the rest).
+$("thumbGet").addEventListener("click", async () => {
+  if (!previewUrl || playlist) return;
+  const url = previewUrl;
+  const folder = await whereToSave();
+  if (!folder) return;
+  const res = await api("/api/thumbnail", { url, folder }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  $("notice").className = res.ok ? "notice" : "notice error";
+  $("notice").textContent = res.ok ? "" : res.error;
+  if (res.ok) {
+    $("thumbGetText").textContent = "Saving...";
+    setTimeout(() => { $("thumbGetText").textContent = "Thumbnail"; }, 1500);
   }
   refresh();
 });
@@ -912,7 +1079,7 @@ function renderJob(el, job) {
   el.className = "job " + job.status;
   setDrag(el, job.status === "done" ? { kind: "job", id: job.id } : null);
   el.title = job.status === "done" ? DRAG_HINT : "";
-  el.querySelector(".thumb").style.backgroundImage = job.thumbnail ? `url("${job.thumbnail}")` : "";
+  setThumb(el.querySelector(".thumb"), job.thumbnail, job.format);
   el.querySelector(".title").textContent = job.title;
   el.querySelector(".title").title = job.title;
   el.querySelector(".badge").textContent = [job.format.toUpperCase(), job.qualityLabel.replace(/ \(.*\)/, ""), job.trimLabel]
@@ -945,10 +1112,21 @@ function renderJob(el, job) {
   return el;
 }
 
+const DRAG_TIP_TIMES = 3;
+const tipCounted = new Set(); // finished downloads already counted for the tip
+
 function renderQueue(jobs) {
   $("queue").classList.toggle("show", jobs.length > 0);
   $("clear").hidden = !jobs.some((j) => j.status === "done" || j.status === "error");
-  $("dragTip").hidden = !jobs.some((j) => j.status === "done");
+  // (3.0) The drag tip shows for the first few finished downloads, then it's known.
+  for (const j of jobs) {
+    if (j.status === "done" && !tipCounted.has(j.id)) {
+      tipCounted.add(j.id);
+      if ((loadPref("dragTipSeen") || 0) < DRAG_TIP_TIMES) savePref("dragTipSeen", (loadPref("dragTipSeen") || 0) + 1);
+      else tipCounted.late = true;
+    }
+  }
+  $("dragTip").hidden = !jobs.some((j) => j.status === "done") || !!tipCounted.late;
   const list = $("jobs");
   const existing = new Map([...list.children].map((el) => [el.dataset.id, el]));
   const ordered = [...jobs].reverse(); // newest on top
@@ -1005,6 +1183,7 @@ function render(s) {
     $("quality").value = s.quality[format];
     shownQuality = key;
   }
+  fmtButtonText();
   $("checkNow").disabled = s.checking;
   settingsCheckDone(s);
   $("autoUpdate").checked = s.autoUpdate;

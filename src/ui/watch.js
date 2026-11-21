@@ -22,7 +22,7 @@ function youtubeId(url) {
 let watchUrl = "";
 let watchConvert = null;
 // What the player told us last (it sends this a few times a second while we listen).
-const watchState = { time: 0, at: 0, dur: 0, state: -1, rate: 1, vol: 100, muted: false, loaded: 0, cc: false, heard: false };
+const watchState = { time: 0, at: 0, dur: 0, state: -1, rate: 1, vol: 100, muted: false, loaded: 0, cc: false, heard: false, maxH: 0 };
 const WATCH_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // Video quality. YouTube no longer lets apps pick it directly (setPlaybackQuality does nothing),
 // but it picks the quality from how big the player is. So the player is laid out at the size of
@@ -33,6 +33,14 @@ const WATCH_QUALITIES = [
   { h: 720, label: "720p" }, { h: 480, label: "480p", note: "saves data" }, { h: 360, label: "360p" },
 ];
 let watchQuality = 0;
+// (3.0) The best quality this video really has (from YouTube, once it plays): picks above it use this.
+const WATCH_LEVELS = { highres: 4320, hd2160: 2160, hd1440: 1440, hd1080: 1080, hd720: 720, large: 480, medium: 360, small: 240, tiny: 144 };
+function watchQualityNow() {
+  const top = watchState.maxH;
+  if (!watchQuality || !top || watchQuality <= top) return watchQuality;
+  const fit = WATCH_QUALITIES.find((q) => q.h && q.h <= top);
+  return fit ? fit.h : 0;
+}
 try { watchQuality = Number(localStorage.getItem("watchQuality")) || 0; } catch {}
 if (!WATCH_QUALITIES.some((q) => q.h === watchQuality)) watchQuality = 0;
 let watchHello = 0, watchIdle = 0, watchTick = 0, watchDragAt = null;
@@ -50,7 +58,7 @@ function openWatch(url, info = {}) {
   $("watchSub").textContent = info.sub || "";
   $("watchConvert").hidden = !watchConvert;
   $("watchError").hidden = true;
-  Object.assign(watchState, { time: 0, at: 0, dur: 0, state: -1, rate: 1, loaded: 0, cc: false, heard: false });
+  Object.assign(watchState, { time: 0, at: 0, dur: 0, state: -1, rate: 1, loaded: 0, cc: false, heard: false, maxH: 0 });
   $("watchVideo").classList.remove("playing", "ended", "idle");
   watchCloseMenus();
   const frame = document.createElement("iframe");
@@ -126,7 +134,7 @@ function watchDraw() {
   v.classList.toggle("muted", watchState.muted || watchState.vol === 0);
   $("watchVolFill").style.width = (watchState.muted ? 0 : watchState.vol) + "%";
   $("watchSpeedBtn").textContent = watchState.rate === 1 ? "1x" : watchState.rate + "x";
-  $("watchQualityBtn").textContent = WATCH_QUALITIES.find((q) => q.h === watchQuality).label;
+  $("watchQualityBtn").textContent = WATCH_QUALITIES.find((q) => q.h === watchQualityNow()).label;
   $("watchCc").classList.toggle("on", watchState.cc);
   // The big button: paused (after it started) or at the end. At the end it covers YouTube's
   // "more videos" screen.
@@ -167,6 +175,10 @@ window.addEventListener("message", (e) => {
     if (typeof i.volume === "number") watchState.vol = i.volume;
     if (typeof i.muted === "boolean") watchState.muted = i.muted;
     if (typeof i.playbackRate === "number") watchState.rate = i.playbackRate;
+    if (Array.isArray(i.availableQualityLevels) && i.availableQualityLevels.length) {
+      const top = Math.max(0, ...i.availableQualityLevels.map((l) => WATCH_LEVELS[l] || 0));
+      if (top && top !== watchState.maxH) { watchState.maxH = top; watchFit(); watchDraw(); }
+    }
   }
 });
 
@@ -243,8 +255,9 @@ function watchSpeedMenu() {
   })));
 }
 function watchQualityMenu() {
-  watchMenu("Quality", "Quality", WATCH_QUALITIES.map((q) => ({
-    label: q.label, note: q.note, cur: q.h === watchQuality,
+  const now = watchQualityNow(), top = watchState.maxH;
+  watchMenu("Quality", "Quality", WATCH_QUALITIES.filter((q) => !q.h || !top || q.h <= top).map((q) => ({
+    label: q.label, note: q.note, cur: q.h === now,
     pick: () => { watchQuality = q.h; try { localStorage.setItem("watchQuality", String(q.h)); } catch {} watchFit(); watchDraw(); },
   })), "YouTube can still go lower for a moment if your internet is slow, or if the video isn't made in that quality.");
 }
@@ -253,12 +266,13 @@ function watchQualityMenu() {
 function watchFit() {
   const frame = $("watchFrame");
   if (!frame) return;
-  if (!watchQuality) {
+  const quality = watchQualityNow();
+  if (!quality) {
     frame.classList.remove("sized");
     frame.style.width = frame.style.height = frame.style.transform = "";
     return;
   }
-  const dpr = window.devicePixelRatio || 1, w = watchQuality * 16 / 9 / dpr, h = watchQuality / dpr;
+  const dpr = window.devicePixelRatio || 1, w = quality * 16 / 9 / dpr, h = quality / dpr;
   const box = $("watchScreen").getBoundingClientRect();
   if (!box.width || !box.height) return;
   const scale = Math.min(box.width / w, box.height / h);

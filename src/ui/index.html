@@ -125,13 +125,9 @@
       <button type="button" role="tab" data-tab="images" title="Images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 15.5-4.5-4.5-8.5 8.5"/></svg><span>Images</span></button>
       <button type="button" role="tab" data-tab="history" title="History"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>History</span></button>
 </div>
-<div class="sub-tabs" data-section="library" role="tablist">
-      <button type="button" role="tab" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Sounds</span></button>
-      <button type="button" role="tab" data-tab="fx" title="Film assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17M8 5l-1.5 4M13 5l-1.5 4M18 5l-1.5 4"/><path d="M12 12.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z" fill="currentColor" stroke="none"/></svg><span>Film assets</span></button>
-</div>
 <div class="sub-tabs" data-section="recording" role="tablist">
       <button type="button" role="tab" data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
-      <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b></button>
+      <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b><i class="tab-bar" id="povsTabBar" hidden><span></span></i></button>
 </div>
 <div class="sub-tabs" data-section="youtube" role="tablist">
       <button type="button" role="tab" data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
@@ -167,21 +163,29 @@
     </div>
 
     <div class="hw-bar" id="hwBar" hidden>
-      <p><b>Customize Home.</b> Drag a widget by its handle to move it. Make it wide or narrow, or take it off with the X.</p>
+      <p><b>Customize Home.</b> Drag a widget anywhere and it snaps into place. Pick S, M or L for its size, or take it off with the X.</p>
+      <span class="hw-presets" id="hwPresets"><span class="hw-presets-label">Layout</span></span>
       <span class="hw-bar-buttons">
         <button type="button" class="link" id="hwReset">Start over</button>
         <button type="button" class="convert" id="hwDone">Done</button>
       </span>
     </div>
 
-    <div class="home-start" id="homeStart">
-      <button type="button" data-go="video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><b>Convert</b><small>A link, a video or a picture</small></button>
-      <button type="button" data-go="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><b>Write</b><small>Scripts and notes</small></button>
-      <button type="button" data-go="boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><b>Plan</b><small>Your boards</small></button>
-      <button type="button" data-go="sfx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><b>Find a sound</b><small>The crew's library</small></button>
-    </div>
 
     <div class="hw-grid" id="homeWidgets">
+      <div class="hw home-card hw-now-card" data-w="now">
+        <div class="hw-now" id="hwNow"></div>
+      </div>
+
+      <div class="hw hw-plain" data-w="start">
+        <div class="home-start" id="homeStart">
+          <button type="button" data-go="video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><b>Convert</b><small>A link, a video or a picture</small></button>
+          <button type="button" data-go="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><b>Write</b><small>Scripts and notes</small></button>
+          <button type="button" data-go="boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><b>Plan</b><small>Your boards</small></button>
+          <button type="button" data-go="sfx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><b>Find a sound</b><small>The crew's library</small></button>
+        </div>
+      </div>
+
       <div class="hw hw-plain" data-w="live">
         <div class="live-section" id="homeLive" hidden>
           <div class="home-head"><h2><i class="live-dot"></i>Live now</h2><span class="home-muted" id="homeLiveCount"></span></div>
@@ -285,7 +289,32 @@
         <p class="home-muted" id="homeRecentEmpty" hidden>Nothing yet. Paste a link above to get started.</p>
         <div class="home-files" id="homeRecent"></div>
       </div>
+
+      <div class="hw home-card" data-w="since">
+        <div class="home-card-head"><h3 id="hwSinceHead">Since you were last here</h3><button type="button" class="link" id="hwSinceDone">Got it</button></div>
+        <div class="hw-since" id="hwSince"></div>
+      </div>
+
+      <div class="hw home-card" data-w="twitch">
+        <div class="home-card-head"><h3><span class="hw-tw-logo" aria-hidden="true"></span>Your Twitch</h3><button type="button" class="link" id="hwTwOpen">Live</button></div>
+        <div id="hwTwitch"></div>
+      </div>
+
+      <div class="hw home-card" data-w="crew">
+        <div class="home-card-head"><h3>Crew this week</h3><button type="button" class="link" id="hwCrewOpen">See stats</button></div>
+        <div class="hw-list" id="hwCrew"></div>
+      </div>
+
+      <div class="hw home-card" data-w="projects">
+        <div class="home-card-head"><h3>Projects</h3><button type="button" class="link" id="hwPjOpen">Projects</button></div>
+        <div class="hw-list" id="hwProjects"></div>
+      </div>
     </div>
+
+    <button type="button" class="hw-add-hint" id="hwAddHint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span><b>Add widgets</b><small>Make Home yours: friends, chat, your Twitch, docs, game sales and more.</small></span>
+    </button>
 
     <div class="hw-tray" id="hwTray" hidden>
       <h3 class="home-sub">Add a widget</h3>
@@ -296,9 +325,9 @@
 
   <section class="tab-page" id="statsTab" hidden>
     <button type="button" class="link stats-back" id="statsBack">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Home
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg><span id="statsBackText">Home</span>
     </button>
-    <h1 class="headline">Channel stats.<br><em>How we're growing.</em></h1>
+    <h1 class="headline" id="statsHead">Crew stats.<br><em>How we're growing.</em></h1>
     <div class="stats-top">
       <div class="find-sources stats-range" id="statsRange">
         <span class="find-pill" id="statsPill"></span>
@@ -309,26 +338,53 @@
       <p class="stats-note" id="statsNote"></p>
     </div>
 
-    <div class="home-card stats-card">
-      <div class="home-card-head"><h3>Leaderboard</h3><span class="home-muted" id="statsBoardNote"></span></div>
-      <div class="stats-board" id="statsBoard"></div>
-    </div>
+    <div id="statsAll">
+      <p class="stats-summary" id="statsSummary" hidden></p>
 
-    <div class="home-card stats-card">
-      <div class="home-card-head"><h3>Subscribers gained</h3></div>
-      <div class="stats-chart" id="statsChart"></div>
-      <div class="stats-legend" id="statsLegend"></div>
-    </div>
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Leaderboard</h3><span class="home-muted" id="statsBoardNote"></span></div>
+        <div class="stats-board" id="statsBoard"></div>
+        <p class="home-muted stats-hint">Click a channel to see more about it.</p>
+      </div>
 
-    <div class="home-grid stats-grid">
-      <div class="home-card">
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Subscribers gained</h3></div>
+        <div class="stats-chart" id="statsChart"></div>
+        <div class="stats-legend" id="statsLegend"></div>
+      </div>
+
+      <div class="home-grid stats-grid">
+        <div class="home-card">
+          <div class="home-card-head"><h3>Next milestones</h3><span class="home-muted">at the speed of this range</span></div>
+          <div class="stats-goals" id="statsGoals"></div>
+        </div>
+        <div class="home-card">
+          <div class="home-card-head"><h3>Uploads</h3><span class="home-muted">last 30 days</span></div>
+          <div class="stats-bars" id="statsUploads"></div>
+        </div>
+      </div>
+
+      <div class="home-card stats-card">
         <div class="home-card-head"><h3>Most watched lately</h3></div>
         <p class="home-muted" id="statsTopEmpty" hidden>No videos found yet.</p>
-        <div class="stats-bars" id="statsTop"></div>
+        <div class="stats-videos" id="statsTop"></div>
       </div>
-      <div class="home-card">
-        <div class="home-card-head"><h3>Uploads in the last 30 days</h3></div>
-        <div class="stats-bars" id="statsUploads"></div>
+    </div>
+
+    <div id="statsOne" hidden>
+      <div class="home-card stats-card stats-one-head" id="statsOneHead"></div>
+      <div class="stats-one-nums" id="statsOneNums"></div>
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Subscribers</h3></div>
+        <div class="stats-chart" id="statsOneChart"></div>
+      </div>
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Best videos</h3><span class="home-muted">most views of the newest 30</span></div>
+        <div class="stats-videos" id="statsOneTop"></div>
+      </div>
+      <div class="home-card stats-card">
+        <div class="home-card-head"><h3>Newest videos</h3></div>
+        <div class="stats-videos" id="statsOneNew"></div>
       </div>
     </div>
   </section>
@@ -379,7 +435,7 @@
   </section>
 
   <section class="tab-page lv-page" id="lvalertsTab" hidden>
-    <div class="lv-head"><h1 class="headline">Alerts.<br><em>Hear it when something happens.</em></h1></div>
+    <div class="lv-head"><h1 class="headline">Alerts.<br><em>On your stream, when something happens.</em></h1></div>
     <div id="lvAlerts"></div>
   </section>
 
@@ -549,7 +605,7 @@
     <div class="tt-top">
       <div class="home-card tt-write">
         <label class="tt-field"><span>What's the video about?</span>
-          <input id="ttTopic" maxlength="80" placeholder="minecraft hardcore" spellcheck="false" autocomplete="off"></label>
+          <input id="ttTopic" maxlength="80" placeholder="Like: minecraft hardcore" spellcheck="false" autocomplete="off"></label>
         <label class="tt-field"><span>Your title <b class="tt-count" id="ttCount">0 / 100</b></span>
           <textarea id="ttTitle" rows="2" maxlength="100" placeholder="Type the title you want to use" spellcheck="true"></textarea></label>
         <div class="tt-score" id="ttScore">
@@ -619,28 +675,64 @@
   <form class="row" id="form">
     <label class="input">
       <input id="url" placeholder="Paste a link (or a bunch at once) from YouTube, TikTok and more" autocomplete="off" spellcheck="false" autofocus>
+      <button type="button" class="url-tool" id="urlPaste" title="Paste the link you copied">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+        <span id="urlPasteText">Paste</span>
+      </button>
+      <button type="button" class="url-tool url-clear" id="urlClear" title="Clear the box" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </label>
+    <!-- (3.0) One button for the format, quality and volume: the choices open under it -->
+    <div class="fmt-wrap">
+      <button type="button" class="fmt-button" id="fmtButton" aria-haspopup="true" aria-expanded="false" title="Format and quality">
+        <span id="fmtButtonText">MP3</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="fmt-pop" id="fmtPop" hidden>
+        <div class="fmt-section">
+          <span class="fmt-label">Sound</span>
+          <div class="toggle" id="toggle">
+            <button type="button" class="active" data-format="mp3">MP3</button>
+            <button type="button" data-format="m4a">M4A</button>
+            <button type="button" data-format="wav">WAV</button>
+            <button type="button" data-format="flac">FLAC</button>
+          </div>
+        </div>
+        <div class="fmt-section">
+          <span class="fmt-label">Video</span>
+          <div class="toggle" id="toggleVideo">
+            <button type="button" data-format="mp4">MP4</button>
+            <button type="button" data-format="gif">GIF</button>
+          </div>
+        </div>
+        <div class="fmt-section">
+          <span class="fmt-label">Quality</span>
+          <label class="quality">
+            <select id="quality" aria-label="Quality"></select>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+        </div>
+        <label class="check volume-check" id="normalizeBox" title="Makes quiet and loud songs about as loud as each other"><input type="checkbox" id="normalize"> Even out volume</label>
+      </div>
+    </div>
     <button class="convert" id="convert" type="submit">
       <span id="convertText">Convert</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
   </form>
 
-  <div class="options">
-    <div class="toggle" id="toggle">
-      <button class="active" data-format="mp3">MP3</button>
-      <button data-format="m4a">M4A</button>
-      <button data-format="wav">WAV</button>
-      <button data-format="flac">FLAC</button>
-      <button data-format="mp4">MP4</button>
-      <button data-format="gif">GIF</button>
+  <!-- (3.0) A link you just copied: one click to use it -->
+  <div class="copied-offer" id="copiedOffer" hidden>
+    <div class="thumb" id="copiedThumb"></div>
+    <div class="copied-text">
+      <span>Use the link you copied?</span>
+      <b id="copiedTitle"></b>
     </div>
-    <label class="quality">
-      <span>Quality</span>
-      <select id="quality" aria-label="Quality"></select>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-    </label>
-    <label class="check volume-check" id="normalizeBox" title="Makes quiet and loud songs about as loud as each other"><input type="checkbox" id="normalize"> Even out volume</label>
+    <button type="button" class="small-button" id="copiedUse">Use it</button>
+    <button type="button" class="icon-button" id="copiedNo" title="No thanks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
 
   <div class="preview" id="preview">
@@ -657,7 +749,13 @@
         </button>
       </div>
     </div>
-    <button type="button" class="outline-button trim-toggle" id="trimToggle">Trim</button>
+    <div class="preview-actions">
+      <button type="button" class="ghost-button thumb-get" id="thumbGet" title="Save the video's thumbnail as a picture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+        <span id="thumbGetText">Thumbnail</span>
+      </button>
+      <button type="button" class="outline-button trim-toggle" id="trimToggle">Trim</button>
+    </div>
   </div>
 
   <div class="playlist" id="playlist" hidden>
@@ -906,8 +1004,7 @@
     <label class="dropzone" id="fileDrop">
       <input type="file" id="mediaFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav,.ogg,.opus,.wma,.aac" multiple hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-      <span class="drop-text"><strong>Drop videos, songs or a whole folder here</strong> or <span class="link">choose files</span> · <button type="button" class="link" id="fileFolderPick">choose a folder</button></span>
-      <span class="drop-hint">MP4, MKV, MOV, AVI, WEBM, MP3, WAV, FLAC, M4A and more. Folders bring everything inside them, subfolders too.</span>
+      <span class="drop-text"><strong>Drop videos, songs or a folder here</strong> or <span class="link">choose files</span> · <button type="button" class="link" id="fileFolderPick">choose a folder</button></span>
     </label>
 
     <div class="file-scans" id="fileScans"></div>
@@ -959,6 +1056,11 @@
       </div>
     </div>
 
+    <button type="button" class="link files-watch-link" id="watchAddSmall" hidden title="Every new video or song you put in that folder gets converted by itself">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      Watch a folder
+    </button>
+
     <div class="watch-box" id="watchBox">
       <div class="watch-head">
         <div>
@@ -992,9 +1094,10 @@
     <p class="sfx-lead" id="sfxNotSetUp" hidden>The shared sound library isn't set up in this version yet. It comes in an update.</p>
 
     <div id="sfxMain" class="lib-layout" hidden>
+      <!-- (above the genres, so the buttons stay where they are when the genres open) -->
+      <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
       <nav class="lib-genres" id="sfxGenres" aria-label="Genres" hidden></nav>
       <div class="lib-main">
-        <div class="lib-cats" id="sfxCats" role="tablist" aria-label="Categories"><span class="lib-cats-pill" id="sfxCatsPill"></span></div>
         <div class="lib-tools">
           <label class="input history-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -1021,7 +1124,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </label>
           <button type="button" class="outline-button find-open" id="findOpen" title="Search free sound effects, copyright-free music and meme sounds online">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Find sounds &amp; music</button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.2 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.2-3.6-8.5s1.2-6.2 3.6-8.5z"/></svg><span class="find-text">Find sounds &amp; music</span></button>
           <button type="button" class="small-button sfx-upload-button" id="sfxUploadOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Upload</button>
         </div>
         <div class="pl-bar" id="sfxPlaylistBar" hidden>
@@ -1057,6 +1160,7 @@
         <button type="button" data-pane="account">Account</button>
         <button type="button" data-pane="invites" id="acctTabInvites" hidden>Invites</button>
         <button type="button" data-pane="people" id="acctTabPeople" hidden>People</button>
+        <button type="button" data-pane="inbox" id="acctTabInbox" hidden>Inbox<b class="acct-tab-count" id="acctInboxCount" hidden></b></button>
       </div>
 
       <div class="acct-pane" data-pane="profile">
@@ -1095,29 +1199,25 @@
           <p class="pf-status" id="peStatusView" hidden></p><p class="pf-bio" id="peBioView" hidden></p>
         </div>
 
-        <div class="ap-grid">
-          <div class="acct-card ap-card">
-            <h2>Picture ring</h2>
-            <p class="acct-help">A ring around your picture on your profile. It uses your color.</p>
-            <div class="ap-rings" id="peRings"></div>
-          </div>
-          <div class="acct-card ap-card">
-            <h2>Your color</h2>
-            <p class="acct-help">For your name, buttons and ring on your profile.</p>
-            <div class="pe-colors" id="peColors"></div>
+        <div class="acct-card ap-card ap-look">
+          <h2>Look</h2>
+          <p class="acct-help">Your color and the ring around your picture.</p>
+          <div class="ap-look-row">
+            <div><h3 class="ap-sub">Color</h3><div class="pe-colors" id="peColors"></div></div>
+            <div><h3 class="ap-sub">Ring</h3><div class="ap-rings" id="peRings"></div></div>
           </div>
         </div>
 
         <div class="acct-card ap-card">
           <h2>Showcase</h2>
-          <p class="acct-help">Pin up to 3 things to the top of your profile: a video, a sound or a game.</p>
+          <p class="acct-help">Pin up to 3 videos, sounds or games to the top.</p>
           <div class="ap-show" id="peShowcase"></div>
           <div class="ap-pick" id="pePick" hidden></div>
         </div>
 
         <div class="acct-card ap-card">
           <h2>Show on my profile</h2>
-          <p class="acct-help">Pick what your friends see.</p>
+          <p class="acct-help">Pick what friends see.</p>
           <div class="pe-show" id="peShow"></div>
         </div>
 
@@ -1130,39 +1230,44 @@
       </div>
 
       <div class="acct-pane" data-pane="account" hidden>
-        <div class="acct-card acct-profile">
-          <span class="avatar huge" id="acctAvatar"></span>
-          <div class="acct-who">
-            <b id="acctName"></b>
-            <span class="acct-since" id="acctSince"></span>
-          </div>
-        </div>
       <form class="acct-card" id="acctNameForm">
         <h2>Username</h2>
-        <p class="acct-help">This is the name everyone sees next to your sounds. 3 to 20 letters or numbers.</p>
+        <p class="acct-help">Everyone sees this name. 3 to 20 letters, numbers, dots, dashes or _.</p>
         <div class="acct-row">
-          <label class="lib-field"><input id="acctUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+          <label class="lib-field"><input id="acctUsername" maxlength="20" autocomplete="username" spellcheck="false" aria-label="Username"></label>
           <button type="submit" class="small-button" id="acctNameSave">Save</button>
         </div>
         <p class="acct-note" id="acctNameNote"></p>
       </form>
-      <form class="acct-card" id="acctPasswordForm">
-        <h2>Password</h2>
-        <p class="acct-help">At least 8 characters, and not one people often use. Your other devices get logged out.</p>
-        <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
-        <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password"></label>
-        <button type="submit" class="small-button">Change password</button>
+      <div class="acct-card" id="acctPassword">
+        <div class="acct-head">
+          <div><h2>Password</h2><p class="acct-help">Changing it logs out your other devices.</p></div>
+          <button type="button" class="small-button acct-quiet" id="acctPwOpen">Change password</button>
+        </div>
+        <form id="acctPasswordForm" hidden>
+          <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
+          <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>
+          <div class="acct-buttons"><button type="submit" class="small-button">Save new password</button><button type="button" class="link acct-cancel" id="acctPwCancel">Cancel</button></div>
+        </form>
         <p class="acct-note" id="acctPasswordNote"></p>
-      </form>
+      </div>
       <div class="acct-card" id="acctDevices">
         <h2>Your devices</h2>
-        <p class="acct-help">The computers logged in to your account. If you see one you don't know, log it out and change your password.</p>
+        <p class="acct-help">Log out any computer you don't know, then change your password.</p>
         <div id="devList"></div>
         <p class="acct-note" id="devNote"></p>
         <button type="button" class="small-button acct-danger" id="devOutOthers" hidden>Log out everywhere else</button>
       </div>
+      <div class="acct-card" id="acctLinks">
+        <h2>Connected accounts</h2>
+        <p class="acct-help">What VaultHub is signed in to for Live and YouTube.</p>
+        <div id="linkList"></div>
+      </div>
       <div class="acct-card acct-end">
-        <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+        <div class="acct-end-row">
+          <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+          <span class="acct-since" id="acctSince"></span>
+        </div>
         <div id="acctDeleteBox">
           <button type="button" class="link acct-delete-open" id="acctDeleteOpen">Delete my account</button>
           <form id="acctDeleteForm" hidden>
@@ -1180,7 +1285,7 @@
       <div class="acct-pane" data-pane="invites" hidden>
       <div class="acct-card" id="acctInvites" hidden>
         <h2>Invite friends</h2>
-        <p class="acct-help">New accounts need an invite code. Make one, send it to a friend, and they type it in when they press Create account.</p>
+        <p class="acct-help">New accounts need a code. Send one to a friend to type in at Create account.</p>
         <div class="inv-make">
           <div class="inv-pick"><span>Works for</span>
             <label class="quality"><select id="invHours">
@@ -1192,7 +1297,7 @@
               <option value="1" selected>1 person</option><option value="5">Up to 5</option><option value="20">Up to 20</option><option value="">Anyone with the code</option>
             </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
           </div>
-          <button type="button" class="convert inv-make-button" id="invMake">Make a code</button>
+          <button type="button" class="small-button inv-make-button" id="invMake">Make a code</button>
         </div>
         <p class="acct-note" id="invNote"></p>
         <div id="invList"></div>
@@ -1202,13 +1307,16 @@
       <div class="acct-pane" data-pane="people" hidden>
       <div class="acct-card" id="libPeople" hidden>
         <h2>People and roles</h2>
-        <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
+        <p class="acct-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen. New accounts start as viewers.</p>
         <p class="sfx-error" id="libPeopleError"></p>
         <div id="libPeopleList"></div>
       </div>
+      </div>
+
+      <div class="acct-pane" data-pane="inbox" hidden>
       <div class="acct-card" id="acctInbox" hidden>
         <h2>Feedback inbox</h2>
-        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
+        <p class="acct-help">Bugs and wishes from friends. Mark them done when handled.</p>
         <p class="sfx-error" id="inboxError"></p>
         <div id="inboxList"></div>
       </div>
@@ -1235,8 +1343,11 @@
       </div>
       <div id="docsMain">
         <nav class="docs-crumbs" id="docsCrumbs" hidden></nav>
-        <h3 class="docs-label">Start something new</h3>
-        <div class="docs-templates" id="docsTemplates"></div>
+        <div class="docs-new-row" id="docsTemplates"></div>
+        <div class="docs-recent" id="docsRecent" hidden>
+          <h3 class="docs-label">Jump back in</h3>
+          <div class="docs-recent-list" id="docsRecentList"></div>
+        </div>
         <div class="docs-list-head">
           <h3 class="docs-label" id="docsListTitle">Your documents</h3>
           <span class="spacer"></span>
@@ -1301,6 +1412,7 @@
         <aside class="doc-guide" id="docGuide" hidden>
           <div class="doc-guide-head">
             <h4 id="docGuideTitle"></h4>
+            <button type="button" class="link doc-guide-fold" id="docGuideFold">Show how</button>
             <button type="button" class="icon-button" id="docGuideClose" title="Hide the guide (View, Writing guide brings it back)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
           </div>
           <p class="doc-guide-intro" id="docGuideIntro"></p>
@@ -1421,7 +1533,7 @@
       <p class="fx-wait" id="fxWait" hidden>The owner is setting up the storage for film assets. Check back soon!</p>
       <div class="fx-browse" id="fxBrowse" hidden>
         <div class="fx-tools">
-          <label class="input fx-search">
+          <label class="input history-search fx-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
             <input id="fxSearch" placeholder="Search explosions, fire, smoke..." autocomplete="off" spellcheck="false">
           </label>
@@ -1429,7 +1541,7 @@
             <select id="fxSort"><option value="new">Newest</option><option value="popular">Most downloaded</option><option value="name">A to Z</option></select>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </label>
-          <button type="button" class="convert small-button fx-new" id="fxNew" hidden>+ New pack</button>
+          <button type="button" class="convert small-button fx-new" id="fxNew" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New pack</button>
         </div>
         <div class="fx-cats" id="fxCats"></div>
         <div class="fx-grid-head"><h2 id="fxGridTitle">All packs</h2><span id="fxGridCount"></span><span class="fx-used" id="fxUsed"></span></div>
@@ -1465,7 +1577,10 @@
       </div>
       <div class="gm-bar">
         <div class="gm-pills" id="gmPills" role="tablist" aria-label="Show"></div>
-        <div class="gm-chips" id="gmChips"></div>
+        <div class="gm-filter">
+          <button type="button" class="gm-filter-btn" id="gmFilterBtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filter</span><b id="gmFilterCount" hidden></b></button>
+          <div class="gm-filter-pop" id="gmChips" hidden></div>
+        </div>
       </div>
       <div class="fx-tools gm-tools">
         <label class="input fx-search">
@@ -1491,7 +1606,7 @@
     </div>
     <div class="pv-main" id="pvMain" hidden>
       <div class="pv-top">
-        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they (or a friend who already got it) need VaultHub open while you download.</p>
+        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from PC to PC.</p>
         <button type="button" class="convert small-button" id="pvNew">+ New video</button>
       </div>
       <div class="pv-grid" id="pvGrid"></div>
@@ -1532,11 +1647,24 @@
     <div class="history-tools">
       <label class="input history-search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <input id="historySearch" placeholder="Search your downloads" autocomplete="off" spellcheck="false">
+        <input id="historySearch" placeholder="Search everything you made" autocomplete="off" spellcheck="false">
       </label>
-      <button type="button" class="link" id="historyClear" hidden>Clear history</button>
+      <div class="chips history-kinds" id="historyKinds">
+        <button type="button" data-kind="" class="active">All</button>
+        <button type="button" data-kind="link">Links</button>
+        <button type="button" data-kind="file">Files</button>
+        <button type="button" data-kind="image">Images</button>
+      </div>
+      <div class="hist-menu-wrap" id="historyMoreWrap" hidden>
+        <button type="button" class="icon-button" id="historyMore" title="More" aria-haspopup="true">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        </button>
+        <div class="hist-menu" id="historyMenu" hidden>
+          <button type="button" id="historyClear">Clear history</button>
+        </div>
+      </div>
     </div>
-    <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you download in the Video tab shows up here.</p>
+    <p class="history-empty" id="historyEmpty">Nothing here yet. Everything you make in Link, Files and Images shows up here.</p>
     <div class="jobs history-list" id="historyList"></div>
   </section>
 
@@ -1581,6 +1709,11 @@
           <span>px</span>
         </div>
       </div>
+      <button type="button" class="link img-more-toggle" id="imgMoreToggle" aria-expanded="false">
+        <span id="imgMoreText">More options</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="img-more" id="imgMore" hidden>
       <div class="opt-row" id="qualityRow">
         <span class="opt-label">Quality</span>
         <input type="range" id="imgQuality" min="10" max="100" step="5" value="90">
@@ -1603,6 +1736,7 @@
           <button class="toggle-chip" id="imgGray">Black &amp; white</button>
         </div>
         <button class="link opt-reset" id="imgReset">Reset</button>
+      </div>
       </div>
       <div class="image-go">
         <button class="link" id="imgClear">Remove all</button>
@@ -2396,9 +2530,8 @@
       <button type="button" data-set="general" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>General</span></button>
       <button type="button" data-set="look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg><span>Appearance</span></button>
       <button type="button" data-set="sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span></button>
-      <button type="button" data-set="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Notifications</span></button>
+      <button type="button" data-set="voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span>Voice &amp; calls</span></button>
       <button type="button" data-set="trash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span>Trash</span></button>
-      <button type="button" data-set="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5L5.5 13.5H12L11 20.5L18.5 10.5H12z"/></svg><span>Performance</span></button>
       <div class="set-about"><b>VaultHub</b><span id="version"></span></div>
     </nav>
     <div class="set-main">
@@ -2424,6 +2557,14 @@
           <div class="set-row"><span class="set-text"><b>Check for updates</b><small id="setVersionLine">See if there's something new right now.</small></span>
             <button type="button" class="ghost-button set-button" id="checkNow">Check now</button></div>
         </div>
+        <div class="set-label">Notifications</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Desktop notifications</b><small>A pop-up in the corner of your screen for messages, calls and invites when VaultHub is in the background. Quiet while you're live or recording.</small></span><input type="checkbox" id="setNoteWindows"></label>
+        </div>
+        <div class="set-label">Performance</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Use my graphics card</b><small>Makes videos faster and the window smoother. Turn it off if videos come out broken or the app looks glitchy (the window changes next time you open the app).</small></span><input type="checkbox" id="setHardware"></label>
+        </div>
       </section>
 
       <section class="set-page" data-set="look" hidden>
@@ -2442,7 +2583,7 @@
         <div class="set-group set-pad">
           <div class="page-bg-row">
             <span class="page-bg-sample" id="pageBgSample"></span>
-            <div class="page-bg-text"><b id="pageBgTitle">The normal background</b><small>Put your own picture behind every page.</small></div>
+            <div class="page-bg-text"><b id="pageBgTitle">The normal background</b><small>Shown behind every page.</small></div>
             <button type="button" class="outline-button" id="pageBgPick">Choose picture</button>
             <button type="button" class="outline-button" id="pageBgClear" hidden>Remove</button>
             <input type="file" id="pageBgFile" accept="image/*" hidden>
@@ -2467,6 +2608,7 @@
 
       <section class="set-page" data-set="sound" hidden>
         <h3 class="set-title">Sound</h3>
+        <p class="set-sub">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
         <div class="set-label">Volume</div>
         <div class="set-group set-pad">
             <div class="volume-row">
@@ -2474,7 +2616,6 @@
               <span class="volume-value"></span>
             </div>
         </div>
-        <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
         <div class="set-label">Speakers or headphones</div>
         <div class="set-group set-pad">
           <div class="set-device-row">
@@ -2482,6 +2623,15 @@
             <button type="button" class="ghost-button" id="setSpeakerTest">Play a test sound</button>
           </div>
         </div>
+        <div class="set-label">Chat sound</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
+        </div>
+      </section>
+
+      <section class="set-page" data-set="voice" hidden>
+        <h3 class="set-title">Voice &amp; calls</h3>
+        <p class="set-sub">Calls use these too. If you change them during a call, they change here as well.</p>
         <div class="set-label">Microphone</div>
         <div class="set-group set-pad">
           <div class="set-device-row">
@@ -2490,16 +2640,6 @@
           </div>
           <div class="set-mic-meter" id="setMicMeter" hidden><span id="setMicLevel"></span></div>
           <p class="set-mic-note" id="setMicNote" hidden>Say something. The bar moves when the microphone hears you.</p>
-        </div>
-        <div class="set-label">Call sound quality</div>
-        <div class="set-group set-pad">
-          <div class="set-chips" id="setAudio"></div>
-          <p class="set-mic-note" id="setAudioNote"></p>
-        </div>
-        <div class="set-label">Music mode</div>
-        <div class="set-group set-pad">
-          <div class="set-chips" id="setMusic"></div>
-          <p class="set-mic-note" id="setMusicNote"></p>
         </div>
         <div class="set-label">Push to talk</div>
         <div class="set-group set-pad">
@@ -2511,20 +2651,21 @@
           <div class="set-chips" id="setNoise"></div>
           <p class="set-mic-note" id="setNoiseNote"></p>
         </div>
-        <p class="set-help">Calls use these too. If you change them during a call, they change here as well.</p>
-        <div class="set-label">Chat</div>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
+        <button type="button" class="set-more" id="setMore" aria-expanded="false"><span>More call options</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="set-more-box" id="setMoreBox" hidden>
+        <div class="set-label">Call sound quality</div>
+        <div class="set-group set-pad">
+          <div class="set-chips" id="setAudio"></div>
+          <p class="set-mic-note" id="setAudioNote"></p>
+        </div>
+        <div class="set-label">Music mode</div>
+        <div class="set-group set-pad">
+          <div class="set-chips" id="setMusic"></div>
+          <p class="set-mic-note" id="setMusicNote"></p>
+        </div>
         </div>
       </section>
 
-      <section class="set-page" data-set="notes" hidden>
-        <h3 class="set-title">Notifications</h3>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Desktop notifications</b><small>A Windows pop-up in the corner of your screen for new messages, calls, invites and more, when VaultHub is behind other windows or minimized. Click it to jump straight there. They stay quiet while you're live or recording.</small></span><input type="checkbox" id="setNoteWindows"></label>
-        </div>
-        <p class="set-help">Everything still shows up under the bell at the top. The moon button there turns everything quiet for an hour.</p>
-      </section>
 
       <section class="set-page" data-set="trash" hidden>
         <h3 class="set-title">Trash</h3>
@@ -2536,20 +2677,12 @@
             <button type="button" data-kind="board">Boards</button>
             <button type="button" data-kind="sound" id="trashSoundsFilter" hidden>Sounds</button>
           </div>
-          <button type="button" class="small-button trash-empty" id="trashEmpty" disabled>Empty Trash</button>
+          <button type="button" class="small-button trash-empty" id="trashEmpty" disabled hidden>Empty Trash</button>
         </div>
         <div class="set-group trash-list" id="trashList"></div>
         <p class="set-help" id="trashNote" hidden></p>
       </section>
 
-      <section class="set-page" data-set="speed" hidden>
-        <h3 class="set-title">Performance</h3>
-        <div class="set-label">Hardware acceleration</div>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Use my graphics card</b><small>Makes videos several times faster and keeps the window smooth.</small></span><input type="checkbox" id="setHardware"></label>
-        </div>
-        <p class="set-help">Turn it off if videos come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
-      </section>
     </div>
   </div>
 </div>
@@ -2624,7 +2757,6 @@
 <script src="pdfimport.js"></script>
   <script src="pdfedit.js"></script>
 <script src="boards.js"></script>
-<script src="fx.js"></script>
 <script src="projects.js"></script>
 <script src="projectsync.js"></script>
 <script src="games.js"></script>
@@ -2650,6 +2782,7 @@
 <script src="lvmulti.js"></script>
 <script src="lvads.js"></script>
 <script src="lvrecap.js"></script>
+<script src="lvalerts.js"></script>
 <script src="lvcostream.js"></script>
 <script src="lvextra.js"></script>
 </body>

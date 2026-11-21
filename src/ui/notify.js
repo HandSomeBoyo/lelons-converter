@@ -84,6 +84,11 @@ function notifyRead(test) {
   if (changed) { noteSave(); noteDraw(); }
 }
 
+// (3.0) Take a pop-up away early (a call you already answered or declined).
+function notifyUnpop(test) {
+  for (const card of $("notePop").children) if (test(card.dataset.key || "")) card.remove();
+}
+
 // Gone (an invitation you answered, a game that isn't on sale anymore).
 function notifyDrop(test) {
   const before = noteData.list.length;
@@ -209,6 +214,7 @@ let notePopTimer = null;
 function notePop(n) {
   const box = $("notePop");
   const card = noteRow(n, true);
+  card.dataset.key = n.key;
   const close = document.createElement("button");
   close.type = "button";
   close.className = "note-pop-x";

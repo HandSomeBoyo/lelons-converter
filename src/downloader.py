@@ -312,3 +312,60 @@ def download(info, folder, fmt, quality, on_progress, trim=None, normalize=False
         raise
     names.remove_leftovers(folder, mark)  # a thumbnail that wasn't used, and so on
     return path
+
+
+# ---- (3.0) the video's thumbnail as a picture
+
+def _thumbnail_urls(info):
+    """The thumbnail's links, biggest first."""
+    urls = []
+    if (info.get("extractor_key") or info.get("ie_key")) == "Youtube" and info.get("id"):
+        # (maxresdefault is missing on some older videos: then the next one is used)
+        urls += [f"https://i.ytimg.com/vi/{info['id']}/{n}.jpg" for n in ("maxresdefault", "sddefault", "hqdefault")]
+    thumbs = [t for t in info.get("thumbnails") or [] if isinstance(t, dict) and t.get("url")]
+    thumbs.sort(key=lambda t: ((t.get("width") or 0) * (t.get("height") or 0), t.get("preference") or 0), reverse=True)
+    urls += [t["url"] for t in thumbs]
+    if info.get("thumbnail"):
+        urls.append(info["thumbnail"])
+    return list(dict.fromkeys(u for u in urls if str(u).startswith(("http://", "https://"))))
+
+
+def save_thumbnail(info, folder, on_progress=None):
+    """Save the video's thumbnail in folder as a JPG. Returns the saved file's path."""
+    import io
+    import urllib.request
+
+    from PIL import Image
+
+    urls = _thumbnail_urls(info)
+    if not urls:
+        raise ValueError("This video has no thumbnail.")
+    picture = None
+    for url in urls:
+        if on_progress:
+            on_progress({"status": "step", "step": "Thumbnail"})
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                data = response.read(30 * 1024 * 1024)
+            picture = Image.open(io.BytesIO(data))
+            picture.load()
+        except Exception:
+            picture = None
+            continue
+        if picture.width >= 200:  # (YouTube's "no picture" stand-in is 120 x 90)
+            break
+    if picture is None:
+        raise ValueError("Couldn't get the thumbnail. Try again in a moment.")
+    if picture.mode != "RGB":
+        picture = picture.convert("RGB")
+    os.makedirs(folder, exist_ok=True)
+    stem = names.safe_stem(info.get("title"), "video", 70) + " thumbnail"
+    path = names.temp_path(folder, stem, ".jpg")
+    try:
+        picture.save(path, "JPEG", quality=95)
+        return names.finish(path)
+    except BaseException:
+        if os.path.exists(path):
+            os.remove(path)
+        raise

@@ -102,7 +102,7 @@ if sys.stderr is None:
 # ---------------------------------------------------------------- app state
 
 PAGE_PREFS = ("tab", "sfxSort", "fileOptions", "imageOptions", "chatSeen", "chatSound", "homeSeen", "volume", "tourSeen", "tourVoice", "sideSmall", "settingsPage", "sfxPlaylist", "callMic", "callSpeaker", "callQuality", "boardOpen", "callNoise", "callCam", "gamesSaleSeen", "chDays", "chChart", "chUpsellHidden", "notes", "notesOn", "povsSeen", "sideGroupsShut", "feedSeen", "feedNoted", "feedOpts", "callBitrate", "callMusic", "callPtt", "callVolumes", "callBoardVolume", "callShareSound", "chCmp", "pageBg", "lvRecapSeen", "lvCoView",
-              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed")  # what the page may remember
+              "lvFilter", "lvSendTo", "lvAlerts", "lvPads", "lvBoardPrefs", "lvPop", "lvPreview", "lvGames", "lvLayout", "lvClipKey", "lvSceneKeys", "lvObsView", "lvWelcomed", "dragTipSeen")  # what the page may remember
 page_pref_lock = threading.Lock()
 
 def live_or_recording():
@@ -660,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
+        if url.path == "/api/remote-sound":  # (3.0) this PC's sound, for Remote desktop (see loopback.py)
+            return self.send_remote_sound()
         if self.path == "/api/state":
             state.set(last_ping=time.time())
             page_loaded.set()
@@ -691,6 +693,9 @@ class Handler(BaseHTTPRequestHandler):
             file_id = self.path[len("/file-thumb/"):]
             item = (resolvetools.get() if file_id.startswith("r") else local_files).find(file_id)
             path = item and item["thumbPath"]
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/history-thumb/"):  # (3.0) a file or picture in the History tab
+            path = history.thumb_path(self.path[len("/history-thumb/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/image/"):
             path = images.thumbnail_path(self.path[len("/image/"):])
@@ -869,6 +874,14 @@ class Handler(BaseHTTPRequestHandler):
                     data.get("title"), data.get("gameId"), tags if isinstance(tags, list) else None)})
             elif action == "twitch-signout":
                 streamlive.twitch().sign_out()
+            elif action == "home":  # (3.0) the Your Twitch widget on Home: no channel set up, nothing is started
+                channel = streamlive.config()["twitch"]
+                if not channel:
+                    return self.send_json({"ok": True, "channel": ""})
+                tw = dict(streamlive.twitch().status)
+                past = streamlive.streams()
+                return self.send_json({"ok": True, "channel": channel, "last": past[0] if past else None,
+                                       "twitch": {k: tw.get(k) for k in ("live", "viewers", "title", "game", "started", "followers", "signedIn")}})
             elif action == "streams":
                 return self.send_json({"ok": True, "streams": streamlive.streams()})
             elif action == "stream":
@@ -949,6 +962,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, "prefs": adtimer.set_prefs(data.get("prefs") or {})})
             elif action == "ads-scenes":
                 return self.send_json({"ok": True, "scenes": adtimer.scenes()})
+            elif action == "ov":  # (3.0) stream alerts on your stream (an OBS Browser Source)
+                import streamoverlay
+                return self.send_json({"ok": True, "ov": streamoverlay.status()})
+            elif action == "ov-set":
+                import streamoverlay
+                streamoverlay.set_prefs(data)
+                return self.send_json({"ok": True, "ov": streamoverlay.status()})
+            elif action == "ov-link":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "prefs": streamoverlay.save_link(str(data.get("kind") or ""), str(data.get("what") or ""), data.get("url"))})
+                except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "ov-test":
+                import streamoverlay
+                try:
+                    streamoverlay.test(str(data.get("kind") or ""))
+                except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "ov-obs":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "close-ask":  # (2.36.0) what the "You're live. Close anyway?" box lists
                 return self.send_json({"ok": True, "sites": multistream.live_sites()})
             elif action == "hide":
@@ -1698,6 +1736,32 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def send_remote_sound(self):
+        """(3.0) Streams this PC's own sound to the hidden sender page while someone controls this PC."""
+        import loopback
+        live = lambda: bool(remote._state["session"]) and not remote._state["stop"]  # noqa: E731
+        if not live():
+            return self.send_json({"ok": False, "error": "no session"})
+        sound = loopback.capture(live)
+        try:
+            info, _ = next(sound)
+        except (loopback.Error, OSError, StopIteration) as e:
+            return self.send_json({"ok": False, "error": str(e) or "no sound"})
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Sound", json.dumps(info))
+            self.end_headers()
+            for _, chunk in sound:
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, loopback.Error, OSError):
+            pass  # the page stopped listening, or the session ended
+        finally:
+            sound.close()
+        self.close_connection = True
+
     def handle_remote(self, action, data):
         """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""
         try:
@@ -1732,6 +1796,8 @@ class Handler(BaseHTTPRequestHandler):
                                   data={"name": str(data.get("name") or "")}) or {}
                 if action == "rename" and device == me["device"] and result.get("ok"):
                     remote.set_options({"name": data.get("name")})
+                if action == "forget" and device != me["device"]:
+                    remote.forget_host(device)
             elif action == "allowed":
                 result = {"allowed": remote.allowed(str(data.get("key") or ""))}
             elif action == "ask":
@@ -1757,6 +1823,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = remote.key(data.get("role"), data.get("pub"), data.get("priv"))
             elif action == "nonce":  # (2.37.1) a hello is only ever answered once, even across restarts
                 result = {"fresh": remote.nonce_fresh(data.get("nonce"))}
+            elif action == "stop":  # (3.0) the Stop button on this PC's own Remote page
+                remote.stop_now()
+                result = {}
             elif action == "host-state":
                 result = remote.host_state()
             elif action == "screen":  # show another screen: the sender starts again on it
@@ -1927,6 +1996,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/live-ov-file":  # (3.0) your own sound or picture for a stream alert; the body is the file
+            import streamoverlay
+            try:
+                return self.send_json({"ok": True, "prefs": streamoverlay.save_file(
+                    self.headers.get("X-Alert-Kind") or "", self.headers.get("X-Alert-What") or "",
+                    urllib.parse.unquote(self.headers.get("X-File-Name") or ""), self.rfile, length)})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save that file."})
         if self.path == "/api/rt-add":  # a file dropped on the Resolve tab; the body is the file itself
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
             try:
@@ -2062,7 +2141,14 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             data = {}
 
-        if self.path == "/api/info":
+        if self.path == "/api/clipboard-text":  # (3.0) the Link page's Paste button, and "Use the link you copied?"
+            if os.name != "nt":
+                return self.send_json({"ok": False, "fallback": True})
+            try:
+                self.send_json({"ok": True, "text": windows.clipboard_text()})
+            except OSError:
+                self.send_json({"ok": False, "fallback": True})
+        elif self.path == "/api/info":
             url = str(data.get("url", "")).strip()
             try:
                 self.send_json({"ok": True, "preview": queue.preview(url)})
@@ -2125,6 +2211,12 @@ class Handler(BaseHTTPRequestHandler):
             queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim, state.normalize)
             state.set(notice=None)
             self.send_json({"ok": True})
+        elif self.path == "/api/thumbnail":  # (3.0) the Thumbnail button next to a looked-up video
+            url = str(data.get("url", "")).strip()
+            if not url:
+                return self.send_json({"ok": False, "error": "Paste a link first."})
+            queue.add(url, "jpg", "", "Thumbnail", save_folder(data, "pictures"))
+            self.send_json({"ok": True})
         elif self.path == "/api/convert-many":
             # Videos picked from a playlist.
             fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
@@ -2145,6 +2237,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True})
         elif self.path == "/api/history-again":
             item = history.find(str(data.get("id")))
+            if item and item.get("url") and item.get("format") == "jpg":  # (3.0) a thumbnail
+                queue.add(item["url"], "jpg", "", "Thumbnail", save_folder(data, "pictures"), preview=item)
+                return self.send_json({"ok": True})
             if not item or item.get("format") not in settings.QUALITIES:
                 return self.send_json({"ok": False, "error": "That download isn't in the list anymore."})
             fmt, quality = item["format"], str(item.get("quality"))
@@ -2152,8 +2247,10 @@ class Handler(BaseHTTPRequestHandler):
                 quality = state.quality.get(fmt) or settings.DEFAULT_QUALITY[fmt]
             trim = item.get("trim")
             trim = (float(trim[0]), float(trim[1])) if isinstance(trim, list) and len(trim) == 2 else None
+            # (Downloads saved before 3.0 don't say whether the volume was evened out: use the switch as it is now.)
+            normalize = bool(item["normalize"]) if isinstance(item.get("normalize"), bool) else state.normalize
             queue.add(item["url"], fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
-                      state.normalize, preview=item)
+                      normalize, preview=item)
             self.send_json({"ok": True})
         elif self.path == "/api/history-show":
             item = history.find(str(data.get("id")))
@@ -2364,6 +2461,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/image-convert":
             try:
                 made = images.convert(str(data.get("id")), data.get("options") or {}, save_folder(data, "pictures"))
+                try:  # (3.0) the History tab lists it too
+                    fmt = (data.get("options") or {}).get("format")
+                    history.add_local("image", os.path.splitext(made["name"])[0], made["path"],
+                                      fmt if fmt in images.FORMATS else "png", f"{made['width']} × {made['height']}",
+                                      picture=images.thumbnail_path(str(data.get("id"))))
+                except Exception:
+                    pass
                 self.send_json({"ok": True, **made})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e) if isinstance(e, ValueError) else "Couldn't save this picture."})
@@ -2415,10 +2519,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "clicked": appwindow.take_clicked()})
         elif self.path == "/api/page-pref":  # something the page remembers (see ui/theme.js)
             key, value = data.get("key"), data.get("value")
-            if (key in PAGE_PREFS or re.fullmatch(r"docs?[A-Z][\w]{1,40}(:[\w-]{1,40})?", str(key))) and len(json.dumps(value)) < (40000 if key in ("notes", "lvPads") else 4000):
+            # (3.0) Any plain name is kept now. Only the names on the PAGE_PREFS list were kept before, so
+            # things added later without being put on it (the Home layout, chat GIFs, Remote's settings...)
+            # were forgotten whenever the app closed.
+            if isinstance(key, str) and re.fullmatch(r"[A-Za-z][\w:.-]{0,60}", key) and len(json.dumps(value)) < 40000:
                 with page_pref_lock:
                     saved = settings.load().get("page") or {}
-                    settings.save(page={**saved, key: value})
+                    if key in saved or len(saved) < 600:
+                        settings.save(page={**saved, key: value})
             self.send_json({"ok": True})
         elif self.path == "/api/settings":  # the Settings window
             changes = {}

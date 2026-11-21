@@ -2,6 +2,15 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.0.0", items: [
+    "VaultHub 3.0! Every page got a cleanup: calmer, tidier and easier to use.",
+    "Home starts clean now. Press Add widgets to put on what you want, in small, medium or large.",
+    "Live: alerts for follows, subs and raids now pop up right on your stream in OBS, and messages can be read out loud.",
+    "Boards: lists can do things by themselves when a card lands in them, like mark it done or add a label.",
+    "Remote: faster and sharper, and now with your PC's sound.",
+    "Settings: Sound is split into Sound and Voice & calls, so things are easier to find.",
+    "Lots of fixes: settings and sound devices are remembered, and the online count shows people, not PCs. Film assets is gone.",
+  ] },
   { version: "2.43.1", items: [
     "Live: no more little freezes. VaultHub kept reading all your saved streams again for the Earnings card and the recap. Now it reads each one only once.",
     "Customize on the Live page: every card keeps its bar with the dots, sizes and X now (some lost it after a second). Done always closes Customize.",

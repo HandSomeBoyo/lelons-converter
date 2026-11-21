@@ -178,7 +178,7 @@ function togglePlaylistSound(p, sound) {
   drawPlaylistPop();
   drawSfx();
   playlistAction({ what: on ? "add" : "take_out", playlist: p.id, sound: sound.id }).then((res) => {
-    if (!res) { sfxNotes.set(sound.id, { text: "Couldn't change the playlist. Try again.", kind: "bad" }); drawSfx(); }
+    if (!res) { sfxBadNote(sound.id, "Couldn't change the playlist. Try again."); drawSfx(); }
     if (!plPop.hidden) drawPlaylistPop();
   });
 }

@@ -20,7 +20,7 @@ function lvDrawInfo() {
       <div class="lvi-row">
         <span class="lvi-art lvi-empty">${LV_ICONS.tw}</span>
         <div class="lvi-text"><b>${lvEsc(tw.title || "Your Twitch title and game")}</b>
-          <span>${lvEsc(tw.game || "Sign in to Twitch to change them from here, without opening the Twitch dashboard.")}</span></div>
+          <span>${tw.game ? lvEsc(tw.game) + " · " : ""}Sign in to Twitch to change your title and game, make clips, set chat modes and time your ads from here.</span></div>
         <button type="button" class="small-button" id="lviSetup">Sign in to Twitch</button>
       </div>`;
     $("lviSetup").onclick = () => lvOpenSetup();

@@ -104,13 +104,15 @@ async function changeSettings(changes) {
 
 // The pages on the left of the Settings window.
 function showSettingsPage(page) {
+  // (3.0) Notifications and Performance are part of General now; old saved pages land there.
+  if (page === "notes" || page === "speed") page = "general";
   if (!document.querySelector(`#setNav button[data-set="${page}"]`)) page = "general";
   document.querySelectorAll("#setNav button").forEach((b) => b.classList.toggle("active", b.dataset.set === page));
   document.querySelectorAll(".set-page").forEach((p) => { p.hidden = p.dataset.set !== page; });
-  if (page === "notes") drawNoteSettings();
+  if (page === "general") drawNoteSettings();
   if (page === "trash" && typeof loadTrash === "function") loadTrash();
-  if (page === "sound") listSoundDevices();
-  else if (typeof stopMicTest === "function") stopMicTest();
+  if (page === "sound" || page === "voice") listSoundDevices();
+  if (page !== "voice" && typeof stopMicTest === "function") stopMicTest();
 }
 document.querySelectorAll("#setNav button").forEach((b) => b.addEventListener("click", () => {
   showSettingsPage(b.dataset.set);
@@ -125,10 +127,16 @@ $("setNoteWindows").addEventListener("change", () => noteSetOn("windows", $("set
 
 function openSettings(part) {
   drawSettings();
-  showSettingsPage(part === "save" ? "general" : part === "notes" ? "notes" : part === "trash" ? "trash" : loadPref("settingsPage") || "general");
+  showSettingsPage(part === "save" || part === "notes" ? "general" : part === "trash" ? "trash" : loadPref("settingsPage") || "general");
   $("settingsModal").hidden = false;
   $("setSaveBlock").classList.toggle("glow", part === "save");
   if (part === "save") setTimeout(() => $("setSaveBlock").classList.remove("glow"), 1600);
+  if (part === "notes") {  // (from the bell) Notifications sit at the bottom of General now: show them
+    const group = $("setNoteWindows").closest(".set-group");
+    requestAnimationFrame(() => group.scrollIntoView({ block: "center" }));
+    group.classList.add("glow");
+    setTimeout(() => group.classList.remove("glow"), 1600);
+  }
 }
 function closeSettings() { $("settingsModal").hidden = true; stopMicTest(); }
 
@@ -241,6 +249,7 @@ async function listSoundDevices() {
       soundDevices = await navigator.mediaDevices.enumerateDevices();
     } catch { /* no microphone, or not allowed: the lists just say "Microphone 1" */ }
   }
+  if (typeof callMatchDevices === "function") callMatchDevices(soundDevices);  // (3.0) your saved picks, found again
   drawSoundSettings();
 }
 
@@ -282,6 +291,8 @@ function drawSoundSettings() {
     b.addEventListener("click", () => { callSetNoise(level); if (micTest) startMicTest(); });
     return b;
   }));
+  // (3.0) Sound quality and Music mode sit behind "More call options"; open when one isn't the normal choice.
+  if (!setMoreTouched) setMoreOpen(music || kbps !== 128);
   $("setPtt").replaceChildren(callPttRows("set-chips"));
   $("setPttNote").textContent = PTT_NOTE;
   $("setNoiseNote").textContent = music ? AUDIO_MUSIC_NOISE : NOISE_NOTES[noise];
@@ -357,3 +368,12 @@ function stopMicTest() {
   $("setMicLevel").style.width = "0";
 }
 $("setMicTest").addEventListener("click", () => (micTest ? stopMicTest() : startMicTest()));
+
+// "More call options": the call sound quality and Music mode, folded away unless you open them.
+let setMoreTouched = false;
+function setMoreOpen(open) {
+  $("setMoreBox").hidden = !open;
+  $("setMore").setAttribute("aria-expanded", String(open));
+  $("setMore").firstElementChild.textContent = open ? "Fewer call options" : "More call options";
+}
+$("setMore").addEventListener("click", () => { setMoreTouched = true; setMoreOpen($("setMoreBox").hidden); });

@@ -368,7 +368,46 @@ async function callAudioBitrateNow(p, again) {
 }
 
 // Your microphone, cleaned up: {stream (to send), parts}. Throws if there's no microphone.
+// (3.0) Windows gives each sound device a new id every time VaultHub starts (the ids belong to the app's
+// address, which changes each start), so a saved choice was lost. Its name is saved too now, and the
+// device is found again by its name.
+const CALL_DEVICE_PREFS = { callMic: "audioinput", callSpeaker: "audiooutput", callCam: "videoinput" };
+function callMatchDevices(list) {
+  let speaker = false;
+  for (const [pref, kind] of Object.entries(CALL_DEVICE_PREFS)) {
+    const id = loadPref(pref);
+    if (!id) continue;
+    const mine = list.filter((d) => d.kind === kind);
+    const same = mine.find((d) => d.deviceId === id);
+    if (same) {
+      if (same.label && loadPref(pref + "Name") !== same.label) savePref(pref + "Name", same.label);
+      continue;
+    }
+    const name = loadPref(pref + "Name");
+    const found = name && mine.find((d) => d.label === name && d.deviceId !== "default" && d.deviceId !== "communications");
+    if (found) { savePref(pref, found.deviceId); if (pref === "callSpeaker") speaker = true; }
+  }
+  if (speaker && typeof appSpeakerChanged === "function") appSpeakerChanged();
+  return list;
+}
+async function callFindDevices(unlock) {
+  let list = [];
+  try { list = await navigator.mediaDevices.enumerateDevices(); } catch { return; }
+  const lost = Object.entries(CALL_DEVICE_PREFS).some(([pref, kind]) => loadPref(pref) && !list.some((d) => d.kind === kind && d.deviceId === loadPref(pref)));
+  if (unlock && lost && list.every((d) => !d.label)) {  // (the names only show once the microphone was used)
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+      list = await navigator.mediaDevices.enumerateDevices();
+    } catch { /* no microphone */ }
+  }
+  callMatchDevices(list);
+}
+callFindDevices(false);
+if (navigator.mediaDevices) navigator.mediaDevices.addEventListener("devicechange", () => callFindDevices(false));
+
 async function callOpenMic() {
+  await callFindDevices(true);
   const raw = await navigator.mediaDevices.getUserMedia(callMicConstraints());
   const level = callNoiseUsed();
   if (level !== "strong" && level !== "max" && level !== "deep") return { stream: raw, parts: { raw } };
@@ -479,6 +518,7 @@ async function callGetMic() {
 // Switch to another microphone (or noise suppression) in the middle of a call.
 async function callUseMic(id) {
   savePref("callMic", id || null);
+  callFindDevices(false);  // (saves its name)
   if (typeof drawSoundSettings === "function") drawSoundSettings();
   await callReopenMic("Couldn't use that microphone.");
 }
@@ -527,6 +567,7 @@ async function callReopenMic(problem) {
 
 function callUseSpeaker(id) {
   savePref("callSpeaker", id || null);
+  callFindDevices(false);
   for (const p of callPeers.values()) callSetSpeaker(p.audio);
   appSpeakerChanged(); // the rest of the app's sounds follow too
   if (typeof drawSoundSettings === "function") drawSoundSettings();
@@ -939,6 +980,7 @@ function callCamSet(stream) {
 
 async function callUseCam(id) {
   savePref("callCam", id || null);
+  callFindDevices(false);
   if (!callCam) return;
   let stream;
   try {
@@ -971,7 +1013,10 @@ function callRing(kind) {
   callRinging = kind;
   clearInterval(callRingTimer);
   callRingTimer = null;
-  if (!kind) return;
+  if (!kind) {
+    if (typeof notifyUnpop === "function") notifyUnpop((k) => k.startsWith("call:")); // (3.0) "calling you" goes once it stops ringing
+    return;
+  }
   const beep = (notes) => {
     try {
       callRingCtx = callRingCtx || appSinkCtx(new AudioContext());

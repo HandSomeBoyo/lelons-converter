@@ -580,7 +580,7 @@ function srvRoomHead() {
   const tools = [];
   if (c.kind === "text") tools.push(...chatRoomButtons());
   if (c.kind === "voice") {
-    const b = srvBtn("call-start" + (inVoice ? " live" : ""), CALL_ICONS.phone, inVoice ? "Leave the voice channel" : "Join the voice channel",
+    const b = srvBtn("call-start" + (inVoice ? " leave" : ""), inVoice ? SRV_I.hang : CALL_ICONS.phone, inVoice ? "Leave the voice channel" : "Join the voice channel",
       () => (inVoice ? callHangUp("") : srvJoinVoice(c)));
     b.append(document.createTextNode(inVoice ? "Leave" : "Join voice"));
     tools.push(b);

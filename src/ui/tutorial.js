@@ -224,16 +224,13 @@ const TOUR = [
   },
   {
     key: "povs", seconds: 8.5,
-    title: "Share recordings and film assets",
-    text: "POVs sends your full game recordings straight to your friends, PC to PC. Film assets holds the crew's effects and clips, ready to drag into your edit.",
-    say: "Recorded a game together? Use POVs to send your whole recording straight to your friends. And Film assets has the crew's effects and clips, ready to drop into your edit.",
+    title: "Share your recordings",
+    text: "POVs sends your full game recordings straight to your friends, PC to PC, with no uploading.",
+    say: "Recorded a game together? Use POVs to send your whole recording straight to your friends, right from your PC to theirs.",
     html: `<div class="t-pv">
       <div class="t-pc a"><div class="t-pc-screen"></div><small>Your PC</small></div>
       <div class="t-pv-wire"><div class="t-pv-file"><b>Full match.mp4</b><small>4.2 GB</small><div class="t-bar"><i></i></div></div></div>
       <div class="t-pc b"><div class="t-pc-screen"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg></div><small>Kim's PC</small></div>
-      <div class="t-fx">${[["Explosions", "#ff8a3d", "#ef5350"], ["Smoke", "#8a8f99", "#3d424a"], ["Glitch", "#9b7bf7", "#22b8a5"], ["Muzzle flash", "#ffcf3f", "#ff8a3d"]].map(([n, a, b], i) => `
-        <div class="t-pack" style="--i:${i};--a:${a};--b:${b}"><i></i><b>${n}</b><span>↓</span></div>`).join("")}
-      </div>
     </div>`,
   },
   {

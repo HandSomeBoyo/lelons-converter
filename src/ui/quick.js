@@ -36,7 +36,7 @@ const qkList = (get) => { try { return get() || []; } catch (e) { return []; } }
 // ---------------------------------------------------------------- converting a link
 
 function quickConvert(text, fmt) {
-  const btn = document.querySelector(`#toggle button[data-format="${fmt}"]`);
+  const btn = document.querySelector(`#fmtPop button[data-format="${fmt}"]`);
   if (btn && !btn.classList.contains("active")) btn.click();
   homeConvert(text, true);
 }
@@ -54,7 +54,7 @@ const qk = { items: [], at: 0, loaded: false };
 const qkTabButtons = () => [...document.querySelectorAll("#tabs button[data-tab]")];
 // Every page, also the ones inside a place (Files sits in Convert): the side bar's own pages first.
 const qkAllPages = () => [...document.querySelectorAll("#tabs button[data-tab]:not([data-section]), .sub-tabs button[data-tab]")];
-const QK_PAGE_NAMES = { video: "Convert a link", sfx: "Sounds", fx: "Film assets", history: "History" };
+const QK_PAGE_NAMES = { video: "Convert a link", sfx: "Sounds", history: "History" };
 const QK_WORDS = {
   home: "start channels", video: "youtube tiktok mp3 mp4 download song link convert", files: "convert trim shrink compress",
   images: "picture photo png jpg resize crop", resolve: "davinci subtitles silence edit", sfx: "library sounds sound effects music songs",

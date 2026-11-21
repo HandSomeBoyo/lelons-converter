@@ -94,7 +94,7 @@ function drawHome() {
   if (!d) return;
   if (homeEls.size > 200) homeEls.clear();
   const user = sfxUser();
-  $("homeHello").textContent = user ? `Hey ${user.username}.` : "Hey there.";
+  $("homeHello").textContent = homeGreeting(user);
   drawChannels();
   drawUploads();
   drawCrew();
@@ -104,6 +104,18 @@ function drawHome() {
   drawRecent();
   if (typeof hwDrawAll === "function") hwDrawAll(); // the other widgets (homewidgets.js)
 }
+
+// (3.0) A hello that fits the time of day.
+function homeGreeting(user) {
+  const h = new Date().getHours();
+  const hello = h >= 5 && h < 12 ? "Good morning" : h >= 12 && h < 18 ? "Good afternoon" : h >= 18 && h < 23 ? "Good evening" : "Up late";
+  return user ? `${hello}, ${user.username}.` : `${hello}.`;
+}
+// (3.0) Widgets with nothing in them hide until there's something (homewidgets.js).
+const homeBlank = (id, blank) => { if (typeof hwMarkBlank === "function") hwMarkBlank(id, blank); };
+// The newest uploads shown in Our channels, so Activity doesn't show them a second time.
+let homeUploadIds = new Set();
+const homeChannelsOn = () => typeof hwLayout !== "function" || hwLayout().items.some((it) => it.id === "channels");
 
 function drawChannels() {
   const d = homeData;
@@ -161,12 +173,13 @@ function drawUploads() {
   // Newest first. Dates on the older uploads are rough, so each channel's newest wins a tie.
   all.sort((a, b) => (b.when || 0) - (a.when || 0) || b.newest - a.newest);
   const top = all.slice(0, 3);
+  homeUploadIds = new Set(top.map((u) => u.id));
   $("homeUploadsHead").hidden = !top.length;
   const box = $("homeUploads");
   // Cards that didn't change are kept, so they don't fade in again every half a minute.
   setChildren(box, top.map((u, i) => keptNode(homeCards, u.id, JSON.stringify([u, i === 0]), () => {
     const el = document.createElement("div");
-    el.className = "upload-card" + (i === 0 ? " hero" : "");
+    el.className = "upload-card" + (i === 0 ? " newest" : "");
     el.innerHTML = `<div class="upload-thumb"><img alt="" loading="lazy"><span class="upload-length"></span></div>
       <div class="upload-body"><b class="upload-title"></b><span class="upload-meta"></span>
       <div class="upload-actions"><button type="button" class="small-button upload-watch">Watch</button>
@@ -219,6 +232,7 @@ function activityItems() {
   for (const c of d.channels) {
     const info = c.info;
     for (const v of ((info && info.videos) || info && info.uploads || []).slice(0, 3)) {
+      if (homeUploadIds.has(v.id) && homeChannelsOn()) continue; // already in Our channels
       if (v.when && v.when * 1000 > weekAgo) {
         items.push({ kind: "video", when: v.when * 1000, id: v.id, title: v.title, url: v.url, thumbnail: v.thumbnail,
           channel: info.name, avatarUrl: info.avatar });
@@ -299,6 +313,7 @@ function drawHomeSounds() {
   const items = activityItems();
   const shown = homeActivityAll ? items.slice(0, 25) : items.slice(0, 6);
   $("homeSoundsEmpty").hidden = items.length > 0;
+  homeBlank("activity", !items.length);
   $("homeActivityMore").hidden = items.length <= 6;
   $("homeActivityMore").textContent = homeActivityAll ? "Show less" : "Show more";
   setChildren($("homeSounds"), shown.map((item) => {
@@ -313,6 +328,7 @@ function drawHomeChat() {
   const d = homeData;
   if (!d || !d.loggedIn) return;
   $("homeChatEmpty").hidden = d.chat.length > 0;
+  homeBlank("chat", !d.chat.length);
   setChildren($("homeChat"), d.chat.map((m) => keptNode(homeEls, "m" + m.id, JSON.stringify(m), () => {
     const row = document.createElement("div");
     row.className = "home-chat-msg";
@@ -329,6 +345,7 @@ function drawHomeChat() {
 let homeStatsDrawn = "";
 function drawStats() {
   const s = homeData.stats;
+  homeBlank("stats", !s.files);
   if (JSON.stringify(s) === homeStatsDrawn) return;
   homeStatsDrawn = JSON.stringify(s);
   const minutes = Math.round(s.seconds / 60);
@@ -348,6 +365,7 @@ function drawStats() {
 function drawRecent() {
   const items = homeData.recent;
   $("homeRecentEmpty").hidden = items.length > 0;
+  homeBlank("recent", !items.length);
   setChildren($("homeRecent"), items.map((item) => keptNode(homeEls, "r" + item.id, JSON.stringify(item), () => {
     const row = document.createElement("div");
     row.className = "home-file";
