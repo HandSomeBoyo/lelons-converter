@@ -123,5 +123,6 @@ function drawInbox() {
 
 $("libInboxOpen").addEventListener("click", () => {
   showTab("account");
+  acctPane("people"); // the inbox sits on the People tab
   setTimeout(() => $("acctInbox").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 });

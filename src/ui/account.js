@@ -53,7 +53,7 @@ function note(id, text, good) {
 }
 
 // From the account button's menu
-$("libAccountOpen").addEventListener("click", () => showTab("account"));
+$("libAccountOpen").addEventListener("click", () => { showTab("account"); acctPane("profile"); });
 $("libPeopleOpen").addEventListener("click", () => { showTab("account"); acctPane("people"); });
 $("libInvitesOpen").addEventListener("click", () => { showTab("account"); acctPane("invites"); });
 
@@ -82,7 +82,10 @@ async function sendPicture(promise) {
   if (sfxLoggedOut(res)) return;
   if (res.ok && res.account) setSfxAccount(res.account);
   else drawSfxAccount();
-  if (!res.ok) alert(res.error);
+  if (!res.ok && typeof drawProfileEditor === "function") {
+    note("peNote", res.error); // (was a Windows pop-up)
+    drawProfileEditor();
+  }
 }
 
 $("acctPicture").addEventListener("click", async () => {
@@ -170,7 +173,7 @@ function drawPeople() {
     el.querySelector(".person-info span").textContent = [
       "Joined " + sfxAgo(person.created_at),
       person.sounds ? `${person.sounds} sound${person.sounds === 1 ? "" : "s"}` : "",
-      person.last_seen ? "seen " + sfxAgo(person.last_seen) : "",
+      person.me ? "" : person.last_seen ? "seen " + sfxAgo(person.last_seen) : "",
     ].filter(Boolean).join(" · ");
     const roleBox = el.querySelector(".person-role");
     if (person.role === "owner") {
@@ -225,8 +228,10 @@ let inviteCodes = [], inviteCodeNew = "";
 
 function inviteCodeLeft(seconds) {
   const left = seconds - Date.now() / 1000;
-  if (left < 3600) return `${Math.max(1, Math.round(left / 60))} min`;
-  if (left < 48 * 3600) return `${Math.round(left / 3600)} hour${Math.round(left / 3600) === 1 ? "" : "s"}`;
+  const mins = Math.max(1, Math.round(left / 60));
+  if (mins < 60) return `${mins} min`; // (59.9 minutes is "1 hour", not "60 min")
+  const hours = Math.round(left / 3600);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
   return `${Math.round(left / 86400)} days`;
 }
 
