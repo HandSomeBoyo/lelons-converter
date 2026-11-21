@@ -67,13 +67,21 @@ async function rdCode(ctrlKey, hostKey, fpOffer, fpAnswer) {
   return String(n % 1000000).padStart(6, "0");
 }
 
+// (3.0) Faster: it doesn't wait for every address server to answer (a slow one used to hold it up to
+// 4 seconds). Once the internet address is known (a "srflx" one), a short moment more is enough.
 function rdGathered(pc) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((done) => {
+    let soon = 0;
     const check = () => { if (pc.iceGatheringState === "complete") finish(); };
-    const finish = () => { pc.removeEventListener("icegatheringstatechange", check); clearTimeout(timer); done(); };
-    const timer = setTimeout(finish, 4000);
+    const found = (e) => { if (e.candidate && / typ srflx /.test(e.candidate.candidate) && !soon) soon = setTimeout(finish, 300); };
+    const finish = () => {
+      pc.removeEventListener("icegatheringstatechange", check); pc.removeEventListener("icecandidate", found);
+      clearTimeout(timer); clearTimeout(soon); done();
+    };
+    const timer = setTimeout(finish, 2500);
     pc.addEventListener("icegatheringstatechange", check);
+    pc.addEventListener("icecandidate", found);
   });
 }
 
@@ -90,7 +98,7 @@ function rdTuneOpus(sdp) {
 
 // Picture modes: [frames a second, most pixels high, bits per second, what WebRTC gives up first]
 const RD_MODES = {
-  auto: { fps: 60, height: 1440, bitrate: 20e6, keep: "balanced", hint: "motion" },
+  auto: { fps: 60, height: 1440, bitrate: 20e6, keep: "balanced", hint: "detail" }, // (3.0) sharp text first
   smooth: { fps: 60, height: 1080, bitrate: 12e6, keep: "maintain-framerate", hint: "motion" },
   sharp: { fps: 60, height: 2160, bitrate: 30e6, keep: "maintain-resolution", hint: "detail" },
   save: { fps: 30, height: 720, bitrate: 2.5e6, keep: "balanced", hint: "detail" },

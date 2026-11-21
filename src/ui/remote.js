@@ -87,7 +87,10 @@ function rdDraw() {
   const page = $("remoteTab");
   if (!page || !rd.info) return;
   const me = rd.info;
-  const others = rd.devices.filter((d) => !d.me);
+  // (3.0) Only PCs you can control are shown. A PC with "let my other PCs control this one" off (like a
+  // laptop you only use to control) is just named in a quiet line under them.
+  const others = rd.devices.filter((d) => !d.me && d.host);
+  const quiet = rd.devices.filter((d) => !d.me && !d.host);
   const card = (d) => {
     const ready = d.online && d.host;
     const status = ready ? (d.busy ? "In use right now" : "Ready") : d.online ? "Controlling is off on it" : `Last seen ${rdAgo(d.seen)}`;
@@ -104,8 +107,11 @@ function rdDraw() {
   const html = `<div class="rd-page">
     <h1 class="headline">Remote.<em> Your own PCs, anywhere.</em></h1>
     ${rd.error ? `<p class="rd-error">${rdEsc(rd.error)}</p>` : ""}
-    <div class="rd-grid">${others.map(card).join("")}
-      <div class="rd-pc rd-add"><div class="plus">${RD_ICONS.plus}</div><b>Add a PC</b>Install VaultHub on it, log in with your account and turn on<br>"Let my other PCs control this one" there. It shows up here.</div></div>
+    ${others.length ? `<div class="rd-grid">${others.map(card).join("")}</div>`
+      : `<div class="rd-pc rd-add rd-empty"><div class="plus">${RD_ICONS.plus}</div><b>No PCs to control yet</b>${RD_ADD_TEXT}</div>`}
+    <div class="rd-links">${others.length ? `<button type="button" class="rd-link" id="rdAdd">${RD_ICONS.plus}Add a PC</button>` : ""}
+      <button type="button" class="rd-link" id="rdSafeInfo">${RD_ICONS.shield}How it stays safe</button>
+      ${quiet.length ? `<span class="rd-quiet">Not shown: ${quiet.map((d) => rdEsc(d.name)).join(", ")} (controlling is off there)</span>` : ""}</div>
     <div class="rd-this${using ? " busy" : ""}">${me.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<div class="rd-this-text"><b>This PC: ${rdEsc(me.name)}</b>${
       using ? `<span class="rd-using"><i class="rd-dot warn"></i>${rdEsc(using)} is using this PC now</span>`
       : me.host ? `On. Keep VaultHub open here (minimized is fine)${me.keepAwake ? " and it won't go to sleep" : ""}. Don't let Windows lock itself, the lock screen can't be used from far away.`
@@ -113,12 +119,7 @@ function rdDraw() {
       ${using ? '<button type="button" class="ghost-button rd-small rd-red" id="rdStopHere">Stop</button>' : ""}
       <button type="button" class="ghost-button rd-small" id="rdManage">Safety settings</button>
       <button type="button" class="rd-sw${me.host ? " on" : ""}" id="rdHostSwitch" role="switch" aria-checked="${me.host}" title="Let my other PCs control this one"></button></div>
-    <div class="rd-safe">
-      <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your owner account. Nobody else can use Remote.</div>
-      <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code.</div>
-      <div><b>${RD_ICONS.eye}Straight PC to PC</b>Picture, sound and keys are locked (encrypted) from PC to PC. Nothing goes through our server.</div>
-      <div><b>${RD_ICONS.key}Stop any time</b>A yellow bar shows on the PC being used. Ctrl+Alt+End cuts it off.</div>
-    </div></div>`;
+    </div>`;
   // (3.0) Only draw it again when something changed: it's checked every 3 seconds, and drawing it anew
   // each time could swallow a click (the button under the mouse was swapped for a new one).
   if (html === rd.drawn && page.firstElementChild) return;
@@ -132,6 +133,19 @@ function rdDraw() {
     if (res.ok) { rd.info = res; rdDraw(); }
   });
   $("rdManage").addEventListener("click", rdManage);
+  if ($("rdAdd")) $("rdAdd").addEventListener("click", () => rdInfoBox(RD_ICONS.plus, "Add a PC", `<p>${RD_ADD_TEXT}</p>`));
+  $("rdSafeInfo").addEventListener("click", () => rdInfoBox(RD_ICONS.shield, "How it stays safe", `<div class="rd-safe">
+      <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your owner account. Nobody else can use Remote.</div>
+      <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code.</div>
+      <div><b>${RD_ICONS.eye}Straight PC to PC</b>Picture, sound and keys are locked (encrypted) from PC to PC. Nothing goes through our server.</div>
+      <div><b>${RD_ICONS.key}Stop any time</b>A yellow bar shows on the PC being used. Ctrl+Alt+End cuts it off.</div></div>`));
+}
+
+const RD_ADD_TEXT = 'Install VaultHub on the other PC, log in with your account and turn on "Let my other PCs control this one" there. It shows up here by itself.';
+
+function rdInfoBox(icon, title, body) {
+  const m = rdModal(`<div class="rd-big-ic">${icon}</div><h2>${title}</h2>${body}<div class="rd-acts"><button type="button" class="convert" id="rdOk">OK</button></div>`);
+  m.querySelector("#rdOk").addEventListener("click", rdModalClose);
 }
 
 // (3.0) Take a PC off your list. It also forgets the key this PC kept for it, so after a reinstall
@@ -336,6 +350,7 @@ function rdCtl(c, data) {
     rdPhase("");
     rdToolbar();
     rdHint(true);
+    rdSendView();
     return;
   }
   if (msg.error === "screen") return rdEnd(`${c.dev.name} couldn't share its screen.`);
@@ -357,8 +372,7 @@ function rdSession() {
   rdSessionClose();
   const s = document.createElement("div");
   s.className = "rd-session"; s.id = "rdSession";
-  const side = document.querySelector(".sidebar");
-  s.style.setProperty("--rd-left", (side ? side.getBoundingClientRect().right : 0) + "px");
+  // (3.0) The other PC gets the whole window (the side bar is hidden behind it); Back or Disconnect returns.
   s.innerHTML = `<div class="rd-tool" id="rdTool"></div><div class="rd-screen" id="rdScreen">
     <video id="rdVideo" autoplay playsinline></video><div class="rd-input" id="rdInput" tabindex="0"></div>
     <div class="rd-phase" id="rdPhase" hidden></div><div class="rd-hint" id="rdHint" hidden></div></div>`;
@@ -400,7 +414,8 @@ function rdToolbar() {
     <div class="who">${c.dev.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<b>${rdEsc(c.dev.name)}</b></div>
     <div class="live" id="rdLive"><span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${c.rtt ? Math.round(c.rtt) + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}</div>
     <span class="sp"></span>
-    <div class="rd-vol"><button type="button" class="rd-mute" id="rdMute" title="Sound on/off">${c.muted ? RD_ICONS.mute : RD_ICONS.sound}</button><input type="range" id="rdVol" min="0" max="100" value="${c.volume}" title="Volume"></div>
+    <div class="rd-vol-wrap"><button type="button" class="rd-tb${c.muted ? "" : " on"}" id="rdMute" title="Sound">${c.muted || !c.volume ? RD_ICONS.mute : RD_ICONS.sound}</button>
+      <div class="rd-vol-pop" id="rdVolPop" hidden><input type="range" id="rdVol" min="0" max="100" value="${c.volume}" title="Volume"><button type="button" class="rd-link" id="rdMuteBtn">${c.muted ? "Turn sound on" : "Mute"}</button></div></div>
     ${c.screens > 1 ? `<button type="button" class="rd-tb" id="rdScreens">${RD_ICONS.mons}Screen ${c.screen + 1}</button>` : ""}
     <button type="button" class="rd-tb" id="rdMenuBtn">${RD_ICONS.gear}Picture &amp; keys</button>
     <button type="button" class="rd-tb" id="rdFull" title="Full screen">${RD_ICONS.full}</button>
@@ -409,10 +424,23 @@ function rdToolbar() {
   $("rdFull").onclick = rdFullscreen;
   $("rdMenuBtn").onclick = () => rdMenu();
   if ($("rdScreens")) $("rdScreens").onclick = () => rdMenu();
-  $("rdMute").onclick = () => { c.muted = !c.muted; rdApplyVolume(); rdToolbar(); };
-  $("rdVol").oninput = (e) => { c.volume = Number(e.target.value); c.muted = false; savePref("rdVolume", c.volume); rdApplyVolume(); };
+  $("rdMute").onclick = (e) => { e.stopPropagation(); $("rdVolPop").hidden = !$("rdVolPop").hidden; };
+  $("rdMuteBtn").onclick = () => { c.muted = !c.muted; rdApplyVolume(); rdToolbar(); $("rdVolPop").hidden = false; };
+  $("rdVol").oninput = (e) => {
+    c.volume = Number(e.target.value); c.muted = false; savePref("rdVolume", c.volume); rdApplyVolume();
+    $("rdMute").innerHTML = c.volume ? RD_ICONS.sound : RD_ICONS.mute; $("rdMuteBtn").textContent = "Mute";
+  };
   rdApplyVolume();
 }
+
+// (3.0) Tell the other PC how big the picture is here, so it never sends more pixels than you can see.
+function rdSendView() {
+  const c = rd.conn, box = $("rdScreen");
+  if (!c || c.phase !== "on" || !box) return;
+  const h = Math.max(720, Math.ceil((box.clientHeight * (window.devicePixelRatio || 1)) / 180) * 180);
+  if (h !== c.viewH) { c.viewH = h; rdSend(c, { viewH: h }); }
+}
+window.addEventListener("resize", () => { clearTimeout(rdSendView.t); rdSendView.t = setTimeout(rdSendView, 400); });
 
 function rdApplyVolume() {
   const v = $("rdVideo"), c = rd.conn;
@@ -495,6 +523,7 @@ function rdInputs() {
     area.focus();
     area.setPointerCapture(e.pointerId);
     $("rdPop") && $("rdPop").remove();
+    $("rdVolPop") && ($("rdVolPop").hidden = true);
     rdSend(rd.conn, { e: [{ t: "m", ...at(e) }, { t: "d", b: btn(e) }] });
   });
   area.addEventListener("pointerup", (e) => { if (live()) rdSend(rd.conn, { e: [{ t: "m", ...at(e) }, { t: "u", b: btn(e) }] }); });
@@ -563,8 +592,13 @@ function rdEnd(why, quiet) {
   if (rd.open) rdDraw();
 }
 
+document.addEventListener("click", (e) => { // a click anywhere else closes the volume pop-up
+  const pop = $("rdVolPop");
+  if (pop && !pop.hidden && !e.target.closest(".rd-vol-wrap")) pop.hidden = true;
+});
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && $("rdPop")) $("rdPop").remove();
+  if (e.key === "Escape" && $("rdVolPop") && !$("rdVolPop").hidden) $("rdVolPop").hidden = true;
+  else if (e.key === "Escape" && $("rdPop")) $("rdPop").remove();
   else if (e.key === "Escape" && $("rdModal") && !$("rdModal").querySelector("#rdYes")) rdModalClose();
 });
 // (2.38.2) When the app opens on the Remote page, the page was picked before this file loaded, so it

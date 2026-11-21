@@ -8,7 +8,7 @@ function rhSay(text) { document.getElementById("what").textContent = text; }
 
 async function rhTick() {
   clearTimeout(rh.timer);
-  let wait = 2500;
+  let wait = 1500; // (3.0) was 2.5 s: connecting starts sooner
   try {
     const info = await rdPost("/api/remote-info");
     if (info.ok) rh.me = info;
@@ -179,7 +179,9 @@ async function rhMode(sess, mode) {
   const video = sess.stream && sess.stream.getVideoTracks()[0];
   if (!video) return;
   video.contentHint = m.hint;
-  await video.applyConstraints({ frameRate: { ideal: m.fps, max: 60 }, height: { max: m.height } }).catch(() => {});
+  // (3.0) Never bigger than the picture on your other PC's window: fewer pixels = less delay and data.
+  const height = Math.min(m.height, sess.viewH || m.height);
+  await video.applyConstraints({ frameRate: { ideal: m.fps, max: 60 }, height: { max: height } }).catch(() => {});
   for (const t of sess.pc.getTransceivers()) {
     if (t.sender.track !== video) continue;
     const p = t.sender.getParameters();
@@ -208,6 +210,7 @@ async function rhMessage(sess, data) {
   if (!sess.started) return;
   if (Array.isArray(msg.e)) { sess.queue.push(...msg.e.slice(0, 100)); rhFlush(sess); }
   if (msg.mode && RD_MODES[msg.mode]) rhMode(sess, msg.mode);
+  if (Number.isInteger(msg.viewH) && msg.viewH >= 360 && msg.viewH !== sess.viewH) { sess.viewH = msg.viewH; rhMode(sess, sess.mode); }
   if (Number.isInteger(msg.screen) && msg.screen !== sess.screen) {
     rhSend(sess, { switching: msg.screen });
     rhEnd("screen", false);

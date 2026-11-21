@@ -8043,6 +8043,24 @@ button.rd-sw.on { background: var(--accent); box-shadow: none; }
 .rd-spin { animation: spin .9s linear infinite; }
 .rd-keyname { flex: none !important; display: flex; gap: 4px; }
 .rd-keyname kbd { font: 600 12px var(--head); padding: 4px 8px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line2); color: var(--text); }
+/* (3.0) round 2: only the PCs you can control, small links instead of big boxes, full-window sessions,
+   volume behind the speaker button */
+.rd-links { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; margin: 12px 2px 0; }
+.rd-link { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.rd-link:hover { color: var(--text); }
+.rd-link svg { width: 14px; height: 14px; }
+.rd-quiet { font-size: 12.5px; color: var(--muted); opacity: .8; margin-left: auto; }
+.rd-empty { max-width: 460px; padding: 26px 22px; }
+.rd-dlg .rd-safe { margin: 0 0 16px; grid-template-columns: 1fr 1fr; }
+.rd-dlg .rd-safe div { background: var(--panel2); border: 0; }
+.rd-session { left: 0; z-index: 60; }
+.rd-vol-wrap { position: relative; }
+.rd-vol-wrap .rd-tb { padding: 0 10px; }
+.rd-vol-pop { position: absolute; top: 42px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); z-index: 46; white-space: nowrap; }
+.rd-vol-pop[hidden] { display: none; }
+.rd-vol-pop input[type=range] { width: 130px; accent-color: var(--accent); }
+.rd-this { margin-top: 18px; }
 /* ================================================================ 2.37.0: servers in Chat (servers.js) and zoom on shared screens */
 body .chat-panel.with-rail { grid-template-columns: 72px 264px minmax(0, 1fr); }
 body .chat-panel.with-rail.has-pane { grid-template-columns: 72px 264px minmax(0, 1fr) minmax(300px, 380px); }
