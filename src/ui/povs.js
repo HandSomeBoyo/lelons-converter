@@ -274,7 +274,9 @@ function pvDrawAct(card, f) {
     : `${f.by} is offline. They (or a friend who has it) need VaultHub open.`);
   const row = pvEl("div", "pv-row");
   const partly = d && d.state === "part" && d.have > 0;
-  row.append(pvButton("convert small-button pv-get", PV_ICONS.down,
+  // (grey while nobody who has it is online: yellow ones work right now)
+  const canNow = f.ready || from !== f.by;
+  row.append(pvButton((canNow ? "convert" : "ghost-button") + " small-button pv-get", PV_ICONS.down,
     partly ? `Go on (${Math.floor((d.have / f.size) * 100)}%)` : `Download ${pvSize(f.size)}`, () => pvDownload(f)));
   if (partly) row.append(pvButton("ghost-button", "", "Cancel", (e) => pvCancel(f, e.currentTarget)));
   act.replaceChildren(line, row);

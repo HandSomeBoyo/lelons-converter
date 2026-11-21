@@ -1465,7 +1465,10 @@
       </div>
       <div class="gm-bar">
         <div class="gm-pills" id="gmPills" role="tablist" aria-label="Show"></div>
-        <div class="gm-chips" id="gmChips"></div>
+        <div class="gm-filter">
+          <button type="button" class="gm-filter-btn" id="gmFilterBtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filter</span><b id="gmFilterCount" hidden></b></button>
+          <div class="gm-filter-pop" id="gmChips" hidden></div>
+        </div>
       </div>
       <div class="fx-tools gm-tools">
         <label class="input fx-search">
@@ -1491,7 +1494,7 @@
     </div>
     <div class="pv-main" id="pvMain" hidden>
       <div class="pv-top">
-        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from your friend's PC to yours, so they (or a friend who already got it) need VaultHub open while you download.</p>
+        <p class="pv-how"><b>No uploading, no size limit.</b> Videos go straight from PC to PC.</p>
         <button type="button" class="convert small-button" id="pvNew">+ New video</button>
       </div>
       <div class="pv-grid" id="pvGrid"></div>

@@ -128,10 +128,19 @@ function renderGamePills() {
     return b;
   };
   $("gmPills").replaceChildren(...GM_STATUS.map(pill));
-  $("gmChips").replaceChildren(...GM_CHIPS.map((c) => gmButton("gm-chip" + (gmChips.has(c.key) ? " on" : ""), "", c.name, () => {
-    if (gmChips.has(c.key)) gmChips.delete(c.key); else gmChips.add(c.key);
-    renderGames();
-  })));
+  // The filters sit in one small Filter menu (they were four pills always on screen).
+  $("gmChips").replaceChildren(...GM_CHIPS.map((c) => {
+    const b = gmButton("gm-filter-row" + (gmChips.has(c.key) ? " on" : ""), '<i class="gm-check"></i>', c.name, () => {
+      if (gmChips.has(c.key)) gmChips.delete(c.key); else gmChips.add(c.key);
+      renderGames();
+    });
+    b.setAttribute("role", "menuitemcheckbox");
+    b.setAttribute("aria-checked", String(gmChips.has(c.key)));
+    return b;
+  }));
+  $("gmFilterBtn").classList.toggle("on", gmChips.size > 0);
+  $("gmFilterCount").hidden = !gmChips.size;
+  $("gmFilterCount").textContent = gmChips.size;
 }
 
 function gmPrice(info, big) {
@@ -201,7 +210,7 @@ function gameCard(game) {
   if (coop) kinds.push(coop);
   if ((info.genres || []).some((x) => /early access/i.test(x))) kinds.push("Early Access");
   body.append(gmEl("p", "gm-kinds", kinds.join(" · ") || (info.type === "dlc" ? "DLC" : "Game")));
-  body.append(gmEl("p", "gm-short", info.short));
+  // (the long Steam text is only in the game's window: the cards stay short)
   if (game.note) {
     const note = gmEl("div", "gm-note-line");
     note.append(profileLink(avatarEl(game.byAvatar, game.by || "?"), game.by), gmEl("span", "", game.note));
@@ -273,6 +282,7 @@ $("gmAdd").addEventListener("submit", async (e) => {
     return;
   }
   $("gmLink").value = $("gmNote").value = "";
+  gmShowNote();
   const parts = [];
   if (res.added.length) parts.push(res.added.length === 1 ? `Posted ${res.added[0].info.name}.` : `Posted ${res.added.length} games.`);
   if (res.already.length) parts.push(res.already.length === 1 ? `${res.already[0].info.name} was already here (posted by ${res.already[0].by || "someone"}).` : `${res.already.length} were already here.`);
@@ -285,7 +295,19 @@ $("gmAdd").addEventListener("submit", async (e) => {
   const card = first && [...$("gmGrid").children].find((c) => c.querySelector("h3") && c.querySelector("h3").textContent === first.info.name);
   if (card) { card.classList.add("fresh"); card.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
 });
-$("gmLink").addEventListener("input", () => { $("gmAddMsg").textContent = ""; });
+$("gmLink").addEventListener("input", () => { $("gmAddMsg").textContent = ""; gmShowNote(); });
+// "Why this one?" only shows up once there's a link to post.
+function gmShowNote() { $("gmAdd").classList.toggle("has-link", !!$("gmLink").value.trim() || !!$("gmNote").value.trim()); }
+gmShowNote();
+
+function gmFilterOpen(open) {
+  $("gmChips").hidden = !open;
+  $("gmFilterBtn").setAttribute("aria-expanded", String(open));
+}
+$("gmFilterBtn").addEventListener("click", (e) => { e.stopPropagation(); gmFilterOpen($("gmChips").hidden); });
+$("gmChips").addEventListener("click", (e) => e.stopPropagation()); // (ticking one redraws the menu: it stays open)
+document.addEventListener("click", (e) => { if (!$("gmChips").hidden && !e.target.closest(".gm-filter")) gmFilterOpen(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("gmChips").hidden) gmFilterOpen(false); });
 
 async function gmVote(game) {
   const on = !game.voted;
