@@ -370,8 +370,8 @@ function drawRoom() {
       b.addEventListener("click", fn);
       return b;
     };
-    tools.push(tool(CHAT_ICONS.people, "Add people", () => openGroupModal("edit", true)));
-    tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture and people", () => openGroupModal("edit")));
+    // (3.0) "Add people" lives in the group settings (the gear), to keep the top tidy.
+    tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture, people and adding people", () => openGroupModal("edit")));
   }
   if (chatWith && calls) {
     // Call them, or the whole group (or join the group's call that's going on).
