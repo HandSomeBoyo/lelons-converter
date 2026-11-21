@@ -245,13 +245,34 @@ function cmActions(t, d) {
     if (t.status === "done") row.append(cmButton("Mark as unread", "ghost-button", () => cmDone(t, false)));
   }
   row.append(Object.assign(document.createElement("span"), { className: "spacer" }));
-  row.append(cmButton("Open on YouTube", "link", () => api("/api/ch-open", {
-    url: `https://www.youtube.com/watch?v=${t.videoId}&lc=${t.id}` })));
+  // (3.0) The rarer things sit in a small ... menu, so each comment shows just its main buttons.
+  const wrap = Object.assign(document.createElement("div"), { className: "help-menu cm-more" });
+  const dots = cmButton("", "icon-button cm-dots", (e) => {
+    e.stopPropagation();
+    const open = pop.hidden;
+    cmCloseMenus();
+    pop.hidden = !open;
+  }, "More");
+  dots.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>';
+  const pop = Object.assign(document.createElement("div"), { className: "lib-menu help-pop cm-pop", hidden: true });
+  pop.append(cmButton("Open on YouTube", "", () => {
+    pop.hidden = true;
+    api("/api/ch-open", { url: `https://www.youtube.com/watch?v=${t.videoId}&lc=${t.id}` });
+  }));
   if (t.status !== "held" && t.status !== "mine" && d.google.canReply) {
-    row.append(cmButton("Hide", "link cm-hide", (e) => cmModerate(t, "hide", e.currentTarget), "Hide this comment from your channel. You can find it again in YouTube Studio under Comments > Removed."));
+    pop.append(cmButton("Hide from my channel", "cm-hide", (e) => { e.stopPropagation(); cmModerate(t, "hide", e.currentTarget); },
+      "You can find it again in YouTube Studio under Comments > Removed."));
   }
+  wrap.append(dots, pop);
+  row.append(wrap);
   return row;
 }
+
+function cmCloseMenus() {
+  document.querySelectorAll("#cmList .cm-pop").forEach((p) => { p.hidden = true; });
+}
+document.addEventListener("click", (e) => { if (!e.target.closest || !e.target.closest(".cm-pop")) cmCloseMenus(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cmCloseMenus(); });
 
 function cmBox(t, d) {
   const box = document.createElement("div");

@@ -223,13 +223,17 @@ const CH_ICONS = {
   comments: '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
 };
 
+const CH_NEWEST_FIRST = 6;
+let chNewestAll = false;
+
 function drawChNewest(d) {
   const videos = d.newest || [];
   if (!videos.length) {
     setChildren($("chNewest"), [Object.assign(document.createElement("p"), { className: "home-muted", textContent: d.loading ? "Loading..." : "No uploads yet." })]);
     return;
   }
-  setChildren($("chNewest"), videos.map((v, i) => {
+  const shown = chNewestAll ? videos : videos.slice(0, CH_NEWEST_FIRST);
+  const rows = shown.map((v, i) => {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "ch-video";
@@ -249,7 +253,15 @@ function drawChNewest(d) {
     if (v.usual && v.usual.tone === "new") usual.title = "Out for less than 2 days: too soon to tell";
     row.append(thumb, text, stats, usual);
     return row;
-  }));
+  });
+  // (3.0) The newest 6 first; the rest one click away, so the page isn't one long list.
+  if (videos.length > CH_NEWEST_FIRST) {
+    const more = Object.assign(document.createElement("button"), { type: "button", className: "ch-more",
+      textContent: chNewestAll ? "Show fewer" : `Show ${videos.length - CH_NEWEST_FIRST} more` });
+    more.onclick = () => { chNewestAll = !chNewestAll; $("channelTab").classList.add("stats-calm"); drawChNewest(chData); };
+    rows.push(more);
+  }
+  setChildren($("chNewest"), rows);
 }
 
 function drawChTop(d) {

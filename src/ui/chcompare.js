@@ -151,7 +151,6 @@ function drawChCmpRows(a, b, ready) {
     const vals = [a, b].map((v) => (ready || r.label === "Views" || r.label === "Length" ? r.get(v) : null));
     // "Average watched" is won by the higher share watched, not the longer time (a longer video always wins that).
     const scores = [a, b].map((v, i) => (r.score ? r.score(v) : vals[i]));
-    const max = Math.max(...scores.map((x) => Math.abs(x || 0)), 0) || 1;
     let win = -1;
     if (r.better && scores[0] != null && scores[1] != null && scores[0] !== scores[1]) {
       const lo = Math.min(scores[0], scores[1]), hi = Math.max(scores[0], scores[1]);
@@ -164,12 +163,7 @@ function drawChCmpRows(a, b, ready) {
       cell.style.setProperty("--side", CH_CMP_COLORS[i]);
       const value = Object.assign(document.createElement("b"), { textContent: vals[i] == null ? "–" : r.show(vals[i], i ? b : a) });
       if (r.exact && vals[i] != null) value.title = vals[i].toLocaleString();
-      const bar = Object.assign(document.createElement("span"), { className: "ch-cmp-bar" });
-      const fill = Object.assign(document.createElement("i"), {});
-      fill.style.width = (scores[i] == null || !r.better ? 0 : Math.max(3, Math.abs(scores[i]) / max * 100)) + "%";
-      fill.style.animationDelay = 120 + n * 50 + "ms";
-      bar.append(fill);
-      cell.append(value, bar);
+      cell.append(value); // (3.0) just the numbers; the better one gets a dot
       return cell;
     };
     const label = Object.assign(document.createElement("span"), { className: "ch-cmp-label", textContent: r.label });
