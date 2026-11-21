@@ -18,7 +18,7 @@ function saveImageOptions() {
 // ---- tabs
 
 // The side bar has 8 places. Some hold a few pages, picked with the bar at the top of the page.
-const TAB_SECTIONS = { convert: ["video", "files", "images", "history"], library: ["sfx", "fx"],
+const TAB_SECTIONS = { convert: ["video", "files", "images", "history"], 
   recording: ["games", "povs"], youtube: ["channel", "comments", "titles", "copyright"],
   live: ["live", "lvboard", "lvalerts", "lvstats"] };
 const sectionOf = (tab) => Object.keys(TAB_SECTIONS).find((k) => TAB_SECTIONS[k].includes(tab) && document.querySelector(`.sub-tabs button[data-tab="${tab}"]`)) || "";
@@ -74,7 +74,7 @@ document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => b.add
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // A page inside a place has news (like a game on sale): a dot on the place's side bar button too.

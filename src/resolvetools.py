@@ -89,8 +89,10 @@ class Tools(files.Files):
 
     # ---- the list
 
-    def _register(self, file_id, name, path, copied):
-        super()._register(file_id, name, path, copied)
+    def _register(self, file_id, name, path, copied, **more):
+        # (3.0) **more: the Files tab's add_path passes sub= and watch= since 2.32.0. Without them here,
+        # "Add a video" with the Open window broke (only dragging a video in worked).
+        super()._register(file_id, name, path, copied, **more)
         with self.lock:
             item = next(i for i in self.items if i["id"] == file_id)
             found = item["probe"]

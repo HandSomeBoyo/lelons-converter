@@ -774,7 +774,9 @@ returns void language sql security definer set search_path = '' as
 create or replace function lelons.online_json() returns json
   language sql stable security definer set search_path = '' as $$
   select json_build_object(
-    'online', (select count(*) from lelons.presence p where p.seen_at > now() - interval '150 seconds'),
+    -- (3.0) One account open on two PCs is one person: count people, plus each logged-out app.
+    'online', (select count(distinct p.account_id) + count(*) filter (where p.account_id is null)
+               from lelons.presence p where p.seen_at > now() - interval '150 seconds'),
     'people', coalesce((select json_agg(json_build_object('username', a.username, 'avatar', a.avatar, 'role', a.role,
                                                           'mode', a.mode, 'status', a.status)
                                         order by lower(a.username))
@@ -4173,7 +4175,7 @@ begin
     if what = 'preview' then
       return (select json_build_object('ok', true, 'server', jsonb_build_object('id', x.id, 'name', x.name, 'picture', x.picture,
                       'banner', x.banner, 'about', x.about, 'members', (select count(*) from lelons.server_members m where m.server_id = x.id),
-                      'online', (select count(*) from lelons.server_members m join lelons.presence p on p.account_id = m.account_id
+                      'online', (select count(distinct m.account_id) from lelons.server_members m join lelons.presence p on p.account_id = m.account_id
                                  where m.server_id = x.id and p.seen_at > now() - interval '150 seconds'),
                       'joined', exists (select 1 from lelons.server_members m where m.server_id = x.id and m.account_id = me.id)))
               from lelons.servers x where x.id = sid);

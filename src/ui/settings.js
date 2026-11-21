@@ -241,6 +241,7 @@ async function listSoundDevices() {
       soundDevices = await navigator.mediaDevices.enumerateDevices();
     } catch { /* no microphone, or not allowed: the lists just say "Microphone 1" */ }
   }
+  if (typeof callMatchDevices === "function") callMatchDevices(soundDevices);  // (3.0) your saved picks, found again
   drawSoundSettings();
 }
 
