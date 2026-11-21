@@ -112,6 +112,7 @@ const DOC_ICONS = {
   check: '<path d="M5.5 12.5l4 4 9-9"/>',
   moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  moreH: '<circle cx="6" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/>',
   more: '<circle cx="12" cy="6" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>',
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   pdf: '<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
@@ -522,24 +523,20 @@ function drawDocsHome() {
   $("docsMain").hidden = collab && !user;
   drawInvites();
   if (collab && !user) return;
-  // The "New document" button (it asks what kind)
+  // (3.0) One slim row: New document (it asks what kind), New folder, Import a PDF. Before, these were three big
+  // boxes that pushed your documents down the page.
   if (!$("docsTemplates").children.length) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "doc-template";
-    b.innerHTML = `<span class="doc-thumb"><span class="doc-thumb-page"><span class="doc-plus">${docIcon("plus")}</span></span></span><b class="doc-name-line">New document</b><small class="doc-note-line">Choose what to write</small>`;
-    b.addEventListener("click", () => openDocTypes());
-    const f = document.createElement("button");
-    f.type = "button";
-    f.className = "doc-template";
-    f.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus">${docIcon("folder")}</span></span><b class="doc-name-line">New folder</b><small class="doc-note-line">Keep a project together</small>`;
-    f.addEventListener("click", () => newFolder());
-    const pdf = document.createElement("button");
-    pdf.type = "button";
-    pdf.className = "doc-template";
-    pdf.innerHTML = `<span class="doc-thumb doc-thumb-folder"><span class="doc-plus doc-pdf-badge">${docIcon("pdf")}<em>PDF</em></span></span><b class="doc-name-line">Import a PDF</b><small class="doc-note-line">Edit it like any doc</small>`;
-    pdf.addEventListener("click", () => pickPdf(importPdfAsDoc));
-    $("docsTemplates").append(b, f, pdf);
+    const button = (cls, icon, label, title, fn) => {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "docs-new " + cls, title });
+      b.innerHTML = docIcon(icon) + "<span></span>";
+      b.querySelector("span").textContent = label;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    $("docsTemplates").append(
+      button("main", "plus", "New document", "Choose what to write", () => openDocTypes()),
+      button("", "folder", "New folder", "Keep a project together", () => newFolder()),
+      button("", "pdf", "Import a PDF", "Edit it like any doc", () => pickPdf(importPdfAsDoc)));
   }
   if (!docsF().folders.some((f) => f.id === docsFolderAt)) docsFolderAt = "";
   drawCrumbs();
@@ -560,6 +557,7 @@ function drawDocsHome() {
   const here = docsF().folders.find((f) => f.id === docsFolderAt);
   $("docsListTitle").textContent = here && !search ? `In ${here.name}` : collab ? "Shared with you" : "On this computer";
   setChildren($("docsGrid"), list.map(docCard));
+  drawRecent(all, search);
   $("docsEmpty").hidden = list.length > 0 || (folders.length > 0 && !search);
   $("docsEmpty").textContent = search ? "Nothing with that name."
     : here ? "This folder is empty. Start a document above, or drag documents onto the folder."
@@ -567,6 +565,34 @@ function drawDocsHome() {
     : collab && !docsCollab ? "Loading..."
     : collab ? "No shared documents yet. Start one above, then invite people with the Invite button."
     : "No documents yet. Start one above.";
+}
+
+// (3.0) "Jump back in": the last 3 documents you opened (on this computer), on the top of the Docs home.
+const docsRecentKey = () => "docsRecent" + (docsWhere === "collab" ? "Collab" : "Local");
+function docsRecent() { try { const v = JSON.parse(loadPref(docsRecentKey()) || "[]"); return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } }
+function docsRemember(where, id) {
+  const key = "docsRecent" + (where === "collab" ? "Collab" : "Local");
+  let v = [];
+  try { v = JSON.parse(loadPref(key) || "[]"); } catch (e) { /* start again */ }
+  savePref(key, JSON.stringify([id, ...(Array.isArray(v) ? v : []).filter((x) => x !== id)].slice(0, 6)));
+}
+function drawRecent(all, search) {
+  const box = $("docsRecent");
+  const byId = new Map(all.map((d) => [d.id, d]));
+  const recent = docsRecent().map((id) => byId.get(id)).filter(Boolean).slice(0, 3);
+  // Only on the top of the Docs home, and only when there are enough documents for it to help.
+  const show = !search && !docsFolderAt && recent.length > 0 && all.length > 4;
+  box.hidden = !show;
+  if (!show) return;
+  const collab = docsWhere === "collab";
+  $("docsRecentList").replaceChildren(...recent.map((d) => {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "docs-recent-item" });
+    b.innerHTML = `<span class="doc-card-icon">${docIcon(docTypeOf(d).icon)}</span><span><b></b><small></small></span>`;
+    b.querySelector("b").textContent = d.title;
+    b.querySelector("small").textContent = timeAgo(whenOf(d));
+    b.addEventListener("click", () => openDoc(collab ? "collab" : "local", d.id));
+    return b;
+  }));
 }
 
 const docCards = new Map();
@@ -599,6 +625,7 @@ function docCard(d) {
     const open = () => openDoc(collab ? "collab" : "local", d.id);
     card.addEventListener("click", open);
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+    card.addEventListener("contextmenu", (e) => { e.preventDefault(); docCardMenu(d, collab, more); }); // (3.0) right-click = the ... menu
     return card;
   });
 }
@@ -795,6 +822,7 @@ function folderCard(f, docs) {
     more.addEventListener("click", (e) => { e.stopPropagation(); const now = folderById(f.id); if (now) folderMenu(now, more); });
     card.addEventListener("click", () => openFolder(f.id));
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") openFolder(f.id); });
+    card.addEventListener("contextmenu", (e) => { e.preventDefault(); const now = folderById(f.id); if (now) folderMenu(now, more); });
     card.draggable = true;
     card.addEventListener("dragstart", (e) => { docsDrag = { folder: f.id }; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-vh-folder", f.id); card.classList.add("dragging"); document.body.classList.add("docs-dragging"); });
     card.addEventListener("dragend", () => { docsDrag = null; card.classList.remove("dragging"); document.body.classList.remove("docs-dragging"); });
@@ -867,6 +895,15 @@ async function deleteFolder(f) {
   drawDocsHome();
 }
 
+// Puts the "..." menu of a card or folder under its button. (3.0) Near the bottom of the window it
+// opens upward instead, so it isn't cut off below the edge.
+function docsPlaceMenu(menu, button) {
+  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
+  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
+  const up = r.bottom + 6 + menu.offsetHeight > innerHeight - 8 && r.top - 6 - menu.offsetHeight > 8;
+  menu.style.top = (up ? r.top - box.top - 6 - menu.offsetHeight : r.bottom - box.top + 6) + "px";
+}
+
 function folderMenu(f, button) {
   const menu = $("docsCardMenu");
   if (!menu.hidden && menu.dataset.id === "folder:" + f.id) { menu.hidden = true; return; }
@@ -885,9 +922,7 @@ function folderMenu(f, button) {
   menu.append(Object.assign(document.createElement("div"), { className: "lib-menu-line" }));
   item("trash", "Delete folder", () => deleteFolder(f), "danger");
   menu.hidden = false;
-  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
-  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
-  menu.style.top = r.bottom - box.top + 6 + "px";
+  docsPlaceMenu(menu, button);
 }
 
 // "Move to folder": every folder, as a tree.
@@ -943,6 +978,7 @@ async function openDoc(where, id, opts = {}) {
     return;
   }
   const d = res.doc;
+  if (!opts.fresh) docsRemember(where, id);
   doc = { where, id, kind: d.kind === "script" ? "script" : "doc", baseKind: d.kind === "script" ? "script" : "doc", title: d.title, mine: where === "local" || d.mine,
           people: d.people || [], rev: d.rev || 0, settings: docCleanSettings(d.settings), fresh: !!opts.fresh };
   docPending.clear(); docDeleted.clear(); docInFlight.clear();
@@ -1451,6 +1487,9 @@ function drawTabs() {
   for (const t of kids("")) row(t, 0);
   box.replaceChildren(...rows);
   $("docTabsHint").hidden = list.length > 0;
+  // (3.0) With only one page the list just repeats the tab over the page, so it hides until there are more
+  // ("Add a page" over the page is still there).
+  $("docTabs").hidden = list.length === 0;
 }
 $("docTitle").addEventListener("input", () => {
   const name = $("docTitle").value.trim() || "Untitled document";
@@ -1568,7 +1607,7 @@ function docShowTab(id) {
     drawMenubar();
     drawGuide();
     $("docOutline").hidden = loadPref(doc.kind === "script" ? "docOutlineScript" : "docOutlineDoc") === "0";
-    docHint("");
+    $("docHint").textContent = ""; // (3.0) not docHint(""): that's the "Title page." hint, which showed on every new page
   }
   docApplySettings();
   drawTabs();
@@ -1735,6 +1774,7 @@ drawDarkButton();
 
 // ---------------------------------------------------------------- the writing guide (next to the page)
 
+const docGuideCounted = new Set(); // "<doc id>:<kind>" counted this time the app is open
 function drawGuide() {
   const t = docTypeOf(doc), g = t.guide;
   docsText.dataset.hint = t.hint || "";
@@ -1742,6 +1782,14 @@ function drawGuide() {
   docEmptyCheck();
   $("docGuide").hidden = !g || loadPref("docGuideOff:" + t.key) === "1" || !$("docNotes").hidden;
   if (!g) return;
+  // (3.0) Once you've seen a kind's guide in 3 documents, it starts folded to one line ("Show how" opens it).
+  if (!$("docGuide").hidden && !docGuideCounted.has(doc.id + ":" + t.key)) {
+    docGuideCounted.add(doc.id + ":" + t.key);
+    savePref("docGuideSeen:" + t.key, String((Number(loadPref("docGuideSeen:" + t.key)) || 0) + 1));
+  }
+  $("docGuide").classList.toggle("folded", (Number(loadPref("docGuideSeen:" + t.key)) || 0) > 3);
+  $("docGuide").classList.remove("open");
+  $("docGuideFold").textContent = "Show how";
   $("docGuideTitle").textContent = g.title;
   $("docGuideIntro").textContent = g.intro;
   $("docGuideSteps").replaceChildren(...g.steps.map(([name, text], i) => {
@@ -1770,6 +1818,11 @@ function docShowGuide(on) {
   docFit();
 }
 $("docGuideClose").addEventListener("click", () => docShowGuide(false));
+// (3.0) In a small window the guide sits over the page, folded to one line until you open it.
+$("docGuideFold").addEventListener("click", () => {
+  const open = $("docGuide").classList.toggle("open");
+  $("docGuideFold").textContent = open ? "Show less" : "Show how";
+});
 
 // An empty table with just the column names (the rest is up to you).
 function docGuideTable(cols, rows) {
@@ -2486,26 +2539,25 @@ function buildToolbar() {
   if (pdfeIsPage(docTab)) return pdfeToolbar();
   const script = doc.kind === "script";
   const sep = '<span class="doc-sep"></span>';
-  const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), tb("print", "print", "Print or save as PDF (Ctrl+P)"), sep];
+  // (3.0) Fewer buttons: the ones you need less often (print, page break, indent...) wait under "More" at the end.
+  const more = `<button type="button" class="doc-tool doc-more" data-pop="more" title="More">${docIcon("moreH")}</button>`;
+  const parts = [tb("undo", "undo", "Undo (Ctrl+Z)"), tb("redo", "redo", "Redo (Ctrl+Y)"), sep];
   if (script) {
     parts.push(`<button type="button" class="doc-select doc-element" data-pop="element" title="What this line is (Tab changes it)"><span>Action</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`,
       `<button type="button" class="doc-select doc-font" data-pop="font" title="Font"><span>Courier Prime</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
       tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"), sep,
-      tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("numbers-scene", "numbersScene", "Scene numbers"), sep,
-      tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Scenes"));
+      tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Scenes"), more);
   } else {
     parts.push(`<button type="button" class="doc-select doc-style" data-pop="style" title="Text style"><span>Normal text</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`,
       `<button type="button" class="doc-select doc-font" data-pop="font" title="Font"><span>Inter</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 10l5 5 5-5"/></svg></button>`, sep,
       tb("smaller", "minus", "Smaller text"), `<input class="doc-size" id="docSize" value="11" title="Text size" inputmode="numeric" maxlength="3">`, tb("bigger", "plus", "Bigger text"), sep,
-      tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"), tb("strikeThrough", "strike", "Strikethrough"),
+      tb("bold", "bold", "Bold (Ctrl+B)"), tb("italic", "italic", "Italic (Ctrl+I)"), tb("underline", "underline", "Underline (Ctrl+U)"),
       `<button type="button" class="doc-tool doc-color" data-pop="color" title="Text color">${docIcon("color")}<i></i></button>`,
       `<button type="button" class="doc-tool doc-color hl" data-pop="highlight" title="Highlight">${docIcon("highlight")}<i></i></button>`, sep,
       tb("link", "link", "Link (Ctrl+K)"), tb("image", "image", "Picture"), `<button type="button" class="doc-tool" data-pop="table" title="Table">${docIcon("table")}</button>`, sep,
       `<button type="button" class="doc-tool doc-align" data-pop="align" title="Line up the text">${docIcon("left")}</button>`,
       `<button type="button" class="doc-tool" data-pop="spacing" title="Line spacing">${docIcon("spacing")}</button>`, sep,
-      tb("checklist", "checklist", "Checklist"), tb("insertUnorderedList", "bullets", "Bullets"), tb("insertOrderedList", "numbers", "Numbered list"),
-      tb("outdent", "outdent", "Less indent"), tb("indent", "indent", "More indent"), sep,
-      tb("removeFormat", "clear", "Clear formatting (Ctrl+\\)"), tb("pagebreak", "pagebreak", "Page break (Ctrl+Enter)"), tb("find", "find", "Find and replace (Ctrl+F)"), tb("outline", "outline", "Outline"));
+      tb("checklist", "checklist", "Checklist"), tb("insertUnorderedList", "bullets", "Bullets"), tb("insertOrderedList", "numbers", "Numbered list"), more);
   }
   $("docToolbar").innerHTML = parts.join("");
   $("docToolbar").querySelectorAll("button").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault())); // keep the selection
@@ -2601,7 +2653,9 @@ function docBlockHeld(key) {
 
 // Which buttons are "on" for where the caret is.
 function docToolState() {
-  if (!doc || !$("docSize")) return; // PDF pages have their own toolbar
+  // PDF pages have their own toolbar. (3.0) Script pages have no size box, so this used to stop
+  // here for them too, and "Action" and the hint at the bottom never changed as you moved around.
+  if (!doc || !$("docToolbar").querySelector("#docSize, .doc-element")) return;
   const sel = getSelection();
   const inside = sel.rangeCount && docsText.contains(sel.anchorNode);
   const q = (cmd) => { try { return inside && document.queryCommandState(cmd); } catch (e) { return false; } };
@@ -2785,6 +2839,24 @@ function docOpenPop(kind, button) {
       item(entry.label, entry.fn, { icon: entry.icon || "blank", key: entry.key, on: entry.on, more: entry.more, cls: entry.danger ? "danger" : "", disabled: entry.disabled });
     }
     if (pop.lastChild && pop.lastChild.classList.contains("lib-menu-line")) pop.lastChild.remove();
+  } else if (kind === "more") {
+    // (3.0) the toolbar buttons you need less often
+    const on = (cmd) => { try { return !!docKeepRange && document.queryCommandState(cmd); } catch (e) { return false; } };
+    if (doc.kind === "script") {
+      item("Scene numbers", () => docCommand("numbers-scene"), { icon: "numbersScene", on: docsText.classList.contains("numbers") });
+      item("Page break", () => docCommand("pagebreak"), { icon: "pagebreak", key: "Ctrl+Enter" });
+    } else {
+      item("Strikethrough", () => docCommand("strikeThrough"), { icon: "strike", on: on("strikeThrough") });
+      item("Less indent", () => docCommand("outdent"), { icon: "outdent" });
+      item("More indent", () => docCommand("indent"), { icon: "indent" });
+      item("Clear formatting", () => docCommand("removeFormat"), { icon: "clear", key: "Ctrl+\\" });
+      item("Page break", () => docCommand("pagebreak"), { icon: "pagebreak", key: "Ctrl+Enter" });
+      line();
+      item("Find and replace", () => docCommand("find"), { icon: "find", key: "Ctrl+F" });
+      item("Outline", () => docCommand("outline"), { icon: "outline", on: !$("docOutline").hidden });
+    }
+    line();
+    item("Print or save as PDF", () => docCommand("print"), { icon: "print", key: "Ctrl+P" });
   } else if (kind === "spacing") {
     head("Line spacing");
     const now = docSettings().line;
@@ -4727,9 +4799,7 @@ function docCardMenu(d, collab, button) {
   if (collab && !d.mine) item("leave", "Leave this document", () => docCardRemove(d, collab), "danger");
   else item("trash", "Delete", () => docCardRemove(d, collab), "danger");
   menu.hidden = false;
-  const r = button.getBoundingClientRect(), box = $("docsTab").getBoundingClientRect();
-  menu.style.left = Math.max(0, Math.min(r.right - box.left - menu.offsetWidth, box.width - menu.offsetWidth)) + "px";
-  menu.style.top = r.bottom - box.top + 6 + "px";
+  docsPlaceMenu(menu, button);
 }
 document.addEventListener("mousedown", (e) => {
   const menu = $("docsCardMenu");

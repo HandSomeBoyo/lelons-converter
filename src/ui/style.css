@@ -9024,3 +9024,81 @@ button.stats-bar { cursor: pointer; }
   .sound .play .eq i { animation: none; transform: scaleY(.7); }
   #sfxList.list-in > .sound { animation: none; }
 }
+
+
+/* ---------------------------------------------------------------- 3.0: Docs page fixes */
+/* the dark page button is the same height as Saved and Only you next to it */
+.doc-top .doc-notes-button { box-sizing: border-box; width: 36px; height: 36px; padding: 0; }
+.doc-top .doc-notes-button svg { width: 17px; height: 17px; }
+/* the bar under the page is solid, so the white page doesn't show through it as a grey block */
+.doc-status { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* the guide's "Show how": in a small window, or once you've seen that guide a few times */
+.doc-guide-fold { display: none; flex: none; font-size: 13px; margin-top: 2px; }
+#docGuide.folded .doc-guide-fold { display: block; order: 2; flex-basis: 100%; margin-top: 4px; }
+#docGuide.folded:not(.open) > :not(.doc-guide-head) { display: none; }
+#docGuide.folded:not(.open) { padding-bottom: 12px; }
+#docGuide.folded .doc-guide-head { flex-wrap: wrap; }
+/* small window: the guide sits over the page, folded to one line, so the page stays in view */
+@container page (max-width: 960px) {
+  #docGuide { animation: none; padding: 12px 14px; }
+  #docGuide .doc-guide-head { align-items: center; }
+  #docGuide .doc-guide-head h4 { margin: 0; }
+  #docGuide .doc-guide-fold, #docGuide.folded .doc-guide-fold { display: inline; order: 0; flex-basis: auto; margin-top: 0; }
+  #docGuide:not(.open) > :not(.doc-guide-head) { display: none; }
+  #docGuide .doc-guide-head .icon-button { margin: 0 -4px 0 0; }
+}
+/* the "What do you want to write?" picker is a bit wider, so no note gets cut off with "..." */
+.doc-type-dialog { width: min(700px, 100%); }
+/* (3.0) the icons at the top right (help, bell, you) stay where they are on every other page when a
+   document opens, even though the editor itself uses the whole width */
+body.doc-open main > .top { box-sizing: border-box; width: min(100% - 40px, 960px); margin-inline: auto; }
+@media (max-width: 900px) { body.doc-open main > .top { width: min(100% - 4px, 960px); } }
+
+/* ---------------------------------------------------------------- 3.0: Docs home, calmer */
+/* one slim row of "new" buttons instead of three big boxes */
+.docs-new-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
+.docs-new {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px 0 13px;
+  border-radius: 999px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font: 600 13.5px var(--head);
+  cursor: pointer; transition: background-color .2s var(--ease), transform .25s var(--spring), box-shadow .2s var(--ease);
+}
+.docs-new svg { width: 17px; height: 17px; color: var(--accent); }
+:root[data-theme="light"] .docs-new svg { color: var(--accent-text); }
+.docs-new:hover { background: var(--panel2); transform: translateY(-1px); }
+.docs-new:active { transform: scale(.97); }
+.docs-new:focus-visible { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .9); }
+.docs-new.main { background: var(--accent); color: #111; box-shadow: none; }
+.docs-new.main svg { color: #111; }
+.docs-new.main:hover { filter: brightness(1.06); background: var(--accent); }
+
+/* "Jump back in": the last documents you opened */
+.docs-recent { margin: 0 0 30px; }
+.docs-recent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.docs-recent-item {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 14px 10px 10px;
+  border-radius: 14px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer;
+  transition: background-color .2s var(--ease), transform .25s var(--spring);
+}
+.docs-recent-item:hover { background: var(--panel2); transform: translateY(-1px); }
+.docs-recent-item:active { transform: scale(.98); }
+.docs-recent-item:focus-visible { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .9); }
+.docs-recent-item > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.docs-recent-item b { font: 600 14px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.docs-recent-item small { color: var(--muted); font-size: 12.5px; }
+
+/* cards: a softer lift on hover, and the little page slides up a bit so you see more of it */
+.doc-card .doc-text.thumb { transition: translate 1.4s var(--ease); }
+.doc-card:hover .doc-text.thumb { translate: 0 -14px; }
+.doc-card:hover .doc-thumb, .doc-card:focus-visible .doc-thumb { transform: translateY(-4px); }
+
+/* a soft fade when a document opens, and when you go back to your documents */
+@keyframes docs-in { from { opacity: 0; translate: 0 6px; } }
+#docEditor:not([hidden]), #docsHome:not([hidden]) { animation: docs-in .3s var(--ease) backwards; }
+
+/* "Not saved yet": the dot pulses once, so you notice it */
+@keyframes doc-dirty-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 159, 10, .55); } 100% { box-shadow: 0 0 0 7px rgba(255, 159, 10, 0); } }
+.doc-saved.dirty::before { animation: here-in .4s var(--spring), doc-dirty-pulse 1.1s .3s var(--ease) 1; }
+@media (prefers-reduced-motion: reduce) {
+  #docEditor:not([hidden]), #docsHome:not([hidden]), .doc-saved.dirty::before { animation: none; }
+  .doc-card:hover .doc-text.thumb { translate: none; }
+}
