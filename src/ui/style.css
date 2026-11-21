@@ -9079,27 +9079,9 @@ button.stats-bar { cursor: pointer; }
 @container libmain (max-width: 560px) {
   .lib-tools .history-search { flex: 1 1 100%; }
 }
-/* Film assets: the search looks like the one on Sounds, and the row has one height */
-.fx-browse > .fx-tools { align-items: center; }
-.fx-browse > .fx-tools > .input, .fx-browse > .fx-tools > .quality, .fx-browse > .fx-tools > .fx-new { height: 44px; box-sizing: border-box; }
-.fx-browse .fx-new { display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; }
-.fx-browse .fx-new svg { width: 16px; height: 16px; }
-.fx-toast { position: fixed; z-index: 200; left: 50%; bottom: 26px; transform: translate(-50%, 16px); max-width: min(520px, 90vw); padding: 11px 16px;
-  border-radius: 10px; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); font-size: 13.5px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
-.fx-toast.show { opacity: 1; transform: translate(-50%, 0); }
-.fx-icon.sure, .ghost-button.fx-danger.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
 /* The category buttons sit above the genres: picking Music no longer pushes them 200px to the right */
 #sfxMain > .lib-cats { grid-column: 1 / -1; }
 #sfxMain.has-genres > .lib-cats { margin-bottom: -8px; }
-/* Film assets: a slim banner instead of a big one that repeated the first pack */
-.fx-hero { min-height: 150px; align-items: center; }
-.fx-hero-text { padding: 22px 28px; }
-.fx-hero-text .headline { margin: 0 0 14px; }
-.fx-hero-buttons:empty, .fx-hero-buttons[hidden] { display: none; }
-.fx-hero-text > [hidden] { display: none; }
-#fxHeroOpen { height: 36px; padding: 0 16px; font-size: 13.5px; }
-
 /* ---- 3.0 visual touches on Sounds */
 /* hovering a waveform lights it up to the mouse: where the sound starts if you click */
 .sound .bars i.peek { background: color-mix(in srgb, var(--accent) 35%, var(--bars-hover)); }
