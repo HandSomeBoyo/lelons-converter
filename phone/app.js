@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.4.0";
+const VERSION = "phone 1.5.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -311,8 +311,9 @@ function afterRender() {
 function bindPage() {
   const root = $("#app");
   root.onclick = (e) => {
-    const t = e.target.closest("[data-open],[data-server],[data-voice],[data-callkey],[data-play],[data-seg],[data-cat],[data-genre],[data-act]");
+    const t = e.target.closest("[data-open],[data-server],[data-voice],[data-callkey],[data-play],[data-seg],[data-cat],[data-genre],[data-act],[data-tab-go]");
     if (!t) return;
+    if (t.dataset.tabGo) { S.tab = t.dataset.tabGo; store.set("tab", S.tab); return render(); }
     if (t.dataset.open !== undefined) return openChat(t.dataset.open, t.dataset.title, t.dataset.sub);
     if (t.dataset.server) return openServer(t.dataset.server);
     if (t.dataset.voice) return startCall("g:" + t.dataset.voice, t.dataset.title, t.dataset.sub);
@@ -343,32 +344,53 @@ function voiceNow() {
 
 function homeHtml() {
   const me = S.me || {};
-  const rows = [];
-  for (const v of voiceNow()) {
+  const h = new Date().getHours();
+  const hello = h < 5 ? "Up late" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  // Who's online (not you)
+  const online = ((S.index && S.index.online && S.index.online.people) || []).filter((p) => lower(p.username) !== lower(me.username));
+  const friends = online.length ? `<div class="lbl">Online now</div><div class="friends">${online.map((p) => `<button data-open="${esc(p.username)}" data-title="${esc(p.username)}">
+      ${avatar(p.username, publicUrl(p.avatar), { big: true, dot: "#34c759" })}<span class="one">${esc(p.username)}</span></button>`).join("")}</div>` : "";
+
+  // Voice channels with people in them: big green cards
+  const voice = voiceNow().map((v) => {
     const p = v.channel.people;
-    const first = p[0];
-    rows.push(`<button class="row" data-voice="${esc(v.channel.id)}" data-title="${esc(v.channel.name)}" data-sub="${esc(v.server.name)}">${avatar(first.username, publicUrl(first.avatar), { small: true, dot: "#4da3ff" })}
-      <div class="grow"><b>${esc(p.map((x) => x.username).join(", "))}</b> <span class="muted sm">in ${esc(v.channel.name)}</span><div class="sm muted">${esc(v.server.name)} voice</div></div>
-      <span class="btn2 go">Join</span></button>`);
-  }
+    return `<button class="voice-card" data-voice="${esc(v.channel.id)}" data-title="${esc(v.channel.name)}" data-sub="${esc(v.server.name)}">
+      <div class="faces">${p.slice(0, 4).map((x) => avatar(x.username, publicUrl(x.avatar), { small: true })).join("")}</div>
+      <div class="grow"><b class="one">${esc(p.map((x) => x.username).join(", "))}</b><div class="sm one">${esc(v.channel.name)} · ${esc(v.server.name)}</div></div>
+      <span class="join">Join</span></button>`;
+  }).join("");
+
+  // New messages
+  const rows = [];
   for (const u of unreadChats().slice(0, 4)) {
-    rows.push(`<button class="row" data-open="${esc(u.key)}" data-title="${esc(u.name)}">${avatar(u.name, publicUrl(u.avatar), { small: true, square: u.group })}
-      <div class="grow"><b>${esc(u.name)}</b><div class="sm muted one">${esc(u.text || "")}</div></div><span class="unread">new</span></button>`);
+    rows.push(`<button class="row" data-open="${esc(u.key)}" data-title="${esc(u.name)}">${avatar(u.name, publicUrl(u.avatar), { square: u.group, letters: u.group ? initials(u.name) : "" })}
+      <div class="grow"><div class="row between"><b class="one">${esc(u.name)}</b><span class="sm" style="color:var(--accent);flex:none">${esc(timeOf(u.at))}</span></div><div class="sm one">${esc(u.text || "")}</div></div><span class="dotn"></span></button>`);
   }
   for (const s of S.servers) for (const c of s.channels || []) {
-    if (c.kind === "text" && c.unread && rows.length < 7) {
-      rows.push(`<button class="row" data-server="${esc(s.id)}">${avatar(s.name, publicUrl(s.picture), { small: true, square: true, letters: initials(s.name) })}
-        <div class="grow"><b>${esc(s.name)}</b><div class="sm muted"># ${esc(c.name)}${c.mentions ? ` · <span style="color:var(--accent)">@ you</span>` : ""}</div></div><span class="unread">${c.unread}</span></button>`);
+    if (c.kind === "text" && c.unread && rows.length < 6) {
+      rows.push(`<button class="row" data-server="${esc(s.id)}">${avatar(s.name, publicUrl(s.picture), { square: true, letters: initials(s.name), bg: "#1f7a4a" })}
+        <div class="grow"><b class="one">${esc(s.name)}</b><div class="sm muted"># ${esc(c.name)}${c.mentions ? ` · <span style="color:var(--accent)">mentioned you</span>` : ""}</div></div><span class="unread">${c.mentions ? "@" : c.unread}</span></button>`);
     }
   }
-  if (!rows.length) rows.push(`<div class="muted sm" style="padding:14px 0">All caught up. Nobody is in a voice channel right now.</div>`);
+  const news = rows.length ? `<div class="lbl">New messages</div><div class="card list">${rows.join("")}</div>`
+    : `<div class="caught"><span>✓</span><div><b>All caught up</b><div class="sm muted">No new messages${voice ? "" : " and nobody is in voice"}.</div></div></div>`;
 
-  return `<div class="row between" style="margin-top:10px">
-      <div class="row" style="gap:10px"><div class="av s sq" style="background:#1c1c1e;font-family:var(--head);border-radius:10px">V</div><b style="font:700 19px var(--head)">Vault<span style="font-weight:400;color:var(--muted)">Hub</span></b></div>
-      ${avatar(me.username, publicUrl(me.avatar), { small: true, dot: "#b98cff" })}</div>
-    <h1 style="margin-top:18px">Hey <em>${esc(me.username || "there")}</em>.</h1>
-    <div class="lbl">Right now</div>
-    <div class="card list">${rows.join("")}</div>
+  // Shortcuts
+  const unread = unreadChats().length + S.servers.reduce((n, s) => n + (s.channels || []).filter((c) => c.kind === "text" && c.unread).length, 0);
+  const np = S.playing;
+  const tiles = `<div class="bento">
+    <button class="tile t-chat" data-tab-go="chat"><span class="ti">${I.chat}</span><b>Chat</b><span class="sm">${unread ? `${unread} new` : "Messages and servers"}</span></button>
+    <button class="tile t-lib" data-tab-go="lib"><span class="ti">${I.lib}</span><b>${np ? esc(np.name) : "Library"}</b><span class="sm">${np ? (plAudio().paused ? "Paused" : "Playing now") : "Music and sounds"}</span></button>
+    <button class="tile t-docs" data-act="docs"><span class="ti">${DI.doc}</span><b>Docs</b><span class="sm">Shared documents</span></button>
+    <button class="tile t-live" data-tab-go="live"><span class="ti">${I.live}</span><b>Live</b><span class="sm">Your Twitch stream</span></button></div>`;
+
+  return `<div class="hello">${avatar(me.username, publicUrl(me.avatar), { dot: "#34c759" })}
+      <div class="grow"><div class="sm muted">${hello}</div><b>${esc(me.username || "there")}</b></div>
+      <div class="brand">Vault<span>Hub</span></div></div>
+    ${voice ? `<div class="lbl">In voice now</div>${voice}` : ""}
+    ${news}
+    ${friends}
+    <div class="lbl">Shortcuts</div>${tiles}
     <div class="lbl">Games on sale</div>
     ${gamesHtml()}`;
 }
@@ -382,8 +404,9 @@ function gamesHtml() {
   if (!S.games) { loadGames(); return '<div class="spin" style="margin:20px auto"></div>'; }
   const sale = S.games.filter((g) => g.info && g.info.price && (g.info.price.discount > 0)).sort((a, b) => b.info.price.discount - a.info.price.discount);
   if (!sale.length) return '<div class="muted sm" style="padding:6px 2px">No games from your list are on sale right now.</div>';
-  return `<div class="games">${sale.slice(0, 12).map((g) => `<div class="card game">${g.info.header ? `<img src="${esc(g.info.header)}" loading="lazy" alt="">` : '<div class="ph"></div>'}
-    <div><b class="sm one" style="display:block">${esc(g.info.name)}</b><div class="sm"><span class="sale">-${g.info.price.discount}%</span> <span class="muted">${esc(g.info.price.text || "")}</span></div></div></div>`).join("")}</div>`;
+  return `<div class="games">${sale.slice(0, 12).map((g) => `<div class="game">${g.info.header ? `<img src="${esc(g.info.header)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:${esc(JSON.stringify(initials(g.info.name)))}}))">` : `<div class="ph">${esc(initials(g.info.name))}</div>`}
+    <span class="sale">-${g.info.price.discount}%</span>
+    <div class="gi"><b class="one">${esc(g.info.name)}</b><div class="sm muted">${esc(g.info.price.text || "")}</div></div></div>`).join("")}</div>`;
 }
 
 async function loadGames() {
@@ -573,37 +596,61 @@ function renderMessages(error) {
   if (!el || !v) return;
   if (v.loading) { el.innerHTML = '<div class="spin"></div>'; return; }
   if (error) { el.innerHTML = `<div class="empty">${esc(error)}</div>`; return; }
-  if (!v.messages.length) { el.innerHTML = '<div class="empty">No messages yet. Say hi!</div>'; return; }
-  let prev = null;
-  el.innerHTML = v.messages.map((m) => {
-    const same = prev && prev.username === m.username && !m.auto && !prev.auto && new Date(m.created_at) - new Date(prev.created_at) < 5 * 60e3;
-    prev = m;
-    return messageHtml(m, same);
-  }).join("");
+  if (!v.messages.length) { el.innerHTML = `<div class="empty chat-empty">${avatar(v.title.replace(/^# /, ""), "", { big: true })}<b>${esc(v.title)}</b><div class="muted sm">No messages yet. Say hi!</div></div>`; return; }
+  // Bubbles in groups: the same person within 5 minutes. A day line between days.
+  const dm = !!v.key && !v.key.startsWith("g:");
+  const list = v.messages;
+  const out = [];
+  let day = "";
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i], prev = list[i - 1], next = list[i + 1];
+    const d = new Date(m.created_at).toDateString();
+    if (d !== day) { day = d; out.push(`<div class="day"><span>${esc(dayName(m.created_at))}</span></div>`); }
+    const joins = (a, b) => a && b && !a.auto && !b.auto && lower(a.username) === lower(b.username)
+      && Math.abs(new Date(b.created_at) - new Date(a.created_at)) < 5 * 60e3 && new Date(a.created_at).toDateString() === new Date(b.created_at).toDateString();
+    const gap = !next || new Date(next.created_at) - new Date(m.created_at) > 10 * 60e3;
+    out.push(messageHtml(m, { first: !joins(prev, m), last: !joins(m, next), dm, time: gap && !joins(m, next) }));
+  }
+  el.innerHTML = out.join("");
 }
 
-function messageHtml(m, same) {
+function dayName(iso) {
+  const d = new Date(iso), now = new Date();
+  if (d.toDateString() === now.toDateString()) return "Today";
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" });
+}
+
+function messageHtml(m, o) {
   const me = S.me && lower(m.username) === lower(S.me.username);
   const pinged = S.me && !me && new RegExp(`@${escapeRe(S.me.username)}\\b`, "i").test(m.message || "");
-  const name = m.auto ? "VaultHub" : m.username;
-  const color = m.auto ? "var(--text)" : me ? "var(--accent)" : NAMECOLORS[hash(m.username) % NAMECOLORS.length];
-  const face = m.auto ? avatar("V", "", { small: true, bg: "#2c2c2e" }) : avatar(m.username, publicUrl(m.avatar), { small: true });
+  const time = new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // VaultHub's own posts ("Kim joined", "Zed posted a game") are a quiet line in the middle.
+  if (m.auto) {
+    return `<div class="sys"><span>${formatText(m.message || "")}</span>${m.card ? cardHtml(m.card) : ""}<i>${esc(time)}</i></div>`;
+  }
   const parts = [];
-  if (m.reply && !m.reply.gone) parts.push(`<div class="reply">↪ ${esc(m.reply.username)}: ${esc(m.reply.message || m.reply.kind || "")}</div>`);
-  if (m.message) parts.push(`<div>${formatText(m.message)}${m.edited ? ' <span class="muted sm">(edited)</span>' : ""}</div>`);
+  let media = "";
+  if (m.reply && !m.reply.gone) parts.push(`<div class="reply"><b>${esc(m.reply.username)}</b> ${esc(m.reply.message || m.reply.kind || "")}</div>`);
+  if (m.message) parts.push(`<div class="tx">${formatText(m.message)}${m.edited ? ' <span class="ed">edited</span>' : ""}</div>`);
   if (m.card) parts.push(cardHtml(m.card));
-  if (m.sound) parts.push(`<div class="attach snd"><button class="play" data-play="${esc(m.sound.id)}" data-url="${esc(publicUrl(m.sound.path))}" data-name="${esc(m.sound.name)}">${I.play}</button><div class="grow"><b class="sm one" style="display:block">${esc(m.sound.name)}</b><div class="sm muted">Sound from the Library</div></div></div>`);
-  if (m.voice && m.file) parts.push(`<div class="attach"><audio controls preload="none" src="${esc(publicUrl(m.file))}" style="width:240px"></audio></div>`);
-  else if (m.file && !m.gif) parts.push(`<div class="attach"><audio controls preload="none" src="${esc(publicUrl(m.file))}" style="width:240px"></audio><div class="sm muted">${esc(m.file_name || "Clip")}</div></div>`);
+  if (m.sound) parts.push(`<div class="snd-b"><button class="play" data-play="${esc(m.sound.id)}" data-url="${esc(publicUrl(m.sound.path))}" data-name="${esc(m.sound.name)}">${S.playing && S.playing.id === m.sound.id && !$("#audio").paused ? I.pause : I.play}</button><div class="grow"><b class="one">${esc(m.sound.name)}</b><div class="sm">${m.sound.seconds ? duration(m.sound.seconds) + " · " : ""}Library</div></div></div>`);
+  if (m.file && (m.voice || !m.gif)) parts.push(`<div class="clip"><audio controls preload="none" src="${esc(publicUrl(m.file))}"></audio>${m.voice ? "" : `<div class="sm">${esc(m.file_name || "Clip")}</div>`}</div>`);
   const gif = m.gif === "@file" ? publicUrl(m.file) : m.gif && String(m.gif).startsWith("https://") ? m.gif : "";
-  if (gif) parts.push(`<div class="attach"><img src="${esc(gif)}" loading="lazy" alt=""></div>`);
-  if (m.sticker) parts.push(`<div class="muted sm">[sticker: ${esc(m.sticker)}]</div>`);
-  if (m.poll) parts.push(`<div class="attach card" style="padding:10px 12px"><b class="sm">📊 ${esc(m.poll.q)}</b>${(m.poll.options || []).map((o, i) => { const v = (m.votes || []).find((x) => x.choice === i); return `<div class="sm row between" style="margin-top:6px"><span>${esc(o)}</span><span class="muted">${v ? v.count : 0}</span></div>`; }).join("")}<div class="sm muted" style="margin-top:6px">Vote on your PC for now</div></div>`);
-  if (m.call_seconds != null) parts.push(`<div class="muted sm">📞 Call, ${Math.round(m.call_seconds / 60)} min</div>`);
-  if (m.thread && m.thread.count) parts.push(`<div class="sm" style="color:var(--accent);margin-top:4px">${m.thread.count} ${m.thread.count === 1 ? "reply" : "replies"}</div>`);
-  if (m.reactions && m.reactions.length) parts.push(`<div class="reacts">${m.reactions.map((r) => `<span class="${r.mine ? "mine" : ""}">${esc(r.emoji)} ${r.count}</span>`).join("")}</div>`);
-  if (same && !pinged) return `<div class="msg cont"><div class="av s"></div><div class="body">${parts.join("")}</div></div>`;
-  return `<div class="msg ${pinged ? "me-ping" : ""}">${face}<div class="body"><div class="n" style="color:${color}">${esc(name)}${m.auto ? '<span class="pill">AUTO</span>' : ""}<span class="t">${esc(timeOf(m.created_at))}</span></div>${parts.join("")}</div></div>`;
+  if (gif) media = `<img class="media" src="${esc(gif)}" loading="lazy" alt="">`;
+  if (m.sticker) parts.push(`<div class="sm">[sticker: ${esc(m.sticker)}]</div>`);
+  if (m.poll) parts.push(`<div class="poll"><b>📊 ${esc(m.poll.q)}</b>${(m.poll.options || []).map((opt, i) => { const v = (m.votes || []).find((x) => x.choice === i); const n = v ? v.count : 0; const all = (m.votes || []).reduce((t, x) => t + x.count, 0) || 1; return `<div class="opt"><i style="width:${Math.round(n / all * 100)}%"></i><span>${esc(opt)}</span><span>${n}</span></div>`; }).join("")}</div>`);
+  if (m.call_seconds != null) parts.push(`<div class="tx">📞 Call · ${Math.max(1, Math.round(m.call_seconds / 60))} min</div>`);
+  if (m.thread && m.thread.count) parts.push(`<div class="sm thr">${m.thread.count} ${m.thread.count === 1 ? "reply" : "replies"}</div>`);
+  const onlyMedia = media && !parts.length;
+  const reacts = m.reactions && m.reactions.length ? `<div class="reacts">${m.reactions.map((r) => `<button class="${r.mine ? "mine" : ""}" data-react="${esc(r.emoji)}" data-mid="${m.id}" data-on="${r.mine ? 0 : 1}">${esc(r.emoji)}${r.count > 1 ? ` <b>${r.count}</b>` : ""}</button>`).join("")}</div>` : "";
+  const name = o.first && !me && !o.dm ? `<div class="who" style="color:${NAMECOLORS[hash(m.username) % NAMECOLORS.length]}">${esc(m.username)}</div>` : "";
+  const face = !me ? (o.last ? avatar(m.username, publicUrl(m.avatar), { small: true }) : '<div class="av s ghost"></div>') : "";
+  const cls = ["brow", me ? "me" : "them", o.first ? "first" : "", o.last ? "last" : "", pinged ? "ping" : ""].join(" ");
+  return `<div class="${cls}" data-mid="${m.id}">${face}<div class="bcol">${name}
+    <div class="bub ${onlyMedia ? "only-media" : ""}">${media}${parts.join("")}</div>${reacts}
+    ${o.time ? `<div class="bt">${esc(time)}</div>` : ""}</div></div>`;
 }
 
 function escapeRe(s) { return String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
@@ -668,7 +715,7 @@ function libHtml() {
   return head + `<div class="list">${list.map((s) => {
     const on = S.playing && S.playing.id === s.id;
     const by = s.mine ? "you" : s.uploader || "someone";
-    return `<button class="row track ${on ? "on" : ""}" data-play="${esc(s.id)}"><div class="tile">${on && !$("#audio").paused ? I.pause : I.play}</div>
+    return `<button class="row track ${on ? "on" : ""}" data-play="${esc(s.id)}"><div class="tile" style="${plArt(s)}">${on && !$("#audio").paused ? I.pause : I.play}</div>
       <div class="grow"><b class="one" style="display:block">${esc(s.name)}</b><div class="sm muted">${esc(s.genre || CATS.find((c) => c[0] === s.category)[1])} · uploaded by ${esc(by)}</div></div>
       <span class="sm muted">${duration(s.seconds)}</span></button>`;
   }).join("")}</div>`;
@@ -683,19 +730,24 @@ function duration(sec) {
 
 function moreHtml() {
   const me = S.me || {};
+  const ic = (bg, svg) => `<span class="sico" style="background:${bg}">${svg}</span>`;
+  const bell = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
+  const pc = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+  const soon = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  const out = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>';
   return `<h1>More</h1>
-    <div class="card row">${avatar(me.username, publicUrl(me.avatar), { dot: "#9fd67a" })}<div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")}</div></div></div>
-    <div class="lbl">Notifications</div>
-    <div class="card list">${pushRowHtml()}</div>
-    <div class="lbl">Apps</div>
-    <div class="card list"><button class="row" data-act="docs" style="width:100%"><div class="doc-ic">${DI.doc}</div><div class="grow"><b>Docs</b><div class="sm muted">Your shared documents</div></div><span class="chev">›</span></button></div>
-    <div class="lbl">Coming soon on the phone</div>
-    <div class="card list">${["Games", "Boards", "Film assets"].map((n) => `<div class="row"><div class="grow">${n}</div><span class="sm muted">Soon</span></div>`).join("")}</div>
-    <div class="lbl">On your PC only</div>
-    <div class="muted sm" style="padding:0 2px">Converting, Files, Images, Copyright, Resolve and Remote need your PC.</div>
-    <div style="margin-top:28px"><button class="btn2" data-act="logout" style="width:100%;height:44px;color:var(--red)">Log out</button></div>
-    <div class="muted sm" style="text-align:center;margin-top:18px">VaultHub for phone 1.3.0</div>
-    <div class="muted" style="text-align:center;margin-top:4px;font-size:11px">${screenInfo()}</div>`;
+    <div class="profile">${avatar(me.username, publicUrl(me.avatar), { big: true, dot: "#34c759" })}
+      <div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")} · this iPhone</div></div></div>
+    <div class="card list set">
+      <div class="srow">${ic("#ff3b30", bell)}${pushRowHtml()}</div></div>
+    <div class="card list set" style="margin-top:14px">
+      <button class="srow" data-act="docs">${ic("#0a84ff", `<span style="color:#fff;display:grid">${DI.doc}</span>`)}<div class="grow">Docs</div><span class="chev">›</span></button>
+      <div class="srow">${ic("#8e8e93", soon)}<div class="grow">Games, Boards, Film assets<div class="sm muted">Coming to the phone later</div></div></div>
+      <div class="srow">${ic("#5e5ce6", pc)}<div class="grow">On your PC<div class="sm muted">Converting, Files, Images, Copyright, Resolve, Remote</div></div></div></div>
+    <div class="card list set" style="margin-top:14px">
+      <button class="srow" data-act="logout">${ic("#3a3a3c", out)}<div class="grow" style="color:#ff453a">Log out</div></button></div>
+    <div class="muted sm" style="text-align:center;margin-top:22px">VaultHub for phone ${esc(VERSION.replace("phone ", ""))}</div>
+    <div class="muted" style="text-align:center;margin-top:4px;font-size:11px;opacity:.6">${screenInfo()}</div>`;
 }
 
 // Screen sizes, shown small on the More page (helps fix layout problems from a screenshot).
@@ -716,15 +768,15 @@ let pushStatus = store.get("push", "off");  // "on" or "off" on this phone
 
 function pushRowHtml() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-    return `<div class="row"><div class="grow">${/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()
-      ? "Open VaultHub from your Home Screen to turn on notifications." : "This browser can't show notifications."}</div></div>`;
+    return `<div class="grow">Notifications<div class="sm muted">${/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()
+      ? "Open VaultHub from your Home Screen to turn them on." : "This browser can't show notifications."}</div></div>`;
   }
   if (Notification.permission === "denied") {
-    return `<div class="row"><div class="grow">Notifications are blocked<div class="sm muted">Turn them on in Settings > Notifications > VaultHub.</div></div></div>`;
+    return `<div class="grow">Notifications<div class="sm muted">Blocked. Turn them on in Settings > Notifications > VaultHub.</div></div>`;
   }
   const on = pushStatus === "on" && Notification.permission === "granted";
-  return `<div class="row"><div class="grow">New messages and calls<div class="sm muted">${on ? "On for this phone" : "Off"}</div></div>
-    <button class="btn2 ${on ? "" : "go"}" data-act="${on ? "push-off" : "push-on"}">${on ? "Turn off" : "Turn on"}</button></div>`;
+  return `<div class="grow">Notifications<div class="sm muted">New messages and calls</div></div>
+    <button class="switch ${on ? "on" : ""}" data-act="${on ? "push-off" : "push-on"}" aria-label="Notifications ${on ? "on" : "off"}"><i></i></button>`;
 }
 
 function keyBytes(b64) {
