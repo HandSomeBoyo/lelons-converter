@@ -121,12 +121,13 @@ def config():
     s = settings.load()
     try:
         import channelstats
-        google = bool(channelstats._config()["refresh"])
+        ch = channelstats._config()
+        google, google_name = bool(ch["refresh"]), ch["google_name"] if ch["refresh"] else ""
     except Exception:
-        google = False
+        google, google_name = False, ""
     return {"twitch": streamtwitch.name_of(s.get("lv_twitch")), "youtube": s.get("lv_youtube") or "",
             "twitchClient": s.get("lv_tw_client") or "", "twitchLogin": s.get("lv_tw_login") or "",
-            "twitchSignedIn": bool(s.get("lv_tw_refresh")), "google": google,
+            "twitchSignedIn": bool(s.get("lv_tw_refresh")), "google": google, "googleName": google_name,
             "obsOn": s.get("lv_obs_on", True), "obsPort": s.get("lv_obs_port") or 4455, "obsPassword": bool(s.get("lv_obs_password")),
             "goals": s.get("lv_goals") if isinstance(s.get("lv_goals"), list) else [],
             "set": bool(s.get("lv_twitch") or s.get("lv_youtube") or s.get("lv_obs_set"))}

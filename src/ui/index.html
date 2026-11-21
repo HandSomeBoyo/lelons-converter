@@ -1057,6 +1057,7 @@
         <button type="button" data-pane="account">Account</button>
         <button type="button" data-pane="invites" id="acctTabInvites" hidden>Invites</button>
         <button type="button" data-pane="people" id="acctTabPeople" hidden>People</button>
+        <button type="button" data-pane="inbox" id="acctTabInbox" hidden>Inbox<b class="acct-tab-count" id="acctInboxCount" hidden></b></button>
       </div>
 
       <div class="acct-pane" data-pane="profile">
@@ -1095,29 +1096,25 @@
           <p class="pf-status" id="peStatusView" hidden></p><p class="pf-bio" id="peBioView" hidden></p>
         </div>
 
-        <div class="ap-grid">
-          <div class="acct-card ap-card">
-            <h2>Picture ring</h2>
-            <p class="acct-help">A ring around your picture on your profile. It uses your color.</p>
-            <div class="ap-rings" id="peRings"></div>
-          </div>
-          <div class="acct-card ap-card">
-            <h2>Your color</h2>
-            <p class="acct-help">For your name, buttons and ring on your profile.</p>
-            <div class="pe-colors" id="peColors"></div>
+        <div class="acct-card ap-card ap-look">
+          <h2>Look</h2>
+          <p class="acct-help">Your color and the ring around your picture.</p>
+          <div class="ap-look-row">
+            <div><h3 class="ap-sub">Color</h3><div class="pe-colors" id="peColors"></div></div>
+            <div><h3 class="ap-sub">Ring</h3><div class="ap-rings" id="peRings"></div></div>
           </div>
         </div>
 
         <div class="acct-card ap-card">
           <h2>Showcase</h2>
-          <p class="acct-help">Pin up to 3 things to the top of your profile: a video, a sound or a game.</p>
+          <p class="acct-help">Pin up to 3 videos, sounds or games to the top.</p>
           <div class="ap-show" id="peShowcase"></div>
           <div class="ap-pick" id="pePick" hidden></div>
         </div>
 
         <div class="acct-card ap-card">
           <h2>Show on my profile</h2>
-          <p class="acct-help">Pick what your friends see.</p>
+          <p class="acct-help">Pick what friends see.</p>
           <div class="pe-show" id="peShow"></div>
         </div>
 
@@ -1130,39 +1127,44 @@
       </div>
 
       <div class="acct-pane" data-pane="account" hidden>
-        <div class="acct-card acct-profile">
-          <span class="avatar huge" id="acctAvatar"></span>
-          <div class="acct-who">
-            <b id="acctName"></b>
-            <span class="acct-since" id="acctSince"></span>
-          </div>
-        </div>
       <form class="acct-card" id="acctNameForm">
         <h2>Username</h2>
-        <p class="acct-help">This is the name everyone sees next to your sounds. 3 to 20 letters or numbers (dots, dashes and _ are fine too).</p>
+        <p class="acct-help">Everyone sees this name. 3 to 20 letters, numbers, dots, dashes or _.</p>
         <div class="acct-row">
-          <label class="lib-field"><input id="acctUsername" maxlength="20" autocomplete="username" spellcheck="false"></label>
+          <label class="lib-field"><input id="acctUsername" maxlength="20" autocomplete="username" spellcheck="false" aria-label="Username"></label>
           <button type="submit" class="small-button" id="acctNameSave">Save</button>
         </div>
         <p class="acct-note" id="acctNameNote"></p>
       </form>
-      <form class="acct-card" id="acctPasswordForm">
-        <h2>Password</h2>
-        <p class="acct-help">At least 8 characters, and not one people often use. Your other devices get logged out.</p>
-        <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
-        <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password"></label>
-        <button type="submit" class="small-button">Change password</button>
+      <div class="acct-card" id="acctPassword">
+        <div class="acct-head">
+          <div><h2>Password</h2><p class="acct-help">Changing it logs out your other devices.</p></div>
+          <button type="button" class="small-button acct-quiet" id="acctPwOpen">Change password</button>
+        </div>
+        <form id="acctPasswordForm" hidden>
+          <label class="lib-field"><span>Current password</span><input id="acctOldPassword" type="password" autocomplete="current-password"></label>
+          <label class="lib-field"><span>New password</span><input id="acctNewPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>
+          <div class="acct-buttons"><button type="submit" class="small-button">Save new password</button><button type="button" class="link acct-cancel" id="acctPwCancel">Cancel</button></div>
+        </form>
         <p class="acct-note" id="acctPasswordNote"></p>
-      </form>
+      </div>
       <div class="acct-card" id="acctDevices">
         <h2>Your devices</h2>
-        <p class="acct-help">The computers logged in to your account. If you see one you don't know, log it out and change your password.</p>
+        <p class="acct-help">Log out any computer you don't know, then change your password.</p>
         <div id="devList"></div>
         <p class="acct-note" id="devNote"></p>
         <button type="button" class="small-button acct-danger" id="devOutOthers" hidden>Log out everywhere else</button>
       </div>
+      <div class="acct-card" id="acctLinks">
+        <h2>Connected accounts</h2>
+        <p class="acct-help">What VaultHub is signed in to for Live and YouTube.</p>
+        <div id="linkList"></div>
+      </div>
       <div class="acct-card acct-end">
-        <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+        <div class="acct-end-row">
+          <button type="button" class="small-button acct-logout" id="acctLogout">Log out</button>
+          <span class="acct-since" id="acctSince"></span>
+        </div>
         <div id="acctDeleteBox">
           <button type="button" class="link acct-delete-open" id="acctDeleteOpen">Delete my account</button>
           <form id="acctDeleteForm" hidden>
@@ -1180,7 +1182,7 @@
       <div class="acct-pane" data-pane="invites" hidden>
       <div class="acct-card" id="acctInvites" hidden>
         <h2>Invite friends</h2>
-        <p class="acct-help">New accounts need an invite code. Make one, send it to a friend, and they type it in when they press Create account.</p>
+        <p class="acct-help">New accounts need a code. Send one to a friend to type in at Create account.</p>
         <div class="inv-make">
           <div class="inv-pick"><span>Works for</span>
             <label class="quality"><select id="invHours">
@@ -1192,7 +1194,7 @@
               <option value="1" selected>1 person</option><option value="5">Up to 5</option><option value="20">Up to 20</option><option value="">Anyone with the code</option>
             </select><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></label>
           </div>
-          <button type="button" class="convert inv-make-button" id="invMake">Make a code</button>
+          <button type="button" class="small-button inv-make-button" id="invMake">Make a code</button>
         </div>
         <p class="acct-note" id="invNote"></p>
         <div id="invList"></div>
@@ -1202,13 +1204,16 @@
       <div class="acct-pane" data-pane="people" hidden>
       <div class="acct-card" id="libPeople" hidden>
         <h2>People and roles</h2>
-        <p class="lib-people-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen and download. New accounts start as viewers.</p>
+        <p class="acct-help"><b>Admins</b> can upload and delete sounds. <b>Viewers</b> can listen. New accounts start as viewers.</p>
         <p class="sfx-error" id="libPeopleError"></p>
         <div id="libPeopleList"></div>
       </div>
+      </div>
+
+      <div class="acct-pane" data-pane="inbox" hidden>
       <div class="acct-card" id="acctInbox" hidden>
         <h2>Feedback inbox</h2>
-        <p class="acct-help">Bug reports and wishes your friends sent. Mark them done when you've handled them.</p>
+        <p class="acct-help">Bugs and wishes from friends. Mark them done when handled.</p>
         <p class="sfx-error" id="inboxError"></p>
         <div id="inboxList"></div>
       </div>
