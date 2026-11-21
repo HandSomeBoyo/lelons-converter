@@ -821,7 +821,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 /* Favorites in the Library */
 .sound .actions .star.on { color: var(--accent); }
 .sound:has(.star.on) .actions { opacity: 1; }
-.sound:has(.star.on) .actions button:not(.star) { opacity: .55; }
+.sound:has(.star.on) .actions button:not(.star):not(.extra) { opacity: .55; }
 .sound:hover .actions button { opacity: 1 !important; }
 
 /* Send feedback, and the owner's inbox */
@@ -8968,3 +8968,59 @@ button.stats-bar { cursor: pointer; }
   font-size: 13px; color: var(--red); white-space: nowrap;
 }
 .hist-menu button:hover { background: var(--panel2); }
+
+
+/* ---------------------------------------------------------------- Library for 3.0 */
+/* (a starred sound showed its hover-only buttons all the time, half see-through) */
+.sound:has(.star.on):not(:hover):not(:focus-within) .actions .extra:not(.sure) { opacity: 0 !important; }
+/* The search row: when there's less room (the genres are open, or a small window), "Find sounds & music"
+   becomes just its globe, so Upload doesn't fall onto a line of its own. */
+.lib-main { container: libmain / inline-size; min-width: 0; }
+@container libmain (max-width: 860px) {
+  .lib-tools .find-open { padding: 0 12px; gap: 0; }
+  .lib-tools .find-open .find-text { display: none; }
+}
+@container libmain (max-width: 560px) {
+  .lib-tools .history-search { flex: 1 1 100%; }
+}
+/* Film assets: the search looks like the one on Sounds, and the row has one height */
+.fx-browse > .fx-tools { align-items: center; }
+.fx-browse > .fx-tools > .input, .fx-browse > .fx-tools > .quality, .fx-browse > .fx-tools > .fx-new { height: 44px; box-sizing: border-box; }
+.fx-browse .fx-new { display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; }
+.fx-browse .fx-new svg { width: 16px; height: 16px; }
+.fx-toast { position: fixed; z-index: 200; left: 50%; bottom: 26px; transform: translate(-50%, 16px); max-width: min(520px, 90vw); padding: 11px 16px;
+  border-radius: 10px; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); font-size: 13.5px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
+.fx-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.fx-icon.sure, .ghost-button.fx-danger.sure { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+/* The category buttons sit above the genres: picking Music no longer pushes them 200px to the right */
+#sfxMain > .lib-cats { grid-column: 1 / -1; }
+#sfxMain.has-genres > .lib-cats { margin-bottom: -8px; }
+/* Film assets: a slim banner instead of a big one that repeated the first pack */
+.fx-hero { min-height: 150px; align-items: center; }
+.fx-hero-text { padding: 22px 28px; }
+.fx-hero-text .headline { margin: 0 0 14px; }
+.fx-hero-buttons:empty, .fx-hero-buttons[hidden] { display: none; }
+.fx-hero-text > [hidden] { display: none; }
+#fxHeroOpen { height: 36px; padding: 0 16px; font-size: 13.5px; }
+
+/* ---- 3.0 visual touches on Sounds */
+/* hovering a waveform lights it up to the mouse: where the sound starts if you click */
+.sound .bars i.peek { background: color-mix(in srgb, var(--accent) 35%, var(--bars-hover)); }
+.sound .bars i.on, .sound:hover .bars i.on { background: var(--accent); }
+/* the playing sound: 3 bars moving instead of the pause sign (pointing at it shows pause) */
+.sound .play .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+.sound .play .eq i { width: 3px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: bottom; animation: sfx-eq .9s ease-in-out infinite; }
+.sound .play .eq i:nth-child(2) { animation-delay: -.3s; animation-duration: .75s; }
+.sound .play .eq i:nth-child(3) { animation-delay: -.55s; animation-duration: 1.05s; }
+@keyframes sfx-eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.sound .play .pz { display: none; }
+.sound .play:hover .eq, .sound .play:focus-visible .eq { display: none; }
+.sound .play:hover .pz, .sound .play:focus-visible .pz { display: contents; }
+/* switching category: the rows fade in one after another */
+#sfxList.list-in > .sound:nth-child(-n+14) { animation: sfx-row-in .38s var(--ease) both; animation-delay: calc(var(--in, 0) * 22ms); }
+@keyframes sfx-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sound .play .eq i { animation: none; transform: scaleY(.7); }
+  #sfxList.list-in > .sound { animation: none; }
+}
