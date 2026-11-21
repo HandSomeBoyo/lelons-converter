@@ -90,41 +90,65 @@ function rdDraw() {
   const others = rd.devices.filter((d) => !d.me);
   const card = (d) => {
     const ready = d.online && d.host;
-    const status = ready ? (d.busy ? "Someone is using it" : "Ready") : d.online ? "VaultHub is open, but controlling is off on it" : `Last seen ${rdAgo(d.seen)}`;
+    const status = ready ? (d.busy ? "In use right now" : "Ready") : d.online ? "Controlling is off on it" : `Last seen ${rdAgo(d.seen)}`;
     const size = d.width && d.height ? `${d.width} × ${d.height}` : "";
     return `<div class="rd-pc${ready ? "" : " off"}" data-id="${rdEsc(d.id)}">
       <div class="rd-shot${ready ? "" : " sleep"}">${ready ? `<div class="rd-shot-ic">${d.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<small>${rdEsc(size)}</small></div>` : `<div>${RD_ICONS.moon}${d.online ? "Controlling is off" : "Asleep, off or VaultHub closed"}</div>`}</div>
       <div class="rd-name"><b>${rdEsc(d.name)}</b><span class="rd-tag">${d.kind === "laptop" ? "Laptop" : "Desktop"}</span>
-        <button type="button" class="icon-button rd-forget" title="Take it off this list" data-forget="${rdEsc(d.id)}">${RD_ICONS.x}</button></div>
+        <button type="button" class="icon-button rd-forget" title="Take it off this list" data-forget="${rdEsc(d.id)}" data-name="${rdEsc(d.name)}">${RD_ICONS.x}</button></div>
       <div class="rd-stat"><i class="rd-dot${ready ? (d.busy ? " warn" : "") : " off"}"></i>${rdEsc(status)}</div>
       ${ready ? `<button type="button" class="convert" data-connect="${rdEsc(d.id)}">${RD_ICONS.play}Connect</button>` : `<button type="button" class="ghost-button" disabled>${d.online ? "Turn it on there first" : "Turn it on to connect"}</button>`}
     </div>`;
   };
-  page.innerHTML = `<div class="rd-page">
+  const using = me.session && me.session.peer;
+  const html = `<div class="rd-page">
     <h1 class="headline">Remote.<em> Your own PCs, anywhere.</em></h1>
     ${rd.error ? `<p class="rd-error">${rdEsc(rd.error)}</p>` : ""}
     <div class="rd-grid">${others.map(card).join("")}
       <div class="rd-pc rd-add"><div class="plus">${RD_ICONS.plus}</div><b>Add a PC</b>Install VaultHub on it, log in with your account and turn on<br>"Let my other PCs control this one" there. It shows up here.</div></div>
-    <div class="rd-this">${me.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<div><b>This PC: ${rdEsc(me.name)}</b>Let my other PCs control this one${me.windows ? "" : " (Windows only)"}</div>
+    <div class="rd-this${using ? " busy" : ""}">${me.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<div class="rd-this-text"><b>This PC: ${rdEsc(me.name)}</b>${
+      using ? `<span class="rd-using"><i class="rd-dot warn"></i>${rdEsc(using)} is using this PC now</span>`
+      : me.host ? `On. Keep VaultHub open here (minimized is fine)${me.keepAwake ? " and it won't go to sleep" : ""}. Don't let Windows lock itself, the lock screen can't be used from far away.`
+      : `Let my other PCs control this one${me.windows ? "" : " (Windows only)"}`}</div>
+      ${using ? '<button type="button" class="ghost-button rd-small rd-red" id="rdStopHere">Stop</button>' : ""}
       <button type="button" class="ghost-button rd-small" id="rdManage">Safety settings</button>
       <button type="button" class="rd-sw${me.host ? " on" : ""}" id="rdHostSwitch" role="switch" aria-checked="${me.host}" title="Let my other PCs control this one"></button></div>
-    ${me.host ? `<p class="rd-note">Keep VaultHub open on this PC (it can be minimized) so you can reach it. ${me.keepAwake ? "It won't go to sleep while this is on." : ""} Windows' lock screen and admin pop-ups can't be controlled from far away, so don't let it lock itself.</p>` : ""}
     <div class="rd-safe">
       <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your owner account. Nobody else can use Remote.</div>
       <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code.</div>
       <div><b>${RD_ICONS.eye}Straight PC to PC</b>Picture, sound and keys are locked (encrypted) from PC to PC. Nothing goes through our server.</div>
       <div><b>${RD_ICONS.key}Stop any time</b>A yellow bar shows on the PC being used. Ctrl+Alt+End cuts it off.</div>
     </div></div>`;
+  // (3.0) Only draw it again when something changed: it's checked every 3 seconds, and drawing it anew
+  // each time could swallow a click (the button under the mouse was swapped for a new one).
+  if (html === rd.drawn && page.firstElementChild) return;
+  rd.drawn = html;
+  page.innerHTML = html;
   page.querySelectorAll("[data-connect]").forEach((b) => b.addEventListener("click", () => rdConnect(b.dataset.connect)));
-  page.querySelectorAll("[data-forget]").forEach((b) => b.addEventListener("click", async () => {
-    await rdPost("/api/remote-forget", { device: b.dataset.forget });
-    rdLoop(true);
-  }));
+  page.querySelectorAll("[data-forget]").forEach((b) => b.addEventListener("click", () => rdForget(b.dataset.forget, b.dataset.name)));
+  if ($("rdStopHere")) $("rdStopHere").addEventListener("click", async () => { await rdPost("/api/remote-stop"); rdLoop(true); });
   $("rdHostSwitch").addEventListener("click", async () => {
     const res = await rdPost("/api/remote-set", { host: !me.host });
     if (res.ok) { rd.info = res; rdDraw(); }
   });
   $("rdManage").addEventListener("click", rdManage);
+}
+
+// (3.0) Take a PC off your list. It also forgets the key this PC kept for it, so after a reinstall
+// ("key changed") it can be added again. If it's still on, it shows up again by itself.
+function rdForget(id, name) {
+  const m = rdModal(`<h2>Take ${rdEsc(name)} off the list?</h2>
+    <p>If VaultHub is still open on it, it shows up again in a few seconds, as if it was new. Do this if it was reinstalled or says its key changed.</p>
+    <div class="rd-acts"><button type="button" class="ghost-button" id="rdNo">Cancel</button><button type="button" class="convert" id="rdYes2">Take it off</button></div>`);
+  m.querySelector("#rdNo").addEventListener("click", rdModalClose);
+  m.querySelector("#rdYes2").addEventListener("click", async () => {
+    await rdPost("/api/remote-forget", { device: id });
+    rdModalClose();
+    rd.devices = rd.devices.filter((d) => d.id !== id);
+    if (rd.info && rd.info.hosts) delete rd.info.hosts[id];
+    rdDraw();
+    rdLoop(true);
+  });
 }
 
 function rdAgo(t) {
@@ -157,8 +181,8 @@ function rdManage() {
       ${row("host", "Let my other PCs control this one", "", me.host)}
       ${row("keepAwake", "Keep this PC awake while it's on", "So you can reach it when you're away", me.keepAwake)}
       ${row("lockOnEnd", "Lock this PC when they disconnect", "Careful: you can't unlock Windows from far away", me.lockOnEnd)}
-      <div class="rd-row"><span>PIN<small>${me.pin ? "Asked every time someone connects" : "An extra lock, asked every time"}</small></span><input id="rdPin" class="rd-pin-in" inputmode="numeric" maxlength="12" placeholder="${me.pin ? "••••" : "Set a PIN"}"><button type="button" class="ghost-button rd-small" id="rdPinSave">${me.pin ? "Change" : "Save"}</button>${me.pin ? '<button type="button" class="ghost-button rd-small" id="rdPinOff">Remove</button>' : ""}</div>
-      <div class="rd-row"><span>Stop key</span><span class="rd-sel">Ctrl Alt End</span></div>
+      <div class="rd-row"><span>PIN<small>${me.pin ? "Asked every time someone connects" : "An extra lock, asked every time"}</small></span><input id="rdPin" class="rd-pin-in" type="password" autocomplete="off" inputmode="numeric" maxlength="12" placeholder="${me.pin ? "••••" : "Set a PIN"}"><button type="button" class="ghost-button rd-small" id="rdPinSave">${me.pin ? "Change" : "Save"}</button>${me.pin ? '<button type="button" class="ghost-button rd-small" id="rdPinOff">Remove</button>' : ""}</div>
+      <div class="rd-row"><span>Stop key<small>Press it on this PC to cut someone off right away</small></span><span class="rd-keyname"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>End</kbd></span></div>
       <div class="rd-row"><span>Name of this PC</span><input id="rdName" class="rd-pin-in" maxlength="40" value="${rdEsc(me.name)}"><button type="button" class="ghost-button rd-small" id="rdNameSave">Save</button></div>
     </div>
     <p class="rd-error" id="rdManageErr"></p>
@@ -170,7 +194,13 @@ function rdManage() {
   };
   m.querySelectorAll("[data-opt]").forEach((b) => b.addEventListener("click", () => save({ [b.dataset.opt]: !me[b.dataset.opt] })));
   m.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => save({ forget: b.dataset.remove })));
-  $("rdPinSave").addEventListener("click", () => save({ pin: $("rdPin").value.trim() }));
+  // (3.0) An empty box used to save "no PIN", so pressing Change without typing took the PIN off.
+  $("rdPinSave").addEventListener("click", () => {
+    const pin = $("rdPin").value.trim();
+    if (!pin) { $("rdManageErr").textContent = "Type the new PIN first (4 to 12 numbers)."; $("rdPin").focus(); return; }
+    save({ pin });
+  });
+  $("rdPin").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rdPinSave").click(); });
   if ($("rdPinOff")) $("rdPinOff").addEventListener("click", () => save({ pin: "" }));
   $("rdNameSave").addEventListener("click", async () => {
     await rdPost("/api/remote-rename", { name: $("rdName").value.trim() });
@@ -535,6 +565,7 @@ function rdEnd(why, quiet) {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("rdPop")) $("rdPop").remove();
+  else if (e.key === "Escape" && $("rdModal") && !$("rdModal").querySelector("#rdYes")) rdModalClose();
 });
 // (2.38.2) When the app opens on the Remote page, the page was picked before this file loaded, so it
 // never heard about it and stayed empty until you clicked Remote again.

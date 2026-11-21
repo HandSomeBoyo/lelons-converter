@@ -1732,6 +1732,8 @@ class Handler(BaseHTTPRequestHandler):
                                   data={"name": str(data.get("name") or "")}) or {}
                 if action == "rename" and device == me["device"] and result.get("ok"):
                     remote.set_options({"name": data.get("name")})
+                if action == "forget" and device != me["device"]:
+                    remote.forget_host(device)
             elif action == "allowed":
                 result = {"allowed": remote.allowed(str(data.get("key") or ""))}
             elif action == "ask":
@@ -1757,6 +1759,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = remote.key(data.get("role"), data.get("pub"), data.get("priv"))
             elif action == "nonce":  # (2.37.1) a hello is only ever answered once, even across restarts
                 result = {"fresh": remote.nonce_fresh(data.get("nonce"))}
+            elif action == "stop":  # (3.0) the Stop button on this PC's own Remote page
+                remote.stop_now()
+                result = {}
             elif action == "host-state":
                 result = remote.host_state()
             elif action == "screen":  # show another screen: the sender starts again on it

@@ -216,6 +216,14 @@ def key(role, pub=None, priv=None):
         return {"pub": kept["pub"], "priv": opened}
 
 
+def forget_host(device):
+    """(3.0) A PC taken off your list: forget the key kept for it too, so it can be added again."""
+    with _lock:
+        data = _this_pc()
+        if (data.get("hosts") or {}).pop(str(device)[:40], None) is not None:
+            _save(data)
+
+
 def remember_host(device, key):
     """The controlling side: the first time you connect to a PC, its key is kept, and next time it must match."""
     with _lock:
@@ -337,6 +345,10 @@ def run_engine(url, icon, screen=None):
     folder = os.path.join(settings.DATA_DIR, "webview-remote")
     if not data.get("host"):
         _state["engine"] = ""
+        # (3.0) Turned off while someone was using it: end that properly (the yellow frame, held keys,
+        # and "in use" on your other PCs), since the hidden sender is closed without saying goodbye.
+        if _state["session"]:
+            end("off")
         appwindow.engine(url, folder, icon, "", close=True)
         return False
     if screen is not None:
