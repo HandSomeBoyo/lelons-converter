@@ -38,8 +38,13 @@ const LVL_ICONS = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
 };
 
+// (3.0) A new console starts calm with these cards; the rest wait in Customize > Add a card.
+// Layouts saved before 3.0 start over once with this (v: 3).
+const LV_START = ["info", "nums", "health", "chat", "obs"];
+
 function lvLayout() {
-  const saved = loadPref("lvLayout") || {};
+  let saved = loadPref("lvLayout") || {};
+  if (saved.v !== 3) saved = { chatH: saved.chatH, known: LV_CARDS.map((c) => c.id), order: LV_START, off: LV_CARDS.map((c) => c.id).filter((id) => !LV_START.includes(id)) };
   const known = Array.isArray(saved.known) ? saved.known : null;
   let order = Array.isArray(saved.order) ? saved.order.filter((id, i, all) => LV_CARD[id] && all.indexOf(id) === i) : LV_CARDS.map((c) => c.id);
   const off = Array.isArray(saved.off) ? saved.off.filter((id) => LV_CARD[id]) : [];
@@ -51,7 +56,7 @@ function lvLayout() {
   return { order, off, w: saved.w || {}, chatH: LV_CHAT_HEIGHTS[saved.chatH] ? saved.chatH : "l" };
 }
 function lvLayoutSave(l) {
-  savePref("lvLayout", { order: l.order, off: l.off, w: l.w, chatH: l.chatH, known: LV_CARDS.map((c) => c.id) });
+  savePref("lvLayout", { v: 3, order: l.order, off: l.off, w: l.w, chatH: l.chatH, known: LV_CARDS.map((c) => c.id) });
 }
 function lvWidth(l, id) { const w = +l.w[id]; return LV_WIDTHS.includes(w) ? w : LV_CARD[id].w; }
 const lvSlot = (id) => document.querySelector(`#lvGrid > [data-c="${id}"]`);
@@ -118,6 +123,7 @@ function lvLayoutEdit(on) {
     const tray = $("lvTray");
     if (tray) tray.remove();
   }
+  try { if (typeof lvDrawConsole === "function") lvDrawConsole([]); } catch (e) { console.error(e); }  // (3.0) signed-out cards show or step aside
   try { lvLayoutApply(); } catch (e) { console.error(e); }  // (a card that fails to fit must not keep you stuck in Customize)
   if (on) $("lvCbar").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }

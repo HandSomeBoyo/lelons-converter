@@ -732,8 +732,8 @@ function lvAlertFor(items) {
     let rule = null, title = "", text = "";
     if (i.type === "event") {
       const kind = i.kind === "gift" ? "sub" : i.kind === "sticker" ? "superchat" : i.kind;
-      if (!a[kind] || !a[kind].on) continue;
-      rule = a[kind];
+      if (!(a[kind] && a[kind].on) && !(typeof lvaOnStream === "function" && lvaOnStream(i.kind))) continue;
+      rule = a[kind] || { sound: "none" };
       const [who, what] = (LV_EVENT_WORDS[i.kind] || ((e) => [e.user, ""]))(i);
       title = (who || "Someone") + what;
       text = i.text || "";
@@ -748,7 +748,8 @@ function lvAlertFor(items) {
     }
     if (!rule) continue;
     n++;
-    lvSound(rule.sound, a.volume);
+    // (3.0) An alert on your stream plays its own sound there (through OBS): VaultHub only shows its card then.
+    if (!(i.type === "event" && typeof lvaOnStream === "function" && lvaOnStream(i.kind))) lvSound(rule.sound, a.volume);
     lvToast({ title, text, p: i.p, emoji: i.type === "event" ? LV_EVENT_EMOJI[i.kind] : i.first ? "👋" : "🔔" });
   }
 }
@@ -777,74 +778,7 @@ function lvToast(t) {
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, t.quiet ? 3500 : 7000);
 }
 
-function lvDrawAlerts() {
-  const a = lvAlerts();
-  const lib = (typeof sfxSounds !== "undefined" ? sfxSounds : []).filter((s) => s.url);
-  const pads = lvPads();
-  const options = (cur) => Object.entries(LV_TONES).map(([k, n]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${n}</option>`).join("")
-    + (pads.length ? `<optgroup label="Your soundboard">${pads.map((p) => `<option value="lib:${lvEsc(p.id)}" ${cur === "lib:" + p.id ? "selected" : ""}>${lvEsc(p.name)}</option>`).join("")}</optgroup>` : "")
-    + (lib.length ? `<optgroup label="Library">${lib.slice(0, 200).filter((s) => !pads.some((p) => String(p.id) === String(s.id))).map((s) => `<option value="lib:${lvEsc(s.id)}" ${cur === "lib:" + s.id ? "selected" : ""}>${lvEsc(s.name)}</option>`).join("")}</optgroup>` : "");
-  $("lvAlerts").innerHTML = `
-    <div class="lv-grid">
-      <div class="lv-card">
-        <h3>Play a sound when...</h3>
-        ${LV_ALERT_RULES.map(([k, emo, name, p, sub]) => `
-          <div class="lv-rule ${a[k].on ? "" : "off"}" data-k="${k}">
-            <span class="ico">${emo}</span>
-            <div class="words"><b>${name}</b><small>${p ? `<span class="lv-tiny ${p}">${LV_ICONS[p]}</span> ` : ""}${sub}</small></div>
-            <span class="sp"></span>
-            <select class="lv-snd" title="Sound">${options(a[k].sound)}</select>
-            <button type="button" class="icon-button lv-test" title="Try it"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
-            <label class="check"><input type="checkbox" ${a[k].on ? "checked" : ""}></label>
-          </div>
-          ${k === "keyword" ? `<div class="lv-kw" id="lvWords">${a.words.map((w, i) => `<span class="lv-chip">${lvEsc(w)}<button type="button" data-i="${i}" title="Remove">×</button></span>`).join("")}<form id="lvWordForm"><input id="lvWordIn" placeholder="+ Add a word" maxlength="40"></form></div>` : ""}`).join("")}
-        <p class="lv-muted" style="margin-top:12px">Your own name always counts as a word. The sounds play from VaultHub, so if OBS records your desktop sound, viewers hear them too.</p>
-      </div>
-      <div class="lv-col">
-        <div class="lv-card">
-          <h3>Volume</h3>
-          <input type="range" class="volume-slider" id="lvAlertVol" min="0" max="100" value="${Math.round(a.volume * 100)}">
-        </div>
-        <div class="lv-card">
-          <h3>What you see</h3>
-          <p class="lv-muted">A card pops up in the corner of VaultHub, like this one:</p>
-          <div class="lv-toast demo"><span class="ico">💜</span><div><b>frostbyte_ followed</b><small>Twitch · just now</small></div></div>
-        </div>
-      </div>
-    </div>`;
-  const box = $("lvAlerts");
-  box.querySelectorAll(".lv-rule").forEach((row) => {
-    const k = row.dataset.k;
-    row.querySelector("input[type=checkbox]").addEventListener("change", (e) => { const x = lvAlerts(); x[k].on = e.target.checked; lvSaveAlerts(x); row.classList.toggle("off", !e.target.checked); });
-    row.querySelector("select").addEventListener("change", (e) => { const x = lvAlerts(); x[k].sound = e.target.value; lvSaveAlerts(x); lvSound(e.target.value, x.volume); });
-    row.querySelector(".lv-test").addEventListener("click", () => {
-      const x = lvAlerts();
-      lvSound(x[k].sound, x.volume);
-      const sample = { follow: "frostbyte_ followed", sub: "pixelpete subscribed", raid: "frostbyte_ raided with 31 people", bits: "nightowl_k cheered 100 bits",
-        superchat: "Kari sent NOK 50", member: "Tor became a member", keyword: 'Tor said "' + (x.words[0] || LV.cfg?.twitch || "your name") + '"', first: "newbie123 chatted for the first time" }[k];
-      lvToast({ title: sample, text: "This is a test.", emoji: LV_ALERT_RULES.find((r) => r[0] === k)[1] });
-    });
-  });
-  $("lvWords").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-i]");
-    if (!b) return;
-    const x = lvAlerts();
-    x.words.splice(+b.dataset.i, 1);
-    lvSaveAlerts(x);
-    lvDrawAlerts();
-  });
-  $("lvWordForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const w = $("lvWordIn").value.trim();
-    if (!w) return;
-    const x = lvAlerts();
-    if (!x.words.includes(w) && x.words.length < 30) x.words.push(w);
-    lvSaveAlerts(x);
-    lvDrawAlerts();
-    $("lvWordIn").focus();
-  });
-  $("lvAlertVol").addEventListener("change", (e) => { const x = lvAlerts(); x.volume = e.target.value / 100; lvSaveAlerts(x); lvTone("ding", x.volume); });
-}
+// (3.0) lvDrawAlerts() lives in lvalerts.js: alerts on your stream.
 
 // ---------------------------------------------------------------- the soundboard
 

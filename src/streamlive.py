@@ -17,6 +17,7 @@ import gamedetect
 import multistream
 import obsstats
 import settings
+import streamoverlay
 import streamtwitch
 import streamyt
 
@@ -75,6 +76,8 @@ def emit(items):
             _seq += 1
             item["seq"] = _seq
             _items.append((_seq, item))
+            if item.get("type") == "event":
+                streamoverlay.push(item)  # (3.0) the alert on your stream (also before VaultHub sees you're live)
             s = _session
             if not s or item.get("old") or item.get("guest"):
                 continue
@@ -116,6 +119,18 @@ def _start():
     if not (_ticker and _ticker.is_alive()):
         _ticker = threading.Thread(target=_tick_loop, daemon=True)
         _ticker.start()
+        threading.Thread(target=_wake_overlay, daemon=True).start()
+
+
+def _wake_overlay():
+    """(3.0) The alerts page in OBS stays blank if OBS opened before VaultHub: tell OBS to load it again."""
+    if not streamoverlay.start():
+        return
+    import obsctl
+    try:
+        obsctl.ask_once("PressInputPropertiesButton", {"inputName": streamoverlay.SOURCE, "propertyName": "refreshnocache"})
+    except Exception:  # noqa: BLE001 (OBS closed, or the alerts aren't in OBS)
+        pass
 
 
 def config():
