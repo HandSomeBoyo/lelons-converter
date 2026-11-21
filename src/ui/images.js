@@ -66,6 +66,7 @@ function showTab(tab) {
   if (typeof commentsTabChanged === "function") commentsTabChanged(tab);
   if (typeof titlesTabChanged === "function") titlesTabChanged(tab);
   if (typeof liveTabChanged === "function") liveTabChanged(tab);
+  if (typeof linkTabChanged === "function") linkTabChanged(tab);
   if (typeof playerTabChanged === "function") playerTabChanged();
   if (loadPref("tab") !== tab) savePref("tab", tab);
 }
@@ -190,6 +191,14 @@ $("imgSquare").addEventListener("click", () => { imageOptions.square = !imageOpt
 $("imgGray").addEventListener("click", () => { imageOptions.gray = !imageOptions.gray; renderImages(); });
 $("imgReset").addEventListener("click", () => { imageOptions = { ...DEFAULT_IMAGE_OPTIONS, format: imageOptions.format }; renderImages(); });
 
+// (3.0) Quality, turning and extras sit behind "More options".
+let imgMoreOpen = false;
+$("imgMoreToggle").addEventListener("click", () => { imgMoreOpen = !imgMoreOpen; renderImages(); });
+function imgMoreChanged() {
+  const o = imageOptions;
+  return [o.rotate !== 0, o.flipH, o.flipV, o.square, o.gray, ["jpg", "webp"].includes(o.format) && o.quality !== 90].filter(Boolean).length;
+}
+
 $("imgClear").addEventListener("click", () => {
   for (const item of imageItems.splice(0)) if (item.id) api("/api/image-remove", { id: item.id });
   renderImages();
@@ -214,22 +223,29 @@ function outputSize(item) {
 
 // ---- converting
 
+// A picture already saved with exactly these choices is left out of Convert
+// (clicking it again would only make "name (2)").
+const imageSig = () => JSON.stringify(imageOptions);
+const imageMade = (item) => item.status === "done" && item.doneAs === imageSig();
+const imagesToDo = () => imageItems.filter((i) => i.id && i.status !== "loading" && !imageMade(i));
+
 $("imgConvert").addEventListener("click", async () => {
   if (converting) return;
-  const todo = imageItems.filter((i) => i.id && i.status !== "loading");
+  const todo = imagesToDo();
   if (!todo.length) return;
   converting = true;
   const folder = await whereToSave();
   if (!folder) return void (converting = false);
   saveImageOptions();
+  const sig = imageSig(), options = { ...imageOptions };
   for (const item of todo) Object.assign(item, { status: "waiting", message: "Waiting..." });
   renderImages();
   for (const item of todo) {
     Object.assign(item, { status: "working", message: "Converting..." });
     renderImages();
     try {
-      const res = await api("/api/image-convert", { id: item.id, options: imageOptions, folder });
-      if (res.ok) Object.assign(item, { status: "done", path: res.path, message: `Saved as ${res.name} · ${res.width} × ${res.height} · ${sizeText(res.bytes)}` });
+      const res = await api("/api/image-convert", { id: item.id, options, folder });
+      if (res.ok) Object.assign(item, { status: "done", doneAs: sig, path: res.path, message: `Saved as ${res.name} · ${res.width} × ${res.height} · ${sizeText(res.bytes)}` });
       else Object.assign(item, { status: "error", message: res.error });
     } catch (e) {
       Object.assign(item, { status: "error", message: "Couldn't save this picture." });
@@ -258,7 +274,9 @@ function renderImageRow(el, item) {
       </div>
       <div class="actions"></div>`;
   }
-  el.className = "image-row " + item.status;
+  // Saved, but the choices changed since: it looks ready again (not "Saved as" the old one).
+  const madeOther = item.status === "done" && !converting && !imageMade(item);
+  el.className = "image-row " + (madeOther ? "ready" : item.status);
   setDrag(el, item.status === "done" && item.path ? { kind: "image", path: item.path } : null);
   el.title = item.status === "done" && item.path ? DRAG_HINT : "";
   const o = imageOptions;
@@ -274,7 +292,7 @@ function renderImageRow(el, item) {
   const badge = el.querySelector(".badge");
   badge.hidden = !item.kind;
   badge.textContent = item.kind ? `${item.kind} → ${o.format.toUpperCase()}` : "";
-  let message = item.message;
+  let message = madeOther ? "" : item.message;
   if (!message && item.width) {
     const [w, h] = outputSize(item);
     const same = w === item.width && h === item.height;
@@ -328,6 +346,11 @@ function renderImages() {
   if ($("imgWidth").value !== o.width) $("imgWidth").value = o.width;
   if ($("imgHeight").value !== o.height) $("imgHeight").value = o.height;
   $("qualityRow").hidden = !["jpg", "webp"].includes(o.format);
+  $("imgMore").hidden = !imgMoreOpen;
+  $("imgMoreToggle").classList.toggle("open", imgMoreOpen);
+  $("imgMoreToggle").setAttribute("aria-expanded", String(imgMoreOpen));
+  const changed = imgMoreChanged();
+  $("imgMoreText").textContent = imgMoreOpen ? "Fewer options" : changed ? `More options (${changed} on)` : "More options";
   $("imgQuality").value = o.quality;
   $("imgQualityValue").textContent = o.quality;
   $("imgSquare").classList.toggle("active", o.square);
@@ -335,10 +358,11 @@ function renderImages() {
   $("flipH").classList.toggle("active", o.flipH);
   $("flipV").classList.toggle("active", o.flipV);
 
-  const ready = imageItems.filter((i) => i.id).length;
+  const ready = imagesToDo().length;
+  const allMade = !ready && imageItems.some(imageMade);
   $("imgConvert").disabled = converting || !ready;
   $("imgConvert").classList.toggle("busy", converting);
-  $("imgConvertText").textContent = converting ? "Converting..." : ready > 1 ? `Convert ${ready} images` : "Convert";
+  $("imgConvertText").textContent = converting ? "Converting..." : allMade ? "All done" : ready > 1 ? `Convert ${ready} images` : "Convert";
   $("imgClear").hidden = converting;
 }
 

@@ -36,7 +36,7 @@ PICK_KINDS = [
     ("All files", "*.*"),
 ]
 PUBLIC = ("id", "name", "bytes", "seconds", "video", "audio", "width", "height", "thumb",
-          "status", "progress", "message", "trimLabel", "run", "cancel", "sub", "watch")
+          "status", "progress", "message", "trimLabel", "run", "cancel", "sub", "watch", "doneAs")
 
 
 def is_media(name):
@@ -157,6 +157,7 @@ class Files:
             "width": found["width"], "height": found["height"], "probe": found,
             "thumb": f"/file-thumb/{file_id}" if has_thumb else "", "thumbPath": thumb if has_thumb else "",
             "status": "ready", "progress": 0, "message": "", "trimLabel": "", "out": "", "run": 0, "cancel": False,
+            "doneAs": "",  # the page's note of the choices it was last converted with (so Convert skips it)
             "sub": sub, "watch": watch,
         }
         with self.lock:
@@ -244,7 +245,8 @@ class Files:
                         trim = (start, min(end, item["seconds"] or end))
                 except (TypeError, ValueError):
                     pass
-                item.update(status="queued", progress=0, message="Waiting...", job=dict(settings, trim=trim),
+                item.update(status="queued", progress=0, message="Waiting...",
+                            job=dict(settings, trim=trim, sig=str(pick.get("sig") or "")[:300]),
                             run=item["run"] + 1,
                             trimLabel=f"{_clock(trim[0])} to {_clock(trim[1])}" if trim else "")
             self.wake.notify()
@@ -271,9 +273,21 @@ class Files:
                 self._update(item, status="error", progress=0, message=message)
                 self._finished(item)
             else:
-                self._update(item, status="done", progress=100, out=path, message=message)
-                trim = item["job"]["trim"]
-                history.count(item["job"]["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                self._update(item, status="done", progress=100, out=path, message=message, doneAs=item["job"].get("sig", ""))
+                job = item["job"]
+                trim = job["trim"]
+                history.count(job["format"], (trim[1] - trim[0]) if trim else item.get("seconds") or 0)
+                try:  # (3.0) the History tab lists it too
+                    quality = job["quality"]
+                    label = (f"Under {job['targetMb']:g} MB" if job["targetMb"] else
+                             f"{quality} px" if job["format"] == "gif" and quality else
+                             f"{quality}p" if job["format"] == "mp4" and quality else
+                             f"{quality} kbps" if job["format"] in ("mp3", "m4a") and quality else "")
+                    history.add_local("file", os.path.splitext(item["name"])[0] or item["name"], path, job["format"], label,
+                                      (trim[1] - trim[0]) if trim else item.get("seconds") or 0, item["trimLabel"],
+                                      item["thumbPath"])
+                except Exception:
+                    pass
                 self._finished(item)
 
     def _finished(self, item):

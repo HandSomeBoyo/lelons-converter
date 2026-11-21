@@ -21,7 +21,29 @@ STEPS = {
     "Shrink": "Making it smaller",
     "Volume": "Evening out the volume",
     "Metadata": "Adding the title and cover art",
+    "Thumbnail": "Getting the thumbnail",
 }
+
+
+def size_text(n):
+    return f"{n / 1e9:.1f} GB" if n >= 1e9 else f"{n / 1e6:.1f} MB" if n >= 1e5 else f"{max(1, round(n / 1e3))} KB"
+
+
+def time_left(seconds):
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{max(1, seconds)} sec left"
+    if seconds < 3600:
+        return f"{round(seconds / 60)} min left"
+    return f"{seconds // 3600} h {seconds % 3600 // 60} min left"
+
+
+def download_text(got, total, eta):
+    """(3.0) "12.3 MB of 40.1 MB · 30 sec left", or as much of it as is known."""
+    parts = [f"{size_text(got)} of {size_text(total)}" if total else size_text(got) if got else ""]
+    if eta is not None and total and got < total:
+        parts.append(time_left(eta))
+    return " · ".join(p for p in parts if p) or "starting"
 
 
 class Queue:
@@ -146,8 +168,9 @@ class Queue:
             self._stop_if_asked(job)  # raising here stops yt-dlp and ffmpeg
             if d["status"] == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
-                percent = d["downloaded_bytes"] * 100 / total if total else 0
-                self._update(job, progress=percent, message=f"Downloading... {percent:.0f}%")
+                got = d.get("downloaded_bytes") or 0
+                percent = got * 100 / total if total else 0
+                self._update(job, progress=percent, message="Downloading... " + download_text(got, total, d.get("eta")))
             elif d["status"] == "finished":
                 self._update(job, progress=100, message="Converting...")
             elif d["status"] == "step" and d["step"] in STEPS:
@@ -166,8 +189,11 @@ class Queue:
             self._update(job, **{k: v for k, v in preview.items() if k in ("title", "channel", "duration", "thumbnail", "seconds")})
             self._stop_if_asked(job)
             self._update(job, message="Starting download...")
-            path = downloader.download(info, job["folder"], job["format"], job["quality"],
-                                       on_progress, job["trim"], job["normalize"])
+            if job["format"] == "jpg":  # (3.0) only the video's thumbnail
+                path = downloader.save_thumbnail(info, job["folder"], on_progress)
+            else:
+                path = downloader.download(info, job["folder"], job["format"], job["quality"],
+                                           on_progress, job["trim"], job["normalize"])
         except Exception as e:
             self._update(job, status="error", cancel=False,
                          message=STOPPED if job.get("cancel") else downloader.friendly_error(e))
