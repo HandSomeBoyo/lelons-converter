@@ -78,6 +78,8 @@ function lvDrawAlerts() {
             <div class="lva-filerow"><select class="lv-snd lva-snd">${soundOptions(pk.sound)}</select>
               <input type="range" class="volume-slider lva-vol" min="0" max="100" value="${pk.volume}" title="This alert's volume"></div></div>
         </div>
+        <form class="lva-link"><span class="input"><input class="lva-link-in" placeholder="Or paste a link to a GIF or sound (Giphy, Tenor...)" spellcheck="false"></span>
+          <button type="submit" class="ghost-button" ${LVAS.linking ? "disabled" : ""}>${LVAS.linking ? "Getting it..." : "Use it"}</button></form>
         <div class="lva-row-actions"><button type="button" class="link lva-reset">Use the standard text</button><span class="sp"></span>
           <button type="button" class="ghost-button lva-obs-test">Send a test to OBS</button></div>
       </div>` : ""}
@@ -157,6 +159,18 @@ function lvaWire() {
     };
     r.querySelector(".lva-vol").onchange = async (e) => { await lvaSet({ kinds: { [k]: { volume: +e.target.value } } }); lvaPreview(k); };
     r.querySelector(".lva-pick").onclick = () => lvaPick(k, "picture");
+    r.querySelector(".lva-link").onsubmit = async (e) => {
+      e.preventDefault();
+      const url = r.querySelector(".lva-link-in").value.trim();
+      if (!url || LVAS.linking) return;
+      LVAS.linking = true; lvDrawAlerts();
+      const res = await api("/api/live-ov-link", { kind: k, what: "auto", url }).catch(() => null);
+      LVAS.linking = false;
+      if (!res || !res.ok) lvToast({ emoji: "⚠️", title: "Couldn't use that link", text: (res && res.error) || "" });
+      await lvaLoad();
+      lvDrawAlerts();
+      if (res && res.ok) lvaPreview(k);
+    };
     r.querySelector(".lva-unpic")?.addEventListener("click", async () => { await lvaSet({ kinds: { [k]: { picture: "" } } }); lvDrawAlerts(); lvaPreview(k); });
     r.querySelector(".lva-obs-test").onclick = async (e) => {
       const res = await api("/api/live-ov-test", { kind: k }).catch(() => null);

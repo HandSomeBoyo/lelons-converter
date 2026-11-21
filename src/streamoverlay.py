@@ -134,6 +134,97 @@ def save_file(kind, what, name, stream, length):
     return p
 
 
+CONTENT_EXT = {"image/gif": ".gif", "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "video/webm": ".webm",
+               "video/mp4": ".mp4", "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/wav": ".wav", "audio/x-wav": ".wav",
+               "audio/wave": ".wav", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a"}
+
+
+def _fetch(link, limit):
+    import urllib.request
+
+    class _Hops(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            if not _is_public(newurl):  # a link must not lead into your own network
+                raise ValueError("That link doesn't work here.")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    req = urllib.request.Request(link, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VaultHub"})
+    with urllib.request.build_opener(_Hops).open(req, timeout=20) as r:
+        kind = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        data = r.read(limit + 1)
+    return kind, data, r.geturl()
+
+
+def _is_public(link):
+    import ipaddress
+    import socket
+    import urllib.parse
+    parts = urllib.parse.urlsplit(link)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return False
+    try:
+        for info in socket.getaddrinfo(parts.hostname, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def save_link(kind, what, link):
+    """(3.0) A GIF, video or sound from a link (Giphy, Tenor, or any direct link to a file).
+    what "auto": a picture or a sound, whichever the link is."""
+    import html
+    import io
+    link = str(link or "").strip()
+    if not re.match(r"^https?://", link):
+        raise ValueError("Paste a link that starts with https://")
+    m = re.match(r"^https?://(?:www\.)?giphy\.com/(?:gifs|stickers)/(?:[\w-]*-)?([A-Za-z0-9]+)/?(?:[?#].*)?$", link)
+    if m:  # a Giphy page: its GIF has a fixed address
+        link = f"https://media.giphy.com/media/{m.group(1)}/giphy.gif"
+    for _ in range(2):
+        if not _is_public(link):
+            raise ValueError("That link doesn't work here.")
+        try:
+            ctype, data, final = _fetch(link, MAX_FILE)
+        except Exception:  # noqa: BLE001 (the site said no, no internet...)
+            raise ValueError("Couldn't get that link. Check it opens in your browser.")
+        if len(data) > MAX_FILE:
+            raise ValueError("That file is too big (25 MB at most).")
+        if ctype != "text/html":
+            break
+        # A web page (Tenor, Giphy, a sound site): use the picture, video or sound it shares.
+        page = data[:2_000_000].decode("utf-8", "replace")
+        found = ""
+        pics, sounds = ("og:video", "og:video:url", "og:image", "twitter:image"), ("og:audio", "twitter:player:stream")
+        wanted = sounds if what == "sound" else pics if what == "picture" else sounds[:1] + pics
+        for prop in wanted:
+            m = re.search(r'<meta[^>]+(?:property|name)=["\']' + re.escape(prop) + r'["\'][^>]*content=["\']([^"\']+)', page, re.I) \
+                or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*(?:property|name)=["\']' + re.escape(prop) + r'["\']', page, re.I)
+            if m:
+                found = html.unescape(m.group(1))
+                break
+        if not found:
+            raise ValueError("VaultHub couldn't find a file on that page. Right-click the GIF or sound and copy its address instead.")
+        link = urllib_join(final, found)
+    else:
+        raise ValueError("VaultHub couldn't find a file on that page.")
+    ext = CONTENT_EXT.get(ctype) or os.path.splitext(link.split("?")[0])[1].lower()
+    if what == "auto":
+        what = "sound" if ext in SOUND_TYPES else "picture"
+    allowed = SOUND_TYPES if what == "sound" else PICTURE_TYPES
+    if ext not in allowed:
+        raise ValueError("That link is a sound, not a picture." if ext in SOUND_TYPES else
+                         "That link is a picture, not a sound." if ext in PICTURE_TYPES else "That link isn't a GIF, video or sound VaultHub can use.")
+    return save_file(kind, what, "link" + ext, io.BytesIO(data), len(data))
+
+
+def urllib_join(base, link):
+    import urllib.parse
+    return urllib.parse.urljoin(base, link)
+
+
 # ---------------------------------------------------------------- alerts coming in
 
 def _money_amount(e):

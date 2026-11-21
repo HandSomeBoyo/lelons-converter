@@ -956,6 +956,12 @@ class Handler(BaseHTTPRequestHandler):
                 import streamoverlay
                 streamoverlay.set_prefs(data)
                 return self.send_json({"ok": True, "ov": streamoverlay.status()})
+            elif action == "ov-link":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "prefs": streamoverlay.save_link(str(data.get("kind") or ""), str(data.get("what") or ""), data.get("url"))})
+                except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "ov-test":
                 import streamoverlay
                 try:
