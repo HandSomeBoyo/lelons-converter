@@ -72,7 +72,9 @@ function drawChCmp() {
   const ready = a && b && !a.partial && !b.partial;
   $("chCmpResult").hidden = !(a && b);
   if (!a || !b) return;
-  $("chCmpVerdict").textContent = ready ? chCmpVerdict(a, b) : "Getting both videos' numbers...";
+  const failed = chCmpItems.some((x) => x && x.error && !x.loading);
+  $("chCmpVerdict").textContent = ready ? chCmpVerdict(a, b)
+    : failed ? "Couldn't get all the numbers. Press the refresh button at the top to try again." : "Getting both videos' numbers...";
   drawChCmpRows(a, b, ready);
   drawChCmpFirst(a, b, ready);
 }
@@ -233,7 +235,7 @@ function drawChCmpFirst(a, b, ready) {
     return;
   }
   const days = Math.max(lines[0].length, lines[1].length, 2);
-  const W = 640, H = 200, L = 46, R = 12, T = 12, B = 26;
+  const W = Math.max(320, Math.round($("chCmpResult").clientWidth) || 640), H = 200, L = 46, R = 12, T = 12, B = 26;
   let hi = Math.max(1, ...lines.flat());
   const step = niceStep(hi / 3 || 1);
   hi = Math.ceil(hi / step) * step;

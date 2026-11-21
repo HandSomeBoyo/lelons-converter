@@ -2120,6 +2120,7 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15); }
 .stats-note:empty { display: none; }
 .stats-card { margin-bottom: 12px; }
 .stats-grid { margin-bottom: 12px; }
+#channelTab .stats-grid { align-items: stretch; }
 
 .stats-board { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .stats-row {
@@ -5921,8 +5922,8 @@ main { container: page / inline-size; }
 .ch-video-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ch-video-text b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-video-text small { color: var(--muted); font-size: 12.5px; }
-.ch-video-stats { display: flex; gap: 14px; }
-.ch-stat { display: inline-flex; align-items: center; gap: 5px; min-width: 52px; font-size: 13px; font-weight: 600; }
+.ch-video-stats { display: grid; grid-template-columns: 74px 62px 56px; gap: 8px; }
+.ch-stat { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 600; }
 .ch-stat svg { width: 15px; height: 15px; color: var(--muted); }
 .ch-usual { justify-self: end; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
 .ch-usual.up { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
@@ -7027,6 +7028,7 @@ html.side-small .sidebar .tabs .tab-dot { position: absolute; top: 6px; right: 8
 .cm-filters button b:empty { display: none; }
 .cm-bar2 { margin: 4px 0 10px; }
 .cm-search { flex: 1; min-width: 160px; height: 36px; }
+.cm-search input { font-size: 13.5px; }
 .cm-bar2 .cm-video { height: 36px; }
 .cm-video { height: 34px; max-width: 230px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel2);
   color: var(--text); font: 13px Inter, "Segoe UI", sans-serif; cursor: pointer; }
@@ -7070,6 +7072,7 @@ html.side-small .sidebar .tabs .tab-dot { position: absolute; top: 6px; right: 8
 .cm-card .cm-actions button.link { font-size: 12.5px; color: var(--muted); }
 .cm-card .cm-actions button.link:hover { color: var(--text); }
 .cm-card .cm-actions button.cm-hide:hover { color: var(--red); }
+.cm-card button.cm-sure, .cm-card .cm-sure:hover { color: var(--red); opacity: 1; }
 .cm-box { margin: 10px 0 0 44px; display: flex; flex-direction: column; gap: 8px; animation: rise-in .25s var(--ease-out) both; }
 .cm-box textarea { box-sizing: border-box; width: 100%; min-height: 64px; resize: none; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line2);
   background: var(--panel2); color: var(--text); font: 14px/1.45 Inter, "Segoe UI", sans-serif; outline: none; }

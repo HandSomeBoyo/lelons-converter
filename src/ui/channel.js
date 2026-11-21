@@ -165,7 +165,8 @@ function drawChChart(d) {
       : "The app writes your numbers down once a day, so the graph fills in from tomorrow."}</div>`;
     return;
   }
-  const W = 640, H = 220, L = 46, R = 12, T = 12, B = 26;
+  // As wide as the card really is, so the numbers stay small text on a big window (not stretched up).
+  const W = Math.max(320, Math.round(box.clientWidth) || 640), H = 220, L = 46, R = 12, T = 12, B = 26;
   const x0 = points[0][0], x1 = points[points.length - 1][0];
   let lo = Math.min(...points.map((p) => p[1])), hi = Math.max(...points.map((p) => p[1]));
   if (chChart !== "subs") lo = 0; // per day: from 0
@@ -338,6 +339,7 @@ $("chRefresh").addEventListener("click", async () => {
   $("chRefresh").classList.add("spinning");
   await api("/api/ch-refresh", {});
   setTimeout(loadChannel, 300);
+  setTimeout(() => { chCmpSig = ""; loadChCompare(); }, 300); // (a video that couldn't be read is tried again too)
 });
 $("chMore").addEventListener("click", (e) => { e.stopPropagation(); $("chMenu").hidden = !$("chMenu").hidden; });
 document.addEventListener("click", (e) => { if (!$("chMenu").hidden && !$("chMenu").contains(e.target)) $("chMenu").hidden = true; });
@@ -370,5 +372,10 @@ document.querySelectorAll("#chChartPick button").forEach((b) => b.addEventListen
   savePref("chChart", chChart);
   if (chData) drawChChart(chData);
 }));
-window.addEventListener("resize", drawChRange);
+let chResizeTimer = null;
+window.addEventListener("resize", () => {
+  drawChRange();
+  clearTimeout(chResizeTimer);
+  chResizeTimer = setTimeout(() => { if (chData && chData.mode !== "none" && !$("channelTab").hidden) { $("channelTab").classList.add("stats-calm"); drawChChart(chData); const a = chCmpVideo(0), b = chCmpVideo(1); if (a && b) drawChCmpFirst(a, b, !a.partial && !b.partial); } }, 150);
+});
 if (!$("channelTab").hidden) channelTabChanged("channel"); // the app opened on this tab

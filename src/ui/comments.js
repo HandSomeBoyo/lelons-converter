@@ -236,7 +236,7 @@ function cmActions(t, d) {
   row.className = "cm-actions";
   if (t.status === "held") {
     row.append(cmButton("Let it through", "small-button", () => cmModerate(t, "approve"), "Show it on YouTube"),
-      cmButton("Hide it", "ghost-button", () => cmModerate(t, "hide"), "Don't show it on your channel"));
+      cmButton("Hide it", "ghost-button", (e) => cmModerate(t, "hide", e.currentTarget), "Don't show it on your channel"));
   } else {
     if (t.canReply && cmOpen !== t.id) {
       row.append(cmButton(t.status === "needs" ? "Answer" : "Answer again", t.status === "needs" ? "small-button" : "ghost-button", () => cmOpenBox(t.id)));
@@ -248,7 +248,7 @@ function cmActions(t, d) {
   row.append(cmButton("Open on YouTube", "link", () => api("/api/ch-open", {
     url: `https://www.youtube.com/watch?v=${t.videoId}&lc=${t.id}` })));
   if (t.status !== "held" && t.status !== "mine" && d.google.canReply) {
-    row.append(cmButton("Hide", "link cm-hide", () => cmModerate(t, "hide"), "Hide this comment from your channel"));
+    row.append(cmButton("Hide", "link cm-hide", (e) => cmModerate(t, "hide", e.currentTarget), "Hide this comment from your channel. You can find it again in YouTube Studio under Comments > Removed."));
   }
   return row;
 }
@@ -361,8 +361,24 @@ async function cmDone(t, done) {
   setTimeout(loadComments, 600);
 }
 
-async function cmModerate(t, how) {
-  if (how === "hide" && !confirm("Hide this comment from your channel? You can find it again in YouTube Studio under Comments > Removed.")) return;
+// Hiding and deleting ask "sure?" on the button itself (click it again), not with a Windows popup.
+function cmSure(button, ask) {
+  if (button.dataset.sure) return true;
+  const was = button.textContent;
+  button.dataset.sure = "1";
+  button.textContent = ask;
+  button.classList.add("cm-sure");
+  setTimeout(() => {
+    if (!button.isConnected) return;
+    delete button.dataset.sure;
+    button.textContent = was;
+    button.classList.remove("cm-sure");
+  }, 3500);
+  return false;
+}
+
+async function cmModerate(t, how, button) {
+  if (how === "hide" && button && !cmSure(button, "Click again to hide")) return;
   const res = await api("/api/cm-" + how, { id: t.id });
   if (!res.ok) { $("cmNote").textContent = res.error; return; }
   cmSig = "";
@@ -370,7 +386,7 @@ async function cmModerate(t, how) {
 }
 
 async function cmUnreply(id, button) {
-  if (!confirm("Delete your answer on YouTube?")) return;
+  if (!cmSure(button, "Click again to delete")) return;
   button.disabled = true;
   const res = await api("/api/cm-unreply", { id });
   if (!res.ok) { $("cmNote").textContent = res.error; button.disabled = false; return; }
