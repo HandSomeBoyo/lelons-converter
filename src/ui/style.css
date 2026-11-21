@@ -8749,6 +8749,9 @@ body:has(.pj-jobs:not([hidden])) .ps-pillbtn, body:has(.pj-jobs:not([hidden])) .
 .lva-set .sp { flex: 1; }
 .lva-set .volume-slider { width: 120px; }
 .lva-set b { font: 600 12.5px var(--head); min-width: 38px; text-align: right; }
+.lva-set .words { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; }
+.lva-set .words b { font-family: inherit; font-weight: 500; font-size: 13.5px; min-width: 0; text-align: left; }
+.lva-set .words small { color: var(--muted); font-size: 12px; }
 .lva-colors { display: inline-flex; gap: 6px; }
 .lva-colors button { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
 .lva-colors button.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text); }

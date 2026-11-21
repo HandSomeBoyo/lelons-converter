@@ -76,6 +76,33 @@ function tone(kind, volume) {
   }
 }
 
+// Messages read out loud (subs, bits, Super Chats). VaultHub makes the voice with Windows, so it plays
+// through this page and reaches your stream. Without it (or in the preview), the page reads it itself.
+function speechText(a) {
+  let t = String(a.message || "").replace(/https?:\/\/\S+|www\.\S+/g, "");
+  if (a.kind === "bits") t = t.replace(/\b[A-Za-z]+\d+\b/g, "");
+  return t.replace(/\s+/g, " ").trim().slice(0, 150);
+}
+function speak(a, volume) {
+  const text = speechText(a);
+  if (style.tts === false || !text) return Promise.resolve();
+  return new Promise((done) => {
+    const own = () => {
+      if (!window.speechSynthesis) return done();
+      const u = new SpeechSynthesisUtterance(text);
+      u.volume = Math.max(0, Math.min(1, volume));
+      u.onend = u.onerror = () => done();
+      speechSynthesis.speak(u);
+    };
+    if (preview || !a.id) return own();
+    const v = new Audio("/alerts/voice/" + a.id + ".wav");
+    v.volume = Math.max(0, Math.min(1, volume));
+    v.onended = () => done();
+    v.onerror = own;
+    v.play().catch(() => {});
+  });
+}
+
 function media(name) { return "/alerts/media/" + encodeURIComponent(name); }
 
 function show(a) {
@@ -101,12 +128,14 @@ function show(a) {
     tone(sound, volume);
   }
   const seconds = Math.max(3, Math.min(20, +style.seconds || 7));
-  return new Promise((done) => {
-    setTimeout(() => {
-      el.classList.add("out");
-      setTimeout(() => { el.remove(); done(); }, 500);
-    }, seconds * 1000);
-  });
+  // The message is read after the sound. The alert stays up until both are done (25 seconds at most).
+  const talk = new Promise((r) => setTimeout(r, 1600)).then(() => speak(a, volume));
+  const least = new Promise((r) => setTimeout(r, seconds * 1000));
+  const most = new Promise((r) => setTimeout(r, 25000));
+  return Promise.race([Promise.all([talk, least]), most]).then(() => new Promise((done) => {
+    el.classList.add("out");
+    setTimeout(() => { el.remove(); done(); }, 500);
+  }));
 }
 
 async function next() {
@@ -142,6 +171,7 @@ if (preview) {
     if (d.type !== "vh-alert") return;
     kinds = d.kinds || kinds;
     style = d.style || style;
+    if (window.speechSynthesis) speechSynthesis.cancel();
     show(d.alert).catch(() => {});
   });
 } else {

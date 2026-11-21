@@ -38,7 +38,7 @@ KINDS = {
     "superchat": {"name": "Super Chat", "text": "{name} sent {money}!", "emoji": "💸", "sound": "coins"},
     "member": {"name": "New member", "text": "{name} just became a member!", "emoji": "🎖️", "sound": "chime"},
 }
-STYLE_DEFAULTS = {"color": "#ffcf3f", "seconds": 7, "volume": 70}
+STYLE_DEFAULTS = {"color": "#ffcf3f", "seconds": 7, "volume": 70, "tts": True}
 
 _lock = threading.Lock()
 _queue = deque(maxlen=50)  # (seq, alert)
@@ -47,6 +47,9 @@ _server = None
 _port = 0
 _mystery = {}  # gifter -> [subs still to come as single gifts, at]
 _seen = 0  # the last time the page in OBS asked for alerts
+_tts = {}  # alert id -> {"done": Event, "wav": bytes} (messages read out loud)
+_tts_lock = threading.Lock()  # one voice at a time
+VOICE = os.name == "nt"  # Windows has a voice built in
 
 
 # ---------------------------------------------------------------- settings
@@ -69,6 +72,8 @@ def set_prefs(data):
     p = prefs()
     if "color" in data and re.fullmatch(r"#[0-9a-fA-F]{6}", str(data["color"])):
         p["color"] = str(data["color"])
+    if "tts" in data:
+        p["tts"] = bool(data["tts"])
     for key, lo, hi in (("seconds", 3, 20), ("volume", 0, 100)):
         if key in data:
             try:
@@ -258,9 +263,55 @@ def add(alert):
     k = prefs()["kinds"].get(alert["kind"])
     if not k or not (k["on"] or alert.get("test")):
         return
+    text = speech_text(alert) if VOICE and prefs()["tts"] else ""
+    job = {"done": threading.Event(), "wav": b""}
     with _lock:
         _seq += 1
         _queue.append((_seq, {**alert, "id": _seq, "at": time.time()}))
+        if text:
+            _tts[_seq] = job
+            for old in [i for i in _tts if i < _seq - 20]:
+                del _tts[old]
+    if text:
+        threading.Thread(target=lambda: _make_voice(job, text), daemon=True).start()
+
+
+# ---------------------------------------------------------------- messages read out loud
+
+def speech_text(alert):
+    """What gets read out: the message, without links (and without "cheer100" on bits)."""
+    t = str(alert.get("message") or "")
+    t = re.sub(r"https?://\S+|www\.\S+", "", t)
+    if alert.get("kind") == "bits":
+        t = re.sub(r"\b[A-Za-z]+\d+\b", "", t)
+    return re.sub(r"\s+", " ", t).strip()[:150]
+
+
+def _make_voice(job, text):
+    """Windows' own voice makes a .wav. It plays through the page in OBS, so it reaches your stream."""
+    import subprocess
+    import tempfile
+    try:
+        with _tts_lock:
+            fd, path = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+            try:
+                ps = ("[Console]::InputEncoding=[Text.Encoding]::UTF8; Add-Type -AssemblyName System.Speech; "
+                      "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $t=[Console]::In.ReadToEnd(); "
+                      "$s.SetOutputToWaveFile($env:VH_TTS_OUT); $s.Speak($t); $s.Dispose()")
+                subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], input=text.encode("utf-8"),
+                               env={**os.environ, "VH_TTS_OUT": path}, timeout=30, capture_output=True,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                with open(path, "rb") as f:
+                    job["wav"] = f.read()
+            finally:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    except Exception:  # noqa: BLE001 (no voice: the page reads it out itself instead)
+        pass
+    job["done"].set()
 
 
 def test(kind):
@@ -312,6 +363,13 @@ class _Handler(BaseHTTPRequestHandler):
             if m and os.path.isfile(os.path.join(MEDIA_DIR, m.group(1))):
                 with open(os.path.join(MEDIA_DIR, m.group(1)), "rb") as f:
                     return self._send(f.read(), mimetypes.guess_type(m.group(1))[0] or "application/octet-stream", cache=True)
+            m = re.fullmatch(r"/alerts/voice/(\d+)\.wav", path)
+            if m:
+                with _lock:
+                    job = _tts.get(int(m.group(1)))
+                if job and job["done"].wait(30) and len(job["wav"]) > 100:
+                    return self._send(job["wav"], "audio/wav")
+                return self.send_error(404)
             m = re.fullmatch(r"/alerts/fonts/([a-z0-9-]+\.woff2)", path)
             if m and os.path.isfile(os.path.join(FONTS, m.group(1))):
                 with open(os.path.join(FONTS, m.group(1)), "rb") as f:

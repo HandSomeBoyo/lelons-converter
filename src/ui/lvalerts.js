@@ -12,7 +12,7 @@ const LVA_SAMPLE = {
   raid: { name: "BigStreamer", amount: 48 }, bits: { name: "nightowl_k", amount: 500, message: "cheer500 great play" },
   superchat: { name: "Kari", money: "NOK 50", message: "Hi from Bergen!" }, member: { name: "Tor" },
 };
-const LVAS = { ov: null, open: "", busy: false, error: "", obsMsg: "" };
+const LVAS = { ov: null, open: "", busy: false, error: "", obsMsg: "", peek: false };
 
 async function lvaLoad() {
   const res = await api("/api/live-ov", {}).catch(() => null);
@@ -31,12 +31,20 @@ function lvaOnStream(kind) {
   return !!(LVAS.ov && LVAS.ov.prefs.kinds[k] && LVAS.ov.prefs.kinds[k].on);
 }
 
-function lvaPreview(kind) {
+// The preview card only shows once you press ▶ (and goes away with Hide)
+function lvaPreview(kind, open) {
+  if (!LVAS.peek) {
+    if (!open) return;
+    LVAS.peek = true;
+    lvDrawAlerts();
+    $("lvaFrame").addEventListener("load", () => setTimeout(() => lvaPreview(kind), 300), { once: true });
+    return;
+  }
   const f = $("lvaFrame"), ov = LVAS.ov;
   if (!f || !ov) return;
   const kinds = {};
   for (const [k, v] of Object.entries(ov.prefs.kinds)) kinds[k] = { ...v, emoji: ov.kinds[k].emoji };
-  f.contentWindow.postMessage({ type: "vh-alert", kinds, style: { color: ov.prefs.color, seconds: ov.prefs.seconds, volume: ov.prefs.volume },
+  f.contentWindow.postMessage({ type: "vh-alert", kinds, style: { color: ov.prefs.color, seconds: ov.prefs.seconds, volume: ov.prefs.volume, tts: ov.prefs.tts },
     alert: { kind, amount: 0, months: 0, to: "", money: "", message: "", ...LVA_SAMPLE[kind] } }, "*");
 }
 
@@ -105,10 +113,10 @@ function lvDrawAlerts() {
         </div>
       </div>
       <div class="lv-col">
-        <div class="lv-card">
-          <h3>Preview<span class="sp"></span><span class="lv-muted" style="font-weight:500">only you see this</span></h3>
+        ${LVAS.peek ? `<div class="lv-card">
+          <h3>Preview<span class="sp"></span><span class="lv-muted" style="font-weight:500">only you see this</span><button type="button" class="link" id="lvaHide" style="margin-left:12px">Hide</button></h3>
           <div class="lva-stage"><iframe id="lvaFrame" title="Alert preview" allow="autoplay" src="${lvEsc(ov.url)}?preview=1"></iframe></div>
-        </div>
+        </div>` : ""}
         <div class="lv-card">
           <h3>In OBS<span class="sp"></span>${ov.watching ? `<span class="lva-ok">Showing</span>` : ""}</h3>
           ${ov.watching || LVAS.added ? `<p class="lv-muted">${ov.watching ? "OBS shows your alerts in every scene." : "Added to OBS."} Move or resize the <b>VaultHub alerts</b> source in OBS if you like.</p>`
@@ -127,6 +135,8 @@ function lvDrawAlerts() {
           <div class="lva-set"><span>Name color</span><span class="sp"></span><span class="lva-colors">${LVA_COLORS.map((c) => `<button type="button" class="${p.color.toLowerCase() === c ? "on" : ""}" data-c="${c}" style="--c:${c}" title="${c}"></button>`).join("")}</span></div>
           <div class="lva-set"><span>On screen for</span><span class="sp"></span><input type="range" class="volume-slider" id="lvaSecs" min="3" max="15" value="${p.seconds}"><b id="lvaSecsN">${p.seconds} s</b></div>
           <div class="lva-set"><span>Volume</span><span class="sp"></span><input type="range" class="volume-slider" id="lvaVol" min="0" max="100" value="${p.volume}"><b id="lvaVolN">${p.volume}%</b></div>
+          <div class="lva-set"><span class="words"><b>Read messages out loud</b><small>Messages with subs, bits and Super Chats</small></span><span class="sp"></span>
+            <label class="check"><input type="checkbox" id="lvaTts" ${p.tts ? "checked" : ""}></label></div>
         </div>
       </div>
     </div>
@@ -134,6 +144,7 @@ function lvDrawAlerts() {
   lvaWire();
   // The preview is the real 1920 x 1080 page, made small
   const stage = document.querySelector(".lva-stage");
+  if (!stage) return;
   const fit = () => { if ($("lvaFrame")) $("lvaFrame").style.transform = `scale(${stage.clientWidth / 1920})`; };
   fit();
   if (LVAS.fitter) LVAS.fitter.disconnect();
@@ -146,7 +157,7 @@ function lvaWire() {
   box.querySelectorAll(".lva-row").forEach((r) => {
     const k = r.dataset.k;
     r.querySelector(".lva-on").onchange = async (e) => { r.classList.toggle("off", !e.target.checked); await lvaSet({ kinds: { [k]: { on: e.target.checked } } }); };
-    r.querySelector(".lva-try").onclick = () => lvaPreview(k);
+    r.querySelector(".lva-try").onclick = () => lvaPreview(k, true);
     r.querySelector(".lva-edit").onclick = () => { LVAS.open = LVAS.open === k ? "" : k; lvDrawAlerts(); };
     const text = r.querySelector(".lva-text");
     if (!text) return;
@@ -212,6 +223,8 @@ function lvaWire() {
     lvDrawAlerts();
     setTimeout(async () => { await lvaLoad(); if (!$("lvalertsTab").hidden && !LVAS.open) lvDrawAlerts(); }, 4000);
   });
+  $("lvaHide")?.addEventListener("click", () => { LVAS.peek = false; lvDrawAlerts(); });
+  $("lvaTts").onchange = async (e) => { await lvaSet({ tts: e.target.checked }); if (e.target.checked) lvaPreview("sub"); };
   $("lvaCopy").onclick = () => { navigator.clipboard.writeText($("lvaUrl").value).catch(() => {}); $("lvaCopy").textContent = "Copied"; };
   // Look
   box.querySelectorAll(".lva-colors button").forEach((b) => { b.onclick = async () => { await lvaSet({ color: b.dataset.c }); lvDrawAlerts(); lvaPreview(LVAS.open || "follow"); }; });
