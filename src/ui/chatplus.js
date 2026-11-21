@@ -829,8 +829,8 @@ $("chatPlus").addEventListener("click", (e) => {
     return b;
   };
   pop.append(item(CP_ICONS.poll, "Make a poll", "Ask a question, everyone votes", openPollModal),
-    item(CP_ICONS.file, "Send a GIF from your PC", "Up to 10 MB", () => $("chatGifFile").click()),
-    item(CP_ICONS.mic, "Record a voice message", "Up to 10 minutes", () => startVoice("main")));
+    item(CP_ICONS.file, "Send a GIF from your PC", "Up to 10 MB", () => $("chatGifFile").click()));
+  // (3.0) voice messages: the mic button in the message box
 });
 
 // ---- sending things other than words (GIFs, stickers, polls), in the chat itself

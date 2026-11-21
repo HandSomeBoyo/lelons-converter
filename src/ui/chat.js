@@ -121,6 +121,7 @@ function drawUnread() {
     badge.hidden = !count;
     badge.textContent = chatMention ? "@" : count > 9 ? "9+" : count;
   }
+  if (typeof srvDrawRail === "function") srvDrawRail(); // (3.0) the "Your chats" badge on the left follows too
   if (chatIsOpen()) drawConvos();
 }
 
@@ -175,6 +176,15 @@ function openChat(withUser) {
   if (sfxUser()) $("chatInput").focus();
 }
 
+// (3.0) The chat's columns go by how wide the chat itself is (the side bar takes some of the window).
+// cw-m: a thread or search open squeezes the list of chats to pictures, and a server's member list hides.
+new ResizeObserver(([e]) => {
+  const w = e.contentRect.width;
+  if (!w) return;
+  $("chatPanel").classList.toggle("cw-m", w < 1180);
+  $("chatPanel").classList.toggle("cw-s", w < 760);
+}).observe($("chatPanel"));
+
 function closeChat() {
   if (typeof stopVoice === "function") { stopVoice(false); closePop(); }
   $("chatPanel").hidden = true;
@@ -188,7 +198,11 @@ function closeChat() {
 }
 window.addEventListener("pagehide", () => sendTyping(true));
 
+// (3.0) What you were typing stays with that chat, like a draft.
+const chatDrafts = new Map();
 function switchChat(name) {
+  const input = $("chatInput");
+  if (input.value.trim()) chatDrafts.set(chatDraftKey(), input.value); else chatDrafts.delete(chatDraftKey());
   sendTyping(true); // (in the chat being left)
   chatTypingNames = [];
   chatSeenBy = [];
@@ -202,10 +216,13 @@ function switchChat(name) {
   chatDrawn = "";
   $("chatList").replaceChildren();
   $("chatNote").textContent = "";
+  input.value = chatDrafts.get(chatDraftKey()) || "";
+  $("chatSuggest").hidden = true;
   drawConvos();
   pollChat(0);
   if (typeof srvChatSwitched === "function") srvChatSwitched(); // (servers.js)
 }
+function chatDraftKey() { return chatWith.toLowerCase(); }
 
 function drawChatUser() {
   const user = sfxUser();
@@ -353,8 +370,8 @@ function drawRoom() {
       b.addEventListener("click", fn);
       return b;
     };
-    tools.push(tool(CHAT_ICONS.people, "Add people", () => openGroupModal("edit", true)));
-    tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture and people", () => openGroupModal("edit")));
+    // (3.0) "Add people" lives in the group settings (the gear), to keep the top tidy.
+    tools.push(tool(CHAT_ICONS.gear, "Group settings: name, picture, people and adding people", () => openGroupModal("edit")));
   }
   if (chatWith && calls) {
     // Call them, or the whole group (or join the group's call that's going on).
@@ -806,6 +823,12 @@ function chatMessageEl(m, follow, shownUpTo, canDeleteAll) {
       line.append(pin);
     }
     body.append(line);
+  } else if (m.pinned) { // (3.0) a pinned message under another one still says so
+    const pin = document.createElement("span");
+    pin.className = "pinned-tag solo";
+    pin.innerHTML = CP_ICONS.pin;
+    pin.append("Pinned");
+    body.append(pin);
   }
   chatMessageParts(m, body, "main"); // (2.31.0) text, voice, GIFs, stickers, polls, link cards, reactions, thread
   el.append(body);
@@ -923,6 +946,11 @@ function knownNames() {
 }
 
 let suggestPick = 0;
+function typedName() {
+  const input = $("chatInput");
+  const match = input.value.slice(0, input.selectionStart).match(/@([A-Za-z0-9_.-]{0,20})$/);
+  return match ? match[1].toLowerCase() : "";
+}
 function suggestNames() {
   const input = $("chatInput");
   const before = input.value.slice(0, input.selectionStart);
@@ -968,6 +996,8 @@ $("chatInput").addEventListener("keydown", (e) => {
     e.preventDefault();
     suggestPick = (suggestPick + (e.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length;
     suggestNames();
+  } else if (e.key === "Enter" && buttons.length === 1 && typedName() === buttons[0].textContent.slice(1).toLowerCase()) {
+    box.hidden = true; // (3.0) the whole name is typed already: Enter sends
   } else if (e.key === "Tab" || (e.key === "Enter" && buttons.length)) {
     e.preventDefault();
     useName(buttons[suggestPick].textContent.slice(1));
