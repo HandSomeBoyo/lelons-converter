@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>VaultHub alerts</title>
+<!-- (3.0) Stream alerts. OBS shows this page as a Browser Source (1920 x 1080). Served by streamoverlay.py.
+     ?preview=1: the small preview on VaultHub's Alerts page (it sends the alerts to show itself). -->
+<style>
+  @font-face { font-family: "Inter"; src: url("/alerts/fonts/intervariable.woff2") format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font-family: "Inter", "Segoe UI", system-ui, sans-serif; color: #fff; }
+  #stage { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 70px; }
+  .alert { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 1100px; padding: 0 40px;
+    animation: alert-in .6s cubic-bezier(.2, 1.5, .4, 1) both; }
+  .alert.out { animation: alert-out .5s ease-in both; }
+  .pic { height: 300px; display: grid; place-items: center; margin-bottom: 18px; }
+  .pic img, .pic video { max-height: 300px; max-width: 520px; display: block; }
+  .pic .emoji { font-size: 190px; line-height: 1; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .45)); animation: bob 1.4s ease-in-out infinite; }
+  .text { font-size: 54px; font-weight: 850; line-height: 1.15; letter-spacing: -.01em; text-wrap: balance;
+    -webkit-text-stroke: 1.5px rgba(0, 0, 0, .55); paint-order: stroke fill;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, .5), 0 6px 24px rgba(0, 0, 0, .55); }
+  .text b { color: var(--c, #ffcf3f); font-weight: 900; display: inline-block; animation: name-pop .9s .25s cubic-bezier(.2, 1.6, .4, 1) both; }
+  .msg { margin-top: 14px; font-size: 32px; font-weight: 650; max-width: 900px; overflow-wrap: anywhere;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, .5), 0 4px 16px rgba(0, 0, 0, .6); }
+  @keyframes alert-in { from { opacity: 0; transform: translateY(-30px) scale(.7); } to { opacity: 1; transform: none; } }
+  @keyframes alert-out { to { opacity: 0; transform: translateY(-24px) scale(.96); } }
+  @keyframes name-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: none; } }
+  @keyframes bob { 50% { transform: translateY(-12px) rotate(-4deg); } }
+  body.preview #stage { padding-top: 40px; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const preview = /[?&]preview=1/.test(location.search);
+if (preview) document.body.classList.add("preview");
+let since = -1, kinds = {}, style = {}, queue = [], showing = false, audio = null;
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// "{name} gifted {subs}!" -> HTML, with the name in the highlight color
+function words(a, template) {
+  const n = +a.amount || 0;
+  const fill = { amount: n.toLocaleString("en-US"), months: a.months || "", to: a.to || "", money: a.money || "",
+    subs: n === 1 ? "a sub" : `${n.toLocaleString("en-US")} subs` };
+  return esc(template).replace(/\{(\w+)\}/g, (m, k) => k === "name" ? `<b>${esc(a.name)}</b>` : k in fill ? esc(fill[k]) : m);
+}
+
+function ctx() {
+  if (!audio) audio = new AudioContext();
+  if (audio.state === "suspended") audio.resume().catch(() => {});
+  return audio;
+}
+// VaultHub's own sounds, made right here
+function tone(kind, volume) {
+  const notes = {
+    fanfare: [[523, 0, .16], [659, .13, .16], [784, .26, .16], [1047, .39, .7]],
+    levelup: [[392, 0, .1], [523, .08, .1], [659, .16, .1], [784, .24, .1], [1047, .32, .5], [1319, .32, .5]],
+    coins: [[1319, 0, .08], [1976, .07, .35], [1319, .22, .08], [1976, .29, .45]],
+    chime: [[784, 0, .45], [1175, .14, .7]], ding: [[880, 0, .7]], pop: [[600, 0, .12]],
+  }[kind];
+  if (!notes) return;
+  const c = ctx(), t0 = c.currentTime + .03;
+  for (const [f, at, len] of notes) {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = kind === "pop" ? "sine" : kind === "coins" ? "square" : "triangle";
+    o.frequency.value = f;
+    if (kind === "pop") o.frequency.exponentialRampToValueAtTime(f * 1.8, t0 + at + len);
+    const peak = (kind === "coins" ? .12 : .32) * volume;
+    g.gain.setValueAtTime(.0001, t0 + at);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + at + .012);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + at + len);
+    o.connect(g).connect(c.destination);
+    o.start(t0 + at);
+    o.stop(t0 + at + len + .05);
+  }
+}
+
+// Messages read out loud (subs, bits, Super Chats). VaultHub makes the voice with Windows, so it plays
+// through this page and reaches your stream. Without it (or in the preview), the page reads it itself.
+function speechText(a) {
+  let t = String(a.message || "").replace(/https?:\/\/\S+|www\.\S+/g, "");
+  if (a.kind === "bits") t = t.replace(/\b[A-Za-z]+\d+\b/g, "");
+  return t.replace(/\s+/g, " ").trim().slice(0, 150);
+}
+function speak(a, volume) {
+  const text = speechText(a);
+  if (style.tts === false || !text) return Promise.resolve();
+  return new Promise((done) => {
+    const own = () => {
+      if (!window.speechSynthesis) return done();
+      const u = new SpeechSynthesisUtterance(text);
+      u.volume = Math.max(0, Math.min(1, volume));
+      u.onend = u.onerror = () => done();
+      speechSynthesis.speak(u);
+    };
+    if (preview || !a.id) return own();
+    const v = new Audio("/alerts/voice/" + a.id + ".wav");
+    v.volume = Math.max(0, Math.min(1, volume));
+    v.onended = () => done();
+    v.onerror = own;
+    v.play().catch(() => {});
+  });
+}
+
+function media(name) { return "/alerts/media/" + encodeURIComponent(name); }
+
+function show(a) {
+  const k = kinds[a.kind] || {};
+  const volume = (style.volume ?? 70) / 100 * ((k.volume ?? 100) / 100);
+  const stage = document.getElementById("stage");
+  const pic = k.picture || "";
+  const video = /\.(webm|mp4)$/i.test(pic);
+  const el = document.createElement("div");
+  el.className = "alert";
+  el.style.setProperty("--c", style.color || "#ffcf3f");
+  el.innerHTML = `<div class="pic">${pic ? video ? `<video src="${media(pic)}" autoplay muted loop playsinline></video>` : `<img src="${media(pic)}" alt="">`
+      : `<span class="emoji">${esc(k.emoji || "🎉")}</span>`}</div>
+    <div class="text">${words(a, k.text || "{name}")}</div>
+    ${a.message ? `<div class="msg">${esc(a.message)}</div>` : ""}`;
+  stage.replaceChildren(el);
+  const sound = k.sound || "";
+  if (/\./.test(sound)) {
+    const s = new Audio(media(sound));
+    s.volume = Math.max(0, Math.min(1, volume));
+    s.play().catch(() => {});
+  } else if (sound !== "none") {
+    tone(sound, volume);
+  }
+  const seconds = Math.max(3, Math.min(20, +style.seconds || 7));
+  // The message is read after the sound. The alert stays up until both are done (25 seconds at most).
+  const talk = new Promise((r) => setTimeout(r, 1600)).then(() => speak(a, volume));
+  const least = new Promise((r) => setTimeout(r, seconds * 1000));
+  const most = new Promise((r) => setTimeout(r, 25000));
+  return Promise.race([Promise.all([talk, least]), most]).then(() => new Promise((done) => {
+    el.classList.add("out");
+    setTimeout(() => { el.remove(); done(); }, 500);
+  }));
+}
+
+async function next() {
+  if (showing) return;
+  const a = queue.shift();
+  if (!a) return;
+  showing = true;
+  try { await show(a); } catch (e) { /* a broken picture must not stop the next alert */ }
+  showing = false;
+  setTimeout(next, 600);
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/alerts/feed?since=" + Math.max(0, since), { cache: "no-store" });
+    const res = await r.json();
+    kinds = res.kinds || kinds;
+    style = res.style || style;
+    if (res.seq < since) since = 0;  // VaultHub was opened again
+    if (since >= 0) {
+      for (const a of res.alerts || []) if (a.id > since && queue.length < 20) queue.push(a);
+      next();
+    }
+    since = res.seq;  // (the first look only notes where we are: no old alerts when OBS opens)
+  } catch (e) { /* VaultHub is closed: try again in a bit */ }
+  setTimeout(poll, since >= 0 ? 1000 : 3000);
+}
+
+if (preview) {
+  // The Alerts page sends what to show (nothing goes to your stream).
+  addEventListener("message", (e) => {
+    const d = e.data || {};
+    if (d.type !== "vh-alert") return;
+    kinds = d.kinds || kinds;
+    style = d.style || style;
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    show(d.alert).catch(() => {});
+  });
+} else {
+  poll();
+}
+</script>
+</body>
+</html>

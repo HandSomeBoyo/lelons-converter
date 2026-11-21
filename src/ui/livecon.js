@@ -113,6 +113,7 @@ function lvDrawConsole(fresh) {
 
 function lvDrawWelcome() {
   $("lvTop").innerHTML = "";
+  $("lvTop").dataset.html = "";
   $("lvBody").innerHTML = `
     <h1 class="headline">Live console.<br><em>Everything about your stream in one place.</em></h1>
     <div class="lv-welcome">
@@ -206,8 +207,8 @@ function lvDrawTopBar() {
   const live = s.session;
   const since = live ? Date.now() / 1000 - live.start : 0;
   const chip = (p, on, n, off) => `<span class="lv-pill ${on ? "" : "dim"}"><span class="lv-tiny ${p}">${LV_ICONS[p]}</span>${on ? `<b>${lvNum(n)}</b> watching` : off}</span>`;
-  $("lvTop").innerHTML = `
-    ${live ? `<span class="lv-live-pill">LIVE <b id="lvClock">${lvClock(since)}</b></span>` : `<span class="lv-pill dim"><i class="lv-off-dot"></i>Not live</span>`}
+  const html = `
+    ${live ? `<span class="lv-live-pill">LIVE <b id="lvClock"></b></span>` : `<span class="lv-pill dim"><i class="lv-off-dot"></i>Not live</span>`}
     ${c.twitch ? chip("tw", tw.live, tw.viewers, tw.chat === "on" ? "Offline · chat on" : "Offline") : ""}
     ${c.youtube ? chip("yt", yt.live, yt.viewers, "Offline") : ""}
     ${typeof lvMsPills === "function" ? lvMsPills() : ""}
@@ -216,9 +217,15 @@ function lvDrawTopBar() {
     <button type="button" class="lv-ghost" id="lvCustomize" title="Move, size and pick the cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.5"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Customize</button>
     <button type="button" class="lv-ghost" id="lvPop" title="Pop out chat (a small chat window that stays on top of your game)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10M19.5 4.5 12 12"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></svg>Pop out</button>
     <button type="button" class="icon-button" id="lvSetupOpen" title="Set up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>`;
-  $("lvPop").addEventListener("click", lvPopOut);
-  $("lvCustomize").addEventListener("click", () => lvLayoutEdit(true));
-  $("lvSetupOpen").addEventListener("click", lvOpenSetup);
+  // (3.0) Only redrawn when something in it changed: redrawing it every 2 seconds could swallow a click on its buttons.
+  if ($("lvTop").dataset.html !== html) {
+    $("lvTop").innerHTML = html;
+    $("lvTop").dataset.html = html;
+    $("lvPop").addEventListener("click", lvPopOut);
+    $("lvCustomize").addEventListener("click", () => lvLayoutEdit(true));
+    $("lvSetupOpen").addEventListener("click", lvOpenSetup);
+  }
+  if ($("lvClock")) $("lvClock").textContent = lvClock(since);
 }
 
 function lvDrawNumbers() {
@@ -243,24 +250,27 @@ function lvGraphSvg(series, events, start, opts = {}) {
   if (!series || series.length < 2) {
     return `<div class="lv-graph-empty">${opts.empty || "The graph starts when you go live."}</div>`;
   }
-  const end = series[series.length - 1].t || 1;
+  // (3.0) The graph starts at the first point: VaultHub opened an hour into the stream drew one block at the far right.
+  const t0 = series[0].t || 0, end = Math.max(t0 + 1, series[series.length - 1].t || 1);
+  const hasYt = series.some((p) => p.yt > 0);  // (no YouTube: no red line over the Twitch one)
   const top = Math.max(10, ...series.map((p) => (p.tw || 0) + (p.yt || 0)));
   const nice = (n) => { const step = Math.pow(10, Math.floor(Math.log10(n))); return Math.ceil(n / step * 1.1) * step; };
   const max = nice(top);
-  const x = (t) => (t / end * W).toFixed(1), y = (v) => (H - v / max * H).toFixed(1);
+  const x = (t) => ((t - t0) / (end - t0) * W).toFixed(1), y = (v) => (H - v / max * H).toFixed(1);
   const line = (f) => series.map((p, i) => `${i ? "L" : "M"}${x(p.t)},${y(f(p))}`).join("");
   const area = (f, g) => line(f) + series.slice().reverse().map((p) => `L${x(p.t)},${y(g(p))}`).join("") + "Z";
   const tw = (p) => p.tw || 0, both = (p) => (p.tw || 0) + (p.yt || 0);
   const grid = [0, 0.5, 1].map((f) => `<line x1="0" x2="${W}" y1="${y(max * f)}" y2="${y(max * f)}" class="g"/><text x="${W + 8}" y="${+y(max * f) + 4}" class="l">${Math.round(max * f)}</text>`).join("");
-  const steps = end > 4 * 3600 ? 3600 : end > 2 * 3600 ? 1800 : end > 3600 ? 900 : end > 1200 ? 600 : 300;
+  const span = end - t0;
+  const steps = span > 4 * 3600 ? 3600 : span > 2 * 3600 ? 1800 : span > 3600 ? 900 : span > 1200 ? 600 : span > 600 ? 300 : 60;
   let ticks = "";
   const hm = (t) => Math.floor(t / 3600) + ":" + String(Math.floor(t / 60) % 60).padStart(2, "0");
-  for (let t = 0; t <= end - steps * 0.4; t += steps) ticks += `<text x="${x(t)}" y="${H + 16}" class="l" text-anchor="${t ? "middle" : "start"}">${hm(t)}</text>`;
+  for (let t = Math.ceil(t0 / steps) * steps; t <= end - steps * 0.4; t += steps) ticks += `<text x="${x(t)}" y="${H + 16}" class="l" text-anchor="${t > t0 ? "middle" : "start"}">${hm(t)}</text>`;
   const peak = series.reduce((a, p) => (both(p) > both(a) ? p : a), series[0]);
   let marks = "";
   for (const e of (events || []).filter((e) => e.kind === "raid")) {
     const t = e.at - start;
-    if (t < 0 || t > end) continue;
+    if (t < t0 || t > end) continue;
     const near = series.reduce((a, p) => (Math.abs(p.t - t) < Math.abs(a.t - t) ? p : a), series[0]);
     marks += `<g class="raid"><line x1="${x(t)}" x2="${x(t)}" y1="${y(both(near))}" y2="${H}"/><circle cx="${x(t)}" cy="${y(both(near))}" r="4.5"/><title>Raid from ${lvEsc(e.user)} (+${e.amount || 0})</title></g>`;
   }
@@ -268,7 +278,7 @@ function lvGraphSvg(series, events, start, opts = {}) {
   const flip = px > W - 150;
   return `<svg viewBox="-2 -12 ${W + 44} ${H + 30}" class="lv-svg">${grid}
     <path d="${area(tw, () => 0)}" class="a tw"/><path d="${line(tw)}" class="s tw"/>
-    <path d="${area(both, tw)}" class="a yt"/><path d="${line(both)}" class="s yt"/>
+    ${hasYt ? `<path d="${area(both, tw)}" class="a yt"/><path d="${line(both)}" class="s yt"/>` : ""}
     ${marks}
     ${both(peak) ? `<circle cx="${px}" cy="${y(both(peak))}" r="4.5" class="peak"/><g transform="translate(${flip ? px - 12 : px + 12},${+y(both(peak)) - 4})"><rect x="${flip ? -(label.length * 6.4 + 12) : 0}" width="${label.length * 6.4 + 12}" height="22" rx="6" class="tip"/><text x="${flip ? -(label.length * 6.4 + 6) : 6}" y="15" class="tipt">${label}</text></g>` : ""}
     ${ticks}</svg>`;
@@ -287,7 +297,10 @@ function lvChatBars(series) {
 
 function lvDrawGraph() {
   const s = LV.state && LV.state.session;
-  $("lvGraph").innerHTML = s ? lvGraphSvg(s.series, s.events, s.start) : lvGraphSvg([], [], 0, { empty: "The graph starts when you go live. Stream with VaultHub open and it fills in by itself." });
+  $("lvGraph").innerHTML = s ? lvGraphSvg(s.series, s.events, s.start, { empty: "You're live. The graph fills in from here, one point a minute." })
+    : lvGraphSvg([], [], 0, { empty: "The graph starts when you go live. Stream with VaultHub open and it fills in by itself." });
+  const yt = $("lvGraph").closest(".lv-card").querySelector(".lv-legend .yt");
+  if (yt) yt.parentElement.hidden = !(LV.cfg && LV.cfg.youtube);
 }
 
 function lvDrawHealth() {
@@ -338,6 +351,7 @@ function lvRecordingHtml(obs) {
 function lvDrawGoals(force) {
   const c = LV.cfg || {}, t = (LV.state && LV.state.session && LV.state.session.totals) || {};
   const box = $("lvGoals");
+  if ($("lvGoalsEdit")) $("lvGoalsEdit").textContent = LV.editGoals ? "Cancel" : "Edit";
   if (LV.editGoals) {
     if (!force && box.querySelector(".lv-goal-edit")) return;
     const goals = (c.goals || []).length ? c.goals : [{ kind: "followers", target: 10 }];
@@ -347,7 +361,7 @@ function lvDrawGoals(force) {
       const ed = box.querySelector(".lv-goal-edit");
       if (ed.children.length < 6) ed.insertAdjacentHTML("beforeend", lvGoalRow({ kind: "chat", target: 500 }));
     });
-    box.addEventListener("click", (e) => { if (e.target.closest(".lv-goal-x")) e.target.closest(".lv-goal-row").remove(); });
+    box.onclick = (e) => { if (e.target.closest(".lv-goal-x")) e.target.closest(".lv-goal-row").remove(); };
     $("lvGoalSave").addEventListener("click", async () => {
       const goals = [...box.querySelectorAll(".lv-goal-row")].map((r) => ({ kind: r.querySelector("select").value, target: +r.querySelector("input").value }));
       const res = await api("/api/live-setup", { goals }).catch(() => null);
@@ -594,13 +608,12 @@ function lvWireTwitchSign() {
     api("/api/live-open", { url: res.url });
     clearInterval(LV.signTimer);
     LV.signTimer = setInterval(async () => {
-      if ($("lvSetupModal").hidden) return clearInterval(LV.signTimer);
+      // (3.0) Keeps waiting after Save too (only Close stops it), so pressing Save before Authorize doesn't lose the sign-in.
       const r = await api("/api/live-twitch-check", {}).catch(() => null);
       if (r && r.ok && r.done) {
         clearInterval(LV.signTimer);
         await lvLoadConfig();
-        box.innerHTML = lvTwitchSignHtml();
-        lvWireTwitchSign();
+        if (!$("lvSetupModal").hidden && $("lvTwSign") === box) { box.innerHTML = lvTwitchSignHtml(); lvWireTwitchSign(); }
         lvToast({ emoji: "✅", title: "Signed in to Twitch", text: "Everything Twitch in the console works now." });
       } else if (r && !r.ok) {
         clearInterval(LV.signTimer);
@@ -719,8 +732,8 @@ function lvAlertFor(items) {
     let rule = null, title = "", text = "";
     if (i.type === "event") {
       const kind = i.kind === "gift" ? "sub" : i.kind === "sticker" ? "superchat" : i.kind;
-      if (!a[kind] || !a[kind].on) continue;
-      rule = a[kind];
+      if (!(a[kind] && a[kind].on) && !(typeof lvaOnStream === "function" && lvaOnStream(i.kind))) continue;
+      rule = a[kind] || { sound: "none" };
       const [who, what] = (LV_EVENT_WORDS[i.kind] || ((e) => [e.user, ""]))(i);
       title = (who || "Someone") + what;
       text = i.text || "";
@@ -735,7 +748,8 @@ function lvAlertFor(items) {
     }
     if (!rule) continue;
     n++;
-    lvSound(rule.sound, a.volume);
+    // (3.0) An alert on your stream plays its own sound there (through OBS): VaultHub only shows its card then.
+    if (!(i.type === "event" && typeof lvaOnStream === "function" && lvaOnStream(i.kind))) lvSound(rule.sound, a.volume);
     lvToast({ title, text, p: i.p, emoji: i.type === "event" ? LV_EVENT_EMOJI[i.kind] : i.first ? "👋" : "🔔" });
   }
 }
@@ -764,74 +778,7 @@ function lvToast(t) {
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, t.quiet ? 3500 : 7000);
 }
 
-function lvDrawAlerts() {
-  const a = lvAlerts();
-  const lib = (typeof sfxSounds !== "undefined" ? sfxSounds : []).filter((s) => s.url);
-  const pads = lvPads();
-  const options = (cur) => Object.entries(LV_TONES).map(([k, n]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${n}</option>`).join("")
-    + (pads.length ? `<optgroup label="Your soundboard">${pads.map((p) => `<option value="lib:${lvEsc(p.id)}" ${cur === "lib:" + p.id ? "selected" : ""}>${lvEsc(p.name)}</option>`).join("")}</optgroup>` : "")
-    + (lib.length ? `<optgroup label="Library">${lib.slice(0, 200).filter((s) => !pads.some((p) => String(p.id) === String(s.id))).map((s) => `<option value="lib:${lvEsc(s.id)}" ${cur === "lib:" + s.id ? "selected" : ""}>${lvEsc(s.name)}</option>`).join("")}</optgroup>` : "");
-  $("lvAlerts").innerHTML = `
-    <div class="lv-grid">
-      <div class="lv-card">
-        <h3>Play a sound when...</h3>
-        ${LV_ALERT_RULES.map(([k, emo, name, p, sub]) => `
-          <div class="lv-rule ${a[k].on ? "" : "off"}" data-k="${k}">
-            <span class="ico">${emo}</span>
-            <div class="words"><b>${name}</b><small>${p ? `<span class="lv-tiny ${p}">${LV_ICONS[p]}</span> ` : ""}${sub}</small></div>
-            <span class="sp"></span>
-            <select class="lv-snd" title="Sound">${options(a[k].sound)}</select>
-            <button type="button" class="icon-button lv-test" title="Try it"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
-            <label class="check"><input type="checkbox" ${a[k].on ? "checked" : ""}></label>
-          </div>
-          ${k === "keyword" ? `<div class="lv-kw" id="lvWords">${a.words.map((w, i) => `<span class="lv-chip">${lvEsc(w)}<button type="button" data-i="${i}" title="Remove">×</button></span>`).join("")}<form id="lvWordForm"><input id="lvWordIn" placeholder="+ Add a word" maxlength="40"></form></div>` : ""}`).join("")}
-        <p class="lv-muted" style="margin-top:12px">Your own name always counts as a word. The sounds play from VaultHub, so if OBS records your desktop sound, viewers hear them too.</p>
-      </div>
-      <div class="lv-col">
-        <div class="lv-card">
-          <h3>Volume</h3>
-          <input type="range" class="volume-slider" id="lvAlertVol" min="0" max="100" value="${Math.round(a.volume * 100)}">
-        </div>
-        <div class="lv-card">
-          <h3>What you see</h3>
-          <p class="lv-muted">A card pops up in the corner of VaultHub, like this one:</p>
-          <div class="lv-toast demo"><span class="ico">💜</span><div><b>frostbyte_ followed</b><small>Twitch · just now</small></div></div>
-        </div>
-      </div>
-    </div>`;
-  const box = $("lvAlerts");
-  box.querySelectorAll(".lv-rule").forEach((row) => {
-    const k = row.dataset.k;
-    row.querySelector("input[type=checkbox]").addEventListener("change", (e) => { const x = lvAlerts(); x[k].on = e.target.checked; lvSaveAlerts(x); row.classList.toggle("off", !e.target.checked); });
-    row.querySelector("select").addEventListener("change", (e) => { const x = lvAlerts(); x[k].sound = e.target.value; lvSaveAlerts(x); lvSound(e.target.value, x.volume); });
-    row.querySelector(".lv-test").addEventListener("click", () => {
-      const x = lvAlerts();
-      lvSound(x[k].sound, x.volume);
-      const sample = { follow: "frostbyte_ followed", sub: "pixelpete subscribed", raid: "frostbyte_ raided with 31 people", bits: "nightowl_k cheered 100 bits",
-        superchat: "Kari sent NOK 50", member: "Tor became a member", keyword: 'Tor said "' + (x.words[0] || LV.cfg?.twitch || "your name") + '"', first: "newbie123 chatted for the first time" }[k];
-      lvToast({ title: sample, text: "This is a test.", emoji: LV_ALERT_RULES.find((r) => r[0] === k)[1] });
-    });
-  });
-  $("lvWords").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-i]");
-    if (!b) return;
-    const x = lvAlerts();
-    x.words.splice(+b.dataset.i, 1);
-    lvSaveAlerts(x);
-    lvDrawAlerts();
-  });
-  $("lvWordForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const w = $("lvWordIn").value.trim();
-    if (!w) return;
-    const x = lvAlerts();
-    if (!x.words.includes(w) && x.words.length < 30) x.words.push(w);
-    lvSaveAlerts(x);
-    lvDrawAlerts();
-    $("lvWordIn").focus();
-  });
-  $("lvAlertVol").addEventListener("change", (e) => { const x = lvAlerts(); x.volume = e.target.value / 100; lvSaveAlerts(x); lvTone("ding", x.volume); });
-}
+// (3.0) lvDrawAlerts() lives in lvalerts.js: alerts on your stream.
 
 // ---------------------------------------------------------------- the soundboard
 
@@ -875,7 +822,7 @@ function lvDrawBoard() {
   $("lvBoard").innerHTML = `
     <div class="lv-grid">
       <div>
-        <div class="lv-row" style="margin-bottom:14px"><span class="lv-muted">${pads.length ? "Click a sound or press its key. The keys work even while you're in a game." : ""}</span><span class="sp"></span><button type="button" class="lv-ghost" id="lvStop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop all</button></div>
+        <div class="lv-row" style="margin-bottom:14px"><span class="lv-muted">${pads.length ? "Click a sound or press its key. The keys work even while you're in a game." : "No sounds yet. Add a few from your Library and give each one a key."}</span><span class="sp"></span>${pads.length ? `<button type="button" class="lv-ghost" id="lvStop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop all</button>` : ""}</div>
         <div class="lv-pads" id="lvPads">
           ${pads.map((p, i) => `<div class="lv-pad" data-i="${i}" role="button" tabindex="0">
             <span class="emo" style="background:${lvEsc(p.color || LV_COLORS[i % 8])}">${lvEsc(p.emoji || "🔊")}</span>
@@ -899,7 +846,7 @@ function lvDrawBoard() {
       </div>
     </div>`;
   lvDrawPadsPlaying();
-  $("lvStop").addEventListener("click", () => lvStopAll());
+  $("lvStop")?.addEventListener("click", () => lvStopAll());
   $("lvPads").addEventListener("click", (e) => {
     const pad = e.target.closest(".lv-pad[data-i]");
     if (!pad) return;
@@ -1071,12 +1018,18 @@ async function lvDrawStats() {
       <div class="lv-num"><small>New followers</small><b>${lvNum(s.followers)}</b>${diff("followers")}</div>
       <div class="lv-num"><small>Hours watched</small><b>${lvNum(s.hoursWatched)}</b>${diff("hoursWatched")}</div>
     </div>
-    <div class="lv-grid">
-      <div class="lv-card">
-        <h3>Watching over time<span class="sp"></span><span class="lv-legend"><span><i class="tw"></i>Twitch</span><span><i class="yt"></i>YouTube</span></span></h3>
-        <div class="lv-chart">${lvGraphSvg(data.series, data.events, s.start, { empty: "This stream was too short for a graph." })}</div>
-        <h3 style="margin-top:14px">Chat<span class="sp"></span><span class="lv-muted">messages per minute</span></h3>
-        <div class="lv-chart">${lvChatBars(data.series)}</div>
+    ${(() => {
+      // (3.0) One left and one right column, so a tall right side no longer leaves a big hole under the graph.
+      const p = typeof lvRecapParts === "function" ? lvRecapParts(data) : null;
+      return `<div class="lv-grid lvr-stats">
+      <div class="lv-col">
+        <div class="lv-card">
+          <h3>Watching over time<span class="sp"></span><span class="lv-legend"><span><i class="tw"></i>Twitch</span>${(data.series || []).some((x) => x.yt > 0) ? `<span><i class="yt"></i>YouTube</span>` : ""}</span></h3>
+          <div class="lv-chart">${lvGraphSvg(data.series, data.events, s.start, { empty: "This stream was too short for a graph." })}</div>
+          <h3 style="margin-top:14px">Chat<span class="sp"></span><span class="lv-muted">messages per minute</span></h3>
+          <div class="lv-chart">${lvChatBars(data.series)}</div>
+        </div>
+        ${p ? `<div class="lv-card"><h3>Top chatters</h3>${p.topHtml}<h3 style="margin-top:16px">New chatters <span class="lv-muted">${lvNum((data.newbies || []).length)}</span></h3>${p.newHtml}</div>` : ""}
       </div>
       <div class="lv-col">
         <div class="lv-card"><h3>Best moments</h3>${data.moments.length ? data.moments.map((m) => `<div class="lv-moment"><span class="t">${Math.floor(m.t / 3600)}:${String(Math.floor(m.t / 60) % 60).padStart(2, "0")}</span><div>${lvEsc(m.text)}<small>${lvEsc(m.sub)}</small></div></div>`).join("") + `<p class="lv-muted" style="margin-top:10px">Good spots to cut a clip or a Short from your recording.</p>` : `<p class="lv-muted">Nothing stood out this time.</p>`}</div>
@@ -1088,13 +1041,10 @@ async function lvDrawStats() {
           ${s.bits ? `<div>Bits<span class="n">${lvNum(s.bits)}</span></div>` : ""}
           ${s.money ? `<div>Super Chats<span class="n">${lvEsc(s.money)}</span></div>` : ""}
         </div><button type="button" class="link lv-forget" id="lvForget">Delete this stream from the list</button></div>
+        ${p ? `<div class="lv-card"><h3>Clips</h3>${p.clipHtml}</div><div class="lv-card"><h3>Stream health</h3>${p.healthHtml}</div>
+        <button type="button" class="ghost-button" id="lvStatsRecap">Show the recap card</button>` : ""}
       </div>
-    </div>
-    ${typeof lvRecapParts === "function" ? (() => { const p = lvRecapParts(data); return `<div class="lv-grid lvr-stats">
-      <div class="lv-card"><h3>Top chatters</h3>${p.topHtml}<h3 style="margin-top:16px">New chatters <span class="lv-muted">${lvNum((data.newbies || []).length)}</span></h3>${p.newHtml}</div>
-      <div class="lv-col"><div class="lv-card"><h3>Clips</h3>${p.clipHtml}</div><div class="lv-card"><h3>Stream health</h3>${p.healthHtml}</div>
-        <button type="button" class="ghost-button" id="lvStatsRecap">Show the recap card</button></div>
-    </div>`; })() : ""}`;
+    </div>`; })()}`;
   if (typeof lvRecapWire === "function") lvRecapWire(box);
   if ($("lvStatsRecap")) $("lvStatsRecap").onclick = () => lvRecapOpen(s.id, false);
   $("lvStatsPick").addEventListener("change", (e) => { LV.statsId = e.target.value; lvDrawStats(); });

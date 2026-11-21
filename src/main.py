@@ -960,6 +960,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, "prefs": adtimer.set_prefs(data.get("prefs") or {})})
             elif action == "ads-scenes":
                 return self.send_json({"ok": True, "scenes": adtimer.scenes()})
+            elif action == "ov":  # (3.0) stream alerts on your stream (an OBS Browser Source)
+                import streamoverlay
+                return self.send_json({"ok": True, "ov": streamoverlay.status()})
+            elif action == "ov-set":
+                import streamoverlay
+                streamoverlay.set_prefs(data)
+                return self.send_json({"ok": True, "ov": streamoverlay.status()})
+            elif action == "ov-link":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "prefs": streamoverlay.save_link(str(data.get("kind") or ""), str(data.get("what") or ""), data.get("url"))})
+                except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "ov-test":
+                import streamoverlay
+                try:
+                    streamoverlay.test(str(data.get("kind") or ""))
+                except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "ov-obs":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "close-ask":  # (2.36.0) what the "You're live. Close anyway?" box lists
                 return self.send_json({"ok": True, "sites": multistream.live_sites()})
             elif action == "hide":
@@ -1938,6 +1963,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't open this file."})
+        if self.path == "/api/live-ov-file":  # (3.0) your own sound or picture for a stream alert; the body is the file
+            import streamoverlay
+            try:
+                return self.send_json({"ok": True, "prefs": streamoverlay.save_file(
+                    self.headers.get("X-Alert-Kind") or "", self.headers.get("X-Alert-What") or "",
+                    urllib.parse.unquote(self.headers.get("X-File-Name") or ""), self.rfile, length)})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
+            except OSError:
+                return self.send_json({"ok": False, "error": "Couldn't save that file."})
         if self.path == "/api/rt-add":  # a file dropped on the Resolve tab; the body is the file itself
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
             try:

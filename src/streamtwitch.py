@@ -10,6 +10,7 @@
 """
 
 import calendar
+import datetime
 import json
 import random
 import re
@@ -476,9 +477,18 @@ class Twitch:
         d = (self._needs(lambda: self._helix("channels/ads", broadcaster_id=broadcaster), "see your ad breaks").get("data") or [{}])[0]
 
         def when(v):
+            # (3.0) Twitch's docs say these are dates ("2026-11-21T15:04:05+00:00"), but the API has sent plain
+            # Unix seconds too. Both work now: a date used to count as "no ad planned".
+            if v in (None, "", 0, "0"):
+                return 0
             try:
-                return int(v) if v not in (None, "", 0, "0") else 0
+                return int(float(v))
             except (TypeError, ValueError):
+                pass
+            try:
+                text = str(v).strip().replace("Z", "+00:00")
+                return int(datetime.datetime.fromisoformat(text).timestamp())
+            except ValueError:
                 return 0
         return {"next": when(d.get("next_ad_at")), "last": when(d.get("last_ad_at")), "length": int(d.get("duration") or 0),
                 "prerollFree": int(d.get("preroll_free_time") or 0), "snoozes": int(d.get("snooze_count") or 0),

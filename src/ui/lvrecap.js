@@ -145,6 +145,7 @@ function lvrDraw(data, prev, fresh) {
   $("lvrClose").onclick = close;
   $("lvrDone").onclick = close;
   m.onclick = (e) => { if (e.target === m) close(); };
+  m.onkeydown = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };  // (3.0) Esc closes it too
   $("lvrStats").onclick = () => { close(); LV.statsId = s.id; if (typeof showTab === "function") showTab("lvstats"); };
   $("lvrCopy").onclick = () => {
     navigator.clipboard.writeText(lvrText(data)).catch(() => {});
