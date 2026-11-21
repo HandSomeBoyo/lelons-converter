@@ -2529,9 +2529,8 @@
       <button type="button" data-set="general" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>General</span></button>
       <button type="button" data-set="look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg><span>Appearance</span></button>
       <button type="button" data-set="sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span></button>
-      <button type="button" data-set="notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Notifications</span></button>
+      <button type="button" data-set="voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><span>Voice &amp; calls</span></button>
       <button type="button" data-set="trash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg><span>Trash</span></button>
-      <button type="button" data-set="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3.5L5.5 13.5H12L11 20.5L18.5 10.5H12z"/></svg><span>Performance</span></button>
       <div class="set-about"><b>VaultHub</b><span id="version"></span></div>
     </nav>
     <div class="set-main">
@@ -2557,6 +2556,14 @@
           <div class="set-row"><span class="set-text"><b>Check for updates</b><small id="setVersionLine">See if there's something new right now.</small></span>
             <button type="button" class="ghost-button set-button" id="checkNow">Check now</button></div>
         </div>
+        <div class="set-label">Notifications</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Desktop notifications</b><small>A pop-up in the corner of your screen for messages, calls and invites when VaultHub is in the background. Quiet while you're live or recording.</small></span><input type="checkbox" id="setNoteWindows"></label>
+        </div>
+        <div class="set-label">Performance</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Use my graphics card</b><small>Makes videos faster and the window smoother. Turn it off if videos come out broken or the app looks glitchy (the window changes next time you open the app).</small></span><input type="checkbox" id="setHardware"></label>
+        </div>
       </section>
 
       <section class="set-page" data-set="look" hidden>
@@ -2575,7 +2582,7 @@
         <div class="set-group set-pad">
           <div class="page-bg-row">
             <span class="page-bg-sample" id="pageBgSample"></span>
-            <div class="page-bg-text"><b id="pageBgTitle">The normal background</b><small>Put your own picture behind every page.</small></div>
+            <div class="page-bg-text"><b id="pageBgTitle">The normal background</b><small>Shown behind every page.</small></div>
             <button type="button" class="outline-button" id="pageBgPick">Choose picture</button>
             <button type="button" class="outline-button" id="pageBgClear" hidden>Remove</button>
             <input type="file" id="pageBgFile" accept="image/*" hidden>
@@ -2600,6 +2607,7 @@
 
       <section class="set-page" data-set="sound" hidden>
         <h3 class="set-title">Sound</h3>
+        <p class="set-sub">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
         <div class="set-label">Volume</div>
         <div class="set-group set-pad">
             <div class="volume-row">
@@ -2607,7 +2615,6 @@
               <span class="volume-value"></span>
             </div>
         </div>
-        <p class="set-help">For every sound in the app: the Library, the chat, Home and the trim editor.</p>
         <div class="set-label">Speakers or headphones</div>
         <div class="set-group set-pad">
           <div class="set-device-row">
@@ -2615,6 +2622,15 @@
             <button type="button" class="ghost-button" id="setSpeakerTest">Play a test sound</button>
           </div>
         </div>
+        <div class="set-label">Chat sound</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
+        </div>
+      </section>
+
+      <section class="set-page" data-set="voice" hidden>
+        <h3 class="set-title">Voice &amp; calls</h3>
+        <p class="set-sub">Calls use these too. If you change them during a call, they change here as well.</p>
         <div class="set-label">Microphone</div>
         <div class="set-group set-pad">
           <div class="set-device-row">
@@ -2623,16 +2639,6 @@
           </div>
           <div class="set-mic-meter" id="setMicMeter" hidden><span id="setMicLevel"></span></div>
           <p class="set-mic-note" id="setMicNote" hidden>Say something. The bar moves when the microphone hears you.</p>
-        </div>
-        <div class="set-label">Call sound quality</div>
-        <div class="set-group set-pad">
-          <div class="set-chips" id="setAudio"></div>
-          <p class="set-mic-note" id="setAudioNote"></p>
-        </div>
-        <div class="set-label">Music mode</div>
-        <div class="set-group set-pad">
-          <div class="set-chips" id="setMusic"></div>
-          <p class="set-mic-note" id="setMusicNote"></p>
         </div>
         <div class="set-label">Push to talk</div>
         <div class="set-group set-pad">
@@ -2644,20 +2650,21 @@
           <div class="set-chips" id="setNoise"></div>
           <p class="set-mic-note" id="setNoiseNote"></p>
         </div>
-        <p class="set-help">Calls use these too. If you change them during a call, they change here as well.</p>
-        <div class="set-label">Chat</div>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
+        <button type="button" class="set-more" id="setMore" aria-expanded="false"><span>More call options</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="set-more-box" id="setMoreBox" hidden>
+        <div class="set-label">Call sound quality</div>
+        <div class="set-group set-pad">
+          <div class="set-chips" id="setAudio"></div>
+          <p class="set-mic-note" id="setAudioNote"></p>
+        </div>
+        <div class="set-label">Music mode</div>
+        <div class="set-group set-pad">
+          <div class="set-chips" id="setMusic"></div>
+          <p class="set-mic-note" id="setMusicNote"></p>
+        </div>
         </div>
       </section>
 
-      <section class="set-page" data-set="notes" hidden>
-        <h3 class="set-title">Notifications</h3>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Desktop notifications</b><small>A Windows pop-up in the corner of your screen for new messages, calls, invites and more, when VaultHub is behind other windows or minimized. Click it to jump straight there. They stay quiet while you're live or recording.</small></span><input type="checkbox" id="setNoteWindows"></label>
-        </div>
-        <p class="set-help">Everything still shows up under the bell at the top. The moon button there turns everything quiet for an hour.</p>
-      </section>
 
       <section class="set-page" data-set="trash" hidden>
         <h3 class="set-title">Trash</h3>
@@ -2669,20 +2676,12 @@
             <button type="button" data-kind="board">Boards</button>
             <button type="button" data-kind="sound" id="trashSoundsFilter" hidden>Sounds</button>
           </div>
-          <button type="button" class="small-button trash-empty" id="trashEmpty" disabled>Empty Trash</button>
+          <button type="button" class="small-button trash-empty" id="trashEmpty" disabled hidden>Empty Trash</button>
         </div>
         <div class="set-group trash-list" id="trashList"></div>
         <p class="set-help" id="trashNote" hidden></p>
       </section>
 
-      <section class="set-page" data-set="speed" hidden>
-        <h3 class="set-title">Performance</h3>
-        <div class="set-label">Hardware acceleration</div>
-        <div class="set-group">
-          <label class="check set-row"><span class="set-text"><b>Use my graphics card</b><small>Makes videos several times faster and keeps the window smooth.</small></span><input type="checkbox" id="setHardware"></label>
-        </div>
-        <p class="set-help">Turn it off if videos come out broken or the app looks glitchy. For the window, it changes the next time you open the app.</p>
-      </section>
     </div>
   </div>
 </div>
