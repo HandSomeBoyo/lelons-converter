@@ -9,7 +9,9 @@ function openAccount() {
   for (const id of ["acctNameNote", "acctPasswordNote", "acctDeleteNote"]) $(id).textContent = "";
   $("acctDeleteForm").hidden = true;
   $("acctDeleteOpen").hidden = false;
+  passwordBox(false);
   drawAccountPage(true);
+  loadLinks();
   if (typeof loadProfileEditor === "function") loadProfileEditor();
   if (sfxUser()) loadDevices({ what: "list" });
   if (sfxUser() && sfxUser().canUpload) loadInviteCodes({ what: "list" });
@@ -26,8 +28,6 @@ function drawAccountPage(fresh) {
   $("acctLoggedOut").hidden = !!user;
   $("acctMain").hidden = !user;
   if (!user) return;
-  $("acctAvatar").replaceWith(Object.assign(avatarEl(user.avatarUrl, user.username, "huge"), { id: "acctAvatar" }));
-  $("acctName").textContent = user.username;
   $("acctRole").textContent = user.roleName;
   $("acctRole").className = "role role-" + user.role;
   $("acctSince").textContent = [
@@ -41,6 +41,9 @@ function drawAccountPage(fresh) {
   $("acctInbox").hidden = !user.isOwner;
   $("acctTabInvites").hidden = !user.canUpload;
   $("acctTabPeople").hidden = !user.isOwner;
+  $("acctTabInbox").hidden = !user.isOwner;
+  $("acctInboxCount").textContent = user.open_feedback || "";
+  $("acctInboxCount").hidden = !user.open_feedback;
   const open = $("acctTabs").querySelector("button.active");
   if (open && open.hidden) acctPane("profile");
   $("acctDeleteBox").hidden = user.isOwner; // the owner's account can't be deleted
@@ -53,7 +56,7 @@ function note(id, text, good) {
 }
 
 // From the account button's menu
-$("libAccountOpen").addEventListener("click", () => showTab("account"));
+$("libAccountOpen").addEventListener("click", () => { showTab("account"); acctPane("profile"); });
 $("libPeopleOpen").addEventListener("click", () => { showTab("account"); acctPane("people"); });
 $("libInvitesOpen").addEventListener("click", () => { showTab("account"); acctPane("invites"); });
 
@@ -82,7 +85,10 @@ async function sendPicture(promise) {
   if (sfxLoggedOut(res)) return;
   if (res.ok && res.account) setSfxAccount(res.account);
   else drawSfxAccount();
-  if (!res.ok) alert(res.error);
+  if (!res.ok && typeof drawProfileEditor === "function") {
+    note("peNote", res.error); // (was a Windows pop-up)
+    drawProfileEditor();
+  }
 }
 
 $("acctPicture").addEventListener("click", async () => {
@@ -114,7 +120,19 @@ $("acctNameForm").addEventListener("submit", async (e) => {
   sfxLastLoad = 0; // the Library shows the new name next time
 });
 
-// ---- password
+// ---- password (3.0: folded away behind a "Change password" button)
+
+function passwordBox(open) {
+  $("acctPasswordForm").hidden = !open;
+  $("acctPwOpen").hidden = open;
+  $("acctOldPassword").value = $("acctNewPassword").value = "";
+  if (open) {
+    note("acctPasswordNote", "");
+    $("acctOldPassword").focus();
+  }
+}
+$("acctPwOpen").addEventListener("click", () => passwordBox(true));
+$("acctPwCancel").addEventListener("click", () => passwordBox(false));
 
 $("acctPasswordForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -122,8 +140,8 @@ $("acctPasswordForm").addEventListener("submit", async (e) => {
     .catch(() => ({ ok: false, error: "Something went wrong. Try again." }));
   if (sfxLoggedOut(res)) return;
   if (!res.ok) return note("acctPasswordNote", res.error);
-  $("acctOldPassword").value = $("acctNewPassword").value = "";
-  note("acctPasswordNote", "Password changed.", true);
+  passwordBox(false);
+  note("acctPasswordNote", "Password changed. Your other devices were logged out.", true);
   loadDevices({ what: "list" }); // (the others were logged out)
 });
 
@@ -170,7 +188,7 @@ function drawPeople() {
     el.querySelector(".person-info span").textContent = [
       "Joined " + sfxAgo(person.created_at),
       person.sounds ? `${person.sounds} sound${person.sounds === 1 ? "" : "s"}` : "",
-      person.last_seen ? "seen " + sfxAgo(person.last_seen) : "",
+      person.me ? "" : person.last_seen ? "seen " + sfxAgo(person.last_seen) : "",
     ].filter(Boolean).join(" · ");
     const roleBox = el.querySelector(".person-role");
     if (person.role === "owner") {
@@ -225,8 +243,10 @@ let inviteCodes = [], inviteCodeNew = "";
 
 function inviteCodeLeft(seconds) {
   const left = seconds - Date.now() / 1000;
-  if (left < 3600) return `${Math.max(1, Math.round(left / 60))} min`;
-  if (left < 48 * 3600) return `${Math.round(left / 3600)} hour${Math.round(left / 3600) === 1 ? "" : "s"}`;
+  const mins = Math.max(1, Math.round(left / 60));
+  if (mins < 60) return `${mins} min`; // (59.9 minutes is "1 hour", not "60 min")
+  const hours = Math.round(left / 3600);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
   return `${Math.round(left / 86400)} days`;
 }
 
@@ -265,7 +285,7 @@ function drawInviteCodes() {
     }
     const actions = el.querySelector(".actions");
     if (inv.working) {
-      const copy = Object.assign(document.createElement("button"), { type: "button", className: "small-button", textContent: "Copy" });
+      const copy = Object.assign(document.createElement("button"), { type: "button", className: "small-button acct-quiet", textContent: "Copy" });
       copy.onclick = async () => {
         try {
           await navigator.clipboard.writeText(el.querySelector(".inv-code").textContent);
@@ -276,8 +296,8 @@ function drawInviteCodes() {
       actions.append(copy);
     }
     if (inv.mine || sfxUser().isOwner) {
-      const del = Object.assign(document.createElement("button"), { type: "button", className: "small-button acct-danger",
-        textContent: "Delete", title: "The code stops working. People who already joined keep their accounts." });
+      const del = Object.assign(document.createElement("button"), { type: "button", className: "icon-button inv-del",
+        innerHTML: SFX_ICONS.trash, title: "Delete the code (people who already joined keep their accounts)" });
       del.onclick = () => {
         inviteCodes = inviteCodes.filter((x) => x !== inv);
         drawInviteCodes();
@@ -339,3 +359,49 @@ $("devOutOthers").addEventListener("click", () => {
   drawDevices();
   loadDevices({ what: "out_others" }).then(() => note("devNote", "Logged out everywhere else.", true));
 });
+
+// ---- connected accounts (3.0): the Twitch and Google sign-ins the Live and YouTube pages use, in one place
+
+const LINK_ICONS = {
+  twitch: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 3.5 6.5V19h4v2.5h2.5l2.5-2.5h3.5l5-5V3z" fill="#a970ff"/><path d="M11 7.5v5M15.5 7.5v5" stroke="#fff" stroke-width="2"/></svg>',
+  google: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#ff3d3d"/><path d="M10 9v6l5-3z" fill="#fff"/></svg>',
+};
+let acctLinks = null;
+
+async function loadLinks() {
+  const res = await api("/api/live-config", {}).catch(() => null);
+  acctLinks = res && res.ok ? res.config : null;
+  drawLinks();
+}
+
+function drawLinks() {
+  const c = acctLinks;
+  $("acctLinks").hidden = !c;
+  if (!c) return;
+  const rows = [
+    { key: "twitch", name: "Twitch", on: c.twitchSignedIn, who: c.twitchLogin, what: "Live: chat, followers, title and game",
+      signIn: () => { showTab("live"); if (typeof lvOpenSetup === "function") setTimeout(lvOpenSetup, 60); },
+      signOut: () => api("/api/live-twitch-signout", {}) },
+    { key: "google", name: "YouTube (Google)", on: c.google, who: c.googleName, what: "YouTube: exact channel numbers and comments",
+      signIn: () => showTab("channel"),
+      signOut: () => api("/api/ch-disconnect", {}) },
+  ];
+  setChildren($("linkList"), rows.map((r) => {
+    const el = document.createElement("div");
+    el.className = "link-row" + (r.on ? " on" : "");
+    el.innerHTML = `<span class="link-icon">${LINK_ICONS[r.key]}</span><div class="dev-info"><b></b><small></small></div>`;
+    el.querySelector("b").textContent = r.name;
+    el.querySelector("small").textContent = r.on ? (r.who ? "Signed in as " + r.who : "Signed in") : "Not signed in · " + r.what;
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "small-button acct-quiet",
+      textContent: r.on ? "Sign out" : "Sign in" });
+    b.onclick = async () => {
+      if (!r.on) return r.signIn();
+      b.disabled = true;
+      await r.signOut().catch(() => {});
+      if (typeof lvLoadConfig === "function") lvLoadConfig().catch(() => {}); // the Live page sees it too
+      loadLinks();
+    };
+    el.append(b);
+    return el;
+  }));
+}

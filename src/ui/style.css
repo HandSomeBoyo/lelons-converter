@@ -791,7 +791,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .acct-note:empty { display: none; }
 .acct-note.good { color: var(--green, #5fd38d); }
 .acct-end { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
-.acct-delete-open { color: var(--red); font-size: 13px; }
+.acct-end .acct-delete-open { color: var(--red); font-size: 13px; }
 .acct-end form { width: 100%; }
 .acct-card .small-button.acct-logout, .acct-card .small-button.acct-danger { background: transparent; color: var(--text); border: 1px solid var(--line2); }
 .acct-card .small-button.acct-logout:hover { border-color: var(--text); }
@@ -7236,7 +7236,7 @@ html.side-small .sidebar .tabs .tab-dot { position: absolute; top: 6px; right: 8
 .ap-bio { align-items: flex-end; padding: 10px 12px; }
 .ap-bio textarea { height: auto; min-height: 44px; line-height: 1.45; white-space: pre-wrap; resize: vertical; }
 .ap-bio small { flex: none; color: var(--muted); font-size: 11px; }
-.ap-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-links { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .ap-link svg { width: 18px; height: 18px; flex: none; }
 .ap-link input { height: 36px; font-size: 13px; }
 .ap-main .pe-hint { margin: -2px 0 0; font-size: 12px; color: var(--muted); }
@@ -9321,3 +9321,60 @@ body .chat-panel.with-rail.has-pane.cw-s { grid-template-columns: 72px 76px minm
 body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px minmax(0, 1fr); }
 .chat-panel.has-pane.cw-s > .chat-main { display: none; }
 .chat-panel.cw-s .chat-room-tools .call-start { font-size: 0; gap: 0; padding: 0 10px; }
+
+
+/* ================================================================ 3.0: a calmer Account page (like Settings): rounder flat cards,
+   smaller titles with one short line, labels in normal letters, quiet buttons, password folded away, one Look card,
+   an Inbox tab and Connected accounts. */
+#accountTab .acct-card { padding: 18px 20px; border-radius: 10px; }
+#accountTab .acct-card h2 { margin: 0 0 3px; font-size: 15px; }
+#accountTab .acct-help { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+#accountTab .acct-help b { color: var(--text); font-weight: 600; }
+#accountTab .acct-card .lib-field span, #accountTab .inv-pick > span {
+  font-family: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+#accountTab .acct-tabs button { padding: 9px 12px; font-size: 13.5px; }
+.acct-tab-count { margin-left: 6px; padding: 1px 6px; border-radius: 99px; font: 700 10.5px var(--head); color: #111; background: var(--accent); vertical-align: 1px; }
+.acct-tab-count[hidden] { display: none; }
+.acct-head { display: flex; align-items: center; gap: 16px; }
+.acct-head > div { flex: 1; min-width: 0; }
+.acct-head .acct-help { margin: 0; }
+#acctPasswordForm { margin-top: 16px; }
+#acctPasswordForm[hidden], #acctPwOpen[hidden] { display: none; }
+.acct-buttons { display: flex; align-items: center; gap: 16px; }
+.acct-cancel { font-size: 13px; color: var(--muted); }
+#accountTab .acct-card .small-button { height: 36px; padding: 0 14px; font-size: 13.5px; }
+#accountTab .acct-row .small-button { height: 44px; }
+#accountTab .small-button.acct-quiet { background: transparent; color: var(--text); border: 1px solid var(--line2); }
+#accountTab .small-button.acct-quiet:hover { border-color: var(--text); }
+.acct-end-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.acct-end .acct-since { font-size: 12.5px; color: var(--muted); }
+/* Invites */
+#accountTab .inv-make { gap: 10px; }
+#accountTab .inv-make-button { height: 40px; }
+#accountTab .inv-pick .quality select { min-width: 150px; }
+#accountTab .inv-code { font-size: 16px; letter-spacing: 1.5px; }
+.inv .actions { align-items: center; gap: 4px; }
+.inv .inv-del { color: var(--muted); }
+.inv .inv-del:hover { color: var(--red); }
+/* Look: color and ring in one card */
+.ap-look-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+.ap-sub { margin: 0 0 10px; font-family: inherit; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.ap-look .pe-colors { padding-top: 2px; }
+/* The empty "Pin something" spot is a slim button, not a big box */
+.ap-show-add { grid-column: 1 / -1; justify-self: start; flex-direction: row; align-items: center; align-self: start; gap: 10px; padding: 10px 14px; white-space: nowrap; }
+.ap-show-add > span:not(.pf-show-pic) { margin-left: 6px !important; }
+.ap-show-add .pf-show-pic { aspect-ratio: auto; margin: 0; background: transparent; }
+.ap-show-add .pf-show-pic svg { width: 18px; height: 18px; }
+.ap-show-add b { padding: 0; }
+.ap-show-add > span:not(.pf-show-pic) { padding: 0; margin-left: auto; }
+/* Connected accounts */
+.link-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.link-row:first-child { border-top: 0; padding-top: 2px; }
+.link-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--panel2, rgba(255,255,255,.06)); }
+.link-icon svg { width: 22px; height: 22px; }
+.link-row:not(.on) .link-icon { filter: grayscale(1); opacity: .6; }
+#acctLinks[hidden] { display: none; }
+@container page (max-width: 700px) {
+  .ap-look-row { grid-template-columns: 1fr; gap: 16px; }
+  .acct-head { flex-wrap: wrap; }
+}
