@@ -90,7 +90,8 @@ def emit(items):
                 if who in talk or len(talk) < 5000:
                     t = talk.setdefault(who, [item.get("user") or "", 0])
                     t[0], t[1] = item.get("user") or t[0], t[1] + 1
-                if item.get("first"):  # (their very first message in your Twitch chat)
+                if item.get("first") and not any(f.get("login") == item.get("login") for f in s["first"]):
+                    # (their very first message in your Twitch chat; once each, even if Twitch says it twice)
                     s["first"].append({k: item.get(k) for k in ("p", "user", "login", "text", "at")})
                     del s["first"][:-300]
             elif item.get("type") == "event" and item.get("kind") in EVENT_KINDS:
@@ -259,7 +260,9 @@ def _tick():
                 h["slow"] = h.get("slow", 0) + 10  # (seconds: one look every 10)
             if "lag" in keys or "gpu" in keys:
                 h["lag"] = h.get("lag", 0) + 10
-        if now - s["minute"]["at"] >= SAMPLE:
+        if now - s["minute"]["at"] >= SAMPLE and not live:
+            s["minute"] = {"chat": 0, "at": now}  # (3.0) the minutes after the stream ended: no 0 on the graph, no lower average
+        elif now - s["minute"]["at"] >= SAMPLE:
             s["series"].append({"t": round(now - s["start"]), "tw": tw.get("viewers") or 0, "yt": yt.get("viewers") or 0,
                                 "chat": s["minute"]["chat"], "kbps": obs.get("bitrate") or 0})
             s["minute"] = {"chat": 0, "at": now}

@@ -7,6 +7,8 @@ const LVT = { modes: null, modesAt: 0, modesBusy: false, modesError: "", clippin
 
 function lvtSignedIn() { const c = LV.cfg || {}; return !!(c.twitch && c.twitchSignedIn); }
 function lvtNeedSignIn(box, title, what) {
+  // (3.0) Forget what was drawn before, or the card kept saying "Sign in" after signing in again.
+  box.dataset.shape = "";
   box.innerHTML = `<h3>${title}</h3><p class="lv-muted">Sign in to Twitch in Set up to ${what}.</p>
     <button type="button" class="small-button lvi-ghost lvt-sign">Sign in to Twitch</button>`;
   box.querySelector(".lvt-sign").onclick = () => lvOpenSetup();

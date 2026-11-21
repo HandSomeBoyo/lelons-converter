@@ -7622,6 +7622,8 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lv-cbar .small-button { height: 34px; padding: 0 18px; }
 .lv-editing > [data-c] { outline: 1.5px dashed color-mix(in srgb, var(--text) 22%, transparent); outline-offset: 3px; border-radius: var(--r); }
 .lv-editing > [data-c] > :not(.lv-tools) { pointer-events: none; }
+/* (3.0) room for the bar on top, so it no longer covers the title and numbers while you customize */
+.lv-editing > [data-c] { padding-top: 50px !important; }
 .lv-tools { position: absolute; z-index: 6; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-radius: var(--r) var(--r) 0 0;
   background: color-mix(in srgb, var(--panel) 88%, var(--accent) 12%); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
 .lv-tools .sp { flex: 1; }
@@ -7722,6 +7724,7 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lvo-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; background: var(--panel2); font: 600 13px var(--head); }
 .lvo-btn svg { width: 15px; height: 15px; }
 .lvo-btn.rec { background: color-mix(in srgb, var(--red) 20%, var(--panel2)); color: #ff8a80; }
+:root[data-theme="light"] .lvo-btn.rec { background: color-mix(in srgb, var(--red) 14%, var(--panel2)); color: #c62828; }  /* (3.0) readable on light */
 .lvo-btn.dim { color: var(--muted); }
 .lvo-btn:hover { filter: brightness(1.15); }
 #lvoRecTime { font-variant-numeric: tabular-nums; }
