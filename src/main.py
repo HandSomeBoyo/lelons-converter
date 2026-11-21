@@ -660,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
+        if url.path == "/api/remote-sound":  # (3.0) this PC's sound, for Remote desktop (see loopback.py)
+            return self.send_remote_sound()
         if self.path == "/api/state":
             state.set(last_ping=time.time())
             page_loaded.set()
@@ -1734,6 +1736,32 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def send_remote_sound(self):
+        """(3.0) Streams this PC's own sound to the hidden sender page while someone controls this PC."""
+        import loopback
+        live = lambda: bool(remote._state["session"]) and not remote._state["stop"]  # noqa: E731
+        if not live():
+            return self.send_json({"ok": False, "error": "no session"})
+        sound = loopback.capture(live)
+        try:
+            info, _ = next(sound)
+        except (loopback.Error, OSError, StopIteration) as e:
+            return self.send_json({"ok": False, "error": str(e) or "no sound"})
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Sound", json.dumps(info))
+            self.end_headers()
+            for _, chunk in sound:
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, loopback.Error, OSError):
+            pass  # the page stopped listening, or the session ended
+        finally:
+            sound.close()
+        self.close_connection = True
+
     def handle_remote(self, action, data):
         """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""
         try:
@@ -1768,6 +1796,8 @@ class Handler(BaseHTTPRequestHandler):
                                   data={"name": str(data.get("name") or "")}) or {}
                 if action == "rename" and device == me["device"] and result.get("ok"):
                     remote.set_options({"name": data.get("name")})
+                if action == "forget" and device != me["device"]:
+                    remote.forget_host(device)
             elif action == "allowed":
                 result = {"allowed": remote.allowed(str(data.get("key") or ""))}
             elif action == "ask":
@@ -1793,6 +1823,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = remote.key(data.get("role"), data.get("pub"), data.get("priv"))
             elif action == "nonce":  # (2.37.1) a hello is only ever answered once, even across restarts
                 result = {"fresh": remote.nonce_fresh(data.get("nonce"))}
+            elif action == "stop":  # (3.0) the Stop button on this PC's own Remote page
+                remote.stop_now()
+                result = {}
             elif action == "host-state":
                 result = remote.host_state()
             elif action == "screen":  # show another screen: the sender starts again on it
