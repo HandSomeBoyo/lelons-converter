@@ -660,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
+        if url.path == "/api/remote-sound":  # (3.0) this PC's sound, for Remote desktop (see loopback.py)
+            return self.send_remote_sound()
         if self.path == "/api/state":
             state.set(last_ping=time.time())
             page_loaded.set()
@@ -1697,6 +1699,32 @@ class Handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
+
+    def send_remote_sound(self):
+        """(3.0) Streams this PC's own sound to the hidden sender page while someone controls this PC."""
+        import loopback
+        live = lambda: bool(remote._state["session"]) and not remote._state["stop"]  # noqa: E731
+        if not live():
+            return self.send_json({"ok": False, "error": "no session"})
+        sound = loopback.capture(live)
+        try:
+            info, _ = next(sound)
+        except (loopback.Error, OSError, StopIteration) as e:
+            return self.send_json({"ok": False, "error": str(e) or "no sound"})
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Sound", json.dumps(info))
+            self.end_headers()
+            for _, chunk in sound:
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, loopback.Error, OSError):
+            pass  # the page stopped listening, or the session ended
+        finally:
+            sound.close()
+        self.close_connection = True
 
     def handle_remote(self, action, data):
         """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""

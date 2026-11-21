@@ -156,7 +156,12 @@ async function rhGo(sess) {
   }
   if (rh.sess !== sess) return stream.getTracks().forEach((t) => t.stop());
   sess.stream = stream;
-  const video = stream.getVideoTracks()[0], audio = stream.getAudioTracks()[0] || null;
+  const video = stream.getVideoTracks()[0];
+  // (3.0) When the screen is picked by itself (no picker), the engine leaves the sound out. Then the
+  // sound comes from Windows itself (loopback.py) instead.
+  let audio = stream.getAudioTracks()[0] || null;
+  if (!audio) audio = await rhPcSound(sess).catch(() => null);
+  if (rh.sess !== sess) { if (sess.soundStop) sess.soundStop(); return stream.getTracks().forEach((t) => t.stop()); }
   for (const t of sess.pc.getTransceivers()) {
     const kind = t.receiver.track && t.receiver.track.kind;
     if (kind === "video") await t.sender.replaceTrack(video).catch(() => {});
@@ -252,8 +257,49 @@ function rhEnd(why, tell = true) {
     try { sess.pc.close(); } catch (e) { /* gone */ }
   }, 300);
   if (sess.stream) sess.stream.getTracks().forEach((t) => t.stop());
+  if (sess.soundStop) sess.soundStop();
   if (why !== "screen") rdPost("/api/remote-end", { reason: why });
   rhSay("Waiting for your other PCs.");
+}
+
+// (3.0) This PC's own sound, from Windows (see loopback.py): raw samples over a local stream, played into
+// a small audio worklet whose output is a normal sound track for the connection. It keeps the delay low
+// by dropping old sound when it falls behind.
+async function rhPcSound(sess) {
+  const ctrl = new AbortController();
+  const res = await fetch("/api/remote-sound", { headers: RD_TOKEN ? { "X-Lelons-Token": RD_TOKEN } : {}, signal: ctrl.signal });
+  const fmt = JSON.parse(res.headers.get("X-Sound") || "null");
+  if (!res.ok || !res.body || !fmt || !fmt.rate || !fmt.channels) { ctrl.abort(); return null; }
+  const ctx = new AudioContext({ sampleRate: fmt.rate, latencyHint: "interactive" });
+  await ctx.audioWorklet.addModule("remote-sound.js");
+  const node = new AudioWorkletNode(ctx, "rd-feed", { numberOfInputs: 0, outputChannelCount: [2] });
+  const dest = ctx.createMediaStreamDestination();
+  node.connect(dest);
+  ctx.resume().catch(() => {});
+  sess.soundStop = () => { ctrl.abort(); ctx.close().catch(() => {}); };
+  const ch = fmt.channels, bytes = fmt.kind === "s16" ? 2 : 4, frame = ch * bytes;
+  const reader = res.body.getReader();
+  (async () => {
+    let rest = new Uint8Array(0);
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      let buf = value;
+      if (rest.length) { buf = new Uint8Array(rest.length + value.length); buf.set(rest); buf.set(value, rest.length); }
+      const n = Math.floor(buf.length / frame);
+      rest = buf.slice(n * frame);
+      if (!n) continue;
+      const dv = new DataView(buf.buffer, buf.byteOffset, n * frame);
+      const l = new Float32Array(n), r = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const o = i * frame;
+        if (bytes === 4) { l[i] = dv.getFloat32(o, true); r[i] = ch > 1 ? dv.getFloat32(o + 4, true) : l[i]; }
+        else { l[i] = dv.getInt16(o, true) / 32768; r[i] = ch > 1 ? dv.getInt16(o + 2, true) / 32768 : l[i]; }
+      }
+      node.port.postMessage({ l, r }, [l.buffer, r.buffer]);
+    }
+  })().catch(() => {});
+  return dest.stream.getAudioTracks()[0] || null;
 }
 
 rhTick();

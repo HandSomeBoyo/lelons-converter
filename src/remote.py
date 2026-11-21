@@ -318,6 +318,7 @@ def engine_args(screen=0):
         "--disable-background-timer-throttling",
         "--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion",
         "--disable-renderer-backgrounding",
+        "--autoplay-policy=no-user-gesture-required",  # (3.0) the PC's sound plays in a hidden window
     ])
 
 
