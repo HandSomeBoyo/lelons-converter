@@ -8732,3 +8732,11 @@ body.bd-dragging .bd-card:hover { transform: none; }
 .bd-canvas { cursor: grab; }
 .bd-canvas.panning { cursor: grabbing; user-select: none; }
 :where(.bd-canvas > *) { cursor: auto; }
+/* (3.0) Boards automation */
+.bd-rule { margin: 2px 0; padding: 6px 4px; border-radius: 6px; }
+.bd-rule:hover { background: var(--bd-btn-hover); }
+.bd-rule-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px 30px; }
+.bd-rule-label { all: unset; min-width: 34px; height: 24px; padding: 0 8px; box-sizing: border-box; border-radius: 4px; font-size: 12px; font-weight: 600; line-height: 24px; cursor: pointer; text-align: center; }
+.bd-rule-label.on { box-shadow: 0 0 0 2px var(--bd-pop), 0 0 0 4px #388bff; }
+.bd-rule-on { color: #f5cd47 !important; }
+.bd-confetti { position: fixed; z-index: 170; width: 7px; height: 10px; border-radius: 2px; pointer-events: none; }
