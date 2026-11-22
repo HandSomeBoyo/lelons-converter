@@ -602,11 +602,33 @@ def _voice_track(tracks):
     return best
 
 
+def _fix_long_words(words):
+    """(3.0) Where it can't make out what's said (everyone talking at once, cheering), Whisper stretches
+    a word over the whole unclear bit. Two kinds:
+    - a word right after the one before it, but really said seconds later: it keeps its end (where it
+      was said) and starts just before that, so it doesn't show up early;
+    - any other long word: it keeps its start and ends after about the time it takes to say it, so it
+      doesn't hang on screen until the speech is clear again."""
+    out = []
+    for i, (start, end, text) in enumerate(words):
+        letters = len(re.sub(r"\W", "", text))
+        usual = min(1.2, 0.3 + 0.08 * max(1, letters))  # about how long saying it takes, with some room
+        if end - start > usual + 0.6:
+            after_last = out and start - out[-1][1] < 0.15
+            if after_last:
+                start = end - usual
+            else:
+                end = start + usual
+        out.append((start, end, text))
+    return out
+
+
 def fit_to_speech(words, audio):
     """(3.0) Whisper's word times are rough: a word often hangs on into the quiet after it, or starts
     before the voice does. A voice finder (it hears voices, not game sound or music) marks where you
     really talk; each word is kept inside that, and the last word before a pause ends where your
     voice stops, so lines leave with you and pauses stay pauses."""
+    words = _fix_long_words(words)
     if not words or not len(audio):
         return words
     try:
