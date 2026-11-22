@@ -22,7 +22,7 @@ async function rhTick() {
       });
       if (!res.ok) {
         wait = res.error === "owner_only" || res.error === "login" ? 60000 : 8000;
-        rhSay(res.error === "owner_only" ? "Only the owner can use Remote desktop." : "Not connected: " + res.error);
+        rhSay(res.error === "owner_only" ? "Only the owner and admins can use Remote desktop." : "Not connected: " + res.error);
       } else {
         for (const s of res.signals || []) {
           if (s.id <= rh.after) continue;
@@ -175,8 +175,23 @@ async function rhGo(sess) {
   rhSay("Sending to " + sess.name);
 }
 
+// (3.1.2) Smarter Auto: when this PC struggles (on battery, or the processor can't keep up), Auto
+// steps down to a steady 30 fps at 1080p at most instead of collapsing to a few frames. Back up to 60
+// after it's been fine (plugged in, processor keeping up) for about 30 seconds.
+function rhEase(sess, cpu, lowFps) {
+  if (sess.mode !== "auto") { sess.eased = false; sess.ok = 0; sess.bad = 0; return; }
+  if (!sess.eased) {
+    sess.bad = cpu || lowFps || sess.battery ? (sess.bad || 0) + 1 : 0;
+    if (sess.bad >= 2 || sess.battery) { sess.eased = true; sess.ok = 0; rhMode(sess, "auto"); }
+  } else {
+    sess.ok = !sess.battery && !cpu ? (sess.ok || 0) + 1 : 0;
+    if (sess.ok >= 15) { sess.eased = false; sess.bad = 0; rhMode(sess, "auto"); }
+  }
+}
+
 async function rhMode(sess, mode) {
-  const m = RD_MODES[mode] || RD_MODES.auto;
+  let m = RD_MODES[mode] || RD_MODES.auto;
+  if (mode === "auto" && sess.eased) m = { ...m, fps: 30, height: Math.min(m.height, 1080), bitrate: 10e6 };
   sess.mode = mode;
   const video = sess.stream && sess.stream.getVideoTracks()[0];
   if (!video) return;
@@ -228,7 +243,9 @@ async function rhFlush(sess) {
   // Moves in between don't matter: only the newest one is kept, the clicks and keys all go.
   const list = [];
   for (const e of sess.queue.splice(0)) {
-    if (e && e.t === "m" && list.length && list[list.length - 1].t === "m") list[list.length - 1] = e;
+    const last = list[list.length - 1];
+    if (e && e.t === "m" && last && last.t === "m") list[list.length - 1] = e;
+    else if (e && e.t === "r" && last && last.t === "r") list[list.length - 1] = { t: "r", dx: last.dx + e.dx, dy: last.dy + e.dy }; // (3.1.2) moves add up
     else list.push(e);
   }
   const r = await rdPost("/api/remote-input", { e: list });
@@ -258,11 +275,14 @@ async function rhWatch(sess) {
         const n = s.framesEncoded - (sess.encN || 0), t = s.totalEncodeTime - (sess.encT || 0);
         sess.encN = s.framesEncoded; sess.encT = s.totalEncodeTime;
         rhSend(sess, { enc: { ms: n > 0 ? Math.round((t / n) * 1000) : 0, fps: Math.round(s.framesPerSecond || 0),
-          gpu: s.powerEfficientEncoder === true, name: String(s.encoderImplementation || "").slice(0, 60), why: s.qualityLimitationReason || "" } });
+          gpu: s.powerEfficientEncoder === true, name: String(s.encoderImplementation || "").slice(0, 60), why: s.qualityLimitationReason || "",
+          battery: !!sess.battery, eased: !!sess.eased } });
+        rhEase(sess, s.qualityLimitationReason === "cpu", (s.framesPerSecond || 0) < 40);
       });
     } catch (e) { /* closed */ }
   }
   const st = await rdPost("/api/remote-host-state");
+  if (st.ok) sess.battery = st.battery;
   if (st.ok && st.stop) rhEnd("stopped");
 }
 

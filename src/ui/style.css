@@ -8106,6 +8106,7 @@ button.rd-sw.on { background: var(--accent); box-shadow: none; }
 .rd-vol-pop[hidden] { display: none; }
 .rd-vol-pop input[type=range] { width: 130px; accent-color: var(--accent); }
 .rd-this { margin-top: 18px; }
+.rd-batt { color: #f5c518; }
 /* ================================================================ 2.37.0: servers in Chat (servers.js) and zoom on shared screens */
 body .chat-panel.with-rail { grid-template-columns: 72px 264px minmax(0, 1fr); }
 body .chat-panel.with-rail.has-pane { grid-template-columns: 72px 264px minmax(0, 1fr) minmax(300px, 380px); }
