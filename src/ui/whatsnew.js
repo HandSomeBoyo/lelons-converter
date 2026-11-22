@@ -5,6 +5,10 @@ const CHANGES = [
   { version: "3.1.0", items: [
     "Live: new Pre-stream check button. One click checks OBS, your scene, your mic, your Twitch title and game, alerts and your internet before you go live.",
     "Anything wrong gets a plain tip on how to fix it, and often a button that fixes it for you.",
+    "Calls: the call now sits at the bottom of the side bar, so it never covers the page.",
+    "Calls: sounds when people join or leave, mute, deafen or share a screen.",
+    "Calls: our own Share your screen window, with live previews of your screens and windows, and no more \"is sharing your screen\" bar.",
+    "Test your microphone now lets you hear yourself, and there's a new Hear my own microphone switch for calls.",
   ] },
   { version: "3.0.0", items: [
     "VaultHub 3.0! Every page got a cleanup: calmer, tidier and easier to use.",

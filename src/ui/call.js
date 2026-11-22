@@ -1153,7 +1153,6 @@ function drawCall() {
   const box = $("callBox");
   box.hidden = !call;
   document.body.classList.toggle("in-call", !!call);
-  callWatchCardHeight();
   if (typeof srvDraw === "function") srvDraw(); // (servers: the "Voice connected" bar and who's in each voice channel)
   if (!call) { callDrawn = ""; $("callStage").hidden = true; drawCallTiles([], false); callPop(null); callStagePlace(false); return; }
   drawCallStatus();
@@ -1189,9 +1188,10 @@ function drawCall() {
         callCam ? "Turn your camera off" : "Turn your camera on", callCamera));
       buttons.push(button((callScreen ? "on" : "") + (callPopOpen === "share" ? " open" : ""), CALL_ICONS.screen,
         callScreen ? "Your screen: quality, change it, or stop sharing" : "Share your screen", () => (callScreen ? callPop("share") : callShare())));
-      buttons.push(button(callPopOpen === "board" ? "open" : "", CALL_ICONS.board, "Sound board: play Library sounds in the call", () => callPop("board")));
-      buttons.push(button(callRec ? "rec" : "", CALL_ICONS.rec, callRec ? "Stop recording and save it" : "Record the call (saved as an MP3)", callRecToggle, callRec ? callRecClock() : ""));
-      buttons.push(button(callPopOpen === "settings" ? "open" : "", CALL_ICONS.gear, "Microphone, sound quality, push-to-talk, speakers and camera", () => callPop("settings")));
+      // (3.1) Sound board and Record live in the "more" window now (the card is in the side bar); a recording
+      // going on still shows here, with its clock.
+      if (callRec) buttons.push(button("rec", CALL_ICONS.rec, "Stop recording and save it", callRecToggle, callRecClock()));
+      buttons.push(button(callPopOpen === "settings" || callPopOpen === "board" ? "open" : "", CALL_ICONS.gear, "Sound board, recording, microphone, speakers and camera", () => callPop("settings")));
     }
     buttons.push(button("red", CALL_ICONS.hangUp, call.phase === "in" && !callOthersIn().length && !call.group ? "Cancel" : "Hang up", () => callHangUp()));
   }
@@ -1255,7 +1255,7 @@ function callStagePlace(inRoom) {
   document.body.classList.toggle("vc-here", !!inRoom);
   const moved = (inRoom && room && stage.parentElement !== room) || (!inRoom && stage.parentElement !== document.body);
   if (inRoom && room && stage.parentElement !== room) room.append(stage);
-  else if (!inRoom && stage.parentElement !== document.body) $("callBox").after(stage);
+  else if (!inRoom && stage.parentElement !== document.body) $("callPop").before(stage);
   if (moved) stage.querySelectorAll("video").forEach((v) => { if (v.srcObject) v.play().catch(() => {}); });
 }
 
@@ -1397,6 +1397,17 @@ async function drawCallPop() {
       sel.addEventListener("change", () => use(sel.value));
       return sel;
     };
+    const more = document.createElement("div");
+    more.className = "call-pop-actions call-more";
+    const moreBtn = (icon, text, fn, cls = "") => {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "call-more-btn " + cls, innerHTML: icon });
+      b.append(Object.assign(document.createElement("span"), { textContent: text }));
+      b.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+      return b;
+    };
+    more.append(moreBtn(CALL_ICONS.board, "Sound board", () => callPop("board")),
+      moreBtn(CALL_ICONS.rec, callRec ? "Stop recording" : "Record call", () => { callRecToggle(); drawCallPop(); }, callRec ? "rec" : ""));
+    els.push(more);
     els.push(title("Microphone"), select("audioinput", "callMic", "Microphone", callUseMic));
     els.push(title("Hear yourself"));
     els.push(chips(["off", "on"], callHearSelfOn() ? "on" : "off", (v) => (v === "on" ? "On" : "Off"), (v) => callSetHearSelf(v === "on")));

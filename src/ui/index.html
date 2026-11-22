@@ -142,6 +142,20 @@
       <button type="button" role="tab" data-tab="lvstats" title="Stream stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/></svg><span>Stream stats</span></button>
 </div>
     </div>
+    <!-- (3.1) The call you're in sits here, at the bottom of the side bar (it used to float at the top) -->
+    <div class="call" id="callBox" hidden>
+      <div class="call-card">
+        <span class="call-face" id="callFace"></span>
+        <div class="call-text"><b id="callName"></b><small id="callStatus"></small></div>
+        <div class="call-people" id="callPeople"></div>
+        <div class="call-buttons" id="callButtons"></div>
+      </div>
+      <div class="call-sharing" id="callSharing" hidden>
+        <i></i><span>You're sharing your screen</span>
+        <button type="button" class="link" id="callStopShare">Stop</button>
+      </div>
+      <div class="call-sharing call-rec-note" id="callRecNote" hidden><i></i><span></span></div>
+    </div>
     <div class="side-foot">
       <button type="button" class="side-link chat-button" id="chatButton" title="Chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span>
@@ -2197,20 +2211,6 @@
 </aside>
 
 <!-- A call (private and group chats): ringing, talking, shared screens and cameras -->
-<div class="call" id="callBox" hidden>
-  <div class="call-card">
-    <span class="call-face" id="callFace"></span>
-    <div class="call-text"><b id="callName"></b><small id="callStatus"></small></div>
-    <div class="call-people" id="callPeople"></div>
-    <div class="call-buttons" id="callButtons"></div>
-  </div>
-  <div class="call-pop" id="callPop" hidden></div>
-  <div class="call-sharing" id="callSharing" hidden>
-    <i></i><span>You're sharing your screen</span>
-    <button type="button" class="link" id="callStopShare">Stop</button>
-  </div>
-  <div class="call-sharing call-rec-note" id="callRecNote" hidden><i></i><span></span></div>
-</div>
 <div class="call-stage" id="callStage" hidden>
   <video id="callVideo" data-call="1" autoplay playsinline muted></video>
   <div class="call-tiles" id="callTiles" hidden></div>
@@ -2223,6 +2223,7 @@
     </button>
   </div>
 </div>
+<div class="call-pop" id="callPop" hidden></div>
 <audio id="callAudio" autoplay></audio>
 <!-- (3.0.1) Our own "Share your screen" window (callshare.js) -->
 <div class="modal share-modal" id="shareModal" hidden>
