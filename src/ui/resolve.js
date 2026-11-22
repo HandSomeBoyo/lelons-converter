@@ -5,7 +5,7 @@
 
 let rtTool = "";
 let rtView = "pick"; // pick | setup | subs | done
-let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5", punct: "keep", case: "as", position: "bottom" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5", punct: "keep", case: "as", position: "bottom", reveal: "word" };
 let rtNvidia = false; // an NVIDIA graphics card to listen on
 let rtServer = []; // from the app's state
 let rtId = ""; // the video on the tab
@@ -1055,7 +1055,8 @@ async function saveSubsNow() {
 async function rtSend(old) {
   await saveSubsNow();
   const look = { textStyle: rtOptions.textStyle, fadeOut: rtOptions.fadeOut, fadeLen: rtOptions.fadeLen, fadeGap: rtOptions.fadeGap,
-    punct: rtOptions.punct, case: rtOptions.case, position: rtOptions.position };
+    punct: rtOptions.punct, case: rtOptions.case, position: rtOptions.position, reveal: rtOptions.reveal,
+    words: subs.cues.map((c) => [Math.round(c.start * 1000) / 1000, wordTimes(c)]) };
   const res = await api("/api/rt-send", { id: rtId, old, ...look }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   const note = $("subsSaved");
   if (!res.ok) { note.textContent = res.error; return; }
@@ -1283,14 +1284,37 @@ function dressText(text) {
   return text;
 }
 
+// (3.0) When each word of a line is said (seconds from the line's start), for lines that build up
+// word by word. Same rules as the app uses for Resolve (subtitles.word_offsets).
+function wordTimes(cue) {
+  const words = cue.text.split(/\s+/).filter(Boolean);
+  if (Array.isArray(cue.words) && cue.words.length === words.length) return cue.words;
+  const total = words.reduce((n, w) => n + w.length + 1, 0);
+  const span = Math.max(0, cue.end - cue.start - 0.3);
+  let before = 0;
+  return words.map((w) => { const at = Math.round((span * before / total) * 1000) / 1000; before += w.length + 1; return at; });
+}
+
 function drawCaptionAt(cue, next, t) {
   const cap = $("rtCaption");
-  const text = cue ? dressText(cue.text) : "";
+  let since = cue ? t - cue.start : 0;
+  let shown = cue ? cue.text : "";
+  if (cue && rtOptions.reveal === "word") {
+    // only the words said so far; the animation starts again with each new word
+    const times = wordTimes(cue);
+    const ends = [...cue.text.matchAll(/\S+/g)].map((m) => m.index + m[0].length);
+    let k = 0;
+    while (k + 1 < times.length && times[k + 1] <= since) k++;
+    const began = times[k];
+    while (k + 1 < times.length && times[k + 1] - times[k] < 0.09) k++;
+    shown = cue.text.slice(0, ends[k]);
+    since -= began;
+  }
+  const text = cue ? dressText(shown) : "";
   if (cap.textContent !== text) cap.textContent = text;
   if (!cue) return;
   const look = rtLookData;
   const width = $("rtScreen").clientWidth || 640;
-  const since = t - cue.start;
   const size = splineAt(look.animated && look.animated.Size, since) ?? look.size;
   const px = Math.max(1, size * width * 0.7);
   cap.style.fontSize = px.toFixed(2) + "px";

@@ -193,8 +193,9 @@ def peaks_of(path, duration, tracks=1, bars=BARS):
     try:
         pcm = subprocess.run(
             [imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-nostdin", "-i", path,
-             *(["-filter_complex", "".join(f"[0:a:{n}]" for n in range(tracks)) + f"amix=inputs={tracks}:normalize=0[out]",
-                "-map", "[out]"] if tracks > 1 else ["-map", "0:a:0"]), "-vn", "-ac", "1",
+             *(["-filter_complex", "".join(f"[0:a:{n}]aresample=async=1000:first_pts=0[a{n}];" for n in range(tracks))
+                + "".join(f"[a{n}]" for n in range(tracks)) + f"amix=inputs={tracks}:normalize=0[out]",
+                "-map", "[out]"] if tracks > 1 else ["-map", "0:a:0", "-af", "aresample=async=1000:first_pts=0"]), "-vn", "-ac", "1",
              "-ar", str(rate), "-f", "s16le", "-"],
             capture_output=True, timeout=300, creationflags=downloader.NO_WINDOW,
         ).stdout

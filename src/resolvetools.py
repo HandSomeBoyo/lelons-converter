@@ -15,6 +15,7 @@ Resolve 21 turns off what scripts would need to reach VaultHub.)
 import itertools
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -38,8 +39,8 @@ OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
 DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
             "device": "gpu", "words": "", "perScreen": "0", "textStyle": "", "fadeOut": "off", "fadeLen": "0.3", "fadeGap": "0.5",
-            "punct": "keep", "case": "as", "position": "bottom"}
-FADES = {"fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1"),
+            "punct": "keep", "case": "as", "position": "bottom", "reveal": "word"}
+FADES = {"reveal": ("line", "word"), "fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1"),
          "punct": ("keep", "remove"), "case": ("as", "upper", "lower"), "position": ("bottom", "middle", "top", "style")}
 PER_SCREEN = ("0", "1", "3", "6")  # (3.0) most words on screen at once ("0": as many as fit)
 
@@ -154,7 +155,32 @@ class Tools(files.Files):
         status = item["status"]
         return {"status": status, "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
-    def send(self, file_id, kind="drt", look=None):
+    def _word_by_word(self, item, o, words=None):
+        """(3.0) Each line as a row of titles that build it up word by word: "HEY", "HEY GUYS", ...
+        each starting when its last word is said. words: {line start: offsets} from the page (what it
+        showed in the preview); otherwise worked out from what it heard."""
+        out = []
+        for start, end, text in item["cues"]:
+            spots = [m.end() for m in re.finditer(r"\S+", text)]
+            rel = (words or {}).get(round(start, 3))
+            if not isinstance(rel, list) or len(rel) != len(spots):
+                rel = subtitles.word_offsets(start, end, text, item.get("heard"))
+            parts = []
+            for k, at in enumerate(rel):
+                begin = start + max(0.0, float(at))
+                if parts and begin - parts[-1][0] < 0.09:  # (said at the same moment: one title)
+                    parts[-1][2] = k
+                    continue
+                parts.append([begin, None, k])
+            for n, part in enumerate(parts):
+                part[1] = parts[n + 1][0] if n + 1 < len(parts) else end
+            for n, (a, b, k) in enumerate(parts):
+                shown = subtitles.dress(text[:spots[k]], o["punct"], o["case"])
+                if shown.strip() and b > a:
+                    out.append((a, b, shown, n == len(parts) - 1))
+        return out
+
+    def send(self, file_id, kind="drt", look=None, words=None):
         """"Put in Resolve" under the subtitles: a timeline file with the video and its subtitles as
         Text+ (a .drt, Resolve's own kind of file), or the old way (FCPXML: a subtitle track)."""
         item = self.find(file_id)
@@ -183,6 +209,8 @@ class Tools(files.Files):
         o = save_options(look or {})
         cues = [(a, b, subtitles.dress(t, o["punct"], o["case"])) for a, b, t in item["cues"]]
         cues = [c for c in cues if c[2].strip()]
+        if kind != "fcpxml" and o["reveal"] == "word":
+            cues = self._word_by_word(item, o, words)
         if kind == "fcpxml":
             target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
             fcpxml.make(cues, target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
@@ -290,12 +318,10 @@ class Tools(files.Files):
                 def progress(p, n=n):
                     item["mixProgress"] = (n + p / 100) * 100 / count
 
-                try:
-                    media.run(["-i", item["path"], "-map", f"0:a:{n}", "-vn", "-c:a", "copy", "-movflags", "+faststart", temp],
-                              item["seconds"] or 0, progress)
-                except OSError:  # a kind of sound the window can't take as it is
-                    media.run(["-i", item["path"], "-map", f"0:a:{n}", "-vn", "-c:a", "aac", "-b:a", "160k", "-ac", "2",
-                               "-movflags", "+faststart", temp], item["seconds"] or 0, progress)
+                # (3.0) Made fresh, with holes in the sound filled, so it stays in step with the video
+                # (a straight copy drifted further off the longer the video played).
+                media.run(["-i", item["path"], "-map", f"0:a:{n}", "-vn", "-af", subtitles.SOUND_IN_STEP,
+                           "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-movflags", "+faststart", temp], item["seconds"] or 0, progress)
                 os.replace(temp, target)
                 made.append(target)
             with self.lock:

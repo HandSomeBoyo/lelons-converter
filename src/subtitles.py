@@ -348,13 +348,20 @@ def get_ready(model, progress, gpu=True):
 
 # ---------------------------------------------------------------- listening
 
+# (3.0) Keeps the sound in step with the video. Recordings (OBS most of all) often have tiny holes in
+# the sound, or a sound clock that runs a hair fast or slow. Read as it is, the sound gets shorter
+# than the video, so every line after a hole came too early, and more so the further into the video.
+# This fills the holes with silence and follows the video's clock.
+SOUND_IN_STEP = "aresample=async=1000:first_pts=0"
+
+
 def read_audio(path, start=0.0, length=None, stream=0, on_progress=None):
     """The sound of a file as 16 kHz mono floats (what Whisper listens to)."""
     import numpy as np
 
     command = [media.ffmpeg(), "-hide_banner", "-nostdin", *(["-ss", f"{start:.3f}"] if start else []), "-i", path,
                *(["-t", f"{length:.3f}"] if length else []), "-map", f"0:a:{stream}?", "-vn", "-ac", "1",
-               "-ar", str(SAMPLE_RATE), "-f", "f32le", "-"]
+               "-ar", str(SAMPLE_RATE), "-af", SOUND_IN_STEP, "-f", "f32le", "-"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=media.NO_WINDOW)
     chunks = []
     try:
@@ -457,6 +464,29 @@ def dress(text, punct="keep", case="as"):
     elif case == "lower":
         text = text.lower()
     return text
+
+
+def word_offsets(start, end, text, heard=None):
+    """(3.0) When each word of a line is said, in seconds from the line's start (for lines that build
+    up word by word). From the words it heard when they match the line; otherwise spread by length."""
+    words = text.split()
+    if not words:
+        return []
+    if heard:
+        found = [w for w in heard if start - 0.15 <= w[0] < end - 0.05]
+        if len(found) == len(words):
+            out, last = [], 0.0
+            for k, w in enumerate(found):
+                last = 0.0 if k == 0 else max(last, min(end - start - 0.1, w[0] - start))
+                out.append(round(last, 3))
+            return out
+    total = sum(len(w) + 1 for w in words)
+    span = max(0.0, end - start - 0.3)
+    out, before = [], 0
+    for w in words:
+        out.append(round(span * before / total, 3))
+        before += len(w) + 1
+    return out
 
 
 def make_cues(words, style="normal", per_screen=0):

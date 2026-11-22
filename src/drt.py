@@ -398,12 +398,13 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
         return max(0, int(round(seconds * fps)))
 
     lines = []
-    for start, end, text in cues:
+    for start, end, text, *more in cues:
+        # (3.0) more: False for the first parts of a line that builds up word by word (no fade there)
         a, b = frame(start + offset), frame(end + offset)
         if lines and a < lines[-1][1]:
             lines[-1][1] = a
         if b - a >= 2 and text.strip():
-            lines.append([a, b, text.strip()])
+            lines.append([a, b, text.strip(), more[0] if more else True])
     lines = [line for line in lines if line[1] - line[0] >= 2]
 
     media_frames = int(round(info["duration"] * (info.get("fps") or fps))) if has_video else 0
@@ -417,9 +418,9 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
     fade = fade or {}
     fade_frames = frame(float(fade.get("seconds") or 0)) if fade.get("when") in ("pause", "all") else 0
     gap_frames = frame(float(fade.get("gap") or 0.5))
-    for i, (a, b, text) in enumerate(lines):
+    for i, (a, b, text, line_end) in enumerate(lines):
         gap = lines[i + 1][0] - b if i + 1 < len(lines) else 10 ** 9
-        fades = fade_frames if fade.get("when") == "all" or gap >= gap_frames else 0
+        fades = fade_frames if line_end and (fade.get("when") == "all" or gap >= gap_frames) else 0
         el = title_el
         for old in set(re.findall(r'DbId="([^"]+)"', el)):
             el = el.replace(old, str(uuid.uuid4()))
