@@ -230,6 +230,7 @@ async function rtLoadTracks() {
       rtTracks = Array.from({ length: res.count }, (_, n) => {
         const audio = new Audio(`/rt-video/${id}/t${n}`);
         audio.preload = "auto";
+        audio.dataset.ownVolume = "1"; // (its own slider, not the app's)
         return { audio, on: true };
       });
       rtVideo.muted = true;
@@ -272,6 +273,7 @@ $("rtVolButton").addEventListener("click", () => {
   rtApplyVolume();
   savePref("rtVolume", rtVolume);
 });
+rtVideo.dataset.ownVolume = "1";
 rtApplyVolume();
 
 function drawHear() {
@@ -298,21 +300,38 @@ function drawStrip() {
   const item = rtItem();
   const strip = $("rtStrip");
   const width = strip.getBoundingClientRect().width;
-  const count = item && item.video && width ? Math.max(4, Math.min(24, Math.round(width / 84))) : 0;
-  const key = item ? `${item.id}:${count}` : "";
+  const length = rtLength();
+  const per = item && item.video && width && length ? Math.max(4, Math.min(24, Math.round(width / 84))) : 0;
+  $("rtWave").classList.toggle("has-strip", per > 0);
+  if (!per) { strip.innerHTML = ""; rtStripKey = ""; return; }
+  const [from, to] = tlRange();
+  // (3.0) Zoomed in: more pictures along the whole video, and only the ones in view are shown.
+  const count = Math.min(4000, Math.max(per, Math.round(per * length / (to - from))));
+  const first = Math.max(0, Math.floor((from / length) * count)), last = Math.min(count, Math.ceil((to / length) * count));
+  const key = `${item.id}:${count}:${first}:${last}:${Math.round(width)}`;
   if (key === rtStripKey) return;
+  const keep = rtStripKey.split(":").slice(0, 2).join(":") === `${item.id}:${count}`;
   rtStripKey = key;
-  strip.innerHTML = "";
-  $("rtWave").classList.toggle("has-strip", count > 0);
-  for (let n = 0; n < count; n++) {
-    const img = new Image();
-    img.alt = "";
-    img.decoding = "async";
-    img.onload = () => img.classList.add("in");
-    img.onerror = () => { img.style.visibility = "hidden"; };
-    img.src = `/rt-thumb/${item.id}/${n}/${count}`;
-    strip.append(img);
+  const old = new Map(keep ? [...strip.children].map((img) => [img.dataset.n, img]) : []);
+  if (!keep) strip.innerHTML = "";
+  const slice = length / count;
+  for (let n = first; n < last; n++) {
+    let img = old.get(String(n));
+    old.delete(String(n));
+    if (!img) {
+      img = new Image();
+      img.alt = "";
+      img.decoding = "async";
+      img.dataset.n = n;
+      img.onload = () => img.classList.add("in");
+      img.onerror = () => { img.style.visibility = "hidden"; };
+      img.src = `/rt-thumb/${item.id}/${n}/${count}`;
+      strip.append(img);
+    }
+    img.style.left = tlX(n * slice) * 100 + "%";
+    img.style.width = (slice / (to - from)) * 100 + "%";
   }
+  for (const img of old.values()) img.remove();
 }
 
 for (const ev of ["play", "pause", "seeked", "ratechange", "waiting", "playing"]) rtVideo.addEventListener(ev, () => rtSyncSound(ev !== "pause"));
@@ -322,8 +341,8 @@ async function rtLoadWave() {
   const res = await api("/api/rt-wave", { id }).catch(() => ({ ok: false }));
   if (id !== rtId || !res.ok) return;
   subs.peaks = res.peaks;
-  drawSubsWave();
-  drawStrip();
+  rtZoomSpan = 0;
+  drawTimeline();
 }
 
 function subsClock(t) {
@@ -356,17 +375,119 @@ function rtTick() {
   const t = rtVideo.currentTime || 0;
   $("rtTime").textContent = subsClock(t);
   const length = rtLength() || 1;
-  $("rtHead").style.left = Math.min(100, (t / length) * 100) + "%";
+  // (3.0) Zoomed in and playing: the view turns the page when the playhead gets to its edge.
+  if (rtZoomSpan && !rtVideo.paused && !rtScrubbing) {
+    const [from, to] = tlRange();
+    if (t > to - rtZoomSpan * 0.03 || t < from) tlShow(t - rtZoomSpan * 0.08);
+  }
+  const x = tlX(t);
+  $("rtHead").style.left = Math.min(100, x * 100) + "%";
+  $("rtHead").style.visibility = x < 0 || x > 1 ? "hidden" : "";
   drawCaption();
   rtSyncSound(false);
   if (!rtVideo.paused && !$("resolveTab").hidden) requestAnimationFrame(rtTick);
 }
 
-$("rtWave").addEventListener("click", (e) => {
-  const box = $("rtWave").getBoundingClientRect();
-  seekSubs(((e.clientX - box.left) / box.width) * rtLength());
+// ---- (3.0) the timeline: zoom in (scroll up, or the + button), move along it (scroll sideways, shift +
+// scroll, or drag the bar under it), and drag on it to scrub through the video.
+let rtZoomStart = 0, rtZoomSpan = 0; // what's in view; span 0: all of it
+let rtScrubbing = false;
+function tlRange() {
+  const length = rtLength() || 1;
+  return rtZoomSpan ? [rtZoomStart, rtZoomStart + rtZoomSpan] : [0, length];
+}
+const tlX = (t) => { const [a, b] = tlRange(); return (t - a) / (b - a); };
+function tlShow(start) {
+  const length = rtLength() || 1;
+  rtZoomStart = Math.max(0, Math.min(length - rtZoomSpan, start));
+  drawTimeline();
+}
+function tlZoom(factor, at) {
+  const length = rtLength();
+  if (!length) return;
+  const [from, to] = tlRange();
+  const span = Math.max(Math.min(5, length), Math.min(length, (to - from) / factor));
+  if (at == null) at = rtVideo.currentTime >= from && rtVideo.currentTime <= to ? rtVideo.currentTime : (from + to) / 2;
+  const where = (at - from) / (to - from);
+  rtZoomSpan = span >= length - 0.01 ? 0 : span;
+  rtZoomStart = 0;
+  if (rtZoomSpan) tlShow(at - where * span); else drawTimeline();
+}
+function drawTimeline() {
+  drawSubsWave();
+  drawStrip();
+  drawLane();
+  const t = rtVideo.currentTime || 0, x = tlX(t);
+  $("rtHead").style.left = Math.min(100, x * 100) + "%";
+  $("rtHead").style.visibility = x < 0 || x > 1 ? "hidden" : "";
+  const length = rtLength();
+  $("rtZoomFit").hidden = !rtZoomSpan;
+  $("rtZoomOut").disabled = !rtZoomSpan;
+  $("rtZoomIn").disabled = !length || (rtZoomSpan && rtZoomSpan <= 5.01);
+  const bar = $("rtScroll");
+  bar.hidden = !rtZoomSpan;
+  if (rtZoomSpan) {
+    bar.firstElementChild.style.left = (rtZoomStart / length) * 100 + "%";
+    bar.firstElementChild.style.width = Math.max(2, (rtZoomSpan / length) * 100) + "%";
+  }
+}
+$("rtZoomIn").addEventListener("click", () => tlZoom(2));
+$("rtZoomOut").addEventListener("click", () => tlZoom(0.5));
+$("rtZoomFit").addEventListener("click", () => { rtZoomSpan = 0; drawTimeline(); });
+const tlTimeAt = (e) => { const box = $("rtWave").getBoundingClientRect(); const [a, b] = tlRange(); return a + Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * (b - a); };
+$("rtWave").addEventListener("wheel", (e) => {
+  if (!rtLength()) return;
+  e.preventDefault();
+  const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+  if (sideways) {
+    if (rtZoomSpan) tlShow(rtZoomStart + (sideways / $("rtWave").clientWidth) * rtZoomSpan);
+    return;
+  }
+  tlZoom(Math.pow(1.0018, -e.deltaY), tlTimeAt(e));
+}, { passive: false });
+$("rtWave").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  const wave = $("rtWave");
+  wave.setPointerCapture(e.pointerId);
+  rtScrubbing = true;
+  const wasPlaying = !rtVideo.paused;
+  if (wasPlaying) rtVideo.pause();
+  seekSubs(tlTimeAt(e));
+  const move = (m) => seekSubs(tlTimeAt(m));
+  const up = () => {
+    rtScrubbing = false;
+    wave.removeEventListener("pointermove", move);
+    wave.removeEventListener("pointerup", up);
+    wave.removeEventListener("pointercancel", up);
+    if (wasPlaying) rtVideo.play().catch(() => {});
+  };
+  wave.addEventListener("pointermove", move);
+  wave.addEventListener("pointerup", up);
+  wave.addEventListener("pointercancel", up);
 });
-window.addEventListener("resize", () => { if (!$("rtWork").hidden) { drawSubsWave(); drawStrip(); } });
+// the bar under the timeline: drag it to move along
+$("rtScroll").addEventListener("pointerdown", (e) => {
+  const bar = $("rtScroll");
+  const length = rtLength();
+  if (!rtZoomSpan || !length) return;
+  bar.setPointerCapture(e.pointerId);
+  const box = bar.getBoundingClientRect();
+  const thumb = bar.firstElementChild.getBoundingClientRect();
+  const grab = e.clientX >= thumb.left && e.clientX <= thumb.right ? e.clientX - thumb.left : thumb.width / 2;
+  const go = (m) => tlShow(((m.clientX - grab - box.left) / box.width) * length);
+  go(e);
+  const up = () => { bar.removeEventListener("pointermove", go); bar.removeEventListener("pointerup", up); };
+  bar.addEventListener("pointermove", go);
+  bar.addEventListener("pointerup", up);
+});
+// ← and → step a second (with Shift: five)
+document.addEventListener("keydown", (e) => {
+  if ($("resolveTab").hidden || $("rtWork").hidden || /TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName)) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  seekSubs(Math.min(rtLength(), Math.max(0, rtVideo.currentTime + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 5 : 1))));
+});
+window.addEventListener("resize", () => { if (!$("rtWork").hidden) drawTimeline(); });
 
 function drawSubsWave() {
   const canvas = $("rtCanvas");
@@ -377,11 +498,17 @@ function drawSubsWave() {
   g.clearRect(0, 0, canvas.width, canvas.height);
   if (!subs.peaks || !subs.peaks.length) return;
   g.fillStyle = getComputedStyle(document.body).getPropertyValue("--muted") || "#888";
-  const n = subs.peaks.length, w = canvas.width / n, mid = canvas.height / 2;
-  subs.peaks.forEach((p, i) => {
+  const n = subs.peaks.length, length = rtLength() || 1, [from, to] = tlRange();
+  const a = (from / length) * n, b = (to / length) * n;
+  const bars = Math.max(1, Math.min(Math.floor(canvas.width / (2 * devicePixelRatio)), Math.ceil(b - a)));
+  const w = canvas.width / bars, mid = canvas.height / 2;
+  for (let i = 0; i < bars; i++) {
+    // the loudest value in each bar's slice
+    let p = 0;
+    for (let k = Math.floor(a + ((b - a) * i) / bars), end = Math.max(k + 1, Math.floor(a + ((b - a) * (i + 1)) / bars)); k < end && k < n; k++) p = Math.max(p, subs.peaks[k] || 0);
     const h = Math.max(1, p * canvas.height * 0.9);
-    g.fillRect(i * w, mid - h / 2, Math.max(1, w - 0.5), h);
-  });
+    g.fillRect(i * w, mid - h / 2, Math.max(1, w - Math.min(1, w * 0.25)), h);
+  }
 }
 
 // ---------------------------------------------------------------- picking a tool
@@ -998,9 +1125,12 @@ function drawLane() {
   const text = css.getPropertyValue("--text").trim() || "#fff";
   const accent = css.getPropertyValue("--accent").trim() || "#ffd23c";
   const top = 2, height = h - 4;
+  const [from, to] = tlRange();
+  const scale = w / (to - from);
   const bar = (cue, color) => {
-    const x = (cueStart(cue) / length) * w;
-    const width = Math.max(1, ((cue.end - cue.start) / length) * w - (w / subs.cues.length > 3 ? 1 : 0));
+    const x = (cueStart(cue) - from) * scale;
+    const width = Math.max(1, (cue.end - cue.start) * scale - ((cue.end - cue.start) * scale > 3 ? 1 : 0));
+    if (x > w || x + width < 0) return;
     g.fillStyle = color;
     g.beginPath();
     if (g.roundRect && width > 4) g.roundRect(x, top, width, height, 2); else g.rect(x, top, width, height);

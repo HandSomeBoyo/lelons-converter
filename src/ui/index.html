@@ -816,9 +816,15 @@
           <div class="rt-loading" id="rtLoading" hidden><span class="spinner"></span><span id="rtLoadingText">Opening the video...</span></div>
         </div>
         <div class="subs-wave rt-timeline" id="rtWave"><div class="rt-strip" id="rtStrip"></div><canvas id="rtCanvas"></canvas><div class="subs-marks" id="rtMarks"></div><div class="playhead" id="rtHead"></div></div>
+        <div class="rt-scroll" id="rtScroll" hidden><div></div></div>
         <div class="subs-transport">
           <button type="button" class="subs-play" id="rtPlay" title="Play or pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
           <span class="subs-time" id="rtTime">0:00.0</span>
+          <div class="rt-zoom" id="rtZoom">
+            <button type="button" class="rt-icon-button" id="rtZoomOut" title="Zoom out (or scroll down on the timeline)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M8 11h6"/></svg></button>
+            <button type="button" class="rt-icon-button" id="rtZoomIn" title="Zoom in (or scroll up on the timeline)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M8 11h6M11 8v6"/></svg></button>
+            <button type="button" class="rt-zoom-fit" id="rtZoomFit" title="Show the whole video" hidden>Show all</button>
+          </div>
           <div class="rt-vol">
             <button type="button" class="rt-icon-button" id="rtVolButton" title="Sound on or off (only here, not in the file)">
               <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>

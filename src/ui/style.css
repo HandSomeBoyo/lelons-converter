@@ -9754,3 +9754,17 @@ html.side-small #callBox .call-sharing { display: none; }
 .rt-live-note[hidden] { display: none; }
 .rt-learned { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
 .rt-learned[hidden] { display: none; }
+/* (3.0) a timeline you can zoom into and scrub */
+.rt-timeline { touch-action: none; user-select: none; cursor: ew-resize; }
+.rt-strip { position: relative; display: block; }
+.rt-strip img { position: absolute; top: 0; flex: none; }
+.rt-zoom { display: flex; align-items: center; gap: 2px; }
+.rt-zoom svg { width: 18px; height: 18px; }
+.rt-zoom-fit { all: unset; cursor: pointer; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent); transition: background-color .15s; }
+.rt-zoom-fit:hover { background: color-mix(in srgb, var(--text) 13%, transparent); }
+.rt-zoom-fit[hidden] { display: none; }
+.rt-scroll { position: relative; height: 8px; margin-top: 6px; border-radius: 99px; background: color-mix(in srgb, var(--text) 7%, transparent); cursor: pointer; }
+.rt-scroll[hidden] { display: none; }
+.rt-scroll div { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: color-mix(in srgb, var(--text) 32%, transparent); transition: background-color .15s; }
+.rt-scroll:hover div { background: color-mix(in srgb, var(--text) 45%, transparent); }

@@ -313,7 +313,7 @@ class Tools(files.Files):
         """(3.0) A small picture from the video for the strip over the sound wave: picture n of count,
         taken from the middle of its slice. Made once, then kept."""
         item = self.find(file_id)
-        if not item or not item["video"] or not 0 <= n < count <= 60:
+        if not item or not item["video"] or not 0 <= n < count <= 4000:
             return None
         target = os.path.join(files.FOLDER, f"preview-{item['id']}-f{count}-{n}.jpg")
         if os.path.isfile(target):
@@ -336,7 +336,9 @@ class Tools(files.Files):
         if not item:
             raise ValueError("This video was removed.")
         if item.get("peaks") is None:
-            item["peaks"] = waveform.peaks_of(item["path"], item["seconds"], max(1, item.get("audioTracks") or 1)) if item["audio"] else []
+            # (3.0) 20 values a second, so the timeline can be zoomed in on
+            bars = int(max(1200, min(60000, (item["seconds"] or 0) * 20)))
+            item["peaks"] = waveform.peaks_of(item["path"], item["seconds"], max(1, item.get("audioTracks") or 1), bars) if item["audio"] else []
         return item["peaks"]
 
     # ---- the subtitle editor

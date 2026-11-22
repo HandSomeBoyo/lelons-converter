@@ -23,9 +23,12 @@ const realPlay = HTMLMediaElement.prototype.play;
 HTMLMediaElement.prototype.play = function (...args) {
   // A call's voices and videos aren't the app's sounds: they don't stop the Library, and aren't kept in the list.
   if (this.dataset.call) return realPlay.apply(this, args);
-  this.volume = volumeLevel();
   appSinkMedia(this);
-  playedMedia.add(this);
+  // (3.0) Players with their own volume slider (the Resolve page) keep their own volume.
+  if (!this.dataset.ownVolume) {
+    this.volume = volumeLevel();
+    playedMedia.add(this);
+  }
   for (const [audio, stop] of appPlayers) if (audio !== this && !audio.paused) stop();
   return realPlay.apply(this, args);
 };
