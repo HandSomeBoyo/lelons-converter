@@ -15,6 +15,7 @@ const RD_ICONS = {
   sound: rdIc('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
   mute: rdIc('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>'),
   gear: rdIc('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1"/>'),
+  game: rdIc('<rect x="2.5" y="7" width="19" height="11" rx="4"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle cx="15.5" cy="11.5" r=".9" fill="currentColor"/><circle cx="17.5" cy="13.5" r=".9" fill="currentColor"/>'),
   full: rdIc('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   x: rdIc('<path d="M6 6l12 12M18 6 6 18"/>'),
   back: rdIc('<path d="M15 5l-7 7 7 7"/>'),
@@ -255,7 +256,10 @@ async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto", sw
   pc.addTransceiver("audio", { direction: "recvonly" });
   try { // the graphics card's own encoder is used most often for H.264: lower delay
     const caps = RTCRtpReceiver.getCapabilities("video").codecs;
-    const order = (c) => (/h264/i.test(c.mimeType) ? 0 : /vp9/i.test(c.mimeType) ? 1 : /av1/i.test(c.mimeType) ? 2 : 3);
+    // (3.1.2) Among H.264 kinds, High first: that's the one graphics cards make (the plain "baseline"
+    // kind is often made by the processor). The other PC only picks it if its graphics card can.
+    const h264 = (c) => { const p = /profile-level-id=([0-9a-f]{2})/i.exec(c.sdpFmtpLine || ""); return p ? ({ "64": 0, "4d": 0.1, "42": 0.2 }[p[1].toLowerCase()] ?? 0.3) : 0.3; };
+    const order = (c) => (/h264/i.test(c.mimeType) ? h264(c) : /vp9/i.test(c.mimeType) ? 1 : /av1/i.test(c.mimeType) ? 2 : 3);
     vt.setCodecPreferences([...caps].sort((a, b) => order(a) - order(b)));
   } catch (e) { /* the default order */ }
   const ctl = pc.createDataChannel("ctl");
@@ -408,6 +412,8 @@ function rdSession() {
 function rdSessionClose() {
   const s = $("rdSession");
   if (s) s.remove();
+  if (document.pointerLockElement) document.exitPointerLock();
+  if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
@@ -459,10 +465,12 @@ function rdToolbar() {
       <div class="rd-vol-pop" id="rdVolPop" hidden><input type="range" id="rdVol" min="0" max="100" value="${c.volume}" title="Volume"><button type="button" class="rd-link" id="rdMuteBtn">${c.muted ? "Turn sound on" : "Mute"}</button></div></div>
     ${c.screens > 1 ? `<button type="button" class="rd-tb" id="rdScreens">${RD_ICONS.mons}Screen ${c.screen + 1}</button>` : ""}
     <button type="button" class="rd-tb" id="rdMenuBtn">${RD_ICONS.gear}Picture &amp; keys</button>
+    <button type="button" class="rd-tb${c.game ? " on" : ""}" id="rdGame" title="Game mode: full screen, your mouse stays in the game">${RD_ICONS.game}Game mode</button>
     <button type="button" class="rd-tb" id="rdFull" title="Full screen">${RD_ICONS.full}</button>
     <button type="button" class="rd-tb end" id="rdStop">${RD_ICONS.x}Disconnect</button>`;
   $("rdBack").onclick = $("rdStop").onclick = () => rdEnd("");
   $("rdFull").onclick = rdFullscreen;
+  $("rdGame").onclick = () => rdGame(!c.game);
   $("rdMenuBtn").onclick = () => rdMenu();
   if ($("rdScreens")) $("rdScreens").onclick = () => rdMenu();
   $("rdMute").onclick = (e) => { e.stopPropagation(); $("rdVolPop").hidden = !$("rdVolPop").hidden; };
@@ -490,6 +498,44 @@ function rdApplyVolume() {
   v.volume = Math.max(0, Math.min(1, c.volume / 100));
 }
 
+// (3.1.2) Game mode: full screen, every key goes to the other PC (Esc too), and the mouse is locked to
+// the picture and sends how far it moved (what games want), so your pointer doesn't show or slide off
+// onto this PC's other screen. Hold Esc to get your mouse back; click the picture to go back in.
+async function rdGame(on) {
+  const c = rd.conn, s = $("rdSession"), area = $("rdInput");
+  if (!c || !s || !area) return;
+  c.game = on;
+  if (on) {
+    rdGameLock(true);
+    try { if (!document.fullscreenElement) await s.requestFullscreen(); } catch (e) { /* stays in the window */ }
+    if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {});
+    rdGameHint("Game mode: your mouse and keys stay in the game. Hold Esc to get your mouse back.");
+  } else {
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+  rdToolbar();
+}
+function rdGameLock() {
+  const area = $("rdInput");
+  if (!area || document.pointerLockElement === area) return;
+  area.focus();
+  const p = area.requestPointerLock({ unadjustedMovement: true }); // raw moves, no Windows mouse speed-up
+  if (p && p.catch) p.catch(() => { const q = area.requestPointerLock(); if (q && q.catch) q.catch(() => {}); });
+}
+function rdGameHint(text) {
+  const h = $("rdHint");
+  if (!h) return;
+  h.hidden = false; h.textContent = text;
+  clearTimeout(rdHint.t);
+  rdHint.t = setTimeout(() => { h.hidden = true; }, 5000);
+}
+document.addEventListener("pointerlockchange", () => {
+  const c = rd.conn;
+  if (c && c.game && !document.pointerLockElement) rdGameHint("Mouse is free. Click the picture to go back into the game, or turn Game mode off.");
+});
+
 function rdFullscreen() {
   const s = $("rdSession");
   if (!s) return;
@@ -516,7 +562,7 @@ function rdMenu() {
       ${opt("save", "Save data", "720p, 30 fps. For a phone hotspot: about 1 GB an hour.")}
       <p class="rd-used">Used ${gb < 0.1 ? Math.round(c.bytes / 1e6) + " MB" : gb.toFixed(2) + " GB"} so far</p>
       <p class="rd-used">${rdEsc(rdDelayTitle(c))}${c.enc ? `<br>Picture made by ${c.enc.gpu ? "the graphics card" : "the processor (slower)"}${c.enc.why && c.enc.why !== "none" ? `, held back by ${c.enc.why === "cpu" ? "the processor" : "the internet"}` : ""}${
-   c.enc.battery ? `<br>${rdEsc(c.dev.name)} is on battery. Plug it in for a smoother picture.` : ""}` : ""}</p>
+   c.enc.eased ? "<br>Auto: steady 30 fps for now, so it doesn't stutter" : ""}${c.enc.battery ? `<br>${rdEsc(c.dev.name)} is on battery. Plug it in for a smoother picture.` : ""}` : ""}</p>
       <p class="rd-used">${c.sound === "none" ? `No sound from ${rdEsc(c.dev.name)}${c.soundWhy ? ` (${rdEsc(c.soundWhy)})` : ""}` : `Sound: on (${c.sound === "screen" ? "from the screen" : "from its speakers"})`}</p></div>
     ${c.screens > 1 ? `<div><h4>Screen</h4><div class="rd-mons">${Array.from({ length: c.screens }, (_, i) => `<button type="button" class="${i === c.screen ? "on" : ""}" data-screen="${i}">${i + 1}${i === 0 ? " · Main" : ""}</button>`).join("")}</div></div>` : ""}
     <div><h4>Keyboard</h4>
@@ -548,15 +594,25 @@ function rdInputs() {
   };
   const live = () => rd.conn && rd.conn.phase === "on";
   let pending = null;
+  let rel = null; // (3.1.2) Game mode: how far the mouse moved since the last frame
   const flushMove = () => {
     rdInputs.frame = 0;
     const c = rd.conn;
-    if (!pending || !live()) return;
-    if (c.mv.readyState === "open") c.mv.send(JSON.stringify({ e: [{ t: "m", ...pending }] }));
+    if (!live()) return;
+    if (rel && (rel.dx || rel.dy) && c.mv.readyState === "open") c.mv.send(JSON.stringify({ e: [{ t: "r", dx: Math.round(rel.dx), dy: Math.round(rel.dy) }] }));
+    rel = null;
+    if (pending && c.mv.readyState === "open") c.mv.send(JSON.stringify({ e: [{ t: "m", ...pending }] }));
     pending = null;
   };
+  const locked = () => document.pointerLockElement === area;
   area.addEventListener("pointermove", (e) => {
     if (!live()) return;
+    if (locked()) {
+      rel = rel || { dx: 0, dy: 0 };
+      rel.dx += e.movementX; rel.dy += e.movementY;
+      if (!rdInputs.frame) rdInputs.frame = requestAnimationFrame(flushMove);
+      return;
+    }
     pending = at(e);
     if (!rdInputs.frame) rdInputs.frame = requestAnimationFrame(flushMove);
   });
@@ -565,12 +621,18 @@ function rdInputs() {
     if (!live()) return;
     e.preventDefault();
     area.focus();
-    area.setPointerCapture(e.pointerId);
     $("rdPop") && $("rdPop").remove();
     $("rdVolPop") && ($("rdVolPop").hidden = true);
+    if (locked()) return rdSend(rd.conn, { e: [{ t: "d", b: btn(e) }] });
+    try { area.setPointerCapture(e.pointerId); } catch (err) { /* not while the mouse is locked */ }
+    if (rd.conn.game) { rdGameLock(); return; } // back into the game: this click only grabs the mouse
     rdSend(rd.conn, { e: [{ t: "m", ...at(e) }, { t: "d", b: btn(e) }] });
   });
-  area.addEventListener("pointerup", (e) => { if (live()) rdSend(rd.conn, { e: [{ t: "m", ...at(e) }, { t: "u", b: btn(e) }] }); });
+  area.addEventListener("pointerup", (e) => {
+    if (!live()) return;
+    if (locked()) return rdSend(rd.conn, { e: [{ t: "u", b: btn(e) }] });
+    if (!rd.conn.game) rdSend(rd.conn, { e: [{ t: "m", ...at(e) }, { t: "u", b: btn(e) }] });
+  });
   area.addEventListener("contextmenu", (e) => e.preventDefault());
   area.addEventListener("wheel", (e) => {
     if (!live()) return;

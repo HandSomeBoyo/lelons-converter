@@ -415,6 +415,8 @@ def engine_args(screen=0):
         "--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,UseEcoQoSForBackgroundProcess",
         "--disable-renderer-backgrounding",
         "--autoplay-policy=no-user-gesture-required",  # (3.0) the PC's sound plays in a hidden window
+        # (3.1.2) Let the graphics card make H.264 pictures in more cases (much faster than the processor).
+        "--enable-features=MediaFoundationH264CbpEncoding",
     ])
 
 
@@ -604,6 +606,11 @@ def input_events(events):
                 y = rect[1] + min(1.0, max(0.0, float(e["y"]))) * (rect[3] - rect[1] - 1)
                 items.append((0, {"dx": int((x - vx) * 65535 / max(1, vw - 1)), "dy": int((y - vy) * 65535 / max(1, vh - 1)),
                                   "flags": 0x1 | 0x8000 | 0x4000}))  # MOVE | ABSOLUTE | VIRTUALDESK
+            elif t == "r":  # (3.1.2) Game mode: the mouse moved by this much (games read moves, not places)
+                dx = int(max(-4000, min(4000, float(e.get("dx", 0)))))
+                dy = int(max(-4000, min(4000, float(e.get("dy", 0)))))
+                if dx or dy:
+                    items.append((0, {"dx": dx, "dy": dy, "flags": 0x1}))  # MOVE (relative)
             elif t in ("d", "u"):
                 b = int(e.get("b", 0))
                 if b in BUTTONS:

@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.1.2", items: [
+    "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
+    "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",
+    "Remote: uses the graphics card to make the picture more often, and shows when the other PC is on battery.",
+  ] },
   { version: "3.1.1", items: [
     "Remote: a smoother, less laggy picture that starts sharp right away.",
     "Remote: the delay at the top is now the real one, and Picture & keys shows where it comes from.",
