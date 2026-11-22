@@ -219,15 +219,25 @@ def _set_input(inputs, key, value):
     return "{ " + f"{key} = Input {{ Value = {value}, }}, " + inputs[1:].lstrip()
 
 
-def line_tools(style, text, frames, fps, width, height, fade_frames=0):
-    """The tools text of one subtitle made from a saved style."""
-    tools = _stretch_keyframes(style["tools"], fps / (style.get("rate") or fps))
-    m = re.search(r"(\w+) = TextPlus \{", tools)
+POSITIONS = {"bottom": 0.14, "middle": 0.5, "top": 0.86}
+
+
+def _tool_block(tools, kind):
+    """(name, start, end) of the first tool of this kind, like TextPlus or MediaOut."""
+    m = re.search(r"(\w+) = " + kind + r" \{", tools)
     if not m:
+        return None
+    return m[1], m.end() - 1, _block_end(tools, m.end() - 1)
+
+
+def line_tools(style, text, frames, fps, width, height, fade_frames=0, position=""):
+    """The tools text of one subtitle made from a saved style. position: bottom/middle/top moves it
+    there ("" keeps where it is in the style)."""
+    tools = _stretch_keyframes(style["tools"], fps / (style.get("rate") or fps))
+    found = _tool_block(tools, "TextPlus")
+    if not found:
         raise Error("This text style is broken. Add it again from Resolve.")
-    name = m[1]
-    body_at = m.end() - 1
-    body_end = _block_end(tools, body_at)
+    _name, body_at, body_end = found
     body = tools[body_at:body_end]
     inputs_m = re.search(r"Inputs = \{", body)
     inputs_at = inputs_m.end() - 1
@@ -238,25 +248,101 @@ def line_tools(style, text, frames, fps, width, height, fade_frames=0):
     inputs = _set_input(inputs, "GlobalOut", str(last))
     inputs = _set_input(inputs, "Width", str(width))
     inputs = _set_input(inputs, "Height", str(height))
-
-    extra = ""
-    if fade_frames > 0 and frames > 2:
-        fade_frames = min(fade_frames, max(1, frames // 2))
-        start = max(0, last - fade_frames)
-        parts = ["1"] + [n for n in "2345678" if re.search(rf"\bEnabled{n} = Input \{{ Value = 1,", inputs)]
-        for n in parts:
-            alpha = re.search(rf"\bAlpha{n} = Input \{{ Value = ([\d.e-]+), \}}", inputs)
-            if re.search(rf"\bAlpha{n} = Input \{{ SourceOp", inputs):
-                continue  # already animated in Resolve: leave it as it is
-            begin = float(alpha[1]) if alpha else 1.0
-            spline = f"VaultHubFade{n}"
-            extra += (f"{spline} = BezierSpline {{ SplineColor = {{ Red = 180, Green = 180, Blue = 180 }}, CtrlWZoom = false, "
-                      f"KeyFrames = {{ [{start}] = {{ {_num(begin)}, Flags = {{ Linear = true }} }}, "
-                      f"[{last}] = {{ 0, Flags = {{ Linear = true }} }} }} }}, ")
-            link = f'Alpha{n} = Input {{ SourceOp = "{spline}", Source = "Value", }}'
-            inputs = inputs.replace(alpha[0], link, 1) if alpha else "{ " + link + ", " + inputs[1:].lstrip()
+    if position in POSITIONS and not re.search(r"\bCenter = Input \{ SourceOp", inputs):
+        inputs = _set_input(inputs, "VerticalJustificationNew", "3")
+        inputs = _set_input(inputs, "Center", f"{{ 0.5, {POSITIONS[position]} }}")
     body = body[:inputs_at] + inputs + body[inputs_end:]
     tools = tools[:body_at] + body + tools[body_end:]
-    if extra:
-        tools = tools.replace(f"{name} = TextPlus {{", extra + f"{name} = TextPlus {{", 1)
+
+    if fade_frames > 0 and frames > 2:
+        tools = _add_fade(tools, last, min(fade_frames, max(1, frames // 2)), width, height)
     return tools
+
+
+def _add_fade(tools, last, length, width, height):
+    """A fade out of the whole title at once: whatever went into the output is laid over nothing (a
+    see-through background) with a Merge whose Blend goes from 1 to 0, eased at both ends. (Fading the
+    letters, outline and shadow one by one let the shadow show through the letters half way.)"""
+    out = _tool_block(tools, "MediaOut")
+    if not out:
+        return tools
+    name, at, end = out
+    block = tools[at:end]
+    feed = re.search(r'\bInput = Input \{ SourceOp = "(\w+)", Source = "(\w+)"', block)
+    if not feed:
+        return tools
+    start = max(0, last - length)
+    ease = max(1.0, length / 3)
+    new = (
+        "VaultHubClear = Background { Inputs = { "
+        f"GlobalOut = Input {{ Value = {last}, }}, Width = Input {{ Value = {width}, }}, Height = Input {{ Value = {height}, }}, "
+        "UseFrameFormatSettings = Input { Value = 1, }, TopLeftRed = Input { Value = 0, }, TopLeftGreen = Input { Value = 0, }, "
+        "TopLeftBlue = Input { Value = 0, }, TopLeftAlpha = Input { Value = 0, }, }, ViewInfo = OperatorInfo { Pos = { 330, 115.5 } }, }, "
+        "VaultHubFadeBlend = BezierSpline { SplineColor = { Red = 180, Green = 180, Blue = 180 }, CtrlWZoom = false, KeyFrames = { "
+        f"[{start}] = {{ 1, RH = {{ {_num(round(start + ease, 3))}, 1 }} }}, "
+        f"[{last}] = {{ 0, LH = {{ {_num(round(last - ease, 3))}, 0 }} }} }} }}, "
+        "VaultHubFade = Merge { Inputs = { "
+        'Blend = Input { SourceOp = "VaultHubFadeBlend", Source = "Value", }, '
+        'Background = Input { SourceOp = "VaultHubClear", Source = "Output", }, '
+        f'Foreground = Input {{ SourceOp = "{feed[1]}", Source = "{feed[2]}", }}, '
+        "PerformDepthMerge = Input { Value = 0, }, }, ViewInfo = OperatorInfo { Pos = { 330, 49.5 } }, }, "
+    )
+    block = block.replace(feed[0], 'Input = Input { SourceOp = "VaultHubFade", Source = "Output"', 1)
+    begin = at - len(f"{name} = MediaOut ")
+    return tools[:begin] + new + tools[begin:at] + block + tools[end:]
+
+
+# ---------------------------------------------------------------- the preview in VaultHub
+
+def _splines(tools):
+    """{spline name: [[frame, value, lh, rh]]} for every BezierSpline (handles as [frame, value] or None)."""
+    out = {}
+    for m in re.finditer(r"(\w+) = BezierSpline \{", tools):
+        block = tools[m.end() - 1:_block_end(tools, m.end() - 1)]
+        k = re.search(r"KeyFrames = \{", block)
+        if not k:
+            continue
+        frames = block[k.end() - 1:_block_end(block, k.end() - 1)]
+        keys = []
+        for key in re.finditer(r"\[(-?[\d.]+)\] = \{ (-?[\d.e-]+)", frames):
+            one = frames[key.start():_block_end(frames, key.end() - len(key[2]) - 2)]
+            lh = re.search(r"LH = \{ (-?[\d.e-]+), (-?[\d.e-]+) \}", one)
+            rh = re.search(r"RH = \{ (-?[\d.e-]+), (-?[\d.e-]+) \}", one)
+            keys.append([float(key[1]), float(key[2]), [float(lh[1]), float(lh[2])] if lh else None,
+                         [float(rh[1]), float(rh[2])] if rh else None])
+        out[m[1]] = keys
+    return out
+
+
+def preview(style_id):
+    """What the page needs to show a style over the video: font, size, colors, where it sits, and the
+    animated inputs (as keyframes in seconds)."""
+    style = get(style_id)
+    if not style:
+        return None
+    tools = style["tools"]
+    found = _tool_block(tools, "TextPlus")
+    body = tools[found[1]:found[2]] if found else ""
+    rate = style.get("rate") or 24
+
+    def value(key, default):
+        m = re.search(r"\b" + key + r" = Input \{ Value = (-?[\d.e-]+),", body)
+        return float(m[1]) if m else default
+
+    center = re.search(r"\bCenter = Input \{ Value = \{ (-?[\d.e-]+), (-?[\d.e-]+) \}", body)
+    splines = _splines(tools)
+    animated = {}
+    for m in re.finditer(r'\b(\w+) = Input \{ SourceOp = "(\w+)", Source = "Value"', body):
+        if m[2] in splines:
+            animated[m[1]] = [[k[0] / rate, k[1], [k[2][0] / rate, k[2][1]] if k[2] else None,
+                               [k[3][0] / rate, k[3][1]] if k[3] else None] for k in splines[m[2]]]
+    enabled = lambda n: n == 1 or re.search(rf"\bEnabled{n} = Input \{{ Value = 1,", body) is not None
+    return {
+        "font": style.get("font"), "face": style.get("face"),
+        "size": value("Size", 0.08), "center": [float(center[1]), float(center[2])] if center else [0.5, 0.5],
+        "color": [value("Red1", 1), value("Green1", 1), value("Blue1", 1)],
+        "outline": value("Thickness2", 0.03) if enabled(2) else 0,
+        "outlineColor": [value("Red2", 0), value("Green2", 0), value("Blue2", 0)],
+        "shadow": enabled(3), "tracking": value("CharacterSpacing", 1),
+        "animated": animated,
+    }

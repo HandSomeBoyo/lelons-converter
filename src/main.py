@@ -1114,9 +1114,12 @@ class Handler(BaseHTTPRequestHandler):
                 tools.save_cues(data.get("id"), data.get("cues") or [])
             elif path == "/api/rt-send":
                 return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt",
-                                                                {k: str(data[k]) for k in ("textStyle", "fadeOut", "fadeLen", "fadeGap") if k in data})})
+                                                                {k: str(data[k]) for k in ("textStyle", "fadeOut", "fadeLen", "fadeGap", "punct", "case", "position")
+                                                                 if k in data})})
             elif path == "/api/rt-styles":
                 return self.send_json({"ok": True, "styles": textstyles.all_styles()})
+            elif path == "/api/rt-style-preview":
+                return self.send_json({"ok": True, "look": textstyles.preview(data.get("id"))})
             elif path == "/api/rt-style-remove":
                 textstyles.remove(data.get("id"))
                 return self.send_json({"ok": True, "styles": textstyles.all_styles()})

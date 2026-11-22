@@ -5,7 +5,7 @@
 
 let rtTool = "";
 let rtView = "pick"; // pick | setup | subs | done
-let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5", punct: "keep", case: "as", position: "bottom" };
 let rtNvidia = false; // an NVIDIA graphics card to listen on
 let rtServer = []; // from the app's state
 let rtId = ""; // the video on the tab
@@ -29,6 +29,8 @@ api("/api/rt-options", {}).then((res) => {
   $("rtWords").value = rtOptions.words || "";
   $("rtLang").value = rtOptions.language || "";
   drawResolve();
+  drawLook();
+  drawCaptionLook();
 }).catch(() => {});
 
 const RT_NAMES = { fix: "Fix for Resolve", subtitles: "Subtitles", silence: "Cut the silence" };
@@ -827,7 +829,8 @@ async function saveSubsNow() {
 
 async function rtSend(old) {
   await saveSubsNow();
-  const look = { textStyle: rtOptions.textStyle, fadeOut: rtOptions.fadeOut, fadeLen: rtOptions.fadeLen, fadeGap: rtOptions.fadeGap };
+  const look = { textStyle: rtOptions.textStyle, fadeOut: rtOptions.fadeOut, fadeLen: rtOptions.fadeLen, fadeGap: rtOptions.fadeGap,
+    punct: rtOptions.punct, case: rtOptions.case, position: rtOptions.position };
   const res = await api("/api/rt-send", { id: rtId, old, ...look }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   const note = $("subsSaved");
   if (!res.ok) { note.textContent = res.error; return; }
@@ -855,8 +858,10 @@ function drawCaption() {
   const t = rtVideo.currentTime - subs.offset;
   const on = rtView === "subs";
   const i = on ? subs.cues.findIndex((c) => t >= c.start && t < c.end) : -1;
-  $("rtCaption").textContent = i >= 0 ? subs.cues[i].text : "";
+  drawCaptionAt(i >= 0 ? subs.cues[i] : null, i >= 0 ? subs.cues[i + 1] : null, t);
   if (i !== subs.current) {
+    rtLane.current = i;
+    drawLane();
     subs.current = i;
     $("subsList").querySelectorAll(".subs-row").forEach((r) => r.classList.toggle("now", +r.dataset.i === i));
     const row = $("subsList").querySelector(`.subs-row[data-i="${i}"]`);
@@ -864,18 +869,47 @@ function drawCaption() {
   }
 }
 
-function drawSubsMarks() {
-  const marks = $("rtMarks");
-  marks.innerHTML = "";
+// (3.0) The lines on the timeline: one slim lane under the sound, drawn on a canvas (thousands of
+// lines used to cover the whole timeline). The line playing now is lit.
+const rtLane = { current: -1 };
+function drawSubsMarks() { drawLane(); }
+function drawLane() {
+  const box = $("rtMarks");
   const length = rtLength();
-  if (!length || rtView !== "subs") return;
-  for (const cue of subs.cues) {
-    const m = document.createElement("div");
-    m.style.left = (cueStart(cue) / length) * 100 + "%";
-    m.style.width = ((cue.end - cue.start) / length) * 100 + "%";
-    marks.append(m);
+  const on = !!length && rtView === "subs" && subs.cues.length > 0;
+  $("rtWave").classList.toggle("has-lane", on);
+  let canvas = box.querySelector("canvas");
+  if (!on) { if (canvas) canvas.remove(); return; }
+  if (!canvas) { canvas = document.createElement("canvas"); box.append(canvas); }
+  const dpr = window.devicePixelRatio || 1;
+  const w = box.clientWidth, h = box.clientHeight;
+  if (!w || !h) return;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
   }
+  const g = canvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const text = css.getPropertyValue("--text").trim() || "#fff";
+  const accent = css.getPropertyValue("--accent").trim() || "#ffd23c";
+  const top = 2, height = h - 4;
+  const bar = (cue, color) => {
+    const x = (cueStart(cue) / length) * w;
+    const width = Math.max(1, ((cue.end - cue.start) / length) * w - (w / subs.cues.length > 3 ? 1 : 0));
+    g.fillStyle = color;
+    g.beginPath();
+    if (g.roundRect && width > 4) g.roundRect(x, top, width, height, 2); else g.rect(x, top, width, height);
+    g.fill();
+  };
+  g.globalAlpha = 0.28;
+  for (const cue of subs.cues) bar(cue, text);
+  g.globalAlpha = 1;
+  const now = subs.cues[rtLane.current];
+  if (now) bar(now, accent);
 }
+window.addEventListener("resize", () => drawLane());
 
 drawResolve();
 
@@ -935,6 +969,7 @@ function drawLook() {
 document.querySelectorAll("#rtLook .chips[data-look] button").forEach((b) => b.addEventListener("click", () => {
   rtOptions[b.parentElement.dataset.look] = b.dataset.value;
   drawLook();
+  drawCaptionLook();
 }));
 
 $("rtStyleFile").addEventListener("change", async (e) => {
@@ -952,13 +987,101 @@ $("rtStyleFile").addEventListener("change", async (e) => {
   drawCaptionLook();
 });
 
-// The preview over the video uses your style's font when it's on this PC.
-function drawCaptionLook() {
-  const s = rtStyles.find((x) => x.id === rtOptions.textStyle);
+// (3.0) The preview over the video looks like it will in Resolve: your text style's font, size, outline,
+// place and animation, the fade out, and the letters as they'll be written.
+const RT_DEFAULT_LOOK = { font: "Open Sans", face: "Bold", size: 0.06, center: [0.5, 0.12], color: [1, 1, 1], outline: 0.08,
+  outlineColor: [0, 0, 0], shadow: false, tracking: 1, animated: {} };
+const RT_PLACES = { bottom: 0.14, middle: 0.5, top: 0.86 };
+let rtLookData = RT_DEFAULT_LOOK;
+let rtLookFor = null;
+
+async function drawCaptionLook() {
+  const id = rtOptions.textStyle || "";
+  const s = rtStyles.find((x) => x.id === id);
+  if (rtLookFor !== id) {
+    rtLookFor = id;
+    rtLookData = RT_DEFAULT_LOOK;
+    if (s) {
+      const res = await api("/api/rt-style-preview", { id }).catch(() => null);
+      if (rtLookFor !== id) return;
+      if (res && res.ok && res.look) rtLookData = res.look;
+    }
+  }
+  const look = rtLookData;
   const cap = $("rtCaption");
-  cap.classList.toggle("own", !!s);
-  cap.style.fontFamily = s ? `"${s.font}", var(--head)` : "";
+  cap.classList.add("own");
+  cap.style.fontFamily = `"${look.font}", "Open Sans", var(--head)`;
   const weights = { thin: 100, extralight: 200, light: 300, regular: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900, heavy: 900 };
-  cap.style.fontWeight = s ? weights[(s.face || "").toLowerCase().replace(/[\s-]/g, "")] || 700 : "";
+  cap.style.fontWeight = weights[(look.face || "").toLowerCase().replace(/[\s-]/g, "")] || 700;
+  const rgb = (c) => `rgb(${c.map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(",")})`;
+  cap.style.color = rgb(look.color || [1, 1, 1]);
+  cap.style.setProperty("--cap-outline", rgb(look.outlineColor || [0, 0, 0]));
+  cap.style.textShadow = look.shadow ? "0 0.06em 0.12em rgba(0,0,0,.65)" : "none";
+  cap.style.letterSpacing = look.tracking && look.tracking !== 1 ? `${(look.tracking - 1) * 0.5}em` : "";
+  drawPlaceChips();
+  drawCaption();
+}
+
+// A Fusion keyframe curve at time t (seconds): [[t, value, leftHandle, rightHandle]].
+function splineAt(keys, t) {
+  if (!keys || !keys.length) return null;
+  if (t <= keys[0][0]) return keys[0][1];
+  const last = keys[keys.length - 1];
+  if (t >= last[0]) return last[1];
+  let k = 0;
+  while (k < keys.length - 2 && t > keys[k + 1][0]) k++;
+  const [t0, v0, , r0] = keys[k], [t1, v1, l1] = keys[k + 1];
+  const p1 = r0 || [t0 + (t1 - t0) / 3, v0], p2 = l1 || [t1 - (t1 - t0) / 3, v1];
+  const at = (u, a, b, c, d) => { const m = 1 - u; return m * m * m * a + 3 * m * m * u * b + 3 * m * u * u * c + u * u * u * d; };
+  let lo = 0, hi = 1;
+  for (let n = 0; n < 24; n++) { const mid = (lo + hi) / 2; if (at(mid, t0, p1[0], p2[0], t1) < t) lo = mid; else hi = mid; }
+  return at((lo + hi) / 2, v0, p1[1], p2[1], v1);
+}
+
+// Same rules as the app uses for Resolve (subtitles.dress).
+function dressText(text) {
+  if (rtOptions.punct === "remove") {
+    text = text.replace(/(\d)[.,](?=\d)/g, "$1․").replace(/(\w)['’](?=\w)/g, "$1ʼ")
+      .replace(/[^\p{L}\p{N}_\s․ʼ]/gu, " ").replace(/․/g, ".").replace(/ʼ/g, "'")
+      .split("\n").map((l) => l.replace(/[ \t]+/g, " ").trim()).filter(Boolean).join("\n");
+  }
+  if (rtOptions.case === "upper") text = text.toUpperCase();
+  else if (rtOptions.case === "lower") text = text.toLowerCase();
+  return text;
+}
+
+function drawCaptionAt(cue, next, t) {
+  const cap = $("rtCaption");
+  const text = cue ? dressText(cue.text) : "";
+  if (cap.textContent !== text) cap.textContent = text;
+  if (!cue) return;
+  const look = rtLookData;
+  const width = $("rtScreen").clientWidth || 640;
+  const since = t - cue.start;
+  const size = splineAt(look.animated && look.animated.Size, since) ?? look.size;
+  const px = Math.max(1, size * width * 0.7);
+  cap.style.fontSize = px.toFixed(2) + "px";
+  cap.style.setProperty("--cap-stroke", ((look.outline || 0) * px * 0.7).toFixed(2) + "px");
+  const own = !!rtOptions.textStyle;
+  const y = rtOptions.position === "style" && own ? look.center[1] : RT_PLACES[rtOptions.position] ?? (own ? RT_PLACES.bottom : look.center[1]);
+  cap.style.top = ((1 - y) * 100).toFixed(2) + "%";
+  // the fade out, eased at both ends like the one in Resolve
+  let alpha = 1;
+  const fades = rtOptions.fadeOut === "all" || (rtOptions.fadeOut === "pause" && (!next || next.start - cue.end >= +rtOptions.fadeGap));
+  if (fades) {
+    const length = Math.min(+rtOptions.fadeLen, (cue.end - cue.start) / 2);
+    const left = cue.end - t;
+    if (left < length) { const x = 1 - left / length; alpha = 1 - x * x * (3 - 2 * x); }
+  }
+  cap.style.opacity = alpha.toFixed(3);
+}
+
+function drawPlaceChips() {
+  const own = !!rtOptions.textStyle;
+  const chip = document.querySelector('#rtLook .chips[data-look="position"] button[data-value="style"]');
+  if (chip) chip.hidden = !own;
+  if (!own && rtOptions.position === "style") rtOptions.position = "bottom";
+  document.querySelectorAll('#rtLook .chips[data-look="position"] button').forEach((b) =>
+    b.classList.toggle("active", b.dataset.value === rtOptions.position));
 }
 loadStyles().then(drawCaptionLook);

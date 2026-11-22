@@ -9728,3 +9728,14 @@ html.side-small #callBox .call-sharing { display: none; }
 .rt-look-help { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .rt-look-help b { color: var(--text); font-weight: 600; }
 .subs-caption.own { text-transform: none; }
+/* (3.0 round 4) the preview looks like Resolve; a calm lane of lines on the timeline */
+.rt-look-pair { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.rt-look .chips button[hidden] { display: none; }
+#rtCaption.own {
+  bottom: auto; transform: translateY(-50%); line-height: 1.12; text-shadow: none;
+  -webkit-text-stroke: var(--cap-stroke, 0) var(--cap-outline, #000); paint-order: stroke fill;
+}
+.rt-timeline { grid-template-rows: auto 46px 0; }
+.rt-timeline.has-lane { grid-template-rows: auto 46px 12px; }
+.rt-timeline .subs-marks { position: relative; grid-row: 3; height: 100%; inset: auto; background: color-mix(in srgb, var(--text) 4%, transparent); }
+.rt-timeline .subs-marks canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 1; }

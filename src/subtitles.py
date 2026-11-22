@@ -433,6 +433,23 @@ def _clock(t):
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
+def dress(text, punct="keep", case="as"):
+    """(3.0) How the words are written in Resolve: without . , - ! ? and such (apostrophes inside words
+    and decimal points stay), and/or in CAPITALS or small letters."""
+    if punct == "remove":
+        text = re.sub(r"(?<=\d)[.,](?=\d)", "\u2024", text)  # 3.5 keeps its point
+        text = re.sub(r"(?<=\w)['\u2019](?=\w)", "\u02bc", text)  # don't keeps its '
+        text = re.sub(r"[^\w\s\u2024\u02bc]", " ", text)
+        text = text.replace("\u2024", ".").replace("\u02bc", "'")
+        text = "\n".join(re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n"))
+        text = "\n".join(line for line in text.split("\n") if line)
+    if case == "upper":
+        text = text.upper()
+    elif case == "lower":
+        text = text.lower()
+    return text
+
+
 def make_cues(words, style="normal", per_screen=0):
     """Groups words into subtitles: [(start, end, text)]. per_screen: at most this many words at once
     (0: as many as fit)."""
@@ -459,7 +476,9 @@ def make_cues(words, style="normal", per_screen=0):
         if current:
             text = "".join(w[2] for w in current + [word]).strip()
             gap = word[0] - current[-1][1]
-            if gap > 1.0 or (re.search(r"[.!?]$", current[-1][2].strip()) and len(text) > width * 0.5):
+            # A pause ends a line: always after 0.7 s, and after a shorter one once there's a bit on screen.
+            if gap > 0.7 or (gap > 0.35 and len(text) > width * 0.4) or \
+                    (re.search(r"[.!?]$", current[-1][2].strip()) and len(text) > width * 0.5):
                 flush()
             elif len(text) > width * lines or word[1] - current[0][0] > longest:
                 flush(keep_tail=True)
@@ -471,7 +490,7 @@ def make_cues(words, style="normal", per_screen=0):
     for i, cue in enumerate(cues):
         nxt = cues[i + 1][0] if i + 1 < len(cues) else cue[1] + 2
         shortest = 0.3 if per_screen == 1 else 0.6 if style == "short" or per_screen else 1.0
-        cue[1] = min(max(cue[1], cue[0] + shortest), nxt - 0.02)
+        cue[1] = min(max(cue[1] + 0.1, cue[0] + shortest), nxt - 0.02)  # (+0.1: not gone the moment the word ends)
         if cue[1] <= cue[0]:
             cue[1] = cue[0] + 0.3
     return [tuple(c) for c in cues]
@@ -537,9 +556,11 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     heard = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent), words)
     if not heard:
         raise ValueError("Couldn't hear any speech in this.")
+    report("Matching the timing to your voice", 99)
+    heard = fit_to_speech(heard, mix)
     if on_words:
         on_words(heard)  # (kept, so "Words on screen" can change later without listening again)
-    cues = snap_to_voice(make_cues(heard, style, per_screen), mix)
+    cues = make_cues(heard, style, per_screen)
     write_srt(cues, target)
     return cues
 
@@ -570,57 +591,45 @@ def _voice_track(tracks):
     return best
 
 
-def snap_to_voice(cues, audio):
-    """Whisper's times are often a little off (most of all where a line ends). Moves each line's start
-    to where the voice really starts and its end to where it stops, using how loud the sound is."""
-    import numpy as np
+def fit_to_speech(words, audio):
+    """(3.0) Whisper's word times are rough: a word often hangs on into the quiet after it, or starts
+    before the voice does. A voice finder (it hears voices, not game sound or music) marks where you
+    really talk; each word is kept inside that, and the last word before a pause ends where your
+    voice stops, so lines leave with you and pauses stay pauses."""
+    if not words or not len(audio):
+        return words
+    try:
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
 
-    if not len(audio) or not cues:
-        return cues
-    step = SAMPLE_RATE // 100  # 10 ms
-    n = len(audio) // step
-    if n < 10:
-        return cues
-    loud = np.sqrt(np.mean(audio[: n * step].reshape(n, step) ** 2, axis=1))
+        found = get_speech_timestamps(audio, VadOptions(threshold=0.4, min_silence_duration_ms=150, speech_pad_ms=40))
+    except Exception:  # (an old speech engine without it: keep Whisper's times)
+        return words
+    spans = [(s["start"] / SAMPLE_RATE, s["end"] / SAMPLE_RATE) for s in found]
+    if not spans:
+        return words
+    import bisect
+
+    starts = [a for a, _b in spans]
     out = []
-    for i, (start, end, text) in enumerate(cues):
-        a, b = int(start * 100), int(end * 100)
-        lo, hi = max(0, a - 150), min(n, b + 150)
-        if hi - lo < 20:
-            out.append([start, end, text])
-            continue
-        floor = float(np.percentile(loud[lo:hi], 15))
-        peak = float(np.percentile(loud[lo:hi], 95))
-        if peak < floor * 2.5 or peak < 1e-3:  # too noisy to tell: keep Whisper's times
-            out.append([start, end, text])
-            continue
-        level = floor + (peak - floor) * 0.15
-        on = loud > level
-        # Start: the first moment it gets loud, from 0.2 s before to 0.25 s after Whisper's start.
-        new_start = start
-        for f in range(max(0, a - 20), min(n - 3, a + 25)):
-            if on[f] and on[f + 1] and on[f + 2]:
-                new_start = max(0.0, f / 100 - 0.05)
-                break
-        # End: where it goes quiet for 0.2 s, from 0.3 s before to 0.6 s after Whisper's end.
-        new_end = end
-        for f in range(max(a + 10, b - 30), min(n - 20, b + 60)):
-            if on[f] and not on[f + 1:f + 21].any():
-                new_end = f / 100 + 0.12
-                break
-        out.append([new_start, max(new_end, new_start + 0.4), text])
-    # In order, never on top of each other; short gaps closed so lines don't flicker.
-    style_min = 0.7
-    for i, cue in enumerate(out):
-        if i:
-            cue[0] = max(cue[0], out[i - 1][0] + 0.2)
-        nxt = out[i + 1][0] if i + 1 < len(out) else None
-        if nxt is not None:
-            if nxt - cue[1] < 0.3:
-                cue[1] = nxt - 0.04
-            cue[1] = min(cue[1], nxt - 0.04)
-        cue[1] = max(cue[1], cue[0] + min(style_min, (nxt - cue[0] - 0.04) if nxt else style_min))
-    return [(round(a, 3), round(b, 3), t) for a, b, t in out]
+    for i, (start, end, text) in enumerate(words):
+        k = max(0, bisect.bisect_right(starts, end) - 1)
+        touching = [sp for sp in spans[max(0, k - 3):k + 1] if sp[0] < end and sp[1] > start]
+        if touching:
+            first, last = touching[0], touching[-1]
+            prev_end = out[-1][1] if out else -1.0
+            nxt = words[i + 1][0] if i + 1 < len(words) else 10.0 ** 9
+            new_start = max(start, first[0])
+            if prev_end <= first[0] and first[0] < start <= first[0] + 0.4:
+                new_start = first[0]  # the first word after a pause starts with the voice
+            new_end = min(end, last[1])
+            if nxt >= last[1] and last[1] - end <= 0.5:
+                new_end = max(new_end, last[1])  # ...and the last one ends with it
+            if new_end - new_start >= 0.05:
+                start, end = new_start, new_end
+        if out and start < out[-1][1]:
+            start = out[-1][1]
+        out.append((round(start, 3), round(max(end, start + 0.05), 3), text))
+    return out
 
 
 def _save_wav(audio, target):

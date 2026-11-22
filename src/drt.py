@@ -316,7 +316,7 @@ def _lua(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "") + '"'
 
 
-def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0):
+def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0, position=""):
     """The Fusion composition of one Text+ title, as Resolve stores it. own: a text style you made in
     Resolve (textstyles.py) to copy instead of VaultHub's own look; fade_frames: fade out at the end."""
     last = max(0, frames - 1)
@@ -342,10 +342,11 @@ def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0):
              "ViewInfo = OperatorInfo { Pos = { 220, 49.5 } }, Version = 1 }, "
              'MediaOut1 = MediaOut { Inputs = { Index = Input { Value = "0", }, Input = Input { SourceOp = "Template", '
              'Source = "Output", } }, ViewInfo = OperatorInfo { Pos = { 440, 49.5 } }, } } ')
-    if own or fade_frames:
+    if own or fade_frames or position:
         import textstyles
 
-        tools = textstyles.line_tools(own or {"tools": tools, "rate": fps}, text, frames, fps, width, height, fade_frames)
+        tools = textstyles.line_tools(own or {"tools": tools, "rate": fps}, text, frames, fps, width, height, fade_frames,
+                                      position)
     tools = tools.encode()
     rate = round(fps, 3) if abs(fps - round(fps)) > 0.001 else int(round(fps))
     comp = (f"Composition {{ CurrentTime = 0, RenderRange = {{ 0, {last} }}, GlobalRange = {{ 0, {last} }}, CurrentID = 3, "
@@ -380,7 +381,7 @@ def _rate(fps):
     return max(1, int(round(fps or 30)))
 
 
-def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=None, own=None, fade=None):
+def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=None, own=None, fade=None, position=""):
     """Writes the .drt. cues [(start, end, text)] in seconds from the start of the video (or of the
     timeline with no video); offset: where they start inside the video. Returns how many went in.
     own: your own text style (textstyles.get()). fade: {"when": "pause"|"all", "seconds", "gap"}: a fade
@@ -425,7 +426,7 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
         el = _tag(el, "Start", origin + a)
         el = _tag(el, "Duration", b - a)
         el = _tag(el, "Name", "Fusion Title")
-        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style, own, fades))
+        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style, own, fades, position))
         el = _tag(el, "MediaFrameRate", _double_le(fps).hex())
         el = _tag(el, "MediaTimemapBA", _timemap(max(0, b - a - 1) / fps))
         fields = bytes.fromhex(_get(el, "FieldsBlob"))

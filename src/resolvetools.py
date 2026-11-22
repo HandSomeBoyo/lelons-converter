@@ -36,8 +36,10 @@ _thumb_slots = threading.BoundedSemaphore(3)  # pictures for the strip: a few at
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
 DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
-            "device": "gpu", "words": "", "perScreen": "0", "textStyle": "", "fadeOut": "off", "fadeLen": "0.3", "fadeGap": "0.5"}
-FADES = {"fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1")}
+            "device": "gpu", "words": "", "perScreen": "0", "textStyle": "", "fadeOut": "off", "fadeLen": "0.3", "fadeGap": "0.5",
+            "punct": "keep", "case": "as", "position": "bottom"}
+FADES = {"fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1"),
+         "punct": ("keep", "remove"), "case": ("as", "upper", "lower"), "position": ("bottom", "middle", "top", "style")}
 PER_SCREEN = ("0", "1", "3", "6")  # (3.0) most words on screen at once ("0": as many as fit)
 
 
@@ -177,15 +179,18 @@ class Tools(files.Files):
             elif os.path.getsize(keep) == os.path.getsize(source):
                 source = keep
         trim = item["job"].get("trim")
+        o = save_options(look or {})
+        cues = [(a, b, subtitles.dress(t, o["punct"], o["case"])) for a, b, t in item["cues"]]
+        cues = [c for c in cues if c[2].strip()]
         if kind == "fcpxml":
             target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
-            fcpxml.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
+            fcpxml.make(cues, target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
         else:
             target = os.path.join(folder, f"{stem} (subtitles).drt")
-            o = save_options(look or {})
             fade = {"when": o["fadeOut"], "seconds": o["fadeLen"], "gap": o["fadeGap"]} if o["fadeOut"] != "off" else None
-            drt.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0,
-                     own=textstyles.get(o["textStyle"]), fade=fade)
+            own = textstyles.get(o["textStyle"])
+            drt.make(cues, target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0,
+                     own=own, fade=fade, position="" if (own and o["position"] == "style") else o["position"])
         with self.lock:
             item.update(sent=True, timeline=target)
         return {"file": target, "name": os.path.basename(target)}
