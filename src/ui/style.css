@@ -9739,3 +9739,18 @@ html.side-small #callBox .call-sharing { display: none; }
 .rt-timeline.has-lane { grid-template-rows: auto 46px 12px; }
 .rt-timeline .subs-marks { position: relative; grid-row: 3; height: 100%; inset: auto; background: color-mix(in srgb, var(--text) 4%, transparent); }
 .rt-timeline .subs-marks canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 1; }
+/* (3.0) a list of thousands of lines, still smooth: only the ones in view are drawn */
+.subs-list.virtual { display: block; position: relative; }
+.subs-list.virtual .subs-space { width: 1px; }
+.subs-list.virtual .subs-row { position: absolute; left: 0; right: 4px; box-sizing: border-box; }
+.subs-list.virtual .subs-row textarea { resize: none; height: 52px; }
+.rt-fix-all { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 9px 12px; border-radius: 10px;
+  font-size: 12.5px; background: color-mix(in srgb, var(--accent) 12%, transparent); animation: rt-fix-in .25s var(--ease-out, ease-out); }
+.rt-fix-all[hidden] { display: none; }
+.rt-fix-all span { flex: 1 1 160px; }
+.rt-fix-all .small-button { height: 28px; padding: 0 10px; font-size: 12.5px; }
+@keyframes rt-fix-in { from { opacity: 0; transform: translateY(-4px); } }
+.rt-live-note { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+.rt-live-note[hidden] { display: none; }
+.rt-learned { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
+.rt-learned[hidden] { display: none; }

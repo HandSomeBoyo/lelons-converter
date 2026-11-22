@@ -55,6 +55,7 @@ import remote  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
 import textstyles  # noqa: E402
+import fixes  # noqa: E402
 import subtitles  # noqa: E402
 import resolve  # noqa: E402
 import history  # noqa: E402
@@ -1083,7 +1084,8 @@ class Handler(BaseHTTPRequestHandler):
                 tools.convert(data.get("items") or [], data.get("options") or {}, save_folder(data, kind))
                 return self.send_json({"ok": True})
             if path == "/api/rt-options":
-                return self.send_json({"ok": True, "options": resolvetools.load_options(), "nvidia": subtitles.has_nvidia()})
+                return self.send_json({"ok": True, "options": resolvetools.load_options(), "nvidia": subtitles.has_nvidia(),
+                                       "learned": len(fixes.all_fixes())})
             if path == "/api/rt-remove":
                 tools.remove(data.get("id"))
             elif path == "/api/rt-cancel":
@@ -1110,6 +1112,17 @@ class Handler(BaseHTTPRequestHandler):
                                        tools.regroup(data.get("id"), data.get("perScreen"), data.get("style"))]})
             elif path == "/api/rt-wave":
                 return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
+            elif path == "/api/rt-sofar":
+                item = tools.find(data.get("id"))
+                trim = ((item or {}).get("job") or {}).get("trim")
+                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in tools.heard_so_far(data.get("id"))],
+                                       "offset": trim[0] if trim else 0})
+            elif path == "/api/rt-learn":
+                pairs = [(str(p.get("heard", "")), str(p.get("text", ""))) for p in (data.get("pairs") or [])[:5000] if isinstance(p, dict)]
+                return self.send_json({"ok": True, "learned": fixes.learn(pairs, bool(data.get("direct")))})
+            elif path == "/api/rt-forget":
+                fixes.forget()
+                return self.send_json({"ok": True, "learned": 0})
             elif path == "/api/rt-cues-save":
                 tools.save_cues(data.get("id"), data.get("cues") or [])
             elif path == "/api/rt-send":

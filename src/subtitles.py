@@ -374,37 +374,46 @@ def read_audio(path, start=0.0, length=None, stream=0, on_progress=None):
     return np.frombuffer(data[: len(data) // 4 * 4], dtype=np.float32)
 
 
-def listen(model, audio, language, on_progress, words=""):
-    """Words with times: [(start, end, word)].
+def listen(model, audio, language, on_progress, words="", on_partial=None):
+    """Words with times: [(start, end, word)]. on_partial(words so far): called as it goes, so the
+    page can show the lines while it still listens.
 
-    On the graphics card it listens in order, using what was said before to understand what comes
-    next (the most accurate way). On the processor it listens to several pieces at once (faster)."""
+    (3.0) It listens to several pieces at once, on the graphics card too (3 to 5 times faster than one
+    after another, same words). If the card runs out of memory, it tries again with fewer at once."""
     seconds = len(audio) / SAMPLE_RATE
     common = dict(language=language or None, word_timestamps=True, vad_filter=True,
                   vad_parameters={"min_silence_duration_ms": 500}, beam_size=5,
                   language_detection_segments=4,  # find the language from more than the first 30 s
+                  no_speech_threshold=0.6, log_prob_threshold=-1.0, compression_ratio_threshold=2.4,
                   hotwords=words.strip() or None)  # names and words it should know (spelled the way you want)
-    if getattr(model, "on_gpu", False):
-        segments, _info = model.transcribe(
-            audio, condition_on_previous_text=True, no_speech_threshold=0.6, log_prob_threshold=-1.0,
-            compression_ratio_threshold=2.4,
-            hallucination_silence_threshold=2.0,  # drops "words" it imagines in game noise or silence
-            **common)
-    else:
-        from faster_whisper import BatchedInferencePipeline
+    from faster_whisper import BatchedInferencePipeline
 
-        segments, _info = BatchedInferencePipeline(model=model).transcribe(audio, batch_size=8, **common)
-    words = []
-    on_progress(0)
-    with _gentle():
-        for segment in segments:  # (it listens while this loop runs)
-            for w in segment.words or []:
-                if w.word.strip() and getattr(w, "probability", 1) >= 0.05:
-                    words.append((w.start, w.end, w.word))
-            if seconds:
-                on_progress(min(99.0, segment.end * 100 / seconds))
-    words.sort()
-    return words
+    on_gpu = getattr(model, "on_gpu", False)
+    sizes = (16, 8, 4, 1) if on_gpu else (8,)
+    for n, batch in enumerate(sizes):
+        heard = []
+        try:
+            if batch == 1:  # (one piece at a time, the old way: needs the least memory)
+                segments, _info = model.transcribe(audio, condition_on_previous_text=True,
+                                                   hallucination_silence_threshold=2.0, **common)
+            else:
+                segments, _info = BatchedInferencePipeline(model=model).transcribe(audio, batch_size=batch, **common)
+            on_progress(0)
+            with _gentle():
+                for segment in segments:  # (it listens while this loop runs)
+                    for w in segment.words or []:
+                        if w.word.strip() and getattr(w, "probability", 1) >= 0.05:
+                            heard.append((w.start, w.end, w.word))
+                    if on_partial:
+                        on_partial(sorted(heard))
+                    if seconds:
+                        on_progress(min(99.0, segment.end * 100 / seconds))
+            break
+        except RuntimeError as e:
+            if "out of memory" not in str(e).lower() or n == len(sizes) - 1:
+                raise
+    heard.sort()
+    return heard
 
 
 class _gentle:
@@ -519,7 +528,7 @@ def write_srt(cues, target):
 # ---------------------------------------------------------------- the whole thing
 
 def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True,
-                   words="", find_voice=False, per_screen=0, on_words=None):
+                   words="", find_voice=False, per_screen=0, on_words=None, on_partial=None):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
@@ -553,14 +562,16 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     if sound_copy:
         _save_wav(mix, sound_copy)  # for the subtitle editor, when there's no single file to play
     where = " on the graphics card" if getattr(whisper, "on_gpu", False) else ""
-    heard = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent), words)
+    heard = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent), words, on_partial)
     if not heard:
         raise ValueError("Couldn't hear any speech in this.")
     report("Matching the timing to your voice", 99)
     heard = fit_to_speech(heard, mix)
     if on_words:
         on_words(heard)  # (kept, so "Words on screen" can change later without listening again)
-    cues = make_cues(heard, style, per_screen)
+    import fixes
+
+    cues = fixes.apply(make_cues(heard, style, per_screen))
     write_srt(cues, target)
     return cues
 

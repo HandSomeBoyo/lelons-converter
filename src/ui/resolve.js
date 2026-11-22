@@ -21,11 +21,15 @@ let rtTracks = []; // [{audio, on}] once they're ready
 let rtMixText = "";
 let rtVolume = (() => { const v = parseFloat(loadPref("rtVolume")); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; })();
 let rtStripKey = "";
+let rtLearned = 0; // fixes it remembers
+let rtLiveTimer = 0; // asks for the lines heard so far while it listens
 
 api("/api/rt-options", {}).then((res) => {
   if (!res.ok) return;
   rtOptions = { ...rtOptions, ...res.options, track: "auto" };
   rtNvidia = !!res.nvidia;
+  rtLearned = res.learned || 0;
+  drawLearned();
   $("rtWords").value = rtOptions.words || "";
   $("rtLang").value = rtOptions.language || "";
   drawResolve();
@@ -590,6 +594,7 @@ function drawSetup(item) {
     $("rtProgressText").textContent = item.message || "Working...";
     $("rtStop").hidden = !!item.cancel;
   }
+  if (busy && item.tool === "subtitles" && item.status === "active") rtLiveStart(); else if (rtLiveTimer) rtLiveStop();
   $("rtGo").hidden = busy;
   $("rtGo").disabled = !item;
   $("rtGoText").textContent = !item ? "Getting it ready..." : { fix: "Fix it", subtitles: "Make subtitles", silence: "Cut the silence" }[rtTool] || "Start";
@@ -719,6 +724,8 @@ async function openSubs() {
   const id = rtId;
   const res = await api("/api/rt-cues", { id }).catch(() => ({ ok: false }));
   if (!res.ok || id !== rtId) return;
+  rtLiveStop();
+  for (const c of res.cues) c.heard = c.text;
   Object.assign(subs, { cues: res.cues, offset: res.offset || 0, current: -1, edited: false });
   if (res.perScreen != null) rtOptions.perScreen = res.perScreen;
   drawPerScreen();
@@ -732,51 +739,141 @@ async function openSubs() {
 // Times in the list are times in the video (a part of a video starts later than 0).
 const cueStart = (c) => c.start + subs.offset;
 
+// (3.0) Only the lines you can see are on the page (thousands of text boxes made it lag); the rest
+// are drawn as you scroll.
+let subsRowHeight = 108;
 function drawSubsList() {
   const list = $("subsList");
   list.innerHTML = "";
-  subs.cues.forEach((cue, i) => {
-    const row = document.createElement("div");
-    row.className = "subs-row";
-    row.dataset.i = i;
-    row.innerHTML = `
-      <div class="subs-row-top">
-        <button type="button" class="subs-when" title="Play from here"></button>
-        <span class="spacer"></span>
-        <button type="button" class="nudge" data-d="-0.1" title="Show it 0.1 second earlier">◀</button>
-        <button type="button" class="nudge" data-d="0.1" title="Show it 0.1 second later">▶</button>
-        <button type="button" class="nudge here" title="Start this line where the video is now">Start here</button>
-        <button type="button" class="nudge del" title="Delete this line">✕</button>
-      </div>
-      <textarea rows="2" spellcheck="true"></textarea>`;
-    redrawRow(row, cue);
-    const text = row.querySelector("textarea");
-    text.value = cue.text;
-    text.addEventListener("input", () => { cue.text = text.value; subsChanged(); drawCaption(); });
-    text.addEventListener("focus", () => { if (rtVideo.paused) seekSubs(cueStart(cue)); });
-    row.querySelector(".subs-when").onclick = () => { seekSubs(cueStart(cue)); rtVideo.play().catch(() => {}); };
-    row.querySelectorAll(".nudge[data-d]").forEach((b) => b.onclick = () => {
-      const d = parseFloat(b.dataset.d);
-      cue.start = Math.max(0, cue.start + d);
-      cue.end = Math.max(cue.start + 0.2, cue.end + d);
-      subsChanged(); redrawRow(row, cue); drawSubsMarks();
-      seekSubs(cueStart(cue));
-    });
-    row.querySelector(".here").onclick = () => {
-      const length = cue.end - cue.start;
-      cue.start = Math.max(0, rtVideo.currentTime - subs.offset);
-      cue.end = cue.start + length;
-      subsChanged(); redrawRow(row, cue); drawSubsMarks();
-    };
-    row.querySelector(".del").onclick = () => {
-      subs.cues.splice(i, 1);
-      subsChanged(); drawSubsList(); drawResolve();
-    };
-    list.append(row);
-  });
+  list.classList.add("virtual");
+  const space = document.createElement("div");
+  space.className = "subs-space";
+  space.style.height = subs.cues.length * subsRowHeight + "px";
+  list.append(space);
+  subs.rows = new Map();
+  drawSubsWindow();
   drawSubsMarks();
   subs.current = -2;
   drawCaption();
+}
+
+function drawSubsWindow() {
+  const list = $("subsList");
+  if (!subs.rows) return;
+  const top = list.scrollTop, height = list.clientHeight || 600;
+  const first = Math.max(0, Math.floor(top / subsRowHeight) - 4);
+  const last = Math.min(subs.cues.length, Math.ceil((top + height) / subsRowHeight) + 4);
+  for (const [i, row] of subs.rows) {
+    if ((i < first || i >= last) && !row.contains(document.activeElement)) { row.remove(); subs.rows.delete(i); }
+  }
+  for (let i = first; i < last; i++) {
+    if (subs.rows.has(i)) continue;
+    const row = makeSubsRow(subs.cues[i], i);
+    row.style.top = i * subsRowHeight + "px";
+    list.append(row);
+    subs.rows.set(i, row);
+  }
+  // The real height of a row (it depends on the font size), measured once.
+  const one = subs.rows.values().next().value;
+  if (one && Math.abs(one.offsetHeight + 6 - subsRowHeight) > 1) {
+    subsRowHeight = one.offsetHeight + 6;
+    list.querySelector(".subs-space").style.height = subs.cues.length * subsRowHeight + "px";
+    for (const [i, row] of subs.rows) row.style.top = i * subsRowHeight + "px";
+    drawSubsWindow();
+  }
+}
+$("subsList").addEventListener("scroll", () => requestAnimationFrame(drawSubsWindow), { passive: true });
+window.addEventListener("resize", () => { if (rtView === "subs") drawSubsWindow(); });
+
+// Scrolls the list so line i shows (smoothly when it's close).
+function showSubsRow(i) {
+  const list = $("subsList");
+  const top = i * subsRowHeight, height = list.clientHeight;
+  if (top >= list.scrollTop && top + subsRowHeight <= list.scrollTop + height) return;
+  const to = Math.max(0, top - height / 2 + subsRowHeight / 2);
+  list.scrollTo({ top: to, behavior: Math.abs(to - list.scrollTop) < height * 3 ? "smooth" : "auto" });
+}
+
+function makeSubsRow(cue, i) {
+  const row = document.createElement("div");
+  row.className = "subs-row";
+  row.dataset.i = i;
+  row.classList.toggle("now", i === subs.current);
+  row.innerHTML = `
+    <div class="subs-row-top">
+      <button type="button" class="subs-when" title="Play from here"></button>
+      <span class="spacer"></span>
+      <button type="button" class="nudge" data-d="-0.1" title="Show it 0.1 second earlier">◀</button>
+      <button type="button" class="nudge" data-d="0.1" title="Show it 0.1 second later">▶</button>
+      <button type="button" class="nudge here" title="Start this line where the video is now">Start here</button>
+      <button type="button" class="nudge del" title="Delete this line">✕</button>
+    </div>
+    <textarea rows="2" spellcheck="true"></textarea>`;
+  redrawRow(row, cue);
+  const text = row.querySelector("textarea");
+  text.value = cue.text;
+  text.addEventListener("input", () => { cue.text = text.value; subsChanged(); drawCaption(); });
+  text.addEventListener("focus", () => { text.dataset.before = text.value; if (rtVideo.paused) seekSubs(cueStart(cue)); });
+  text.addEventListener("change", () => offerFixAll(text.dataset.before || "", text.value, cue));
+  row.querySelector(".subs-when").onclick = () => { seekSubs(cueStart(cue)); rtVideo.play().catch(() => {}); };
+  row.querySelectorAll(".nudge[data-d]").forEach((b) => b.onclick = () => {
+    const d = parseFloat(b.dataset.d);
+    cue.start = Math.max(0, cue.start + d);
+    cue.end = Math.max(cue.start + 0.2, cue.end + d);
+    subsChanged(); redrawRow(row, cue); drawSubsMarks();
+    seekSubs(cueStart(cue));
+  });
+  row.querySelector(".here").onclick = () => {
+    const length = cue.end - cue.start;
+    cue.start = Math.max(0, rtVideo.currentTime - subs.offset);
+    cue.end = cue.start + length;
+    subsChanged(); redrawRow(row, cue); drawSubsMarks();
+  };
+  row.querySelector(".del").onclick = () => {
+    subs.cues.splice(subs.cues.indexOf(cue), 1);
+    subsChanged(); drawSubsList(); drawResolve();
+  };
+  return row;
+}
+
+// (3.0) Fixed a word? The same mistake in other lines can be fixed in one go (and it's remembered).
+function offerFixAll(before, after, cue) {
+  const words = (t) => t.split(/\s+/).filter(Boolean);
+  const a = words(before), b = words(after);
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  let j = 0;
+  while (j < a.length - i && j < b.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+  const trim = (w) => w.join(" ").replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, "");
+  const old = trim(a.slice(i, a.length - j)), now = trim(b.slice(i, b.length - j));
+  const box = $("subsFixAll");
+  box.hidden = true;
+  if (!old || !now || old === now || old.split(" ").length > 3 || now.split(" ").length > 3) return;
+  const find = new RegExp(`(?<![\\p{L}\\p{N}'])${old.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+")}(?![\\p{L}\\p{N}'])`, "giu");
+  const others = subs.cues.filter((c) => c !== cue && find.test(c.text) && ((find.lastIndex = 0), true));
+  if (!others.length) return;
+  box.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = `"${old}" is in ${others.length} more line${others.length > 1 ? "s" : ""}.`;
+  const yes = document.createElement("button");
+  yes.type = "button";
+  yes.className = "small-button";
+  yes.textContent = `Change ${others.length > 1 ? "them all" : "it"} to "${now}"`;
+  yes.onclick = () => {
+    for (const c of others) c.text = c.text.replace(find, now);
+    subsChanged();
+    drawSubsList();
+    box.textContent = `Changed ${others.length} more. Next time it writes "${now}" by itself.`;
+    setTimeout(() => { box.hidden = true; }, 4000);
+    api("/api/rt-learn", { pairs: [{ heard: old, text: now }], direct: true }).then((r) => { if (r && r.ok) rtLearned = r.learned; drawLearned(); }).catch(() => {});
+  };
+  const no = document.createElement("button");
+  no.type = "button";
+  no.className = "link";
+  no.textContent = "No";
+  no.onclick = () => { box.hidden = true; };
+  box.append(text, yes, no);
+  box.hidden = false;
 }
 
 function redrawRow(row, cue) {
@@ -792,6 +889,7 @@ document.querySelectorAll("#rtSubsPer button").forEach((b) => b.addEventListener
     .catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   if (!res.ok) { $("subsSaved").textContent = res.error; return; }
   rtOptions.perScreen = b.dataset.value;
+  for (const c of res.cues) c.heard = c.text;
   subs.cues = res.cues;
   subs.edited = false;
   drawSubsList();
@@ -834,6 +932,12 @@ async function rtSend(old) {
   const res = await api("/api/rt-send", { id: rtId, old, ...look }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   const note = $("subsSaved");
   if (!res.ok) { note.textContent = res.error; return; }
+  // (3.0) What you fixed is remembered for next time.
+  const pairs = subs.cues.filter((c) => c.heard != null && c.heard !== c.text).map((c) => ({ heard: c.heard, text: c.text }));
+  if (pairs.length) {
+    api("/api/rt-learn", { pairs }).then((r) => { if (r && r.ok) { rtLearned = r.learned; drawLearned(); } }).catch(() => {});
+    for (const c of subs.cues) c.heard = c.text;
+  }
   note.innerHTML = "";
   const text = document.createElement("span");
   text.innerHTML = "Done! In Resolve: <b>File › Import › Timeline</b>, and pick ";
@@ -856,7 +960,7 @@ $("subsOld").addEventListener("click", () => rtSend(true));
 
 function drawCaption() {
   const t = rtVideo.currentTime - subs.offset;
-  const on = rtView === "subs";
+  const on = rtView === "subs" || subs.live;
   const i = on ? subs.cues.findIndex((c) => t >= c.start && t < c.end) : -1;
   drawCaptionAt(i >= 0 ? subs.cues[i] : null, i >= 0 ? subs.cues[i + 1] : null, t);
   if (i !== subs.current) {
@@ -864,8 +968,7 @@ function drawCaption() {
     drawLane();
     subs.current = i;
     $("subsList").querySelectorAll(".subs-row").forEach((r) => r.classList.toggle("now", +r.dataset.i === i));
-    const row = $("subsList").querySelector(`.subs-row[data-i="${i}"]`);
-    if (row && !rtVideo.paused) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (i >= 0 && rtView === "subs" && !rtVideo.paused) showSubsRow(i);
   }
 }
 
@@ -876,7 +979,7 @@ function drawSubsMarks() { drawLane(); }
 function drawLane() {
   const box = $("rtMarks");
   const length = rtLength();
-  const on = !!length && rtView === "subs" && subs.cues.length > 0;
+  const on = !!length && (rtView === "subs" || subs.live) && subs.cues.length > 0;
   $("rtWave").classList.toggle("has-lane", on);
   let canvas = box.querySelector("canvas");
   if (!on) { if (canvas) canvas.remove(); return; }
@@ -1085,3 +1188,48 @@ function drawPlaceChips() {
     b.classList.toggle("active", b.dataset.value === rtOptions.position));
 }
 loadStyles().then(drawCaptionLook);
+
+// ---------------------------------------------------------------- (3.0) lines while it listens
+// The lines it has heard so far show on the video and the timeline, so you can start watching
+// before it's done. (The final lines, timed to your voice, replace them at the end.)
+function rtLiveStart() {
+  if (rtLiveTimer) return;
+  rtLiveTimer = setInterval(rtLivePoll, 2000);
+  rtLivePoll();
+}
+function rtLiveStop() {
+  clearInterval(rtLiveTimer);
+  rtLiveTimer = 0;
+  $("rtLiveNote").hidden = true;
+  if (!subs.live) return;
+  subs.live = false;
+  if (rtView !== "subs") subs.cues = [];
+  drawLane();
+  drawCaption();
+}
+async function rtLivePoll() {
+  const id = rtId;
+  const res = await api("/api/rt-sofar", { id }).catch(() => null);
+  if (!rtLiveTimer || id !== rtId || !res || !res.ok || rtView === "subs") return;
+  if (!res.cues.length) return;
+  subs.live = true;
+  subs.cues = res.cues;
+  subs.offset = res.offset || 0;
+  $("rtLiveNote").textContent = `${res.cues.length} line${res.cues.length > 1 ? "s" : ""} so far. Press play to watch them while it works.`;
+  $("rtLiveNote").hidden = false;
+  drawLane();
+  drawCaption();
+}
+
+// ---------------------------------------------------------------- (3.0) remembered fixes
+function drawLearned() {
+  const row = $("rtLearnedRow");
+  if (!row) return;
+  row.hidden = !rtLearned;
+  $("rtLearnedText").textContent = `It remembers ${rtLearned} word${rtLearned === 1 ? "" : "s"} you fixed, and writes ${rtLearned === 1 ? "it" : "them"} your way.`;
+}
+$("rtForget").addEventListener("click", async () => {
+  if (!confirm("Forget the words you fixed? It will write them the way it hears them again.")) return;
+  const res = await api("/api/rt-forget", {}).catch(() => null);
+  if (res && res.ok) { rtLearned = 0; drawLearned(); }
+});

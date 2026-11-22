@@ -939,6 +939,10 @@
                 <span class="opt-label">Names it should know</span>
                 <label class="input rt-words"><input id="rtWords" placeholder="Like Minecraft, VaultHub" autocomplete="off" spellcheck="false"></label>
               </div>
+              <div class="rt-learned" id="rtLearnedRow" hidden>
+                <span id="rtLearnedText"></span>
+                <button type="button" class="link" id="rtForget">Forget them</button>
+              </div>
               <div class="opt-row" id="rtDeviceRow" hidden>
                 <span class="opt-label">Listen with</span>
                 <div class="chips" data-key="device">
@@ -953,6 +957,7 @@
           <div class="rt-progress" id="rtProgress" hidden>
             <div class="bar"><div></div></div>
             <div class="rt-progress-line"><span id="rtProgressText"></span><button type="button" class="link" id="rtStop">Stop</button></div>
+            <p class="rt-live-note" id="rtLiveNote" hidden></p>
           </div>
           <button class="convert rt-go" id="rtGo" type="button">
             <span id="rtGoText">Start</span>
@@ -979,6 +984,7 @@
               <button type="button" class="nudge" data-all="0.1" title="All subtitles 0.1 second later">+0.1s</button>
             </span>
           </div>
+          <div class="rt-fix-all" id="subsFixAll" hidden></div>
           <div class="subs-list" id="subsList"></div>
           <div class="rt-look" id="rtLook">
             <div class="rt-look-row">

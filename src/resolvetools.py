@@ -22,6 +22,7 @@ import threading
 import drt
 import fcpxml
 import files
+import fixes
 import history
 import media
 import names
@@ -355,13 +356,21 @@ class Tools(files.Files):
         per = str(per_screen) if str(per_screen) in PER_SCREEN else "0"
         style = style if style in subtitles.STYLES else "normal"
         save_options({"perScreen": per, "style": style})
-        cues = subtitles.make_cues(item["heard"], style, int(per))
+        cues = fixes.apply(subtitles.make_cues(item["heard"], style, int(per)))
         with self.lock:
             item["cues"] = cues
             item["job"].update(perScreen=per, style=style)
         if item["out"] and os.path.isfile(item["out"]):
             subtitles.write_srt(cues, item["out"])
         return cues
+
+    def heard_so_far(self, file_id):
+        """(3.0) The lines it has heard so far, while it still listens."""
+        item = self.find(file_id)
+        words = (item or {}).get("sofar") or []
+        job = item.get("job") or {}
+        style = job.get("style") if job.get("style") in subtitles.STYLES else "normal"
+        return fixes.apply(subtitles.make_cues(words, style, int(job.get("perScreen") or 0))) if words else []
 
     def save_cues(self, file_id, cues):
         item = self.cues(file_id)
@@ -411,16 +420,18 @@ class Tools(files.Files):
             parts = [(item["path"], trim[0] if trim else 0, length if trim else None, 0, stream) for stream in streams]
             try:
                 cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
-                                                gpu=job.get("device") != "cpu", words=job.get("words", ""),
+                                                gpu=job.get("device") != "cpu", words=fixes.words_to_listen_for(job.get("words", "")),
                                                 find_voice=picked == "auto" and tracks > 1,
                                                 per_screen=int(job.get("perScreen") or 0),
-                                                on_words=lambda heard: item.update(heard=heard))
+                                                on_words=lambda heard: item.update(heard=heard),
+                                                on_partial=lambda heard: item.update(sofar=heard))
                 path = names.finish(temp)
             except BaseException:
+                item["sofar"] = None
                 if os.path.exists(temp):
                     os.remove(temp)
                 raise
-            self._update(item, cues=cues, message=f"{len(cues)} subtitles. Check them, then put them in Resolve.")
+            self._update(item, cues=cues, sofar=None, message=f"{len(cues)} subtitles. Check them, then put them in Resolve.")
             return path
 
         if tool == "silence":
