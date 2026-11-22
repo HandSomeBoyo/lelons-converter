@@ -440,7 +440,8 @@ function rdDelay(c) {
 function rdLiveHtml(c) {
   const d = rdDelay(c);
   const bars = d ? (d < 50 ? 4 : d < 90 ? 3 : d < 150 ? 2 : 1) : 0;
-  return `<span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${d ? d + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}`;
+  return `<span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${d ? d + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}${
+    c.enc && c.enc.battery ? ` · <span class="rd-batt">${rdEsc(c.dev.name)} is on battery</span>` : ""}`;
 }
 function rdDelayTitle(c) {
   const r = (v) => Math.round(v || 0) + " ms";
@@ -514,7 +515,8 @@ function rdMenu() {
       ${opt("sharp", "Sharp", "Full detail for small text. Needs fast internet.")}
       ${opt("save", "Save data", "720p, 30 fps. For a phone hotspot: about 1 GB an hour.")}
       <p class="rd-used">Used ${gb < 0.1 ? Math.round(c.bytes / 1e6) + " MB" : gb.toFixed(2) + " GB"} so far</p>
-      <p class="rd-used">${rdEsc(rdDelayTitle(c))}${c.enc ? `<br>Picture made by ${c.enc.gpu ? "the graphics card" : "the processor (slower)"}${c.enc.why && c.enc.why !== "none" ? `, held back by ${c.enc.why === "cpu" ? "the processor" : "the internet"}` : ""}` : ""}</p>
+      <p class="rd-used">${rdEsc(rdDelayTitle(c))}${c.enc ? `<br>Picture made by ${c.enc.gpu ? "the graphics card" : "the processor (slower)"}${c.enc.why && c.enc.why !== "none" ? `, held back by ${c.enc.why === "cpu" ? "the processor" : "the internet"}` : ""}${
+   c.enc.battery ? `<br>${rdEsc(c.dev.name)} is on battery. Plug it in for a smoother picture.` : ""}` : ""}</p>
       <p class="rd-used">${c.sound === "none" ? `No sound from ${rdEsc(c.dev.name)}${c.soundWhy ? ` (${rdEsc(c.soundWhy)})` : ""}` : `Sound: on (${c.sound === "screen" ? "from the screen" : "from its speakers"})`}</p></div>
     ${c.screens > 1 ? `<div><h4>Screen</h4><div class="rd-mons">${Array.from({ length: c.screens }, (_, i) => `<button type="button" class="${i === c.screen ? "on" : ""}" data-screen="${i}">${i + 1}${i === 0 ? " · Main" : ""}</button>`).join("")}</div></div>` : ""}
     <div><h4>Keyboard</h4>

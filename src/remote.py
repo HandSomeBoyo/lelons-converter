@@ -273,6 +273,7 @@ def start(peer_key, peer_name, screen=0):
         _state["session"] = {"peer": str(peer_name or "PC")[:40], "since": time.time(), "screen": int(screen or 0)}
         _state["stop"] = False
     _overlay_show(_state["session"]["peer"])
+    threading.Thread(target=_full_speed_while_used, daemon=True).start()
     return True
 
 
@@ -303,7 +304,100 @@ def stop_now():
 
 def host_state():
     """For the sender page, a few times a second while connected."""
-    return {"stop": _state["stop"], "session": bool(_state["session"])}
+    return {"stop": _state["stop"], "session": bool(_state["session"]), "battery": on_battery()}
+
+
+def on_battery():
+    """(3.1.2) True on a laptop running on its battery (Windows slows it down then)."""
+    if os.name != "nt":
+        return False
+
+    class POWER(ctypes.Structure):
+        _fields_ = [("ac", ctypes.c_ubyte), ("flag", ctypes.c_ubyte), ("percent", ctypes.c_ubyte),
+                    ("saver", ctypes.c_ubyte), ("life", ctypes.c_ulong), ("full", ctypes.c_ulong)]
+    p = POWER()
+    try:
+        return bool(ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(p))) and p.ac == 0
+    except OSError:
+        return False
+
+
+def _our_processes():
+    """This app and everything it started (the WebView2 windows and their helpers)."""
+    from ctypes import wintypes
+
+    class ENTRY(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_void_p), ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+    k32 = ctypes.windll.kernel32
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snap = k32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return set()
+    parents = {}
+    try:
+        e = ENTRY()
+        e.dwSize = ctypes.sizeof(ENTRY)
+        ok = k32.Process32FirstW(snap, ctypes.byref(e))
+        while ok:
+            parents[e.th32ProcessID] = e.th32ParentProcessID
+            ok = k32.Process32NextW(snap, ctypes.byref(e))
+    finally:
+        k32.CloseHandle(snap)
+    ours = {os.getpid()}
+    grew = True
+    while grew:
+        grew = False
+        for pid, parent in parents.items():
+            if parent in ours and pid not in ours:
+                ours.add(pid)
+                grew = True
+    return ours
+
+
+def _full_speed(on):
+    """(3.1.2) While someone uses this PC: tell Windows not to slow VaultHub down (no "efficiency mode" /
+    power throttling, a bit higher priority), so the picture keeps up, also on a laptop's battery."""
+    if os.name != "nt":
+        return
+
+    class THROTTLE(ctypes.Structure):
+        _fields_ = [("Version", ctypes.c_ulong), ("ControlMask", ctypes.c_ulong), ("StateMask", ctypes.c_ulong)]
+    k32 = ctypes.windll.kernel32
+    k32.OpenProcess.restype = ctypes.c_void_p
+    # ControlMask EXECUTION_SPEED (1): StateMask 0 = never throttle; ControlMask 0 = let Windows decide again.
+    state = THROTTLE(1, 1 if on else 0, 0)
+    prio = 0x8000 if on else 0x20  # ABOVE_NORMAL / NORMAL
+    try:
+        pids = _our_processes()
+    except OSError:
+        return
+    for pid in pids:
+        h = k32.OpenProcess(0x0200 | 0x1000, False, pid)  # PROCESS_SET_INFORMATION | QUERY_LIMITED
+        if not h:
+            continue
+        try:
+            k32.SetProcessInformation(ctypes.c_void_p(h), 4, ctypes.byref(state), ctypes.sizeof(state))  # ProcessPowerThrottling
+            k32.SetPriorityClass(ctypes.c_void_p(h), prio)
+        except (OSError, AttributeError):
+            pass
+        finally:
+            k32.CloseHandle(ctypes.c_void_p(h))
+
+
+def _full_speed_while_used():
+    """Keeps it on while the session lasts (new helper processes can appear), then lets go."""
+    try:
+        while _state["session"]:
+            _full_speed(True)
+            for _ in range(10):
+                if not _state["session"]:
+                    break
+                time.sleep(1)
+    finally:
+        _full_speed(False)
 
 
 # ---- the hidden sender
@@ -316,7 +410,9 @@ def engine_args(screen=0):
         "--lang=en-US",  # (the switch below matches the screen's English name)
         f'"--auto-select-desktop-capture-source={title}"',
         "--disable-background-timer-throttling",
-        "--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion",
+        # (3.1.2) UseEcoQoSForBackgroundProcess: Windows 11's "efficiency mode" for hidden windows slowed
+        # the picture down to a few frames a second on a laptop.
+        "--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion,UseEcoQoSForBackgroundProcess",
         "--disable-renderer-backgrounding",
         "--autoplay-policy=no-user-gesture-required",  # (3.0) the PC's sound plays in a hidden window
     ])

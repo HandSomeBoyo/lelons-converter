@@ -258,11 +258,13 @@ async function rhWatch(sess) {
         const n = s.framesEncoded - (sess.encN || 0), t = s.totalEncodeTime - (sess.encT || 0);
         sess.encN = s.framesEncoded; sess.encT = s.totalEncodeTime;
         rhSend(sess, { enc: { ms: n > 0 ? Math.round((t / n) * 1000) : 0, fps: Math.round(s.framesPerSecond || 0),
-          gpu: s.powerEfficientEncoder === true, name: String(s.encoderImplementation || "").slice(0, 60), why: s.qualityLimitationReason || "" } });
+          gpu: s.powerEfficientEncoder === true, name: String(s.encoderImplementation || "").slice(0, 60), why: s.qualityLimitationReason || "",
+          battery: !!sess.battery } });
       });
     } catch (e) { /* closed */ }
   }
   const st = await rdPost("/api/remote-host-state");
+  if (st.ok) sess.battery = st.battery;
   if (st.ok && st.stop) rhEnd("stopped");
 }
 
