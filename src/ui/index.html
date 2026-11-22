@@ -142,6 +142,20 @@
       <button type="button" role="tab" data-tab="lvstats" title="Stream stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/></svg><span>Stream stats</span></button>
 </div>
     </div>
+    <!-- (3.1) The call you're in sits here, at the bottom of the side bar (it used to float at the top) -->
+    <div class="call" id="callBox" hidden>
+      <div class="call-card">
+        <span class="call-face" id="callFace"></span>
+        <div class="call-text"><b id="callName"></b><small id="callStatus"></small></div>
+        <div class="call-people" id="callPeople"></div>
+        <div class="call-buttons" id="callButtons"></div>
+      </div>
+      <div class="call-sharing" id="callSharing" hidden>
+        <i></i><span>You're sharing your screen</span>
+        <button type="button" class="link" id="callStopShare">Stop</button>
+      </div>
+      <div class="call-sharing call-rec-note" id="callRecNote" hidden><i></i><span></span></div>
+    </div>
     <div class="side-foot">
       <button type="button" class="side-link chat-button" id="chatButton" title="Chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1z"/><path d="M16 9h4a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-1.5v3L15 17.5h-3.5a1 1 0 0 1-1-1V15"/></svg><span>Chat</span>
@@ -2197,20 +2211,6 @@
 </aside>
 
 <!-- A call (private and group chats): ringing, talking, shared screens and cameras -->
-<div class="call" id="callBox" hidden>
-  <div class="call-card">
-    <span class="call-face" id="callFace"></span>
-    <div class="call-text"><b id="callName"></b><small id="callStatus"></small></div>
-    <div class="call-people" id="callPeople"></div>
-    <div class="call-buttons" id="callButtons"></div>
-  </div>
-  <div class="call-pop" id="callPop" hidden></div>
-  <div class="call-sharing" id="callSharing" hidden>
-    <i></i><span>You're sharing your screen</span>
-    <button type="button" class="link" id="callStopShare">Stop</button>
-  </div>
-  <div class="call-sharing call-rec-note" id="callRecNote" hidden><i></i><span></span></div>
-</div>
 <div class="call-stage" id="callStage" hidden>
   <video id="callVideo" data-call="1" autoplay playsinline muted></video>
   <div class="call-tiles" id="callTiles" hidden></div>
@@ -2223,7 +2223,33 @@
     </button>
   </div>
 </div>
+<div class="call-pop" id="callPop" hidden></div>
 <audio id="callAudio" autoplay></audio>
+<!-- (3.0.1) Our own "Share your screen" window (callshare.js) -->
+<div class="modal share-modal" id="shareModal" hidden>
+  <div class="dialog share-dialog" role="dialog" aria-labelledby="shareHeading">
+    <div class="share-head">
+      <h2 id="shareHeading">Share your screen</h2>
+      <button type="button" class="icon-button share-x" id="shareClose" title="Close (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="share-tabs" id="shareTabs" role="tablist">
+      <span class="share-tab-pill"></span>
+      <button type="button" data-tab="screens" role="tab">Screens</button>
+      <button type="button" data-tab="windows" role="tab">Windows</button>
+    </div>
+    <div class="share-grid" id="shareGrid"></div>
+    <div class="share-options">
+      <div class="share-opt"><span>Quality</span><div class="share-seg" id="shareSize"></div></div>
+      <div class="share-opt"><span>Smoothness</span><div class="share-seg" id="shareFps"></div></div>
+      <label class="check share-sound"><span><b>Share my PC's sound</b><small>Games and music. Not the call.</small></span><input type="checkbox" id="shareSound"></label>
+    </div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="shareCancel">Cancel</button>
+      <button type="button" class="small-button" id="shareGo" disabled>Share</button>
+    </div>
+  </div>
+</div>
 
 <!-- A group chat: make one, or change its name, picture and people. Also "pick a person" for a new private chat. -->
 <div class="modal" id="pollModal" hidden>
@@ -2642,6 +2668,10 @@
         <div class="set-group">
           <label class="check set-row"><span class="set-text"><b>Play a sound for new messages</b><small>A soft ding when someone writes to you.</small></span><input type="checkbox" id="setChatSound"></label>
         </div>
+        <div class="set-label">Call sounds</div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Play call sounds</b><small>When people join or leave, and when someone mutes, deafens or shares a screen.</small></span><input type="checkbox" id="setCallSounds"></label>
+        </div>
       </section>
 
       <section class="set-page" data-set="voice" hidden>
@@ -2654,7 +2684,10 @@
             <button type="button" class="ghost-button" id="setMicTest">Test it</button>
           </div>
           <div class="set-mic-meter" id="setMicMeter" hidden><span id="setMicLevel"></span></div>
-          <p class="set-mic-note" id="setMicNote" hidden>Say something. The bar moves when the microphone hears you.</p>
+          <p class="set-mic-note" id="setMicNote" hidden>Say something. You'll hear yourself the way friends hear you.</p>
+        </div>
+        <div class="set-group">
+          <label class="check set-row"><span class="set-text"><b>Hear my own microphone</b><small>In calls, your voice plays back to you, so you can tell if it sounds bad. Use headphones.</small></span><input type="checkbox" id="setMicHear"></label>
         </div>
         <div class="set-label">Push to talk</div>
         <div class="set-group set-pad">
@@ -2755,8 +2788,11 @@
 <script src="chat.js"></script>
 <script src="emojidata.js"></script>
 <script src="chatplus.js"></script>
+<script src="callsounds.js"></script>
 <script src="call.js"></script>
 <script src="callplus.js"></script>
+<script src="micmonitor.js"></script>
+<script src="callshare.js"></script>
 <script src="servers.js"></script>
 <script src="profile.js"></script>
 <script src="live.js"></script>

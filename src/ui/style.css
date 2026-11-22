@@ -4403,16 +4403,9 @@ body.doc-printing .doc-sheet { display: block; }
 .call-sharing .link { font-size: 12.5px; font-weight: 700; }
 
 /* Their shared screen: big in the middle of the window, or small in the bottom right corner */
-.call-stage { position: fixed; inset: calc(var(--call-h, 64px) + 22px) 24px 24px calc(var(--content-left, 24px)); z-index: 95; display: flex; flex-direction: column; overflow: hidden;
+.call-stage { position: fixed; inset: 24px 24px 24px calc(var(--content-left, 24px)); z-index: 95; display: flex; flex-direction: column; overflow: hidden;
   border-radius: 18px; background: #000; box-shadow: inset 0 0 0 1px var(--g-edge, var(--line)), var(--shadow-lg); animation: chat-page-in .4s var(--ease) both; }
-body.chat-page .call-stage { inset: calc(var(--call-h, 64px) + 22px) 24px 24px 24px; }
-/* In a call, the chat page moves down a little so the call card doesn't cover its top */
-body.chat-page.in-call .chat-panel { top: calc(var(--call-h, 64px) + 22px); transition: top .35s var(--ease); }
-/* On other pages, the page itself moves down under the call card (it used to cover the top, 2.38.0) */
-main { transition: padding-top .35s var(--ease); }
-body.in-call:not(.chat-page) main { padding-top: calc(var(--call-h, 64px) + 30px); }
-/* The call card sits in the middle of the page, not of the whole window (the side bar is on the left) */
-.call { left: calc(50% + var(--content-left, 0px) / 2); }
+body.chat-page .call-stage { inset: 24px 24px 24px 24px; }
 
 /* Talking: a green ring round your picture, like Discord */
 .srv-mem .avatar, .srv-vp .avatar, .chat-me-face .avatar { transition: box-shadow .12s ease; }
@@ -9405,6 +9398,104 @@ body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px mi
   .acct-head { flex-wrap: wrap; }
 }
 
+/* (3.0.1) Our own "Share your screen" window: screens and windows with live pictures, quality, and PC sound. */
+.modal > .dialog.share-dialog {
+  max-width: 760px; padding: 22px 24px 20px; border-radius: 20px; background: var(--panel);
+  box-shadow: 0 0 0 1px var(--gl-line), 0 28px 70px rgba(0, 0, 0, .5);
+}
+:root[data-theme="light"] .modal > .dialog.share-dialog { background: #f6f6f8; box-shadow: 0 0 0 1px rgba(20, 25, 40, .08), 0 28px 70px rgba(20, 25, 40, .2); }
+.share-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.share-head h2 { font-size: 20px; letter-spacing: -.02em; }
+.share-x { border-radius: 50%; width: 32px; height: 32px; padding: 0; justify-content: center; }
+.share-tabs {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; width: 260px; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 6%, transparent); --at: 0;
+}
+:root[data-theme="light"] .share-tabs { background: #e8e8ec; }
+.share-tabs button {
+  all: unset; position: relative; z-index: 1; text-align: center; padding: 7px 0; border-radius: 9px; cursor: pointer;
+  font: 600 13.5px var(--head); color: var(--muted); transition: color .25s;
+}
+.share-tabs button.on { color: var(--text); }
+.share-tab-pill {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 11%, var(--panel)); box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  transform: translateX(calc(var(--at) * 100%)); transition: transform .38s var(--ease);
+}
+:root[data-theme="light"] .share-tab-pill { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .14); }
+.share-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 16px -6px 0; padding: 6px; min-height: 200px; max-height: 330px;
+  overflow-y: auto; align-content: start; scrollbar-width: thin;
+}
+.share-grid.windows { grid-template-columns: repeat(3, 1fr); }
+.share-card {
+  all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 9px; padding: 8px; border-radius: 14px;
+  cursor: pointer; background: color-mix(in srgb, var(--text) 4%, transparent); min-width: 0;
+  box-shadow: inset 0 0 0 1px var(--gl-line);
+  transition: transform .3s var(--ease), box-shadow .2s, background-color .2s;
+  animation: share-card-in .45s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 25ms);
+}
+:root[data-theme="light"] .share-card { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+@keyframes share-card-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.share-card:hover { transform: translateY(-2px); background: color-mix(in srgb, var(--text) 7%, transparent); }
+:root[data-theme="light"] .share-card:hover { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .14), 0 6px 18px rgba(20, 25, 40, .08); }
+.share-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.share-card.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+:root[data-theme="light"] .share-card.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 7%, #fff); }
+.share-thumb {
+  position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 9px; overflow: hidden;
+  background: color-mix(in srgb, var(--text) 6%, #000);
+}
+:root[data-theme="light"] .share-thumb { background: #e9e9ee; }
+.share-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.share-thumb.blank img { display: none; }
+.share-thumb.blank::after { content: attr(data-note); font: 600 12px var(--head); color: var(--muted); }
+.share-name { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 2px 2px; }
+.share-name i {
+  flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; font: 700 10px var(--head);
+  font-style: normal; background: color-mix(in srgb, var(--text) 12%, transparent); overflow: hidden;
+}
+.share-name i:has(img) { background: none; }
+.share-name i img { width: 18px; height: 18px; }
+.share-name b { font: 600 13px var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.share-name small {
+  margin-left: auto; flex: none; padding: 2px 7px; border-radius: 99px; font: 600 11px var(--head); color: var(--muted);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.share-card.loading { cursor: default; pointer-events: none; }
+.share-card.loading .share-thumb, .share-card.loading .share-name i, .share-card.loading .share-name b {
+  background: color-mix(in srgb, var(--text) 7%, transparent); animation: share-shimmer 1.3s ease-in-out infinite;
+}
+.share-card.loading .share-name b { display: block; width: 60%; height: 11px; border-radius: 6px; }
+@keyframes share-shimmer { 50% { opacity: .45; } }
+.share-empty { grid-column: 1 / -1; margin: 60px auto; max-width: 300px; text-align: center; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.share-options {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 12px 22px; margin-top: 14px; padding: 14px 16px;
+  border-radius: 14px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: inset 0 0 0 1px var(--gl-line);
+}
+:root[data-theme="light"] .share-options { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+.share-opt { display: flex; flex-direction: column; gap: 6px; }
+.share-opt > span { font: 600 11.5px var(--head); color: var(--muted); }
+.share-seg { display: flex; padding: 3px; gap: 2px; border-radius: 10px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+:root[data-theme="light"] .share-seg { background: #ececf0; }
+.share-seg button {
+  all: unset; cursor: pointer; padding: 5px 9px; border-radius: 7px; font: 600 12px var(--head); color: var(--muted);
+  font-variant-numeric: tabular-nums; transition: background-color .2s, color .2s;
+}
+.share-seg button:hover { color: var(--text); }
+.share-seg button.on { color: var(--text); background: color-mix(in srgb, var(--text) 12%, var(--panel)); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+:root[data-theme="light"] .share-seg button.on { background: #fff; box-shadow: 0 1px 2px rgba(20, 25, 40, .14); }
+.check.share-sound { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
+.share-sound > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.share-sound b { font: 600 13px var(--head); }
+.share-sound small { font-size: 11.5px; color: var(--muted); }
+.share-sound input[type=checkbox]:not(:checked) { background: color-mix(in srgb, var(--text) 18%, transparent); }
+:root[data-theme="light"] .share-sound input[type=checkbox]:not(:checked) { background: #dcdce2; }
+.share-dialog .dialog-actions { margin-top: 16px; }
+.share-dialog .dialog-actions button { border-radius: 10px; }
+.share-dialog #shareGo { min-width: 96px; justify-content: center; }
+.share-dialog #shareGo:disabled { opacity: .45; cursor: default; filter: none; }
+@media (max-width: 720px) { .share-options { grid-template-columns: 1fr 1fr; } .check.share-sound { grid-column: 1 / -1; justify-self: stretch; } .share-grid.windows { grid-template-columns: repeat(2, 1fr); } }
 /* ==================================================================
    (3.1) Pre-stream check (lvprecheck.js): a calm list, each row turns
    from a spinner into a check, a ! or an x, one after another.
@@ -9451,3 +9542,53 @@ body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px mi
 .lvp .dialog-actions { margin-top: 18px; }
 .lvp .ghost-button:disabled { opacity: .5; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .lvp-list.in .lvp-row, .lvp-row.done .lvp-icon svg, .lvp-ring svg { animation: none; } }
+
+/* (3.1) The call card lives at the bottom of the side bar (like Discord), so it never covers the page.
+   Its little windows (screen, settings, sound board, a friend's volume) open next to the side bar. */
+#callBox.call { position: static; transform: none; display: block; margin: 8px 0 0; animation: call-dock-in .5s var(--ease-out) both; }
+@keyframes call-dock-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+#callBox .call-card {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px; min-width: 0; max-width: none; padding: 12px; border-radius: 16px;
+  background: color-mix(in srgb, var(--text) 5%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: inset 0 0 0 1px var(--gl-line);
+}
+:root[data-theme="light"] #callBox .call-card { background: rgba(255, 255, 255, .7); box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+#callBox .call-face .avatar { width: 34px; height: 34px; font-size: 14px; }
+#callBox .call-active .call-face::after, #callBox.call-in .call-face::after { box-shadow: 0 0 0 2px var(--panel); width: 10px; height: 10px; }
+#callBox .call-text { justify-content: center; }
+#callBox .call-text b { font-size: 13.5px; }
+#callBox .call-text small { font-size: 12px; }
+#callBox.call-in .call-text small { color: var(--green); }
+#callBox .call-people { grid-column: 1 / -1; flex-wrap: wrap; gap: 6px 0; padding-left: 2px; }
+#callBox .call-person .avatar { width: 30px; height: 30px; font-size: 12.5px; }
+#callBox .call-buttons { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+#callBox .call-btn { flex: 1 1 0; height: 36px; min-width: 0; padding: 0; border-radius: 12px; }
+#callBox .call-btn svg { width: 17px; height: 17px; }
+#callBox .call-btn.rec { flex: 2 1 0; padding: 0 6px; font-size: 12px; }
+#callBox .call-in .call-btn.red, #callBox.call-in .call-btn.red, #callBox.call-joining .call-btn.red { flex-basis: 100%; height: 34px; }
+#callBox.call-in .call-btn.red::after, #callBox.call-joining .call-btn.red::after { content: "Leave call"; font: 600 13px var(--head); }
+#callBox.call-incoming .call-btn { height: 38px; }
+#callBox .call-sharing { grid-column: 1 / -1; margin-top: 8px; padding: 6px 8px 6px 10px; border-radius: 12px; box-shadow: none; font-size: 12px; }
+#callBox .call-sharing span { flex: 1; min-width: 0; }
+#callBox .call-ended .call-text small, #callBox.call-ended .call-text small { white-space: normal; }
+.call-pop {
+  position: fixed; z-index: 160; left: calc(var(--side-gap, 12px) + var(--side-w, 232px) + 12px); bottom: var(--side-gap, 12px); align-self: auto;
+  max-height: calc(100vh - 2 * var(--side-gap, 12px)); animation: call-pop-side .35s var(--ease-out) both;
+}
+@keyframes call-pop-side { from { opacity: 0; transform: translateX(-10px) scale(.98); } }
+.call-more { margin: 0 0 4px; }
+.call-more .call-more-btn {
+  all: unset; box-sizing: border-box; flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; height: 38px; border-radius: 12px; cursor: pointer;
+  background: var(--panel2); font: 600 13px var(--head);
+}
+.call-more .call-more-btn:hover { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.call-more .call-more-btn svg { width: 16px; height: 16px; }
+.call-more .call-more-btn.rec { background: #e5484d; color: #fff; }
+/* the side bar folded in: just your face, mute, deafen and leave */
+html.side-small #callBox .call-card { grid-template-columns: 1fr; justify-items: center; padding: 8px 4px; gap: 8px; }
+html.side-small #callBox .call-text, html.side-small #callBox .call-people { display: none; }
+html.side-small #callBox .call-buttons { flex-direction: column; gap: 5px; width: 100%; }
+html.side-small #callBox .call-btn { flex: none; height: 34px; width: 100%; }
+html.side-small #callBox .call-btn:not(:nth-child(-n+2)):not(.red):not(.green) { display: none; }
+html.side-small #callBox .call-btn.red::after { content: none; }
+html.side-small #callBox .call-btn.red { flex-basis: auto; height: 34px; }
+html.side-small #callBox .call-sharing { display: none; }

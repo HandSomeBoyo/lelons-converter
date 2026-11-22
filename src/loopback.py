@@ -33,12 +33,16 @@ GET_BUFFER, RELEASE_BUFFER, GET_NEXT_PACKET_SIZE = 3, 4, 5  # IAudioCaptureClien
 
 
 class WAVEFORMATEX(ctypes.Structure):
+    # (3.1) Windows packs these tightly (WAVEFORMATEX is 18 bytes). Without this, Python added 2 bytes of
+    # padding, read the "is it float?" part of the format from the wrong place, and gave up: no sound.
+    _pack_ = 1
     _fields_ = [("wFormatTag", ctypes.c_ushort), ("nChannels", ctypes.c_ushort), ("nSamplesPerSec", c_uint32),
                 ("nAvgBytesPerSec", c_uint32), ("nBlockAlign", ctypes.c_ushort), ("wBitsPerSample", ctypes.c_ushort),
                 ("cbSize", ctypes.c_ushort)]
 
 
 class WAVEFORMATEXTENSIBLE(ctypes.Structure):
+    _pack_ = 1
     _fields_ = [("Format", WAVEFORMATEX), ("wValidBitsPerSample", ctypes.c_ushort), ("dwChannelMask", c_uint32),
                 ("SubFormat", ctypes.c_ubyte * 16)]
 

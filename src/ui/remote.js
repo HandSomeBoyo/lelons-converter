@@ -347,6 +347,7 @@ function rdCtl(c, data) {
     if (c.pairing) { c.pairing = false; rdPost("/api/remote-remember-host", { device: c.id, key: c.hostKey }); }
     clearTimeout(c.giveUp);
     c.phase = "on"; c.w = msg.w; c.h = msg.h; c.screens = msg.screens || 1; c.audio = msg.audio;
+    c.sound = msg.sound || (msg.audio ? "screen" : "none"); c.soundWhy = msg.soundWhy || "";
     rdPhase("");
     rdToolbar();
     rdHint(true);
@@ -473,7 +474,8 @@ function rdMenu() {
       ${opt("smooth", "Smooth", "Always 60 fps, a bit softer. Best for games.")}
       ${opt("sharp", "Sharp", "Full detail for small text. Needs fast internet.")}
       ${opt("save", "Save data", "720p, 30 fps. For a phone hotspot: about 1 GB an hour.")}
-      <p class="rd-used">Used ${gb < 0.1 ? Math.round(c.bytes / 1e6) + " MB" : gb.toFixed(2) + " GB"} so far</p></div>
+      <p class="rd-used">Used ${gb < 0.1 ? Math.round(c.bytes / 1e6) + " MB" : gb.toFixed(2) + " GB"} so far</p>
+      <p class="rd-used">${c.sound === "none" ? `No sound from ${rdEsc(c.dev.name)}${c.soundWhy ? ` (${rdEsc(c.soundWhy)})` : ""}` : `Sound: on (${c.sound === "screen" ? "from the screen" : "from its speakers"})`}</p></div>
     ${c.screens > 1 ? `<div><h4>Screen</h4><div class="rd-mons">${Array.from({ length: c.screens }, (_, i) => `<button type="button" class="${i === c.screen ? "on" : ""}" data-screen="${i}">${i + 1}${i === 0 ? " · Main" : ""}</button>`).join("")}</div></div>` : ""}
     <div><h4>Keyboard</h4>
       <div class="rd-row"><span>Send Alt+Tab and the Windows key<small>In full screen. Off: they stay on this PC</small></span><button type="button" class="rd-sw${loadPref("rdSystemKeys") ? " on" : ""}" id="rdSysKeys"></button></div>
