@@ -5,7 +5,7 @@
 
 let rtTool = "";
 let rtView = "pick"; // pick | setup | subs | done
-let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5" };
 let rtNvidia = false; // an NVIDIA graphics card to listen on
 let rtServer = []; // from the app's state
 let rtId = ""; // the video on the tab
@@ -827,7 +827,8 @@ async function saveSubsNow() {
 
 async function rtSend(old) {
   await saveSubsNow();
-  const res = await api("/api/rt-send", { id: rtId, old }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  const look = { textStyle: rtOptions.textStyle, fadeOut: rtOptions.fadeOut, fadeLen: rtOptions.fadeLen, fadeGap: rtOptions.fadeGap };
+  const res = await api("/api/rt-send", { id: rtId, old, ...look }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   const note = $("subsSaved");
   if (!res.ok) { note.textContent = res.error; return; }
   note.innerHTML = "";
@@ -884,3 +885,80 @@ function resolveTabChanged(tab) {
   if (!rtVideo.paused) rtVideo.pause();
   for (const t of rtTracks) t.audio.pause();
 }
+
+// ---------------------------------------------------------------- (3.0) how the subtitles look in Resolve
+// Your own Text+ (made and animated in Resolve, exported as a .drt) as a text style, and a fade out.
+
+let rtStyles = [];
+async function loadStyles() {
+  const res = await api("/api/rt-styles", {}).catch(() => null);
+  if (res && res.ok) { rtStyles = res.styles; drawLook(); }
+}
+
+function drawLook() {
+  if (rtOptions.textStyle && !rtStyles.some((s) => s.id === rtOptions.textStyle)) rtOptions.textStyle = "";
+  const box = $("rtStyles");
+  box.innerHTML = "";
+  const chip = (id, name, title) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = name;
+    b.title = title || "";
+    b.classList.toggle("active", rtOptions.textStyle === id);
+    b.onclick = () => { rtOptions.textStyle = id; drawLook(); drawCaptionLook(); };
+    return b;
+  };
+  box.append(chip("", "VaultHub", "White letters with a black outline, low on the screen"));
+  for (const s of rtStyles) {
+    const b = chip(s.id, s.name, `${s.font} ${s.face}${s.animated ? ", with its animation" : ""}. Right-click to remove it.`);
+    if (s.animated) b.insertAdjacentHTML("beforeend", ' <span class="rt-anim" aria-label="animated">✦</span>');
+    b.oncontextmenu = async (e) => {
+      e.preventDefault();
+      if (!confirm(`Remove the text style "${s.name}"?`)) return;
+      const res = await api("/api/rt-style-remove", { id: s.id }).catch(() => null);
+      if (res && res.ok) { rtStyles = res.styles; drawLook(); drawCaptionLook(); }
+    };
+    box.append(b);
+  }
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "rt-style-add";
+  add.textContent = "+ Add from Resolve";
+  add.onclick = () => { $("rtStyleHelp").hidden = false; $("rtStyleFile").click(); };
+  box.append(add);
+  document.querySelectorAll("#rtLook .chips[data-look] button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.value === String(rtOptions[b.parentElement.dataset.look])));
+  $("rtFadeLenRow").hidden = rtOptions.fadeOut === "off";
+  $("rtFadeGapRow").hidden = rtOptions.fadeOut !== "pause";
+}
+
+document.querySelectorAll("#rtLook .chips[data-look] button").forEach((b) => b.addEventListener("click", () => {
+  rtOptions[b.parentElement.dataset.look] = b.dataset.value;
+  drawLook();
+}));
+
+$("rtStyleFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const res = await fetch("/api/rt-style-add", { method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name) }, body: file })
+    .then((r) => r.json()).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  if (!res.ok) { $("subsSaved").textContent = res.error; return; }
+  rtStyles = res.styles;
+  if (res.added.length) rtOptions.textStyle = res.added[0].id;
+  $("rtStyleHelp").hidden = true;
+  $("subsSaved").textContent = res.added.length > 1 ? `Added ${res.added.length} text styles.` : `Added "${res.added[0].name}".`;
+  drawLook();
+  drawCaptionLook();
+});
+
+// The preview over the video uses your style's font when it's on this PC.
+function drawCaptionLook() {
+  const s = rtStyles.find((x) => x.id === rtOptions.textStyle);
+  const cap = $("rtCaption");
+  cap.classList.toggle("own", !!s);
+  cap.style.fontFamily = s ? `"${s.font}", var(--head)` : "";
+  const weights = { thin: 100, extralight: 200, light: 300, regular: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900, heavy: 900 };
+  cap.style.fontWeight = s ? weights[(s.face || "").toLowerCase().replace(/[\s-]/g, "")] || 700 : "";
+}
+loadStyles().then(drawCaptionLook);

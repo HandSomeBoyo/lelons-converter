@@ -980,6 +980,39 @@
             </span>
           </div>
           <div class="subs-list" id="subsList"></div>
+          <div class="rt-look" id="rtLook">
+            <div class="rt-look-row">
+              <span class="rt-look-label">Text style</span>
+              <div class="chips" id="rtStyles"></div>
+              <input type="file" id="rtStyleFile" accept=".drt" hidden>
+            </div>
+            <p class="rt-look-help" id="rtStyleHelp" hidden>Make a Text+ the way you like it in Resolve, with its animation. Put it on a timeline, then <b>File › Export › Timeline</b> and save it as <b>.drt</b>. Pick that file here.</p>
+            <div class="rt-look-row">
+              <span class="rt-look-label">Fade out</span>
+              <div class="chips" data-look="fadeOut">
+                <button data-value="off">Off</button>
+                <button data-value="pause">Before a pause</button>
+                <button data-value="all">Every line</button>
+              </div>
+            </div>
+            <div class="rt-look-row" id="rtFadeLenRow">
+              <span class="rt-look-label">Fade length</span>
+              <div class="chips" data-look="fadeLen">
+                <button data-value="0.15">0.15 s</button>
+                <button data-value="0.3">0.3 s</button>
+                <button data-value="0.5">0.5 s</button>
+                <button data-value="1">1 s</button>
+              </div>
+            </div>
+            <div class="rt-look-row" id="rtFadeGapRow">
+              <span class="rt-look-label">A pause is</span>
+              <div class="chips" data-look="fadeGap">
+                <button data-value="0.3">Over 0.3 s</button>
+                <button data-value="0.5">Over 0.5 s</button>
+                <button data-value="1">Over 1 s</button>
+              </div>
+            </div>
+          </div>
           <div class="rt-subs-foot">
             <span class="subs-saved" id="subsSaved"></span>
             <button type="button" class="convert rt-go" id="subsSend"><span>Put in Resolve</span></button>

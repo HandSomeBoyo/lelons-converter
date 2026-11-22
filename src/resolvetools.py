@@ -28,6 +28,7 @@ import names
 import settings
 import silence
 import subtitles
+import textstyles
 import waveform
 
 TOOLS = ("fix", "subtitles", "silence")
@@ -35,7 +36,8 @@ _thumb_slots = threading.BoundedSemaphore(3)  # pictures for the strip: a few at
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
 DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
-            "device": "gpu", "words": "", "perScreen": "0"}
+            "device": "gpu", "words": "", "perScreen": "0", "textStyle": "", "fadeOut": "off", "fadeLen": "0.3", "fadeGap": "0.5"}
+FADES = {"fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1")}
 PER_SCREEN = ("0", "1", "3", "6")  # (3.0) most words on screen at once ("0": as many as fit)
 
 
@@ -62,6 +64,11 @@ def load_options():
         o["device"] = saved["device"]
     if saved.get("cutAs") in ("timeline", "video"):
         o["cutAs"] = saved["cutAs"]
+    for key, allowed in FADES.items():
+        if saved.get(key) in allowed:
+            o[key] = saved[key]
+    if isinstance(saved.get("textStyle"), str) and (not saved["textStyle"] or textstyles.get(saved["textStyle"])):
+        o["textStyle"] = saved["textStyle"]
     if saved.get("perScreen") in PER_SCREEN:
         o["perScreen"] = saved["perScreen"]
     if isinstance(saved.get("words"), str):
@@ -144,7 +151,7 @@ class Tools(files.Files):
         status = item["status"]
         return {"status": status, "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
-    def send(self, file_id, kind="drt"):
+    def send(self, file_id, kind="drt", look=None):
         """"Put in Resolve" under the subtitles: a timeline file with the video and its subtitles as
         Text+ (a .drt, Resolve's own kind of file), or the old way (FCPXML: a subtitle track)."""
         item = self.find(file_id)
@@ -175,7 +182,10 @@ class Tools(files.Files):
             fcpxml.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
         else:
             target = os.path.join(folder, f"{stem} (subtitles).drt")
-            drt.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
+            o = save_options(look or {})
+            fade = {"when": o["fadeOut"], "seconds": o["fadeLen"], "gap": o["fadeGap"]} if o["fadeOut"] != "off" else None
+            drt.make(item["cues"], target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0,
+                     own=textstyles.get(o["textStyle"]), fade=fade)
         with self.lock:
             item.update(sent=True, timeline=target)
         return {"file": target, "name": os.path.basename(target)}

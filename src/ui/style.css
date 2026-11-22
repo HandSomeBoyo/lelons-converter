@@ -9716,3 +9716,15 @@ html.side-small #callBox .call-sharing { display: none; }
 .rt-file-row .small-button { height: 32px; padding: 0 12px; font-size: 13px; flex: none; }
 .rt-close { display: inline-flex; align-items: center; gap: 6px; }
 .rt-close svg { width: 14px; height: 14px; }
+/* (3.0) the look in Resolve: your own text style, fade out */
+.rt-look { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rt-look-row { display: grid; gap: 6px; }
+.rt-look-row[hidden], .rt-look-help[hidden] { display: none; }
+.rt-look-label { font-size: 12.5px; color: var(--muted); }
+.rt-look .chips button { height: 30px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; }
+.rt-look .rt-style-add { color: var(--accent); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+:root[data-theme="light"] .rt-look .rt-style-add { color: var(--accent-text, #8a6a00); }
+.rt-anim { font-size: 10px; opacity: .7; margin-left: 2px; }
+.rt-look-help { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.rt-look-help b { color: var(--text); font-weight: 600; }
+.subs-caption.own { text-transform: none; }

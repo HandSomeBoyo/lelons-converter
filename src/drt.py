@@ -316,8 +316,9 @@ def _lua(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "") + '"'
 
 
-def text_plus(text, frames, fps, width, height, style):
-    """The Fusion composition of one Text+ title, as Resolve stores it."""
+def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0):
+    """The Fusion composition of one Text+ title, as Resolve stores it. own: a text style you made in
+    Resolve (textstyles.py) to copy instead of VaultHub's own look; fade_frames: fade out at the end."""
     last = max(0, frames - 1)
     size = style.get("size", 0.06)
     inputs = [
@@ -340,7 +341,12 @@ def text_plus(text, frames, fps, width, height, style):
     tools = ("{ Template = TextPlus { CtrlWZoom = false, Inputs = { " + ", ".join(inputs) + " }, "
              "ViewInfo = OperatorInfo { Pos = { 220, 49.5 } }, Version = 1 }, "
              'MediaOut1 = MediaOut { Inputs = { Index = Input { Value = "0", }, Input = Input { SourceOp = "Template", '
-             'Source = "Output", } }, ViewInfo = OperatorInfo { Pos = { 440, 49.5 } }, } } ').encode()
+             'Source = "Output", } }, ViewInfo = OperatorInfo { Pos = { 440, 49.5 } }, } } ')
+    if own or fade_frames:
+        import textstyles
+
+        tools = textstyles.line_tools(own or {"tools": tools, "rate": fps}, text, frames, fps, width, height, fade_frames)
+    tools = tools.encode()
     rate = round(fps, 3) if abs(fps - round(fps)) > 0.001 else int(round(fps))
     comp = (f"Composition {{ CurrentTime = 0, RenderRange = {{ 0, {last} }}, GlobalRange = {{ 0, {last} }}, CurrentID = 3, "
             "HiQ = true, PlaybackUpdateMode = 0, StereoMode = false, Version = \"DaVinci Resolve 21.1.2.0010\", "
@@ -374,9 +380,11 @@ def _rate(fps):
     return max(1, int(round(fps or 30)))
 
 
-def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=None):
+def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=None, own=None, fade=None):
     """Writes the .drt. cues [(start, end, text)] in seconds from the start of the video (or of the
-    timeline with no video); offset: where they start inside the video. Returns how many went in."""
+    timeline with no video); offset: where they start inside the video. Returns how many went in.
+    own: your own text style (textstyles.get()). fade: {"when": "pause"|"all", "seconds", "gap"}: a fade
+    out on every line, or only on the last line before a pause of at least gap seconds."""
     style = style or {}
     info = media.probe(clip) if clip else {"duration": 0, "video": False, "audio": False, "width": 0, "height": 0,
                                            "fps": 0, "audioTracks": 0}
@@ -405,14 +413,19 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
     track_v1, track_v2 = re.findall(r"<Element>\s*<Sm2TiTrack .*?</Sm2TiTrack>\s*</Element>", seq.split("<VideoTrackVec>")[1].split("</VideoTrackVec>")[0], re.S)
     title_el = _elements(track_v2, "Sm2TiVideoClip")[0]
     titles = []
-    for a, b, text in lines:
+    fade = fade or {}
+    fade_frames = frame(float(fade.get("seconds") or 0)) if fade.get("when") in ("pause", "all") else 0
+    gap_frames = frame(float(fade.get("gap") or 0.5))
+    for i, (a, b, text) in enumerate(lines):
+        gap = lines[i + 1][0] - b if i + 1 < len(lines) else 10 ** 9
+        fades = fade_frames if fade.get("when") == "all" or gap >= gap_frames else 0
         el = title_el
         for old in set(re.findall(r'DbId="([^"]+)"', el)):
             el = el.replace(old, str(uuid.uuid4()))
         el = _tag(el, "Start", origin + a)
         el = _tag(el, "Duration", b - a)
         el = _tag(el, "Name", "Fusion Title")
-        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style))
+        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style, own, fades))
         el = _tag(el, "MediaFrameRate", _double_le(fps).hex())
         el = _tag(el, "MediaTimemapBA", _timemap(max(0, b - a - 1) / fps))
         fields = bytes.fromhex(_get(el, "FieldsBlob"))

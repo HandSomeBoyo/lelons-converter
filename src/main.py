@@ -54,6 +54,7 @@ import povs  # noqa: E402
 import remote  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
+import textstyles  # noqa: E402
 import subtitles  # noqa: E402
 import resolve  # noqa: E402
 import history  # noqa: E402
@@ -1112,7 +1113,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/rt-cues-save":
                 tools.save_cues(data.get("id"), data.get("cues") or [])
             elif path == "/api/rt-send":
-                return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt")})
+                return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt",
+                                                                {k: str(data[k]) for k in ("textStyle", "fadeOut", "fadeLen", "fadeGap") if k in data})})
+            elif path == "/api/rt-styles":
+                return self.send_json({"ok": True, "styles": textstyles.all_styles()})
+            elif path == "/api/rt-style-remove":
+                textstyles.remove(data.get("id"))
+                return self.send_json({"ok": True, "styles": textstyles.all_styles()})
             # ---- project folders
             elif path == "/api/project-make":
                 parent = pick_folder(state.folder, "Where should the project folder go?")
@@ -2033,6 +2040,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False, "error": str(e)})
             except OSError:
                 return self.send_json({"ok": False, "error": "Couldn't save that file."})
+        if self.path == "/api/rt-style-add":  # (3.0) a .drt with your own Text+ in it; the body is the file
+            if length > 50_000_000:
+                return self.send_json({"ok": False, "error": "That file is too big for a timeline."})
+            try:
+                added = textstyles.add(self.rfile.read(length), urllib.parse.unquote(self.headers.get("X-File-Name") or ""))
+                return self.send_json({"ok": True, "added": added, "styles": textstyles.all_styles()})
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": str(e)})
         if self.path == "/api/rt-add":  # a file dropped on the Resolve tab; the body is the file itself
             name = urllib.parse.unquote(self.headers.get("X-File-Name") or "file")
             try:
