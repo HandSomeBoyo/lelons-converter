@@ -159,8 +159,9 @@ async function rhGo(sess) {
   const video = stream.getVideoTracks()[0];
   // (3.0) When the screen is picked by itself (no picker), the engine leaves the sound out. Then the
   // sound comes from Windows itself (loopback.py) instead.
-  let audio = stream.getAudioTracks()[0] || null;
-  if (!audio) audio = await rhPcSound(sess).catch(() => null);
+  // (3.1) Windows' own sound first (it's what you hear on this PC); the screen's sound only if that fails.
+  let audio = await rhPcSound(sess).catch((e) => { sess.soundWhy = String(e && e.message || e); return null; });
+  if (!audio && stream.getAudioTracks()[0]) { audio = stream.getAudioTracks()[0]; sess.soundHow = "screen"; }
   if (rh.sess !== sess) { if (sess.soundStop) sess.soundStop(); return stream.getTracks().forEach((t) => t.stop()); }
   for (const t of sess.pc.getTransceivers()) {
     const kind = t.receiver.track && t.receiver.track.kind;
@@ -169,7 +170,8 @@ async function rhGo(sess) {
   }
   await rhMode(sess, sess.mode);
   const set = video.getSettings();
-  rhSend(sess, { ready: true, w: set.width, h: set.height, audio: !!audio, screens: rh.me.screens, screen: sess.screen });
+  rhSend(sess, { ready: true, w: set.width, h: set.height, audio: !!audio, screens: rh.me.screens, screen: sess.screen,
+    sound: audio ? sess.soundHow || "pc" : "none", soundWhy: sess.soundWhy || "" });
   rhSay("Sending to " + sess.name);
 }
 
@@ -265,21 +267,51 @@ function rhEnd(why, tell = true) {
   rhSay("Waiting for your other PCs.");
 }
 
-// (3.0) This PC's own sound, from Windows (see loopback.py): raw samples over a local stream, played into
-// a small audio worklet whose output is a normal sound track for the connection. It keeps the delay low
-// by dropping old sound when it falls behind.
+// (3.0) This PC's own sound, from Windows (see loopback.py): raw samples over a local stream, made into a
+// sound track for the connection.
+// (3.1) The track is made with MediaStreamTrackGenerator when there is one: it doesn't need the page's
+// sound to be "allowed to play" (a hidden window with no clicks may not be), which kept it silent before.
+// Otherwise a small audio worklet (remote-sound.js) plays it into a track.
 async function rhPcSound(sess) {
   const ctrl = new AbortController();
   const res = await fetch("/api/remote-sound", { headers: RD_TOKEN ? { "X-Lelons-Token": RD_TOKEN } : {}, signal: ctrl.signal });
   const fmt = JSON.parse(res.headers.get("X-Sound") || "null");
-  if (!res.ok || !res.body || !fmt || !fmt.rate || !fmt.channels) { ctrl.abort(); return null; }
-  const ctx = new AudioContext({ sampleRate: fmt.rate, latencyHint: "interactive" });
-  await ctx.audioWorklet.addModule("remote-sound.js");
-  const node = new AudioWorkletNode(ctx, "rd-feed", { numberOfInputs: 0, outputChannelCount: [2] });
-  const dest = ctx.createMediaStreamDestination();
-  node.connect(dest);
-  ctx.resume().catch(() => {});
-  sess.soundStop = () => { ctrl.abort(); ctx.close().catch(() => {}); };
+  if (!res.ok || !res.body || !fmt || !fmt.rate || !fmt.channels) {
+    let why = "no sound from Windows";
+    try { why = (await res.json()).error || why; } catch (e) { /* not JSON */ }
+    ctrl.abort();
+    throw new Error(why);
+  }
+  let push, track;
+  if (typeof MediaStreamTrackGenerator === "function" && typeof AudioData === "function") {
+    const gen = new MediaStreamTrackGenerator({ kind: "audio" });
+    const writer = gen.writable.getWriter();
+    let ts = 0, last = 0;
+    push = (l, r) => {
+      const n = l.length, now = performance.now() * 1000;
+      if (now - last > 200000) ts = now; // after a pause (nothing playing), start the clock again from now
+      last = now;
+      const data = new Float32Array(n * 2);
+      data.set(l); data.set(r, n);
+      writer.write(new AudioData({ format: "f32-planar", sampleRate: fmt.rate, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round(ts), data })).catch(() => {});
+      ts += (n * 1e6) / fmt.rate;
+    };
+    sess.soundStop = () => { ctrl.abort(); writer.close().catch(() => {}); gen.stop(); };
+    track = gen;
+    sess.soundHow = "pc";
+  } else {
+    const ctx = new AudioContext({ sampleRate: fmt.rate, latencyHint: "interactive" });
+    await ctx.audioWorklet.addModule("remote-sound.js");
+    const node = new AudioWorkletNode(ctx, "rd-feed", { numberOfInputs: 0, outputChannelCount: [2] });
+    const dest = ctx.createMediaStreamDestination();
+    node.connect(dest);
+    await ctx.resume().catch(() => {});
+    if (ctx.state !== "running") sess.soundWhy = "sound engine is " + ctx.state;
+    push = (l, r) => node.port.postMessage({ l, r }, [l.buffer, r.buffer]);
+    sess.soundStop = () => { ctrl.abort(); ctx.close().catch(() => {}); };
+    track = dest.stream.getAudioTracks()[0] || null;
+    sess.soundHow = "pc-worklet";
+  }
   const ch = fmt.channels, bytes = fmt.kind === "s16" ? 2 : 4, frame = ch * bytes;
   const reader = res.body.getReader();
   (async () => {
@@ -299,10 +331,10 @@ async function rhPcSound(sess) {
         if (bytes === 4) { l[i] = dv.getFloat32(o, true); r[i] = ch > 1 ? dv.getFloat32(o + 4, true) : l[i]; }
         else { l[i] = dv.getInt16(o, true) / 32768; r[i] = ch > 1 ? dv.getInt16(o + 2, true) / 32768 : l[i]; }
       }
-      node.port.postMessage({ l, r }, [l.buffer, r.buffer]);
+      push(l, r);
     }
   })().catch(() => {});
-  return dest.stream.getAudioTracks()[0] || null;
+  return track;
 }
 
 rhTick();
