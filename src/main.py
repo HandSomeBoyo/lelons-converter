@@ -987,6 +987,18 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
                 except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
+            elif action == "pre":  # (3.1) the pre-stream check
+                import precheck
+                return self.send_json({"ok": True, **precheck.run()})
+            elif action == "pre-net":
+                import precheck
+                return self.send_json({"ok": True, "check": precheck.net()})
+            elif action == "pre-fix":
+                import precheck
+                try:
+                    return self.send_json({"ok": True, **precheck.fix(str(data.get("what") or ""), data)})
+                except (obsctl.Error, ValueError) as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "close-ask":  # (2.36.0) what the "You're live. Close anyway?" box lists
                 return self.send_json({"ok": True, "sites": multistream.live_sites()})
             elif action == "hide":
