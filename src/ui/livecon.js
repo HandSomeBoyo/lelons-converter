@@ -214,6 +214,7 @@ function lvDrawTopBar() {
     ${typeof lvMsPills === "function" ? lvMsPills() : ""}
     ${c.obsOn ? `<span class="lv-pill ${obs.connected ? "" : "dim"}" title="${lvEsc(obs.error || "")}"><i class="lv-obs-dot ${obs.connected ? (obs.streaming ? "on" : "ok") : ""}"></i>OBS ${obs.connected ? (obs.streaming ? "streaming" : "connected") : "not connected"}</span>` : ""}
     <span class="sp"></span>
+    <button type="button" class="lv-ghost" id="lvPreOpen" title="Check OBS, your mic, title, alerts and internet before you go live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5h6M9 4.5a1.5 1.5 0 0 0 0 3h6a1.5 1.5 0 0 0 0-3M9 4.5H7A1.5 1.5 0 0 0 5.5 6v13A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 17 4.5h-2"/><path d="m9 13.5 2 2 4-4.5"/></svg>Pre-stream check</button>
     <button type="button" class="lv-ghost" id="lvCustomize" title="Move, size and pick the cards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4" rx="1.5"/><rect x="13.5" y="10.5" width="7" height="10" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>Customize</button>
     <button type="button" class="lv-ghost" id="lvPop" title="Pop out chat (a small chat window that stays on top of your game)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10M19.5 4.5 12 12"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></svg>Pop out</button>
     <button type="button" class="icon-button" id="lvSetupOpen" title="Set up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>`;
@@ -223,6 +224,7 @@ function lvDrawTopBar() {
     $("lvTop").dataset.html = html;
     $("lvPop").addEventListener("click", lvPopOut);
     $("lvCustomize").addEventListener("click", () => lvLayoutEdit(true));
+    if ($("lvPreOpen")) $("lvPreOpen").addEventListener("click", () => typeof preOpen === "function" && preOpen());
     $("lvSetupOpen").addEventListener("click", lvOpenSetup);
   }
   if ($("lvClock")) $("lvClock").textContent = lvClock(since);

@@ -1950,6 +1950,21 @@
 
 <div class="lv-toasts" id="lvToasts" aria-live="polite"></div>
 
+<div class="modal" id="preModal" hidden>
+  <div class="dialog lvp" role="dialog" aria-labelledby="preTitle">
+    <div class="lvp-head" id="preHead">
+      <span class="lvp-ring" id="preRing"></span>
+      <div><h2 id="preTitle">Checking your stream...</h2><p class="sub" id="preSub"></p></div>
+    </div>
+    <ul class="lvp-list" id="preList"></ul>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="preAgain">Check again</button>
+      <button type="button" class="small-button" id="preDone">Done</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="lvSetupModal" hidden>
   <div class="dialog lv-setup" role="dialog" aria-labelledby="lvSetupHeading">
     <h2 id="lvSetupHeading">Set up the Live console</h2>
@@ -2785,5 +2800,6 @@
 <script src="lvalerts.js"></script>
 <script src="lvcostream.js"></script>
 <script src="lvextra.js"></script>
+<script src="lvprecheck.js"></script>
 </body>
 </html>
