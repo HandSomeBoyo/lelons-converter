@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.1.0", items: [
+    "Live: new Pre-stream check button. One click checks OBS, your scene, your mic, your Twitch title and game, alerts and your internet before you go live.",
+    "Anything wrong gets a plain tip on how to fix it, and often a button that fixes it for you.",
+  ] },
   { version: "3.0.0", items: [
     "VaultHub 3.0! Every page got a cleanup: calmer, tidier and easier to use.",
     "Home starts clean now. Press Add widgets to put on what you want, in small, medium or large.",
