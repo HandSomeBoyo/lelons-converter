@@ -30,7 +30,8 @@ const rd = {
   asking: null, // a PC that wants to control THIS PC (you answer here)
 };
 
-function rdIsOwner() { return typeof sfxUser === "function" && sfxUser() && sfxUser().isOwner; }
+// (3.1.2) The owner and admins (each only with the PCs on their own account).
+function rdIsOwner() { const u = typeof sfxUser === "function" && sfxUser(); return !!(u && (u.isOwner || u.role === "admin")); }
 
 // ---- the side bar button: only the owner sees it
 function rdSideButton() {
@@ -71,7 +72,7 @@ async function rdHello() {
   rd.lastHello = Date.now();
   const res = await rdPost("/api/remote-hello", { ctrlKey: rd.keys.pub, after: rd.after });
   if (!res.ok) {
-    rd.error = res.error === "owner_only" ? "Only the owner can use Remote." : res.error === "login" ? "Log in first." : "Can't reach the server right now.";
+    rd.error = res.error === "owner_only" ? "Only the owner and admins can use Remote." : res.error === "login" ? "Log in first." : "Can't reach the server right now.";
     return;
   }
   rd.error = "";
@@ -136,7 +137,7 @@ function rdDraw() {
   $("rdManage").addEventListener("click", rdManage);
   if ($("rdAdd")) $("rdAdd").addEventListener("click", () => rdInfoBox(RD_ICONS.plus, "Add a PC", `<p>${RD_ADD_TEXT}</p>`));
   $("rdSafeInfo").addEventListener("click", () => rdInfoBox(RD_ICONS.shield, "How it stays safe", `<div class="rd-safe">
-      <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your owner account. Nobody else can use Remote.</div>
+      <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your own account. Nobody else can reach them, not even other admins.</div>
       <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code.</div>
       <div><b>${RD_ICONS.eye}Straight PC to PC</b>Picture, sound and keys are locked (encrypted) from PC to PC. Nothing goes through our server.</div>
       <div><b>${RD_ICONS.key}Stop any time</b>A yellow bar shows on the PC being used. Ctrl+Alt+End cuts it off.</div></div>`));

@@ -22,7 +22,7 @@ async function rhTick() {
       });
       if (!res.ok) {
         wait = res.error === "owner_only" || res.error === "login" ? 60000 : 8000;
-        rhSay(res.error === "owner_only" ? "Only the owner can use Remote desktop." : "Not connected: " + res.error);
+        rhSay(res.error === "owner_only" ? "Only the owner and admins can use Remote desktop." : "Not connected: " + res.error);
       } else {
         for (const s of res.signals || []) {
           if (s.id <= rh.after) continue;

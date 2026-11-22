@@ -3797,7 +3797,8 @@ declare
   d lelons.remote_devices;
   other uuid;
 begin
-  if me.role <> 'owner' then
+  -- (3.1.2) The owner and admins. Everyone only ever sees and reaches the PCs on their own account.
+  if me.role not in ('owner', 'admin') then
     return json_build_object('ok', false, 'error', 'owner_only');
   end if;
   if device is null then
