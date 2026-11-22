@@ -64,6 +64,7 @@ import linkpreview  # noqa: E402
 import media  # noqa: E402
 import names  # noqa: E402
 import settings  # noqa: E402
+import sharepick  # noqa: E402
 import sfx  # noqa: E402
 import waveform  # noqa: E402
 import windows  # noqa: E402
@@ -650,6 +651,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
             if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
                 return self.send_file(os.path.join(UI_DIR, "index.html"), cookie=True)
+        if url.path == "/share-host" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
+            # (3.0.1) The hidden helper for sharing a screen other than the main one in a call (sharepick.py).
+            if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
+                return self.send_file(os.path.join(UI_DIR, "share-host.html"), cookie=True)
         if url.path == "/remote-host" and secrets.compare_digest(urllib.parse.parse_qs(url.query).get("t", [""])[0], TOKEN):
             # (2.37.0) The Remote desktop's hidden sender (its own engine, so it gets its own cookie).
             if self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}":
@@ -2302,6 +2307,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": False})
             down = bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
             self.send_json({"ok": True, "down": down})
+        elif self.path == "/api/share-sources":  # our own screen share picker (sharepick.py)
+            self.send_json({"ok": True, **sharepick.sources(thumbs=data.get("thumbs") is not False)})
+        elif self.path == "/api/share-pick":
+            self.send_json(sharepick.prepare(data.get("id")))
+        elif self.path == "/api/share-picked":
+            sharepick.finish()
+            self.send_json({"ok": True})
+        elif self.path == "/api/share-relay":  # another screen than the main one, through the hidden helper
+            self.send_json(sharepick.relay(data, share_helper))
+        elif self.path == "/api/share-bar":  # keep the engine's "is sharing your screen" bar hidden
+            sharepick.bar(bool(data.get("on")), self.server.server_port)
+            self.send_json({"ok": True})
         elif self.path == "/api/call-record-show":
             path = data.get("path") or ""
             if path in call_recordings and os.path.isfile(path):
@@ -2737,6 +2754,16 @@ def clean_up():
 
 # ---------------------------------------------------------------- main
 
+def share_helper(screen):
+    """(3.0.1) Start (screen = a number) or close (None) the hidden helper that shares another screen in a call."""
+    folder = os.path.join(settings.DATA_DIR, "webview-share")
+    url = f"http://127.0.0.1:{PORT[0]}/share-host?t={TOKEN}"
+    if screen is None:
+        appwindow.engine(url, folder, WINDOW_ICON, "", close=True)
+    else:
+        appwindow.engine(url, folder, WINDOW_ICON, sharepick.helper_args(screen))
+
+
 def main():
     # Only one copy runs. Starting it again shows the open window instead.
     give_up = time.time() + 15
@@ -2784,6 +2811,7 @@ def main():
     srvwatch.start()  # auto-posts about your own videos and streams in your servers
     # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
     browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
+    browser_args += sharepick.browser_args()  # (calls: our own screen share picker picks for the engine)
     if not state.hardware:  # Hardware acceleration off: the window draws without the graphics card too
         browser_args.append("--disable-gpu")
     os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = " ".join(browser_args)

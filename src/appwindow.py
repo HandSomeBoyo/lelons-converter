@@ -45,7 +45,7 @@ _hotkeys = []  # [(id, modifiers, key code)] the soundboard wants
 _hotkeys_taken = []  # ids another program already uses
 _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
-_engine = None  # (2.37.0) the Remote desktop's hidden screen sender, while it runs
+_engines = {}  # data folder -> hidden window: the Remote desktop's screen sender (2.37.0), a call's extra screen (3.0.1)
 _args_lock = threading.Lock()
 _close_guard = None  # (2.36.0) a function: a reason not to close right away (you're multistreaming), or ""
 
@@ -346,17 +346,19 @@ def engine(url, data_folder, icon, browser_args, close=False):
 def _engine_now(url, data_folder, icon, browser_args, close):
     """(2.37.0) A window nobody sees, for the Remote desktop: it sends this PC's screen and sound when you
     connect from your other PC. It has its own engine (data_folder) so its switches don't touch the app's
-    window. Returns True when it's running (or closed, with close=True)."""
-    global _engine
+    window. Returns True when it's running (or closed, with close=True). (3.0.1) One per data folder: calls
+    use one too, to share a screen other than the main one."""
     if not available():
         return False
     with _lock:
-        running = _engine if _engine and _engine.alive else None
+        engine = _engines.get(data_folder)
+        running = engine if engine and engine.alive else None
         if close or (running and running.browser_args != browser_args):
             if running:
                 running.cancel()
                 running.thread.join(10)
-            _engine = running = None
+            _engines.pop(data_folder, None)
+            running = None
             if close:
                 return True
         if running:
@@ -366,10 +368,11 @@ def _engine_now(url, data_folder, icon, browser_args, close):
     # instead of giving up (that left the sender gone until the app was restarted).
     for attempt in range(12):
         with _lock:
-            if _engine and _engine.alive:
+            engine = _engines.get(data_folder)
+            if engine and engine.alive:
                 return True
-            win = _engine = Window(url, data_folder, icon, lambda placement: None, None, popout=True,
-                                   hidden=True, browser_args=browser_args)
+            win = _engines[data_folder] = Window(url, data_folder, icon, lambda placement: None, None, popout=True,
+                                                 hidden=True, browser_args=browser_args)
         win.thread.start()
         if not win.started.wait(30):
             win.cancel()

@@ -14,6 +14,7 @@ function drawSettings() {
   $("setHardware").checked = appSettings.hardware;
   drawSize();
   $("setChatSound").checked = loadPref("chatSound") !== false;
+  $("setCallSounds").checked = loadPref("callSounds") !== false;
   document.querySelectorAll("#themePicks button").forEach((b) => b.classList.toggle("active", b.dataset.theme === appSettings.theme));
   const light = appSettings.theme === "light";
   setChildren($("accentPicks"), Object.keys(ACCENT_COLORS).map((name) => {
@@ -156,6 +157,11 @@ $("setChatSound").addEventListener("change", () => {
   savePref("chatSound", $("setChatSound").checked);
   if ($("setChatSound").checked && typeof chatDing === "function") chatDing();  // what it sounds like
 });
+$("setCallSounds").addEventListener("change", () => {
+  savePref("callSounds", $("setCallSounds").checked);
+  if ($("setCallSounds").checked) callSound("join");  // what they sound like
+});
+$("setMicHear").addEventListener("change", () => callSetHearSelf($("setMicHear").checked));
 $("setHardware").addEventListener("change", () => changeSettings({ hardware: $("setHardware").checked }));
 document.querySelectorAll("#themePicks button").forEach((b) => b.addEventListener("click", () => changeSettings({ theme: b.dataset.theme })));
 
@@ -268,6 +274,7 @@ function drawSoundSettings() {
   if (!$("setSpeaker")) return;
   fillDeviceSelect($("setSpeaker"), "audiooutput", "callSpeaker", "Speakers");
   fillDeviceSelect($("setMic"), "audioinput", "callMic", "Microphone");
+  $("setMicHear").checked = callHearSelfOn();
   const kbps = callBitrate(), music = callMusicOn();
   setChildren($("setAudio"), AUDIO_RATES.map((v) => {
     const b = Object.assign(document.createElement("button"), { type: "button", textContent: v + " kbps" });
@@ -323,32 +330,20 @@ $("setSpeakerTest").addEventListener("click", () => {
   } catch { /* no sound card */ }
 });
 
-// The microphone test: a bar that moves with your voice (after noise suppression, like in a call).
-let micTest = null; // {mic, ctx, frame}
+// The microphone test: you hear yourself (after noise suppression, like friends hear you in a call), and a
+// bar moves with your voice. (micmonitor.js; it used to show only the bar, so it seemed like nothing happened.)
+let micTest = null; // {test}
 async function startMicTest() {
   stopMicTest();
-  const mine = micTest = { frame: 0 };
+  const mine = micTest = {};
   $("setMicTest").textContent = "Stop";
   $("setMicMeter").hidden = false;
   $("setMicNote").hidden = false;
-  $("setMicNote").textContent = "Say something. The bar moves when the microphone hears you.";
+  $("setMicNote").textContent = "Say something. You'll hear yourself the way friends hear you. Use headphones, or it may echo.";
   try {
-    const mic = await callOpenMic();
-    if (micTest !== mine) return callMicClose(mic.stream, mic.parts);
-    mine.mic = mic;
-    mine.ctx = new AudioContext();
-    const analyser = mine.ctx.createAnalyser();
-    analyser.fftSize = 512;
-    mine.ctx.createMediaStreamSource(mic.stream).connect(analyser);
-    const data = new Uint8Array(analyser.fftSize);
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      let peak = 0;
-      for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
-      $("setMicLevel").style.width = Math.min(100, peak / 128 * 160) + "%";
-      mine.frame = requestAnimationFrame(tick);
-    };
-    tick();
+    const test = await micMonitorStart({ hear: true, onLevel: (v) => { $("setMicLevel").style.width = v * 100 + "%"; } });
+    if (micTest !== mine) return test.stop();
+    mine.test = test;
   } catch {
     if (micTest !== mine) return;
     stopMicTest();
@@ -358,9 +353,7 @@ async function startMicTest() {
 }
 function stopMicTest() {
   if (!micTest) return;
-  cancelAnimationFrame(micTest.frame);
-  if (micTest.mic) callMicClose(micTest.mic.stream, micTest.mic.parts);
-  if (micTest.ctx) micTest.ctx.close().catch(() => {});
+  if (micTest.test) micTest.test.stop();
   micTest = null;
   $("setMicTest").textContent = "Test it";
   $("setMicMeter").hidden = true;

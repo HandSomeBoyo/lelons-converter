@@ -189,6 +189,8 @@ function callEntered(res) {
   call.phase = "in";
   call.status = "";
   call.startedAt = call.startedAt || Date.now();
+  call.heard = null; // (who's in, for the join and leave sounds: set at the first count, so only newcomers ding)
+  callSound("join");
   clearInterval(call.clock);
   call.clock = setInterval(drawCallStatus, 1000);
   const r = (res.rooms || []).find((x) => x.id === call.id);
@@ -238,6 +240,7 @@ function callHangUp(note = "Call ended.") {
 function callFinish(note) {
   if (!call) return;
   const was = call;
+  if (was.phase === "in") callSound("leave");
   if (was.id) callIgnored.add(was.id);
   callRing(null);
   clearInterval(was.clock);
@@ -509,6 +512,7 @@ async function callGetMic() {
   callMicParts = mic.parts;
   callSendStream = callMixStart(callMicStream);
   callApplyGain();
+  callHearSelfApply();
   callWatchSpeaking("", callSendStream);
   callPttRun();
   callLinesRun();
@@ -580,13 +584,16 @@ function callSetSpeaker(audio) {
 function callMute() {
   if (callDeafened) { callDeafen(); return; } // (undeafen turns your microphone back on too, like Discord)
   callMuted = !callMuted;
+  callSound(callMuted ? "mute" : "unmute");
   callApplyMic();
 }
 // Deafen: you hear nobody, and nobody hears you.
 function callDeafen() {
   callDeafened = !callDeafened;
+  callSound(callDeafened ? "deafen" : "undeafen");
   for (const p of callPeers.values()) callApplyVolume(p);
   for (const s of callBoardPlaying.values()) if (s.localGain) s.localGain.gain.value = callDeafened ? 0 : callBoardVolume();
+  callHearSelfApply();
   callApplyMic();
 }
 function callApplyMic() {
@@ -604,6 +611,11 @@ function callPeopleChanged(people) {
   const inside = new Set(people.filter((p) => p.state === "in").map((p) => lower(p.username)));
   inside.delete(me);
   if (inside.size) call.everTalked = true;
+  if (call.heard) {
+    if ([...inside].some((n) => !call.heard.has(n))) callSound("join");
+    else if ([...call.heard].some((n) => !inside.has(n))) callSound("leave");
+  }
+  call.heard = new Set(inside);
   for (const name of [...callPeers.keys()]) if (!inside.has(name)) callDropPeer(name);
   for (const name of inside) {
     const p = callPeers.get(name);
@@ -798,6 +810,7 @@ function callChannel(p, dc) {
       // They left: off the call card and the voice channel list right away (not at the next check).
       const who = (call && call.people || []).find((x) => lower(x.username) === lower(p.name));
       if (who) who.state = "left";
+      if (call && call.heard && call.heard.delete(lower(p.name))) callSound("leave");
       return callDropPeer(lower(p.name));
     }
     if (msg.hello >= 2 && lower(callMe()) < lower(p.name)) callAddCameraLane(p);
@@ -809,6 +822,7 @@ function callChannel(p, dc) {
     if ("sharing" in msg) {
       const started = !p.sharing && msg.sharing;
       p.sharing = !!msg.sharing;
+      if (started) callSound("shareThem");
       if (started && (!callWatching || !callPeers.has(callWatching))) { callWatching = lower(p.name); callStageSmall = false; }
       if (!p.sharing && callWatching === lower(p.name)) callWatching = "";
     }
@@ -873,16 +887,13 @@ function callQuality() {
 
 async function callShare() {
   if (!callIsLive() || call.phase !== "in") return;
+  callPop(null);
+  // (3.0.1) Our own picker (callshare.js) instead of the engine's "Choose what to share" window.
+  const pick = await callSharePick();
+  if (!pick || !callIsLive() || call.phase !== "in") return;
   const q = callQuality();
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { height: { ideal: q.size, max: q.size }, frameRate: { ideal: q.fps, max: q.fps } }, audio: callShareAudioOptions(),
-      systemAudio: "include", // (Windows asks: "Also share system audio")
-    });
-  } catch (e) {
-    return; // (picked nothing)
-  }
+  const stream = await callShareStart(pick);
+  if (!stream) return; // (picked nothing, or it didn't work)
   if (!callIsLive() || call.phase !== "in") return stream.getTracks().forEach((t) => t.stop());
   const track = stream.getVideoTracks()[0];
   track.contentHint = q.fps >= 60 ? "motion" : "detail";
@@ -895,7 +906,9 @@ async function callShare() {
     callShareBitrate(p);
     if (!old) callSend(p, { sharing: true });
   }
+  callShareSwapped(stream);
   if (old) old.getTracks().forEach((t) => t.stop());
+  else callSound("shareOn");
   callPop(null);
   drawCall();
 }
@@ -919,6 +932,7 @@ function callSetQuality(change) {
     track.applyConstraints({ height: { ideal: q.size, max: q.size }, frameRate: { ideal: q.fps, max: q.fps } }).catch(() => {});
     track.contentHint = q.fps >= 60 ? "motion" : "detail";
     for (const p of callPeers.values()) callShareBitrate(p);
+    if (callShareRelayPc) api("/api/share-relay", { what: "quality", size: q.size, fps: q.fps }).catch(() => {});
   }
   drawCallPop();
 }
@@ -927,6 +941,9 @@ function callStopShare() {
   if (!callScreen) return;
   callScreen.getTracks().forEach((t) => t.stop());
   callScreen = null;
+  callSound("shareOff");
+  api("/api/share-bar", { on: false }).catch(() => {});
+  callShareOtherStop();
   callMixScreen(null);
   for (const p of callPeers.values()) {
     if (p.videoTx) p.videoTx.sender.replaceTrack(null).catch(() => {});
@@ -1171,7 +1188,7 @@ function drawCall() {
       buttons.push(button(callCam ? "on" : "", callCam ? CALL_ICONS.camera : CALL_ICONS.cameraOff,
         callCam ? "Turn your camera off" : "Turn your camera on", callCamera));
       buttons.push(button((callScreen ? "on" : "") + (callPopOpen === "share" ? " open" : ""), CALL_ICONS.screen,
-        callScreen ? "Your screen: quality, change it, or stop sharing" : "Share your screen", () => callPop("share")));
+        callScreen ? "Your screen: quality, change it, or stop sharing" : "Share your screen", () => (callScreen ? callPop("share") : callShare())));
       buttons.push(button(callPopOpen === "board" ? "open" : "", CALL_ICONS.board, "Sound board: play Library sounds in the call", () => callPop("board")));
       buttons.push(button(callRec ? "rec" : "", CALL_ICONS.rec, callRec ? "Stop recording and save it" : "Record the call (saved as an MP3)", callRecToggle, callRec ? callRecClock() : ""));
       buttons.push(button(callPopOpen === "settings" ? "open" : "", CALL_ICONS.gear, "Microphone, sound quality, push-to-talk, speakers and camera", () => callPop("settings")));
@@ -1381,6 +1398,8 @@ async function drawCallPop() {
       return sel;
     };
     els.push(title("Microphone"), select("audioinput", "callMic", "Microphone", callUseMic));
+    els.push(title("Hear yourself"));
+    els.push(chips(["off", "on"], callHearSelfOn() ? "on" : "off", (v) => (v === "on" ? "On" : "Off"), (v) => callSetHearSelf(v === "on")));
     const kbps = callBitrate(), music = callMusicOn();
     els.push(title("Sound quality (kbps)"));
     els.push(chips(AUDIO_RATES, kbps, String, callSetBitrate));

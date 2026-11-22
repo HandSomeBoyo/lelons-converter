@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>VaultHub screen helper</title>
+</head>
+<body style="margin:0;background:#141414;color:#eee;font:14px system-ui">
+<!-- (3.0.1) Nobody sees this page: in a call, it takes a screen other than your main one and hands it to
+     the app's window (the app's own engine can only pick the main screen by itself). See sharepick.py. -->
+<p id="what">Waiting.</p>
+<script src="share-host.js"></script>
+</body>
+</html>
