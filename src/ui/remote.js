@@ -265,13 +265,16 @@ async function rdConnect(id, screen = 0, mode = loadPref("rdMode") || "auto", sw
     bytes: 0, since: Date.now(), rtt: 0, fps: 0, height: 0, w: 0, h: 0, volume: loadPref("rdVolume") ?? 80, muted: false, tries: 0, switching };
   rdSession();
   rdPhase(switching ? `Switching to screen ${screen + 1}…` : "Connecting to " + dev.name + "…");
-  pc.ontrack = (ev) => { c.stream.addTrack(ev.track); const v = $("rdVideo"); if (v) { v.srcObject = c.stream; v.play().catch(() => {}); } try { ev.receiver.jitterBufferTarget = 0; } catch (e) { /* older */ } };
+  pc.ontrack = (ev) => { c.stream.addTrack(ev.track); const v = $("rdVideo"); if (v) { v.srcObject = c.stream; v.play().catch(() => {}); } try { ev.receiver.jitterBufferTarget = 0; ev.receiver.playoutDelayHint = 0; } catch (e) { /* older */ } };
   pc.onconnectionstatechange = () => {
     if (rd.conn !== c) return;
     if (pc.connectionState === "failed") rdEnd("The connection dropped. Check the internet on both PCs and try again.");
   };
   ctl.onmessage = (m) => rdCtl(c, m.data);
   const offer = await pc.createOffer();
+  // (3.1) Start fast: WebRTC normally starts at a low speed and creeps up, so the first seconds were
+  // blurry and slow. On a home network it can start high (it still backs off by itself if it's too much).
+  offer.sdp = rdStartFast(offer.sdp, mode === "save" ? [1500, 300] : [8000, 1000]);
   await pc.setLocalDescription(offer);
   await rdGathered(pc);
   if (rd.conn !== c) return;
@@ -330,6 +333,7 @@ function rdCtl(c, data) {
   let msg;
   try { msg = JSON.parse(data); } catch (e) { return; }
   if (msg.pong) { c.rttCtl = Date.now() - msg.pong; return; }
+  if (msg.enc && typeof msg.enc === "object") { c.enc = msg.enc; return; }
   if (msg.waiting) return;
   if (msg.needPin || msg.pinBad) {
     if (c.pairing) { c.pairing = false; rdPost("/api/remote-remember-host", { device: c.id, key: c.hostKey }); }
@@ -365,6 +369,25 @@ function rdCtl(c, data) {
   if (msg.bye) {
     rdEnd({ stopped: "They stopped it on " + c.dev.name + ".", dropped: "The connection dropped.", declined: `${c.dev.name} said no.`, left: "" }[msg.bye] ?? "");
   }
+}
+
+// (3.1) Adds a start speed and a lowest speed to every video format in the offer (Chrome reads them).
+function rdStartFast(sdp, [start, min]) {
+  const extra = `x-google-start-bitrate=${start};x-google-min-bitrate=${min}`;
+  const lines = sdp.split("\r\n");
+  const video = new Set();
+  for (const l of lines) { const m = /^a=rtpmap:(\d+) (H264|VP8|VP9|AV1)\/90000/i.exec(l); if (m) video.add(m[1]); }
+  const hasFmtp = new Set();
+  const out = lines.map((l) => {
+    const m = /^a=fmtp:(\d+) /.exec(l);
+    if (!m || !video.has(m[1])) return l;
+    hasFmtp.add(m[1]);
+    return `${l};${extra}`;
+  });
+  return out.flatMap((l) => { // (VP8 usually has no fmtp line: give it one)
+    const m = /^a=rtpmap:(\d+) /.exec(l);
+    return m && video.has(m[1]) && !hasFmtp.has(m[1]) ? [l, `a=fmtp:${m[1]} ${extra}`] : [l];
+  }).join("\r\n");
 }
 
 // ---- the session view
@@ -407,13 +430,29 @@ function rdHint(show) {
   if (show) rdHint.t = setTimeout(() => { h.hidden = true; }, 6000);
 }
 
+// (3.1) The top bar shows the whole picture delay, not just the network: what you feel is the network
+// plus squeezing the picture there, waiting in the buffer here and unpacking it.
+function rdDelay(c) {
+  if (!c.rtt) return 0;
+  const frame = c.fps ? 1000 / c.fps / 2 : 8;
+  return Math.round(c.rtt / 2 + (c.enc ? c.enc.ms : 0) + (c.buf || 0) + (c.dec || 0) + frame);
+}
+function rdLiveHtml(c) {
+  const d = rdDelay(c);
+  const bars = d ? (d < 50 ? 4 : d < 90 ? 3 : d < 150 ? 2 : 1) : 0;
+  return `<span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${d ? d + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}`;
+}
+function rdDelayTitle(c) {
+  const r = (v) => Math.round(v || 0) + " ms";
+  return `Network ${r(c.rtt / 2)} · squeezing there ${r(c.enc && c.enc.ms)} · buffer here ${r(c.buf)} · unpacking ${r(c.dec)}`;
+}
+
 function rdToolbar() {
   const t = $("rdTool"), c = rd.conn;
   if (!t || !c) return;
-  const bars = c.rtt ? (c.rtt < 40 ? 4 : c.rtt < 80 ? 3 : c.rtt < 150 ? 2 : 1) : 0;
   t.innerHTML = `<button type="button" class="rd-tb" id="rdBack" title="Disconnect and go back">${RD_ICONS.back}</button>
     <div class="who">${c.dev.kind === "laptop" ? RD_ICONS.laptop : RD_ICONS.pc}<b>${rdEsc(c.dev.name)}</b></div>
-    <div class="live" id="rdLive"><span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${c.rtt ? Math.round(c.rtt) + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}</div>
+    <div class="live" id="rdLive">${rdLiveHtml(c)}</div>
     <span class="sp"></span>
     <div class="rd-vol-wrap"><button type="button" class="rd-tb${c.muted ? "" : " on"}" id="rdMute" title="Sound">${c.muted || !c.volume ? RD_ICONS.mute : RD_ICONS.sound}</button>
       <div class="rd-vol-pop" id="rdVolPop" hidden><input type="range" id="rdVol" min="0" max="100" value="${c.volume}" title="Volume"><button type="button" class="rd-link" id="rdMuteBtn">${c.muted ? "Turn sound on" : "Mute"}</button></div></div>
@@ -475,6 +514,7 @@ function rdMenu() {
       ${opt("sharp", "Sharp", "Full detail for small text. Needs fast internet.")}
       ${opt("save", "Save data", "720p, 30 fps. For a phone hotspot: about 1 GB an hour.")}
       <p class="rd-used">Used ${gb < 0.1 ? Math.round(c.bytes / 1e6) + " MB" : gb.toFixed(2) + " GB"} so far</p>
+      <p class="rd-used">${rdEsc(rdDelayTitle(c))}${c.enc ? `<br>Picture made by ${c.enc.gpu ? "the graphics card" : "the processor (slower)"}${c.enc.why && c.enc.why !== "none" ? `, held back by ${c.enc.why === "cpu" ? "the processor" : "the internet"}` : ""}` : ""}</p>
       <p class="rd-used">${c.sound === "none" ? `No sound from ${rdEsc(c.dev.name)}${c.soundWhy ? ` (${rdEsc(c.soundWhy)})` : ""}` : `Sound: on (${c.sound === "screen" ? "from the screen" : "from its speakers"})`}</p></div>
     ${c.screens > 1 ? `<div><h4>Screen</h4><div class="rd-mons">${Array.from({ length: c.screens }, (_, i) => `<button type="button" class="${i === c.screen ? "on" : ""}" data-screen="${i}">${i + 1}${i === 0 ? " · Main" : ""}</button>`).join("")}</div></div>` : ""}
     <div><h4>Keyboard</h4>
@@ -565,15 +605,26 @@ setInterval(async () => {
     stats.forEach((s) => { if (s.type === "transport" && s.selectedCandidatePairId) pair = s.selectedCandidatePairId; });
     let rtt = 0;
     stats.forEach((s) => {
-      if (s.type === "inbound-rtp") { bytes += s.bytesReceived || 0; if (s.kind === "video") { c.fps = s.framesPerSecond || 0; c.height = s.frameHeight || 0; } }
+      if (s.type === "inbound-rtp") {
+        bytes += s.bytesReceived || 0;
+        if (s.kind === "video") {
+          c.fps = s.framesPerSecond || 0; c.height = s.frameHeight || 0;
+          // (3.1) How long pictures wait here before they're shown (buffer + unpacking), since last time.
+          const jbN = (s.jitterBufferEmittedCount || 0) - (c.jbN || 0), jbT = (s.jitterBufferDelay || 0) - (c.jbT || 0);
+          const dN = (s.framesDecoded || 0) - (c.dN || 0), dT = (s.totalDecodeTime || 0) - (c.dT || 0);
+          c.jbN = s.jitterBufferEmittedCount || 0; c.jbT = s.jitterBufferDelay || 0; c.dN = s.framesDecoded || 0; c.dT = s.totalDecodeTime || 0;
+          c.buf = jbN > 0 ? (jbT / jbN) * 1000 : 0; c.dec = dN > 0 ? (dT / dN) * 1000 : 0;
+          c.decName = s.decoderImplementation || "";
+        }
+      }
       if (s.type === "candidate-pair" && (s.id === pair || (!pair && s.nominated)) && s.currentRoundTripTime != null) rtt = s.currentRoundTripTime * 1000;
     });
     c.rtt = rtt || c.rttCtl || 0;
     c.bytes = bytes;
     const live = $("rdLive");
     if (live && c.phase === "on") {
-      const bars = c.rtt ? (c.rtt < 40 ? 4 : c.rtt < 80 ? 3 : c.rtt < 150 ? 2 : 1) : 0;
-      live.innerHTML = `<span class="rd-bars b${bars}"><i></i><i></i><i></i><i></i></span><b>${c.rtt ? Math.round(c.rtt) + " ms" : "…"}</b>${c.fps ? ` · ${Math.round(c.fps)} fps` : ""}${c.height ? ` · ${c.height}p` : ""}`;
+      live.innerHTML = rdLiveHtml(c);
+      live.title = rdDelayTitle(c);
     }
   } catch (e) { /* closed */ }
 }, 2000);

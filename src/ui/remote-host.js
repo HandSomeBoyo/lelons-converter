@@ -248,6 +248,20 @@ async function rhWatch(sess) {
   if (rh.sess !== sess) return clearInterval(sess.timer);
   if (Date.now() - sess.last > 15000) return rhEnd("dropped"); // nothing from the other PC for a while
   if (!sess.started) return;
+  // (3.1) About every 2 seconds: how long this PC takes to squeeze each picture, and with what (the
+  // graphics card or the processor). The other PC adds it to the delay it shows.
+  if ((sess.ticks = (sess.ticks || 0) + 1) % 3 === 0) {
+    try {
+      const st = await sess.pc.getStats();
+      st.forEach((s) => {
+        if (s.type !== "outbound-rtp" || s.kind !== "video") return;
+        const n = s.framesEncoded - (sess.encN || 0), t = s.totalEncodeTime - (sess.encT || 0);
+        sess.encN = s.framesEncoded; sess.encT = s.totalEncodeTime;
+        rhSend(sess, { enc: { ms: n > 0 ? Math.round((t / n) * 1000) : 0, fps: Math.round(s.framesPerSecond || 0),
+          gpu: s.powerEfficientEncoder === true, name: String(s.encoderImplementation || "").slice(0, 60), why: s.qualityLimitationReason || "" } });
+      });
+    } catch (e) { /* closed */ }
+  }
   const st = await rdPost("/api/remote-host-state");
   if (st.ok && st.stop) rhEnd("stopped");
 }
