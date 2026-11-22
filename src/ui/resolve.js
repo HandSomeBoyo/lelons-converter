@@ -27,6 +27,7 @@ api("/api/rt-options", {}).then((res) => {
   rtOptions = { ...rtOptions, ...res.options, track: "auto" };
   rtNvidia = !!res.nvidia;
   $("rtWords").value = rtOptions.words || "";
+  $("rtLang").value = rtOptions.language || "";
   drawResolve();
 }).catch(() => {});
 
@@ -44,7 +45,7 @@ const RT_NOTES = {
 };
 const rtUsesGpu = () => rtNvidia && rtOptions.device !== "cpu";
 const rtItem = () => rtServer.find((f) => f.id === rtId) || null;
-const rtBusy = (f) => !!f && (f.status === "active" || f.status === "queued" || f.waitingFor);
+const rtBusy = (f) => !!f && !!(f.status === "active" || f.status === "queued" || f.waitingFor);
 
 // ---------------------------------------------------------------- adding the video
 
@@ -313,6 +314,17 @@ $("rtOptions").querySelectorAll(".chips[data-key]").forEach((box) => box.querySe
   drawResolve();
 })));
 $("rtWords").addEventListener("input", () => { rtOptions.words = $("rtWords").value; });
+$("rtLang").addEventListener("change", () => { rtOptions.language = $("rtLang").value; rtError = ""; drawResolve(); });
+
+// (3.0) Options you rarely need (which sound track, names, graphics card) are folded away. They open
+// by themselves when one of them isn't on its usual choice, so nothing set is ever hidden.
+let rtMoreTouched = false;
+function rtMoreOpen(open) {
+  $("rtMoreBox").hidden = !open;
+  $("rtMore").setAttribute("aria-expanded", String(open));
+  $("rtMore").firstElementChild.textContent = open ? "Fewer options" : "More options";
+}
+$("rtMore").addEventListener("click", () => { rtMoreTouched = true; rtMoreOpen($("rtMoreBox").hidden); });
 
 function rtFits(item, tool) {
   return tool === "fix" ? item.video : item.audio;
@@ -364,7 +376,6 @@ function drawResolve() {
   const has = !!(item || rtLocal);
   $("rtDrop").hidden = has;
   $("rtWork").hidden = !has;
-  $("rtInResolve").hidden = has;
   const waiting = rtServer.filter((f) => f.tool === "subtitles" && f.status === "done" && f.hasCues && !f.sent).length;
   $("resolveTabBadge").hidden = !waiting;
   $("resolveTabBadge").textContent = waiting || "";
@@ -423,8 +434,13 @@ let rtDrawnView = "";
 function drawSetup(item) {
   $("rtSetupTitle").textContent = RT_NAMES[rtTool] || "";
   const rows = { rtFixRow: "fix", rtStyleRow: "subtitles", rtLangRow: "subtitles", rtModelRow: "subtitles", rtWordsRow: "subtitles",
-                 rtDeviceRow: rtNvidia ? "subtitles" : "none", rtLevelRow: "silence", rtPauseRow: "silence", rtCutAsRow: "silence" };
+                 rtDeviceRow: rtNvidia ? "subtitles" : "none", rtLevelRow: "silence", rtPauseRow: "silence", rtCutAsRow: "silence",
+                 rtMore: "subtitles" };
   for (const [id, tool] of Object.entries(rows)) $(id).hidden = rtTool !== tool;
+  if (rtTool !== "subtitles") $("rtMoreBox").hidden = true;
+  else if (!rtMoreTouched) rtMoreOpen(!!(rtOptions.words || "").trim() || rtOptions.track !== "auto" || (rtNvidia && rtOptions.device === "cpu"));
+  else rtMoreOpen($("rtMore").getAttribute("aria-expanded") === "true");
+  if ($("rtLang").value !== (rtOptions.language || "")) $("rtLang").value = rtOptions.language || "";
   // Which sound track to listen to, when there are several (OBS often puts your mic on its own).
   const tracks = item ? item.audioTracks || 0 : 0;
   $("rtTrackRow").hidden = rtTool !== "subtitles" || tracks < 2;
@@ -447,6 +463,9 @@ function drawSetup(item) {
     .forEach((b) => b.classList.toggle("active", b.dataset.value === String(rtOptions[box.dataset.key] ?? ""))));
 
   const busy = rtBusy(item);
+  // (3.0) While it works, the choices can't be changed (changing them did nothing until the next run).
+  $("rtOptions").classList.toggle("locked", busy);
+  $("rtOptions").inert = busy;
   const failed = item && item.status === "error" && !item.waitingFor && item.tool === rtTool && item.message !== "Stopped.";
   $("rtNote").classList.toggle("error", !!(rtError || failed));
   $("rtNote").textContent = rtError || (failed ? item.message : RT_NOTES[rtTool] ? RT_NOTES[rtTool](rtOptions) : "");
@@ -493,8 +512,8 @@ function drawDone(item) {
   $("rtDoneTitle").textContent = item.status === "done" ? (item.tool === "fix" ? "Ready for Resolve" : "The quiet parts are out") : "";
   $("rtDoneText").innerHTML = "";
   const text = document.createElement("span");
-  if (item.tool === "fix") text.innerHTML = "Drag the file below straight into Resolve's <b>Media Pool</b>.";
-  else if (timeline) text.innerHTML = "In Resolve: <b>File › Import › Timeline</b>, and pick the file below. Every cut can still be changed.";
+  if (item.tool === "fix") text.innerHTML = "Drag the file below into Resolve's <b>Media Pool</b>.";
+  else if (timeline) text.innerHTML = "In Resolve, use <b>File › Import › Timeline</b> and pick the file below. Every cut can still be changed.";
   else text.innerHTML = "Drag the new video below into Resolve.";
   const how = document.createElement("div");
   how.className = "rt-small";
@@ -530,14 +549,18 @@ async function loadProjects() {
   const res = await api("/api/project-list", {}).catch(() => null);
   if (!res || !res.ok) return;
   const on = !!res.project;
+  rtProjectForm(false);
   $("rtProjectOn").hidden = !on;
   $("rtProjectNone").hidden = on;
+  $("rtProjectNoneButtons").hidden = on;
   $("rtProjectSome").hidden = !on;
+  $("rtProjectSomeButtons").hidden = !on;
   $("rtProject").classList.toggle("on", on);
+  $("rtFolders").innerHTML = "";
   if (on) {
     $("rtProjectTitle").textContent = res.project.split(/[\\/]/).pop();
     $("rtProjectPath").textContent = res.project;
-    $("rtFolders").innerHTML = "";
+    $("rtProjectPath").title = res.project;
     for (const name of res.folders) {
       const chip = document.createElement("span");
       chip.textContent = name;
@@ -568,6 +591,14 @@ function projectError(text) {
   $("rtProjectError").textContent = text || "";
 }
 
+// (3.0) The name box only shows after "New project folder", so the page stays calm.
+function rtProjectForm(open) {
+  $("rtProjectForm").hidden = !open;
+  $("rtProject").classList.toggle("making", open);
+  if (!open) projectError("");
+  else $("rtProjectName").focus();
+}
+
 $("rtProjectMake").addEventListener("click", async () => {
   projectError("");
   const name = $("rtProjectName").value.trim();
@@ -576,16 +607,19 @@ $("rtProjectMake").addEventListener("click", async () => {
   if (res.cancelled) return;
   if (!res.ok) return projectError(res.error);
   $("rtProjectName").value = "";
+  rtProjectForm(false);
+  loadProjects();
   refresh();
 });
-$("rtProjectName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rtProjectMake").click(); });
+$("rtProjectName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("rtProjectMake").click();
+  if (e.key === "Escape") rtProjectForm(false);
+});
+$("rtProjectNew").addEventListener("click", () => rtProjectForm($("rtProjectForm").hidden));
+$("rtProjectAnother").addEventListener("click", () => rtProjectForm($("rtProjectForm").hidden));
+$("rtProjectCancel").addEventListener("click", () => rtProjectForm(false));
 $("rtProjectOpen").addEventListener("click", () => api("/api/project-open", {}));
 $("rtProjectOff").addEventListener("click", () => api("/api/project-use", { path: "" }).then(refresh));
-$("rtProjectAnother").addEventListener("click", () => {
-  $("rtProjectNone").hidden = false;
-  $("rtProjectSome").hidden = true;
-  $("rtProjectName").focus();
-});
 loadProjects();
 
 // ---------------------------------------------------------------- checking the subtitles

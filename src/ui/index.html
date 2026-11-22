@@ -799,14 +799,13 @@
   <section class="tab-page" id="remoteTab" hidden></section>
 
   <section class="tab-page" id="resolveTab" hidden>
-    <p class="rt-beta"><i class="beta-tag">Beta</i> Early version, still being worked on. Tell us what to fix.</p>
-    <h1 class="headline">Edit faster<br><em>in DaVinci Resolve.</em></h1>
+    <h1 class="headline">Resolve<br><em>Subtitles, silence cuts and smooth videos for DaVinci Resolve.</em></h1>
 
     <label class="dropzone rt-start" id="rtDrop">
       <input type="file" id="rtFiles" accept="video/*,audio/*,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4a,.flac,.wav" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z"/></svg>
       <span class="convert rt-add-button">Add a video</span>
-      <span class="drop-hint">or drop it here. MP4, MKV, MOV, recordings from OBS, phones and more</span>
+      <span class="drop-hint">or drop it here. Recordings from OBS, phones and more.</span>
     </label>
 
     <div class="rt-work" id="rtWork" hidden>
@@ -851,53 +850,38 @@
         <div class="rt-panel" id="rtSetup" hidden>
           <button type="button" class="link rt-back" id="rtBack">‹ Back</button>
           <h3 class="rt-panel-title" id="rtSetupTitle"></h3>
-          <div class="image-options" id="rtOptions">
+          <div class="rt-options" id="rtOptions">
             <div class="opt-row" id="rtLangRow">
               <span class="opt-label">Language</span>
-              <div class="chips" data-key="language">
-                <button data-value="">Find it by itself</button>
-                <button data-value="en">English</button>
-                <button data-value="no">Norwegian</button>
-                <button data-value="sv">Swedish</button>
-                <button data-value="da">Danish</button>
-                <button data-value="de">German</button>
-                <button data-value="es">Spanish</button>
-                <button data-value="fr">French</button>
-              </div>
-            </div>
-            <div class="opt-row" id="rtTrackRow" hidden>
-              <span class="opt-label">Listen to</span>
-              <div class="chips" id="rtTrackChips"></div>
+              <label class="quality rt-select"><select id="rtLang">
+                <option value="">Find it by itself</option>
+                <option value="en">English</option>
+                <option value="no">Norwegian</option>
+                <option value="sv">Swedish</option>
+                <option value="da">Danish</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+              </select></label>
             </div>
             <div class="opt-row" id="rtModelRow">
               <span class="opt-label">Listening</span>
               <div class="chips" data-key="model">
-                <button data-value="best">Best (most accurate)</button>
+                <button data-value="best">Best</button>
                 <button data-value="quick">Quick</button>
               </div>
             </div>
             <div class="opt-row" id="rtStyleRow">
               <span class="opt-label">Lines</span>
               <div class="chips" data-key="style">
-                <button data-value="normal">Normal lines</button>
-                <button data-value="short">Short (Shorts and TikTok)</button>
-              </div>
-            </div>
-            <div class="opt-row" id="rtWordsRow">
-              <span class="opt-label">Names</span>
-              <label class="input rt-words"><input id="rtWords" placeholder="Names or words it should know, like Minecraft, VaultHub" autocomplete="off" spellcheck="false"></label>
-            </div>
-            <div class="opt-row" id="rtDeviceRow" hidden>
-              <span class="opt-label">Uses</span>
-              <div class="chips" data-key="device">
-                <button data-value="gpu">Graphics card (fastest)</button>
-                <button data-value="cpu">Processor</button>
+                <button data-value="normal">Normal</button>
+                <button data-value="short">Short, for Shorts and TikTok</button>
               </div>
             </div>
             <div class="opt-row" id="rtFixRow">
               <span class="opt-label">Size</span>
               <div class="chips" data-key="fix">
-                <button data-value="">Normal size</button>
+                <button data-value="">Normal</button>
                 <button data-value="smooth">Smoothest editing (big files)</button>
               </div>
             </div>
@@ -906,22 +890,41 @@
               <div class="chips" data-key="level">
                 <button data-value="quiet">Quiet room</button>
                 <button data-value="normal">Normal</button>
-                <button data-value="noisy">Noisy (game, music)</button>
+                <button data-value="noisy">Noisy</button>
               </div>
             </div>
             <div class="opt-row" id="rtPauseRow">
-              <span class="opt-label">Cut pauses</span>
+              <span class="opt-label">Cut pauses longer than</span>
               <div class="chips" data-key="pause">
-                <button data-value="0.3">Over 0.3 s (punchy)</button>
-                <button data-value="0.5">Over 0.5 s</button>
-                <button data-value="1">Over 1 s (relaxed)</button>
+                <button data-value="0.3">0.3 s</button>
+                <button data-value="0.5">0.5 s</button>
+                <button data-value="1">1 s</button>
               </div>
             </div>
             <div class="opt-row" id="rtCutAsRow">
               <span class="opt-label">Make</span>
               <div class="chips" data-key="cutAs">
-                <button data-value="timeline">A Resolve timeline (change any cut)</button>
+                <button data-value="timeline">A Resolve timeline</button>
                 <button data-value="video">A new video</button>
+              </div>
+            </div>
+            <button type="button" class="set-more rt-more" id="rtMore" aria-expanded="false"><span>More options</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+            <div class="rt-more-box" id="rtMoreBox" hidden>
+              <div class="opt-row" id="rtTrackRow" hidden>
+                <span class="opt-label">Listen to</span>
+                <div class="chips" id="rtTrackChips"></div>
+              </div>
+              <div class="opt-row" id="rtWordsRow">
+                <span class="opt-label">Names it should know</span>
+                <label class="input rt-words"><input id="rtWords" placeholder="Like Minecraft, VaultHub" autocomplete="off" spellcheck="false"></label>
+              </div>
+              <div class="opt-row" id="rtDeviceRow" hidden>
+                <span class="opt-label">Listen with</span>
+                <div class="chips" data-key="device">
+                  <button data-value="gpu">Graphics card (fastest)</button>
+                  <button data-value="cpu">Processor</button>
+                </div>
               </div>
             </div>
           </div>
@@ -958,7 +961,7 @@
 
         <!-- 3b: done -->
         <div class="rt-panel" id="rtDone" hidden>
-          <button type="button" class="link rt-back" id="rtDoneBack">‹ Do something else</button>
+          <button type="button" class="link rt-back" id="rtDoneBack">‹ Back</button>
           <div class="rt-done-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
           <h3 class="rt-panel-title" id="rtDoneTitle">Done!</h3>
           <p class="rt-text" id="rtDoneText"></p>
@@ -970,45 +973,34 @@
       </div>
     </div>
 
-    <div class="rt-cards">
-      <div class="home-card rt-card" id="rtProject">
-        <div class="home-card-head"><h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
-          Project folder</h3>
-          <span class="rt-on" id="rtProjectOn" hidden>On</span>
+    <div class="rt-project" id="rtProject">
+      <div class="rt-project-row">
+        <span class="rt-project-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg></span>
+        <div class="rt-project-text" id="rtProjectNone">
+          <b>Project folder</b>
+          <span>One tidy folder for each video. While it's on, what you make in VaultHub is saved into it.</span>
         </div>
-        <div id="rtProjectNone">
-          <p class="rt-text">One tidy folder for each video. VaultHub makes the folders, and while it's on, everything you make in VaultHub is saved into the right one.</p>
-          <div class="rt-project-new">
-            <label class="input"><input id="rtProjectName" placeholder="Name of the video, like Minecraft hardcore ep 3" autocomplete="off" spellcheck="false"></label>
-            <button type="button" class="convert" id="rtProjectMake"><span>Make project folder</span></button>
-          </div>
+        <div class="rt-project-text" id="rtProjectSome" hidden>
+          <b><span id="rtProjectTitle"></span> <span class="rt-on" id="rtProjectOn" hidden>On</span></b>
+          <span class="rt-project-path" id="rtProjectPath"></span>
         </div>
-        <div id="rtProjectSome" hidden>
-          <div class="rt-project-name" id="rtProjectTitle"></div>
-          <div class="rt-project-path" id="rtProjectPath"></div>
-          <div class="rt-folders" id="rtFolders"></div>
-          <div class="rt-project-buttons">
-            <button type="button" class="outline-button" id="rtProjectOpen">Open folder</button>
-            <button type="button" class="ghost-button" id="rtProjectOff">Turn off</button>
-            <button type="button" class="link" id="rtProjectAnother">New project</button>
-          </div>
+        <div class="rt-project-buttons" id="rtProjectNoneButtons">
+          <button type="button" class="ghost-button small-button" id="rtProjectNew">New project folder</button>
         </div>
-        <div class="rt-recent" id="rtRecent"></div>
-        <p class="error-text" id="rtProjectError" hidden></p>
+        <div class="rt-project-buttons" id="rtProjectSomeButtons" hidden>
+          <button type="button" class="ghost-button small-button" id="rtProjectOpen">Open</button>
+          <button type="button" class="ghost-button small-button" id="rtProjectOff">Turn off</button>
+          <button type="button" class="ghost-button small-button" id="rtProjectAnother">New</button>
+        </div>
       </div>
-
-      <div class="home-card rt-card" id="rtInResolve">
-        <div class="home-card-head"><h3>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 6.8 6.5v6L12 15.5l5.2-3v-6z"/><path d="M6.8 12.5 3.5 14.4v3.8L6.8 20l3.3-1.9"/><path d="M17.2 12.5l3.3 1.9v3.8L17.2 20l-3.3-1.9"/></svg>
-          Into Resolve</h3>
-        </div>
-        <ul class="rt-steps">
-          <li><b>Subtitles</b> and <b>Cut the silence</b>: in Resolve, use <b>File › Import › Timeline</b> and pick the file VaultHub made. Subtitles come in as Text+ you can style and animate.</li>
-          <li><b>Fix for Resolve</b> videos: drag them straight into the Media Pool.</li>
-          <li><b>Project folder</b>: drag the whole folder into the Media Pool, and Resolve makes a bin for each folder.</li>
-        </ul>
+      <div class="rt-project-new" id="rtProjectForm" hidden>
+        <label class="input"><input id="rtProjectName" placeholder="Name of the video, like Minecraft hardcore ep 3" autocomplete="off" spellcheck="false"></label>
+        <button type="button" class="convert small-button" id="rtProjectMake"><span>Make it</span></button>
+        <button type="button" class="link rt-project-cancel" id="rtProjectCancel">Cancel</button>
       </div>
+      <div class="rt-folders" id="rtFolders"></div>
+      <div class="rt-recent" id="rtRecent"></div>
+      <p class="error-text" id="rtProjectError" hidden></p>
     </div>
   </section>
 

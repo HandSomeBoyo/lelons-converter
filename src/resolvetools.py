@@ -398,16 +398,16 @@ class Tools(files.Files):
                 continue
             tool = item["job"]["format"]
             if tool == "silence":
-                before, after = item["seconds"] or 0, item.get("keptSeconds") or 0
-                message = f"Cut {files._clock(max(0, before - after))} of quiet, {files._clock(after)} left"
-                if path.endswith(".fcpxml"):
-                    message += " · In Resolve: File › Import › Timeline"
-                elif path:
-                    message = f"Saved as {os.path.basename(path)} · " + message
+                # (3.0) the file's name shows under this, so the line only says what was cut. Whole seconds
+                # on both sides so they add up (12 s showed "Cut 0:03, 0:08 left"), and only the part used.
+                trim = item["job"].get("trim")
+                before = round((trim[1] - trim[0]) if trim else item["seconds"] or 0)
+                after = min(before, round(item.get("keptSeconds") or 0))
+                message = f"Cut {files._clock(before - after)} of quiet, {files._clock(after)} left"
             elif tool == "subtitles":
                 message = item["message"]
             else:
-                message = f"Saved as {os.path.basename(path)} · {os.path.getsize(path) / 1e6:.1f} MB · Drag it into Resolve"
+                message = f"{os.path.getsize(path) / 1e6:.1f} MB"
             self._update(item, status="done", progress=100, out=path, message=message)
             history.count({"fix": "mov", "subtitles": "srt", "silence": "mov"}[tool], item.get("seconds") or 0)
 

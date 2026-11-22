@@ -9593,3 +9593,76 @@ html.side-small #callBox .call-btn:not(:nth-child(-n+2)):not(.red):not(.green) {
 html.side-small #callBox .call-btn.red::after { content: none; }
 html.side-small #callBox .call-btn.red { flex-basis: auto; height: 34px; }
 html.side-small #callBox .call-sharing { display: none; }
+
+/* ================================================================ 3.0: a calmer Resolve page (like Settings and Account):
+   one flat side panel, labels in normal letters above their choices, rarely used options folded away,
+   a slim Project folder row instead of two big cards, and soft movement between the steps. */
+#resolveTab .rt-start { padding: 40px 20px; border-radius: 16px; }
+.rt-side { background: var(--panel); border-radius: 16px; padding: 18px; box-shadow: inset 0 0 0 1px var(--gl-line); }
+:root[data-theme="light"] .rt-side { background: #fff; box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08), 0 1px 2px rgba(20, 25, 40, .04); }
+.rt-panel:not([hidden]) { animation: rt-in .32s var(--ease-out) both; }
+@keyframes rt-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .rt-panel:not([hidden]) { animation: none; } }
+.rt-panel-title { font-size: 17px; margin-bottom: 14px; }
+.rt-back { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.rt-back:hover { color: var(--text); text-decoration: none; }
+/* the three tools */
+.rt-tool { border-radius: 12px; transition: background-color .2s var(--ease), border-color .2s var(--ease), transform .15s var(--ease); }
+.rt-tool:hover:not(:disabled) { transform: translateY(-1px); }
+/* the choices: a label in normal letters over its buttons, no box inside the box */
+.rt-options { display: grid; gap: 14px; }
+.rt-options .opt-row { display: grid; gap: 7px; min-height: 0; margin: 0; }
+.rt-options .opt-row[hidden] { display: none; }
+.rt-options .opt-label { width: auto; font: 500 12.5px var(--body, inherit); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.rt-options .chips button { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 9px; }
+.rt-options.locked { opacity: .5; transition: opacity .2s; }
+.rt-select { width: 100%; box-sizing: border-box; height: 38px; border-radius: 9px; }
+.rt-select select { width: 100%; font-size: 13.5px; }
+.rt-words { height: 38px; border-radius: 9px; }
+.rt-more { margin: 0; }
+.rt-more[hidden], .rt-more-box[hidden] { display: none; }
+.rt-more-box { display: grid; gap: 14px; animation: rt-in .25s var(--ease-out) both; }
+.rt-part { margin-top: 16px; }
+#rtNote { margin: 14px 0 0; font-size: 12.5px; line-height: 1.5; }
+.rt-go { height: 46px; border-radius: 12px; margin-top: 16px; }
+.rt-progress .bar > div { transition: width .5s var(--ease); }
+/* done */
+.rt-done-icon { animation: rt-pop .45s var(--ease-out) both; }
+@keyframes rt-pop { from { transform: scale(.6); opacity: 0; } }
+.rt-done-file { border-radius: 12px; }
+/* the subtitles list */
+.subs-row { border-radius: 12px; transition: border-color .2s var(--ease); }
+/* the video */
+#resolveTab .rt-screen { border-radius: 16px; }
+#resolveTab .subs-wave { border-radius: 10px; }
+.subs-wave .playhead { border-radius: 2px; }
+/* Project folder: one slim row; the name box opens under it when you make one */
+.rt-project { margin-top: 22px; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, var(--panel) 55%, transparent);
+  box-shadow: inset 0 0 0 1px var(--gl-line); transition: box-shadow .25s var(--ease); }
+:root[data-theme="light"] .rt-project { background: rgba(255, 255, 255, .7); box-shadow: inset 0 0 0 1px rgba(20, 25, 40, .08); }
+.rt-project.on { box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), .5); }
+.rt-project-row { display: flex; align-items: center; gap: 14px; }
+.rt-project-ic { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--panel2); color: var(--accent); }
+.rt-project-ic svg { width: 19px; height: 19px; }
+.rt-project-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.rt-project-text[hidden], .rt-project-buttons[hidden] { display: none; }
+.rt-project-text > b { font: 600 14.5px var(--head); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rt-project-text > span { font-size: 12.5px; color: var(--muted); }
+.rt-project-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.rt-on { font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; padding: 1px 8px; }
+.rt-project-buttons { flex: none; display: flex; gap: 6px; }
+.rt-project-buttons .link { margin-left: 0; }
+.rt-project-buttons .small-button { height: 34px; padding: 0 14px; font-size: 13px; }
+.rt-project-new { display: flex; align-items: center; gap: 8px; margin-top: 12px; animation: rt-in .25s var(--ease-out) both; }
+.rt-project-new[hidden] { display: none; }
+.rt-project-new .input { flex: 1 1 220px; min-width: 0; height: 40px; }
+.rt-project-new .convert.small-button { height: 40px; padding: 0 18px; }
+.rt-project-cancel { font-size: 13px; color: var(--muted); padding: 0 4px; }
+.rt-folders { margin: 12px 0 0 52px; }
+.rt-folders:empty { display: none; }
+.rt-recent { margin: 10px 0 0 52px; }
+.rt-project .error-text { margin: 10px 0 0 52px; }
+@container page (max-width: 640px) {
+  .rt-project-row { flex-wrap: wrap; }
+  .rt-project-buttons { width: 100%; padding-left: 52px; }
+}
