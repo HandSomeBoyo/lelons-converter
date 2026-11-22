@@ -815,15 +815,26 @@
           <div class="subs-caption" id="rtCaption"></div>
           <div class="rt-loading" id="rtLoading" hidden><span class="spinner"></span><span id="rtLoadingText">Opening the video...</span></div>
         </div>
-        <div class="subs-wave" id="rtWave"><canvas id="rtCanvas"></canvas><div class="subs-marks" id="rtMarks"></div><div class="playhead" id="rtHead"></div></div>
+        <div class="subs-wave rt-timeline" id="rtWave"><div class="rt-strip" id="rtStrip"></div><canvas id="rtCanvas"></canvas><div class="subs-marks" id="rtMarks"></div><div class="playhead" id="rtHead"></div></div>
         <div class="subs-transport">
           <button type="button" class="subs-play" id="rtPlay" title="Play or pause (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
           <span class="subs-time" id="rtTime">0:00.0</span>
-          <span class="rt-file" id="rtFileName"></span>
-          <span class="spacer"></span>
-          <button type="button" class="ghost-button small-button" id="rtChange">Change video</button>
+          <div class="rt-vol">
+            <button type="button" class="rt-icon-button" id="rtVolButton" title="Sound on or off (only here, not in the file)">
+              <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+              <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></svg>
+            </button>
+            <input type="range" id="rtVol" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+          </div>
+          <div class="rt-hear" id="rtHear"></div>
         </div>
-        <p class="rt-file-info" id="rtFileInfo"></p>
+        <div class="rt-file-row">
+          <p class="rt-file-info"><span class="rt-file" id="rtFileName"></span><span id="rtFileInfo"></span></p>
+          <button type="button" class="ghost-button small-button" id="rtChange">Change video</button>
+          <button type="button" class="ghost-button small-button rt-close" id="rtClose" title="Close the video and go back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>Close
+          </button>
+        </div>
       </div>
 
       <div class="rt-side">
@@ -874,9 +885,22 @@
             <div class="opt-row" id="rtStyleRow">
               <span class="opt-label">Lines</span>
               <div class="chips" data-key="style">
-                <button data-value="normal">Normal</button>
-                <button data-value="short">Short, for Shorts and TikTok</button>
+                <button data-value="normal">Two lines</button>
+                <button data-value="short">One short line (Shorts, TikTok)</button>
               </div>
+            </div>
+            <div class="opt-row" id="rtPerRow">
+              <span class="opt-label">Words on screen</span>
+              <div class="chips" data-key="perScreen">
+                <button data-value="1">One</button>
+                <button data-value="3">Up to 3</button>
+                <button data-value="6">Up to 6</button>
+                <button data-value="0">As many as fit</button>
+              </div>
+            </div>
+            <div class="opt-row" id="rtTrackRow" hidden>
+              <span class="opt-label">Make subtitles from</span>
+              <div class="chips" id="rtTrackChips"></div>
             </div>
             <div class="opt-row" id="rtFixRow">
               <span class="opt-label">Size</span>
@@ -911,10 +935,6 @@
             <button type="button" class="set-more rt-more" id="rtMore" aria-expanded="false"><span>More options</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
             <div class="rt-more-box" id="rtMoreBox" hidden>
-              <div class="opt-row" id="rtTrackRow" hidden>
-                <span class="opt-label">Listen to</span>
-                <div class="chips" id="rtTrackChips"></div>
-              </div>
               <div class="opt-row" id="rtWordsRow">
                 <span class="opt-label">Names it should know</span>
                 <label class="input rt-words"><input id="rtWords" placeholder="Like Minecraft, VaultHub" autocomplete="off" spellcheck="false"></label>
@@ -945,7 +965,15 @@
           <div class="rt-subs-head">
             <button type="button" class="link rt-back" id="rtSubsBack">‹ Back</button>
             <h3 class="rt-panel-title">Check the subtitles <span class="rt-count" id="rtSubsCount"></span></h3>
-            <p class="subs-tip">Play the video and read along. Click a line to jump to it, and type to fix words. Too early or late? <b>◀ ▶</b> nudges it, or <b>Start here</b> starts it where the video is.</p>
+            <p class="subs-tip">Play and read along. Type to fix a word. <b>◀ ▶</b> moves a line a little, <b>Start here</b> starts it where the video is.</p>
+            <div class="rt-subs-per"><span>Words on screen</span>
+              <div class="chips" id="rtSubsPer">
+                <button data-value="1">One</button>
+                <button data-value="3">Up to 3</button>
+                <button data-value="6">Up to 6</button>
+                <button data-value="0">As many as fit</button>
+              </div>
+            </div>
             <span class="subs-shift">Move all
               <button type="button" class="nudge" data-all="-0.1" title="All subtitles 0.1 second earlier">&minus;0.1s</button>
               <button type="button" class="nudge" data-all="0.1" title="All subtitles 0.1 second later">+0.1s</button>

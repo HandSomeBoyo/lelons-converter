@@ -16,6 +16,7 @@ import itertools
 import json
 import os
 import shutil
+import subprocess
 import threading
 
 import drt
@@ -30,10 +31,12 @@ import subtitles
 import waveform
 
 TOOLS = ("fix", "subtitles", "silence")
+_thumb_slots = threading.BoundedSemaphore(3)  # pictures for the strip: a few at a time
 OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
 DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
-            "device": "gpu", "words": ""}
+            "device": "gpu", "words": "", "perScreen": "0"}
+PER_SCREEN = ("0", "1", "3", "6")  # (3.0) most words on screen at once ("0": as many as fit)
 
 
 def load_options():
@@ -59,6 +62,8 @@ def load_options():
         o["device"] = saved["device"]
     if saved.get("cutAs") in ("timeline", "video"):
         o["cutAs"] = saved["cutAs"]
+    if saved.get("perScreen") in PER_SCREEN:
+        o["perScreen"] = saved["perScreen"]
     if isinstance(saved.get("words"), str):
         o["words"] = saved["words"][:300]
     return o
@@ -182,7 +187,11 @@ class Tools(files.Files):
         item = self.find(file_id)
         if not item:
             return None
-        path = item.get("mixed") if copy == "mix" else item.get("preview") if copy else item["path"]
+        if copy.startswith("t") and copy[1:].isdigit():  # one sound track, see sound_tracks()
+            made = item.get("trackFiles") or []
+            path = made[int(copy[1:])] if int(copy[1:]) < len(made) else None
+        else:
+            path = item.get("preview") if copy else item["path"]
         return path if path and os.path.isfile(path) else None
 
     def preview(self, file_id):
@@ -233,43 +242,77 @@ class Tools(files.Files):
             with self.lock:
                 item.update(previewBusy=False, previewError="VaultHub can't show this video, but the tools still work on it.")
 
-    def mix(self, file_id):
-        """The window plays only a video's first sound track. With more (OBS: game on one, your mic on
-        another), VaultHub mixes them all into one sound file that plays along with the picture.
-        Returns {"ready", "progress"}; call again to see how it's going."""
+    def sound_tracks(self, file_id):
+        """(3.0) The window plays only a video's first sound track. With more (OBS: game on one, your mic
+        on another), each track is taken out into its own sound file, so the page can play them all
+        along with the picture, each with its own on/off. Copied as it is when it can (a few seconds,
+        even for a long recording), else turned into AAC. Returns {"ready", "progress", "count"};
+        call again to see how it's going."""
         item = self.find(file_id)
         if not item:
             raise ValueError("This video was removed.")
+        count = max(1, item.get("audioTracks") or 1)
         with self.lock:
-            if item.get("mixed") and os.path.isfile(item["mixed"]):
-                return {"ready": True, "progress": 100}
+            done = item.get("trackFiles") or []
+            if len(done) == count and all(os.path.isfile(f) for f in done):
+                return {"ready": True, "progress": 100, "count": count}
             if item.get("mixError"):
-                return {"ready": False, "error": item["mixError"]}
+                return {"ready": False, "error": item["mixError"], "count": count}
             if not item.get("mixBusy"):
                 item.update(mixBusy=True, mixProgress=0)
-                threading.Thread(target=self._make_mix, args=(item,), daemon=True).start()
-            return {"ready": False, "progress": item.get("mixProgress", 0)}
+                threading.Thread(target=self._split_tracks, args=(item, count), daemon=True).start()
+            return {"ready": False, "progress": item.get("mixProgress", 0), "count": count}
 
-    def _make_mix(self, item):
-        tracks = max(1, item.get("audioTracks") or 1)
+    def _split_tracks(self, item, count):
         os.makedirs(files.FOLDER, exist_ok=True)
-        target = os.path.join(files.FOLDER, f"preview-{item['id']}-mix.m4a")
-        temp = target + ".part.m4a"
-        inputs = "".join(f"[0:a:{n}]" for n in range(tracks))
+        made = []
         try:
-            media.run(["-i", item["path"], "-filter_complex", f"{inputs}amix=inputs={tracks}:normalize=0:dropout_transition=0,"
-                       "alimiter=limit=0.95[out]", "-map", "[out]", "-vn", "-ac", "2", "-c:a", "aac", "-b:a", "128k", temp],
-                      item["seconds"] or 0, lambda p: item.update(mixProgress=p))
-            os.replace(temp, target)
+            for n in range(count):
+                target = os.path.join(files.FOLDER, f"preview-{item['id']}-t{n}.m4a")
+                temp = target + ".part.m4a"
+
+                def progress(p, n=n):
+                    item["mixProgress"] = (n + p / 100) * 100 / count
+
+                try:
+                    media.run(["-i", item["path"], "-map", f"0:a:{n}", "-vn", "-c:a", "copy", "-movflags", "+faststart", temp],
+                              item["seconds"] or 0, progress)
+                except OSError:  # a kind of sound the window can't take as it is
+                    media.run(["-i", item["path"], "-map", f"0:a:{n}", "-vn", "-c:a", "aac", "-b:a", "160k", "-ac", "2",
+                               "-movflags", "+faststart", temp], item["seconds"] or 0, progress)
+                os.replace(temp, target)
+                made.append(target)
             with self.lock:
-                item.update(mixed=target, mixBusy=False, mixProgress=100)
+                item.update(trackFiles=made, mixBusy=False, mixProgress=100)
         except Exception:
-            try:
-                os.remove(temp)
-            except OSError:
-                pass
+            for path in made:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
             with self.lock:
-                item.update(mixBusy=False, mixError="Couldn't mix the sound tracks.")
+                item.update(mixBusy=False, mixError="Couldn't open the other sound tracks.")
+
+    def thumb(self, file_id, n, count):
+        """(3.0) A small picture from the video for the strip over the sound wave: picture n of count,
+        taken from the middle of its slice. Made once, then kept."""
+        item = self.find(file_id)
+        if not item or not item["video"] or not 0 <= n < count <= 60:
+            return None
+        target = os.path.join(files.FOLDER, f"preview-{item['id']}-f{count}-{n}.jpg")
+        if os.path.isfile(target):
+            return target
+        os.makedirs(files.FOLDER, exist_ok=True)
+        at = (item["seconds"] or 0) * (n + 0.5) / count
+        with _thumb_slots:
+            try:
+                subprocess.run([media.ffmpeg(), "-v", "error", "-nostdin", "-y", "-ss", f"{at:.2f}", "-i", item["path"],
+                                "-frames:v", "1", "-vf", "scale=-2:96", "-q:v", "5", target + ".part.jpg"],
+                               capture_output=True, timeout=30, creationflags=media.NO_WINDOW)
+                os.replace(target + ".part.jpg", target)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+        return target
 
     def peaks(self, file_id):
         """How loud the sound is along the video, for drawing under the player."""
@@ -287,6 +330,23 @@ class Tools(files.Files):
         if not item or not item.get("cues"):
             raise ValueError("These subtitles aren't ready.")
         return item
+
+    def regroup(self, file_id, per_screen, style):
+        """(3.0) Words on screen changed after listening: groups the words it heard again (no listening
+        again). Typed fixes are lost, so the page asks first when there are any."""
+        item = self.cues(file_id)
+        if not item.get("heard"):
+            raise ValueError("Make the subtitles again to change this.")
+        per = str(per_screen) if str(per_screen) in PER_SCREEN else "0"
+        style = style if style in subtitles.STYLES else "normal"
+        save_options({"perScreen": per, "style": style})
+        cues = subtitles.make_cues(item["heard"], style, int(per))
+        with self.lock:
+            item["cues"] = cues
+            item["job"].update(perScreen=per, style=style)
+        if item["out"] and os.path.isfile(item["out"]):
+            subtitles.write_srt(cues, item["out"])
+        return cues
 
     def save_cues(self, file_id, cues):
         item = self.cues(file_id)
@@ -337,7 +397,9 @@ class Tools(files.Files):
             try:
                 cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
                                                 gpu=job.get("device") != "cpu", words=job.get("words", ""),
-                                                find_voice=picked == "auto" and tracks > 1)
+                                                find_voice=picked == "auto" and tracks > 1,
+                                                per_screen=int(job.get("perScreen") or 0),
+                                                on_words=lambda heard: item.update(heard=heard))
                 path = names.finish(temp)
             except BaseException:
                 if os.path.exists(temp):
@@ -414,7 +476,9 @@ class Tools(files.Files):
     def remove(self, file_id):
         item = self.find(file_id)
         super().remove(file_id)
-        for path in (item or {}).get("soundCopy"), (item or {}).get("preview"), (item or {}).get("mixed"):
+        thumbs = [os.path.join(files.FOLDER, f) for f in os.listdir(files.FOLDER)
+                  if f.startswith(f"preview-{file_id}-f")] if item and os.path.isdir(files.FOLDER) else []
+        for path in (item or {}).get("soundCopy"), (item or {}).get("preview"), *((item or {}).get("trackFiles") or []), *thumbs:
             if path:
                 try:
                     os.remove(path)

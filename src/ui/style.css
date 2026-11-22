@@ -9666,3 +9666,53 @@ html.side-small #callBox .call-sharing { display: none; }
   .rt-project-row { flex-wrap: wrap; }
   .rt-project-buttons { width: 100%; padding-left: 52px; }
 }
+/* (3.0 round 2) Resolve: pictures over the sound wave, volume, which tracks you hear, a Close button,
+   a clearer Back, and Words on screen */
+.rt-timeline { height: auto; padding: 0; display: grid; grid-template-rows: auto 46px; }
+.rt-timeline canvas { position: relative; inset: auto; grid-row: 2; width: 100%; height: 46px; }
+.rt-strip { grid-row: 1; display: flex; height: 0; overflow: hidden; background: #000; }
+.rt-timeline.has-strip .rt-strip { height: 58px; }
+.rt-strip img { flex: 1 1 0; min-width: 0; height: 100%; object-fit: cover; opacity: 0; transition: opacity .4s var(--ease-out);
+  border-right: 1px solid rgba(0, 0, 0, .55); }
+.rt-strip img.in { opacity: .9; }
+.rt-timeline .subs-marks div { top: 4px; bottom: 4px; }
+.rt-timeline .playhead { z-index: 2; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
+.rt-timeline:hover .rt-strip img.in { opacity: 1; }
+#resolveTab .subs-transport { flex-wrap: wrap; gap: 10px 12px; }
+.rt-icon-button { all: unset; box-sizing: border-box; cursor: pointer; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--muted); transition: color .15s, background-color .15s; }
+.rt-icon-button:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.rt-icon-button:disabled { opacity: .35; cursor: default; }
+.rt-icon-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rt-icon-button svg { width: 19px; height: 19px; }
+#rtVolButton .off, #rtVolButton.muted .on { display: none; }
+#rtVolButton.muted .off { display: block; }
+.rt-vol { display: flex; align-items: center; gap: 4px; }
+.rt-vol input[type=range] { -webkit-appearance: none; appearance: none; width: 90px; height: 4px; border-radius: 99px; cursor: pointer;
+  background: linear-gradient(to right, var(--text) var(--fill, 100%), color-mix(in srgb, var(--text) 18%, transparent) var(--fill, 100%)); }
+.rt-vol input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--text);
+  border: 0; transition: transform .15s var(--ease); }
+.rt-vol input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+.rt-hear { display: flex; align-items: center; gap: 5px; }
+.rt-hear:empty { display: none; }
+.rt-hear-label { font-size: 12.5px; color: var(--muted); margin-right: 2px; }
+.rt-hear-chip { all: unset; cursor: pointer; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line2); transition: color .15s, background-color .15s, box-shadow .15s; }
+.rt-hear-chip.on { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: none; }
+.rt-hear-chip:not(.on) { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.rt-file-info { display: flex; gap: 8px; align-items: baseline; min-width: 0; margin-top: 8px; }
+.rt-file-info .rt-file { flex: none; max-width: 45%; color: var(--text); font-size: 12.5px; }
+#rtFileInfo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#rtFileInfo.error { color: var(--red); }
+/* Back: a real button, easy to find */
+.rt-back { display: inline-flex; align-items: center; height: 30px; padding: 0 12px 0 9px; margin: 0 0 12px; border-radius: 8px;
+  font-size: 13px; color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); transition: background-color .15s; }
+.rt-back:hover { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.rt-subs-per { display: grid; gap: 7px; margin: 2px 0 12px; }
+.rt-subs-per > span { font-size: 12.5px; color: var(--muted); }
+.rt-subs-per .chips button { height: 30px; padding: 0 11px; font-size: 12.5px; border-radius: 8px; }
+.rt-file-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rt-file-row .rt-file-info { flex: 1; margin: 0; }
+.rt-file-row .small-button { height: 32px; padding: 0 12px; font-size: 13px; flex: none; }
+.rt-close { display: inline-flex; align-items: center; gap: 6px; }
+.rt-close svg { width: 14px; height: 14px; }

@@ -682,9 +682,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/media/"):
             path = waveform.file_path(self.path[len("/media/"):])
             return self.send_media(path) if path and os.path.isfile(path) else self.send_error(404)
+        if self.path.startswith("/rt-thumb/"):  # (3.0) /rt-thumb/<id>/<n>/<count>: the picture strip over the sound wave
+            bits = self.path[len("/rt-thumb/"):].split("/")
+            if len(bits) != 3 or not bits[1].isdigit() or not bits[2].isdigit():
+                return self.send_error(404)
+            path = resolvetools.get().thumb(bits[0], int(bits[1]), int(bits[2]))
+            return self.send_file(path) if path else self.send_error(404)
         if self.path.startswith("/rt-video/"):  # a video on the Resolve tab, played right from where it is
             file_id, _, copy = self.path[len("/rt-video/"):].partition("/")
-            path = resolvetools.get().video_path(file_id, copy if copy in ("copy", "mix") else "")
+            path = resolvetools.get().video_path(file_id, copy if copy == "copy" or re.fullmatch(r"t\d{1,2}", copy) else "")
             if not path:
                 return self.send_error(404)
             ext = os.path.splitext(path)[1].lower()
@@ -1092,11 +1098,15 @@ class Handler(BaseHTTPRequestHandler):
                 item = tools.cues(data.get("id"))
                 trim = (item.get("job") or {}).get("trim")
                 return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in item["cues"]],
-                                       "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent")})
+                                       "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent"),
+                                       "perScreen": (item.get("job") or {}).get("perScreen", "0")})
             elif path == "/api/rt-preview":
                 return self.send_json({"ok": True, **tools.preview(data.get("id"))})
-            elif path == "/api/rt-mix":
-                return self.send_json({"ok": True, **tools.mix(data.get("id"))})
+            elif path == "/api/rt-tracks":
+                return self.send_json({"ok": True, **tools.sound_tracks(data.get("id"))})
+            elif path == "/api/rt-regroup":
+                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in
+                                       tools.regroup(data.get("id"), data.get("perScreen"), data.get("style"))]})
             elif path == "/api/rt-wave":
                 return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
             elif path == "/api/rt-cues-save":

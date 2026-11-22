@@ -433,8 +433,9 @@ def _clock(t):
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
-def make_cues(words, style="normal"):
-    """Groups words into subtitles: [(start, end, text)]."""
+def make_cues(words, style="normal", per_screen=0):
+    """Groups words into subtitles: [(start, end, text)]. per_screen: at most this many words at once
+    (0: as many as fit)."""
     width, lines, longest = STYLES.get(style, STYLES["normal"])
     cues, current = [], []
 
@@ -453,6 +454,8 @@ def make_cues(words, style="normal"):
         current.extend(tail)
 
     for word in words:
+        if per_screen and len(current) >= per_screen:
+            flush()
         if current:
             text = "".join(w[2] for w in current + [word]).strip()
             gap = word[0] - current[-1][1]
@@ -467,7 +470,8 @@ def make_cues(words, style="normal"):
     # Keep each subtitle up long enough to read, without running into the next one.
     for i, cue in enumerate(cues):
         nxt = cues[i + 1][0] if i + 1 < len(cues) else cue[1] + 2
-        cue[1] = min(max(cue[1], cue[0] + (0.6 if style == "short" else 1.0)), nxt - 0.02)
+        shortest = 0.3 if per_screen == 1 else 0.6 if style == "short" or per_screen else 1.0
+        cue[1] = min(max(cue[1], cue[0] + shortest), nxt - 0.02)
         if cue[1] <= cue[0]:
             cue[1] = cue[0] + 0.3
     return [tuple(c) for c in cues]
@@ -496,7 +500,7 @@ def write_srt(cues, target):
 # ---------------------------------------------------------------- the whole thing
 
 def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True,
-                   words="", find_voice=False):
+                   words="", find_voice=False, per_screen=0, on_words=None):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
@@ -533,7 +537,9 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     heard = listen(whisper, mix, language, lambda percent: report("Listening" + where, percent), words)
     if not heard:
         raise ValueError("Couldn't hear any speech in this.")
-    cues = snap_to_voice(make_cues(heard, style), mix)
+    if on_words:
+        on_words(heard)  # (kept, so "Words on screen" can change later without listening again)
+    cues = snap_to_voice(make_cues(heard, style, per_screen), mix)
     write_srt(cues, target)
     return cues
 

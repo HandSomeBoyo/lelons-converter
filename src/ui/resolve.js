@@ -5,7 +5,7 @@
 
 let rtTool = "";
 let rtView = "pick"; // pick | setup | subs | done
-let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0" };
 let rtNvidia = false; // an NVIDIA graphics card to listen on
 let rtServer = []; // from the app's state
 let rtId = ""; // the video on the tab
@@ -15,12 +15,12 @@ let rtError = "";
 let rtProjectPath = "";
 let rtSeenRun = ""; // the finished job the tab already moved on from
 const rtVideo = $("rtVideo");
-// With several sound tracks (OBS: game on one, your mic on another) the window would only play the first,
-// so a mix of them all plays along with the picture instead.
-const rtSound = new Audio();
-rtSound.preload = "auto";
-let rtMixed = false;
+// (3.0) With several sound tracks (OBS: game on one, your mic on another) the window would only play the
+// first, so each track plays from its own sound file along with the picture, each one on or off ("Hear").
+let rtTracks = []; // [{audio, on}] once they're ready
 let rtMixText = "";
+let rtVolume = (() => { const v = parseFloat(loadPref("rtVolume")); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; })();
+let rtStripKey = "";
 
 api("/api/rt-options", {}).then((res) => {
   if (!res.ok) return;
@@ -76,11 +76,13 @@ function rtLetGo() {
   subs.peaks = null;
   rtVideo.removeAttribute("src");
   rtVideo.load();
-  rtMixed = false;
   rtMixText = "";
-  rtSound.pause();
-  rtSound.removeAttribute("src");
+  for (const t of rtTracks) { t.audio.pause(); t.audio.removeAttribute("src"); }
+  rtTracks = [];
   rtVideo.muted = false;
+  rtStripKey = "";
+  $("rtStrip").innerHTML = "";
+  $("rtHear").innerHTML = "";
 }
 
 // A dropped file: it plays right away from memory while it's copied into VaultHub.
@@ -108,7 +110,7 @@ function rtUse(file) {
     rtServer.push(res.file);
     rtId = res.file.id;
     rtLoadWave();
-    rtLoadMix();
+    rtLoadTracks();
     if (rtVideo.dataset.broken) rtMakePreview(); // the window couldn't play it: make a copy it can
     drawResolve();
   };
@@ -121,6 +123,16 @@ function rtUse(file) {
 let rtPicking = false;
 $("rtDrop").addEventListener("click", rtPick);
 $("rtChange").addEventListener("click", rtPick);
+// (3.0) Close the video and go back to the start of the page.
+$("rtClose").addEventListener("click", () => {
+  if (rtBusy(rtItem())) return;
+  if (rtUnsent() && !confirm("Close this video? The subtitles you haven't put in Resolve yet will be lost.")) return;
+  saveSubsNow();
+  rtLetGo();
+  rtView = "pick";
+  drawResolve();
+});
+const rtUnsent = () => { const f = rtItem(); return !!f && f.hasCues && !f.sent; };
 async function rtPick(e) {
   if (e && e.target === $("rtFiles")) return;
   if (e) e.preventDefault();
@@ -135,13 +147,17 @@ async function rtPick(e) {
     if (res.errors.length) { rtError = res.errors[0]; drawResolve(); }
     return;
   }
+  if (rtUnsent() && !confirm("Open the new video? The subtitles you haven't put in Resolve yet will be lost.")) {
+    api("/api/rt-remove", { id: file.id });
+    return;
+  }
   rtLetGo();
   rtView = "pick";
   rtServer.push(file);
   rtId = file.id;
   rtPlay(`/rt-video/${file.id}`);
   rtLoadWave();
-  rtLoadMix();
+  rtLoadTracks();
   drawResolve();
 }
 $("rtFiles").addEventListener("change", (e) => {
@@ -196,36 +212,103 @@ async function rtMakePreview() {
   }
 }
 
-async function rtLoadMix() {
+async function rtLoadTracks() {
   const item = rtItem();
   if (!item || (item.audioTracks || 0) < 2) return;
   const id = rtId;
   while (id === rtId) {
-    const res = await api("/api/rt-mix", { id }).catch(() => ({ ok: false }));
+    const res = await api("/api/rt-tracks", { id }).catch(() => ({ ok: false }));
     if (id !== rtId) return;
-    if (!res.ok || res.error) { rtMixText = ""; drawResolve(); return; }
+    if (!res.ok || res.error) { rtMixText = res.error || ""; drawResolve(); return; }
     if (res.ready) {
-      rtSound.src = `/rt-video/${id}/mix`;
-      rtMixed = true;
+      rtTracks = Array.from({ length: res.count }, (_, n) => {
+        const audio = new Audio(`/rt-video/${id}/t${n}`);
+        audio.preload = "auto";
+        return { audio, on: true };
+      });
       rtVideo.muted = true;
       rtMixText = "";
+      rtApplyVolume();
       rtSyncSound(true);
+      drawHear();
       drawResolve();
       return;
     }
-    rtMixText = `Adding your other sound tracks... ${Math.floor(res.progress || 0)}%`;
+    rtMixText = `Getting your other sound tracks... ${Math.floor(res.progress || 0)}%`;
     drawResolve();
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
 function rtSyncSound(force) {
-  if (!rtMixed) return;
-  if (force || Math.abs(rtSound.currentTime - rtVideo.currentTime) > 0.25) rtSound.currentTime = rtVideo.currentTime;
-  rtSound.playbackRate = rtVideo.playbackRate;
-  if (rtVideo.paused) rtSound.pause();
-  else rtSound.play().catch(() => {});
+  for (const t of rtTracks) {
+    const a = t.audio;
+    if (force || Math.abs(a.currentTime - rtVideo.currentTime) > 0.2) a.currentTime = rtVideo.currentTime;
+    a.playbackRate = rtVideo.playbackRate;
+    if (rtVideo.paused || !t.on) a.pause();
+    else if (a.paused) a.play().catch(() => {});
+  }
 }
+
+// Volume and which tracks you hear (only in VaultHub: the files and Resolve aren't changed).
+function rtApplyVolume() {
+  rtVideo.volume = rtVolume;
+  for (const t of rtTracks) t.audio.volume = rtVolume;
+  $("rtVol").value = rtVolume;
+  $("rtVol").style.setProperty("--fill", rtVolume * 100 + "%");
+  $("rtVolButton").classList.toggle("muted", rtVolume === 0);
+}
+let rtVolBefore = 1;
+$("rtVol").addEventListener("input", () => { rtVolume = parseFloat($("rtVol").value); rtApplyVolume(); });
+$("rtVol").addEventListener("change", () => savePref("rtVolume", rtVolume));
+$("rtVolButton").addEventListener("click", () => {
+  if (rtVolume > 0) { rtVolBefore = rtVolume; rtVolume = 0; } else rtVolume = rtVolBefore || 1;
+  rtApplyVolume();
+  savePref("rtVolume", rtVolume);
+});
+rtApplyVolume();
+
+function drawHear() {
+  const box = $("rtHear");
+  box.innerHTML = "";
+  if (rtTracks.length < 2) return;
+  const label = document.createElement("span");
+  label.className = "rt-hear-label";
+  label.textContent = "Hear";
+  box.append(label);
+  rtTracks.forEach((t, n) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rt-hear-chip" + (t.on ? " on" : "");
+    b.textContent = `Track ${n + 1}`;
+    b.title = t.on ? `Turn track ${n + 1} off while you watch` : `Turn track ${n + 1} on`;
+    b.onclick = () => { t.on = !t.on; rtSyncSound(true); drawHear(); };
+    box.append(b);
+  });
+}
+
+// ---- the picture strip over the sound wave, like a clip in Resolve's timeline
+function drawStrip() {
+  const item = rtItem();
+  const strip = $("rtStrip");
+  const width = strip.getBoundingClientRect().width;
+  const count = item && item.video && width ? Math.max(4, Math.min(24, Math.round(width / 84))) : 0;
+  const key = item ? `${item.id}:${count}` : "";
+  if (key === rtStripKey) return;
+  rtStripKey = key;
+  strip.innerHTML = "";
+  $("rtWave").classList.toggle("has-strip", count > 0);
+  for (let n = 0; n < count; n++) {
+    const img = new Image();
+    img.alt = "";
+    img.decoding = "async";
+    img.onload = () => img.classList.add("in");
+    img.onerror = () => { img.style.visibility = "hidden"; };
+    img.src = `/rt-thumb/${item.id}/${n}/${count}`;
+    strip.append(img);
+  }
+}
+
 for (const ev of ["play", "pause", "seeked", "ratechange", "waiting", "playing"]) rtVideo.addEventListener(ev, () => rtSyncSound(ev !== "pause"));
 
 async function rtLoadWave() {
@@ -234,6 +317,7 @@ async function rtLoadWave() {
   if (id !== rtId || !res.ok) return;
   subs.peaks = res.peaks;
   drawSubsWave();
+  drawStrip();
 }
 
 function subsClock(t) {
@@ -276,11 +360,11 @@ $("rtWave").addEventListener("click", (e) => {
   const box = $("rtWave").getBoundingClientRect();
   seekSubs(((e.clientX - box.left) / box.width) * rtLength());
 });
-window.addEventListener("resize", () => { if (!$("rtWork").hidden) drawSubsWave(); });
+window.addEventListener("resize", () => { if (!$("rtWork").hidden) { drawSubsWave(); drawStrip(); } });
 
 function drawSubsWave() {
   const canvas = $("rtCanvas");
-  const box = $("rtWave").getBoundingClientRect();
+  const box = canvas.getBoundingClientRect();
   canvas.width = Math.max(1, box.width * devicePixelRatio);
   canvas.height = Math.max(1, box.height * devicePixelRatio);
   const g = canvas.getContext("2d");
@@ -399,9 +483,12 @@ function drawResolve() {
     info = bits.join(" · ") + (rtMixText ? " · " + rtMixText : "");
   }
   $("rtFileInfo").textContent = info;
+  $("rtFileInfo").title = info;
   $("rtFileInfo").classList.toggle("error", !!(rtLocal && rtLocal.error));
   $("rtScreen").classList.toggle("no-video", !!item && !item.video);
   $("rtChange").disabled = rtBusy(item);
+  $("rtClose").disabled = rtBusy(item);
+  if (!$("rtWork").hidden) drawStrip();
 
   // A job finished: move on to checking the subtitles, or to the result.
   if (item && item.status === "done" && !item.waitingFor && rtSeenRun !== `${item.id}:${item.run}`) {
@@ -433,12 +520,12 @@ let rtDrawnView = "";
 
 function drawSetup(item) {
   $("rtSetupTitle").textContent = RT_NAMES[rtTool] || "";
-  const rows = { rtFixRow: "fix", rtStyleRow: "subtitles", rtLangRow: "subtitles", rtModelRow: "subtitles", rtWordsRow: "subtitles",
+  const rows = { rtFixRow: "fix", rtStyleRow: "subtitles", rtLangRow: "subtitles", rtModelRow: "subtitles", rtWordsRow: "subtitles", rtPerRow: "subtitles",
                  rtDeviceRow: rtNvidia ? "subtitles" : "none", rtLevelRow: "silence", rtPauseRow: "silence", rtCutAsRow: "silence",
                  rtMore: "subtitles" };
   for (const [id, tool] of Object.entries(rows)) $(id).hidden = rtTool !== tool;
   if (rtTool !== "subtitles") $("rtMoreBox").hidden = true;
-  else if (!rtMoreTouched) rtMoreOpen(!!(rtOptions.words || "").trim() || rtOptions.track !== "auto" || (rtNvidia && rtOptions.device === "cpu"));
+  else if (!rtMoreTouched) rtMoreOpen(!!(rtOptions.words || "").trim() || (rtNvidia && rtOptions.device === "cpu"));
   else rtMoreOpen($("rtMore").getAttribute("aria-expanded") === "true");
   if ($("rtLang").value !== (rtOptions.language || "")) $("rtLang").value = rtOptions.language || "";
   // Which sound track to listen to, when there are several (OBS often puts your mic on its own).
@@ -448,7 +535,7 @@ function drawSetup(item) {
   if (chips.dataset.n !== String(tracks)) {
     chips.dataset.n = tracks;
     chips.innerHTML = "";
-    const choices = [["auto", "Find my voice by itself"], ["all", "All together"]];
+    const choices = [["auto", "Find my voice"], ["all", tracks > 2 ? "All tracks" : "Both"]];
     for (let i = 0; i < tracks; i++) choices.push([String(i), `Track ${i + 1}`]);
     for (const [value, label] of choices) {
       const b = document.createElement("button");
@@ -630,7 +717,9 @@ async function openSubs() {
   const id = rtId;
   const res = await api("/api/rt-cues", { id }).catch(() => ({ ok: false }));
   if (!res.ok || id !== rtId) return;
-  Object.assign(subs, { cues: res.cues, offset: res.offset || 0, current: -1 });
+  Object.assign(subs, { cues: res.cues, offset: res.offset || 0, current: -1, edited: false });
+  if (res.perScreen != null) rtOptions.perScreen = res.perScreen;
+  drawPerScreen();
   $("subsSaved").textContent = res.sent ? "" : "";
   drawSubsList();
   rtVideo.pause();
@@ -692,6 +781,25 @@ function redrawRow(row, cue) {
   row.querySelector(".subs-when").textContent = `${subsClock(cueStart(cue))} – ${subsClock(cue.end + subs.offset)}`;
 }
 
+// (3.0) Words on screen, changed while checking: grouped again from what it heard (no listening again).
+document.querySelectorAll("#rtSubsPer button").forEach((b) => b.addEventListener("click", async () => {
+  if (b.classList.contains("active")) return;
+  if (subs.edited && !confirm("Change how many words show at once? Your typed fixes will be undone.")) return;
+  await saveSubsNow();
+  const res = await api("/api/rt-regroup", { id: rtId, perScreen: b.dataset.value, style: rtOptions.style })
+    .catch(() => ({ ok: false, error: "Couldn't reach the app." }));
+  if (!res.ok) { $("subsSaved").textContent = res.error; return; }
+  rtOptions.perScreen = b.dataset.value;
+  subs.cues = res.cues;
+  subs.edited = false;
+  drawSubsList();
+  drawPerScreen();
+  drawResolve();
+}));
+function drawPerScreen() {
+  document.querySelectorAll("#rtSubsPer button").forEach((b) => b.classList.toggle("active", b.dataset.value === String(rtOptions.perScreen || "0")));
+}
+
 document.querySelectorAll("#rtSubs .nudge[data-all]").forEach((b) => b.addEventListener("click", () => {
   const d = parseFloat(b.dataset.all);
   for (const cue of subs.cues) {
@@ -703,6 +811,7 @@ document.querySelectorAll("#rtSubs .nudge[data-all]").forEach((b) => b.addEventL
 }));
 
 function subsChanged() {
+  subs.edited = true;
   $("subsSaved").textContent = "Saving...";
   clearTimeout(subs.saveTimer);
   subs.saveTimer = setTimeout(saveSubsNow, 600);
@@ -773,5 +882,5 @@ drawResolve();
 function resolveTabChanged(tab) {
   if (tab === "resolve") return;
   if (!rtVideo.paused) rtVideo.pause();
-  rtSound.pause();
+  for (const t of rtTracks) t.audio.pause();
 }
