@@ -9431,7 +9431,7 @@ body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px mi
 }
 :root[data-theme="light"] .share-tab-pill { background: #fff; box-shadow: 0 1px 3px rgba(20, 25, 40, .14); }
 .share-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 16px -6px 0; padding: 6px; height: 330px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 16px -6px 0; padding: 6px; min-height: 200px; max-height: 330px;
   overflow-y: auto; align-content: start; scrollbar-width: thin;
 }
 .share-grid.windows { grid-template-columns: repeat(3, 1fr); }
@@ -9493,7 +9493,7 @@ body .chat-panel.with-rail.srv-on.has-pane.cw-s { grid-template-columns: 72px mi
 .share-seg button.on { color: var(--text); background: color-mix(in srgb, var(--text) 12%, var(--panel)); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
 :root[data-theme="light"] .share-seg button.on { background: #fff; box-shadow: 0 1px 2px rgba(20, 25, 40, .14); }
 .check.share-sound { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
-.share-sound > span { display: flex; flex-direction: column; gap: 2px; text-align: right; min-width: 0; }
+.share-sound > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .share-sound b { font: 600 13px var(--head); }
 .share-sound small { font-size: 11.5px; color: var(--muted); }
 .share-sound input[type=checkbox]:not(:checked) { background: color-mix(in srgb, var(--text) 18%, transparent); }
