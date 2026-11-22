@@ -98,7 +98,9 @@ function rdTuneOpus(sdp) {
 
 // Picture modes: [frames a second, most pixels high, bits per second, what WebRTC gives up first]
 const RD_MODES = {
-  auto: { fps: 60, height: 1440, bitrate: 20e6, keep: "balanced", hint: "detail" }, // (3.0) sharp text first
+  // (3.1) Auto keeps the picture moving: "detail" made Chrome treat it like a slideshow (it let the frame
+  // rate drop to keep text sharp), which felt laggy even on a fast network. Sharp is still there for that.
+  auto: { fps: 60, height: 1440, bitrate: 20e6, keep: "maintain-framerate", hint: "motion" },
   smooth: { fps: 60, height: 1080, bitrate: 12e6, keep: "maintain-framerate", hint: "motion" },
   sharp: { fps: 60, height: 2160, bitrate: 30e6, keep: "maintain-resolution", hint: "detail" },
   save: { fps: 30, height: 720, bitrate: 2.5e6, keep: "balanced", hint: "detail" },

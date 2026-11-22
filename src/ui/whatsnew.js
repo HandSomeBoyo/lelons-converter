@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.1.1", items: [
+    "Remote: a smoother, less laggy picture that starts sharp right away.",
+    "Remote: the delay at the top is now the real one, and Picture & keys shows where it comes from.",
+  ] },
   { version: "3.1.0", items: [
     "Live: new Pre-stream check. One click checks OBS, your mic, your Twitch title, alerts and your internet, with a tip or a fix for anything wrong.",
     "Calls: the call now sits at the bottom of the side bar, and there are sounds when people join, leave, mute, deafen or share.",
