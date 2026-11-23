@@ -66,7 +66,7 @@ document.addEventListener("dragstart", (e) => {
   el.classList.remove("drag-dropped", "drag-back");
   el.classList.add("drag-lift");
   api("/api/drag", what).then((res) => {
-    if (res && !res.ok) { el.classList.remove("drag-lift"); return alert(res.error); }
+    if (res && !res.ok) { el.classList.remove("drag-lift"); return callToast(res.error || "Couldn't do that."); }
     if (res && res.drag) watchDrag(el, res.drag);
   }).catch(() => el.classList.remove("drag-lift"));
 });

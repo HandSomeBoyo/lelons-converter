@@ -90,7 +90,7 @@ async function toLibGo() {
   $("toLibSend").disabled = false;
   if (typeof sfxLoggedOut === "function" && sfxLoggedOut(res)) return toLibClose(null);
   if (!res.ok) {
-    $("toLibError").textContent = res.error;
+    $("toLibError").textContent = res.error || "Couldn't add it to the Library.";
     return;
   }
   savePref("toLibLast", { category: toLibCategory, genre: toLibGenre });

@@ -3796,6 +3796,7 @@ body.chat-page .player-bar { visibility: hidden; }
 .group-empty { margin: 6px 8px; color: var(--muted); font-size: 13px; }
 .group-note { min-height: 18px; margin: 10px 0 0; color: var(--muted); font-size: 13px; }
 .group-leave { color: var(--red, #ef5350); }
+.group-leave.sure { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
 .avatar.group-avatar img { border-radius: inherit; }
 
 /* ================================================================ 2.5.0: genres on the left of the Library (like Artlist) */

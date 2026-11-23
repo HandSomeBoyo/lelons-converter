@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.6", items: [
+    "Bug sweep: we clicked through every page and button. The old gray Windows pop-up boxes are gone. Errors now show as a small message at the bottom instead.",
+    "Chat: leaving a group asks with a second click on the button, like deleting does elsewhere.",
+  ] },
   { version: "3.2.5", items: [
     "MyVault: Fill now types your login into websites. Before, Chrome and Edge sent it to their menu button instead.",
     "Remote: you can now set a password on a PC (letters are fine too). Type it to connect from anywhere, no one has to be home to press Allow.",

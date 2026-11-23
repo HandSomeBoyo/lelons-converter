@@ -99,7 +99,7 @@ async function addCopyFiles(files) {
   for (const file of files.slice(0, 20)) {
     const res = await fetch("/api/copyright-add", { method: "POST", headers: { "X-File-Name": encodeURIComponent(file.name) }, body: file })
       .then((r) => r.json()).catch(() => ({ ok: false, error: "Couldn't open this file." }));
-    if (!res.ok) alert(res.error);
+    if (!res.ok) callToast(res.error || "Couldn't check that.");
     loadCopyright();
   }
 }
@@ -115,7 +115,7 @@ function copyTakesDrop(files) {
 async function checkSoundCopyright(sound) {
   showTab("copyright");
   const res = await api("/api/copyright-sound", { url: sound.url, name: sound.name, id: sound.id }).catch(() => ({ ok: false, error: "Couldn't get that sound." }));
-  if (!res.ok) alert(res.error);
+  if (!res.ok) callToast(res.error || "Couldn't check that.");
   loadCopyright();
 }
 
