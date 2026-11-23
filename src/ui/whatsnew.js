@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.1", items: [
+    "MyVault: the Google Authenticator import no longer gets stuck on \"Starting the webcam\". It skips OBS's virtual camera, lets you switch cameras, and tells you what's wrong if the webcam is busy or blocked.",
+  ] },
   { version: "3.2.0", items: [
     "New: MyVault, at the top of the side bar. Your passwords, 2FA codes and notes behind a 6-number PIN, kept only on this PC. It can bring codes over from Google Authenticator, tells you about weak passwords, and offers to fill in logins for Steam, Epic and websites.",
     "Live: new Input overlay. Your keys, mouse or controller light up on stream as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
