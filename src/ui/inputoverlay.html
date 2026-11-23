@@ -1,0 +1,316 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>VaultHub input overlay</title>
+<!-- (3.2) The input overlay OBS shows as a Browser Source (1920 x 1080, see. inputoverlay.py). Your keys, mouse and
+     controller light up as you press them. Five looks: Keycaps, Glass, Outline, Controller and Key pops.
+     Kept to CSS that OBS's built-in browser knows (no color-mix, no :has). -->
+<style>
+@font-face { font-family: InterVar; src: url(/input/fonts/intervariable.woff2) format("woff2"); font-weight: 100 900; }
+:root { --c: #ffcf3f; --c2: #b38f22; --on: #141414; --s: 1; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; font-family: InterVar, "Segoe UI", sans-serif; }
+.ov { position: absolute; display: flex; align-items: flex-end; gap: 16px; transform: scale(var(--s)); transition: opacity .6s ease; }
+.ov.bl { left: 56px; bottom: 56px; transform-origin: left bottom; }
+.ov.br { right: 56px; bottom: 56px; transform-origin: right bottom; }
+.ov.tl { left: 56px; top: 56px; transform-origin: left top; align-items: flex-start; }
+.ov.tr { right: 56px; top: 56px; transform-origin: right top; align-items: flex-start; }
+.ov.idle { opacity: 0; }
+.ov.idle.preview { opacity: .35; }
+
+/* ---------- keys and mouse */
+.keys { position: relative; }
+.k { position: absolute; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: 650; font-size: 20px; box-sizing: border-box;
+  transition: transform .09s cubic-bezier(.3,.7,.4,1), background .09s, box-shadow .09s, color .09s; }
+.k small { font-size: 14px; font-weight: 650; }
+.mouse { position: relative; width: 100px; height: 150px; flex: none; }
+.mouse svg { width: 100%; height: 100%; overflow: visible; }
+.mouse path, .mouse rect { transition: fill .09s, stroke .09s; }
+.kps { position: absolute; left: 0; top: -44px; height: 30px; padding: 0 12px; border-radius: 99px; display: none; align-items: center; gap: 6px; font-weight: 650; font-size: 14px; }
+.ov.tl .kps, .ov.tr .kps { top: auto; bottom: -44px; }
+.show-kps .kps { display: inline-flex; }
+
+/* 1. Keycaps: 3D keycaps that sink when pressed */
+.t-caps .k { border-radius: 12px; color: #3b352d; background: linear-gradient(180deg, #faf5ea 0%, #ece3d2 100%);
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,.07), inset 0 1px 0 #fff, 0 6px 0 #b8ab95, 0 9px 16px rgba(0,0,0,.28); }
+.t-caps .k.mod { color: #f4efe6; background: linear-gradient(180deg, #8f8a82, #7b766e); box-shadow: inset 0 -6px 0 rgba(0,0,0,.09), inset 0 1px 0 rgba(255,255,255,.25), 0 6px 0 #57534d, 0 9px 16px rgba(0,0,0,.28); }
+.t-caps .k.on { transform: translateY(5px); background: var(--c); color: var(--on);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.35), 0 1px 0 var(--c2), 0 3px 6px rgba(0,0,0,.25); }
+.t-caps .mb, .t-caps .mbody { fill: url(#capG); stroke: #b8ab95; stroke-width: 1.5; } .t-caps .mb.on { fill: var(--c); stroke: var(--c2); }
+.t-caps .wheel { fill: #57534d; } .t-caps .wheel.on { fill: var(--c); } .t-caps .mshadow { fill: rgba(0,0,0,.25); }
+.t-caps .kps { background: #ece3d2; color: #3b352d; box-shadow: 0 3px 0 #b8ab95; } .t-caps .kps b { color: var(--c2); }
+
+/* 2. Glass: light see-through keys */
+.t-glass .k { border-radius: 16px; color: #fff; background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,.12));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.38), inset 0 1px 0 rgba(255,255,255,.55), 0 8px 24px rgba(0,0,0,.18); text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.t-glass .k.on { background: var(--c); color: var(--on); text-shadow: none; transform: scale(.95); box-shadow: inset 0 0 0 1px rgba(255,255,255,.6), 0 4px 14px rgba(0,0,0,.18); }
+.t-glass .mb, .t-glass .mbody { fill: rgba(255,255,255,.18); stroke: rgba(255,255,255,.5); stroke-width: 1.5; }
+.t-glass .mb.on { fill: var(--c); stroke: rgba(255,255,255,.8); } .t-glass .wheel { fill: rgba(255,255,255,.75); } .t-glass .wheel.on { fill: var(--c); }
+.t-glass .kps { background: rgba(255,255,255,.2); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.38); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+
+/* 3. Outline: thin lines that fill in */
+.t-line .k { border-radius: 14px; color: #fff; background: rgba(0,0,0,.08); box-shadow: inset 0 0 0 2px rgba(255,255,255,.9), 0 0 0 1px rgba(0,0,0,.12); text-shadow: 0 1px 3px rgba(0,0,0,.55); }
+.t-line .k.on { background: var(--c); color: var(--on); text-shadow: none; box-shadow: inset 0 0 0 2px var(--c); transform: scale(.95); }
+.t-line .mb, .t-line .mbody { fill: rgba(0,0,0,.08); stroke: rgba(255,255,255,.92); stroke-width: 2.5; }
+.t-line .mb.on { fill: var(--c); stroke: var(--c); } .t-line .wheel { fill: #fff; } .t-line .wheel.on { fill: var(--c); }
+.t-line .kps { box-shadow: inset 0 0 0 2px rgba(255,255,255,.9); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+
+/* ---------- 4. controller */
+.pad { width: 470px; }
+.pad svg { width: 100%; display: block; overflow: visible; }
+.pad .body { fill: rgba(12,12,16,.55); stroke: rgba(255,255,255,.92); stroke-width: 2.5; }
+.pad .tp { fill: rgba(255,255,255,.06); stroke: rgba(255,255,255,.55); stroke-width: 2; }
+.pad .well { fill: rgba(0,0,0,.25); stroke: rgba(255,255,255,.55); stroke-width: 2; }
+.pad .cap { fill: rgba(255,255,255,.14); stroke: #fff; stroke-width: 2.5; transition: fill .09s; }
+.pad .cap.on { fill: var(--c); }
+.pad .trail { stroke: #fff; stroke-width: 3; stroke-linecap: round; fill: none; opacity: .5; }
+.pad .fb { fill: rgba(0,0,0,.2); stroke-width: 2.5; transition: fill .09s; }
+.pad .sym { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transition: stroke .09s; }
+.pad .let { font: 750 17px InterVar, sans-serif; text-anchor: middle; dominant-baseline: central; transition: fill .09s; }
+.pad .dp, .pad .sm, .pad .sh { fill: rgba(0,0,0,.2); stroke: rgba(255,255,255,.8); stroke-width: 2; transition: fill .09s; }
+.pad .dp.on, .pad .sm.on, .pad .sh.on { fill: var(--c); stroke: var(--c); }
+.pad .g { fill: rgba(12,12,16,.55); stroke: rgba(255,255,255,.8); stroke-width: 2; }
+.pad .gf { fill: var(--c); }
+.pad .gl { fill: #fff; font: 700 12px InterVar, sans-serif; text-anchor: middle; dominant-baseline: central; }
+.pad .gl.dark { fill: var(--on); }
+
+/* ---------- 5. key pops */
+.pops { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.ov.br .pops, .ov.tr .pops { align-items: flex-end; }
+.ov.tl .pops, .ov.tr .pops { flex-direction: column-reverse; }
+.pop { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 20px; background: rgba(14,14,18,.72);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 10px 30px rgba(0,0,0,.18); color: #fff; font-weight: 650; font-size: 20px;
+  transform-origin: left bottom; transition: opacity .25s, transform .25s cubic-bezier(.2,.8,.2,1); }
+.ov.br .pop { transform-origin: right bottom; }
+.pop.in { animation: popin .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes popin { from { opacity: 0; transform: translateY(16px) scale(.9); } }
+.pop.bump { animation: bump .16s ease-out; }
+@keyframes bump { 50% { transform: scale(1.05); } }
+.pop .kc { min-width: 48px; height: 48px; padding: 0 15px; box-sizing: border-box; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(180deg, #fbfbfc, #e9e9ee); color: #17171c; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12); font-size: 19px; white-space: nowrap; }
+.pop .kc svg { width: 18px; height: 26px; }
+.pop .plus { color: rgba(255,255,255,.5); font-size: 18px; padding: 0 1px; }
+.pop .x { margin: 0 8px 0 4px; height: 28px; padding: 0 10px; border-radius: 99px; background: var(--c); color: var(--on); font-size: 15px; display: inline-flex; align-items: center; }
+.pop.f1 { opacity: .78; transform: scale(.94); } .pop.f2 { opacity: .5; transform: scale(.88); } .pop.f3 { opacity: .25; transform: scale(.82); }
+.pop.gone { opacity: 0; transform: scale(.8); }
+</style></head>
+<body>
+<div class="ov bl" id="ov"></div>
+<script>
+const PREVIEW = /[?&]preview=1/.test(location.search);
+const AUTO = { caps: "#f58a3f", glass: "#ffffff", line: "#ffcf3f", pad: "#ffcf3f", pops: "#ffcf3f" };
+const MODS = ["Shift", "Ctrl", "Alt", "Win"];
+const ov = document.getElementById("ov");
+let look = { style: "caps", color: "auto", size: 100, corner: "bl", fade: true, kps: false, pad: "xbox" };
+let down = new Set(), pad = null, lastInput = 0, realAt = 0, built = "";
+const presses = [];  // key-down times, for keys per second
+
+// ---------------------------------------------------------------- colors
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function setColor() {
+  const c = look.color === "auto" ? AUTO[look.style] : look.color;
+  const [r, g, b] = hexRgb(c);
+  const dark = (x) => Math.round(x * .68).toString(16).padStart(2, "0");
+  document.documentElement.style.setProperty("--c", c);
+  document.documentElement.style.setProperty("--c2", "#" + dark(r) + dark(g) + dark(b));
+  document.documentElement.style.setProperty("--on", (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#17171c" : "#ffffff");
+}
+
+// ---------------------------------------------------------------- building each look
+const KEYMAP = [["Tab", 0, 0, 1.5], ["Q", 1.5, 0, 1], ["W", 2.5, 0, 1], ["E", 3.5, 0, 1], ["R", 4.5, 0, 1],
+  ["Shift", 0, 1, 1.75], ["A", 1.75, 1, 1], ["S", 2.75, 1, 1], ["D", 3.75, 1, 1], ["F", 4.75, 1, 1],
+  ["Ctrl", 0, 2, 1.5], ["Space", 1.5, 2, 4.25]];
+function buildKeys() {
+  const u = 60, g = 9, w = 5.75 * (u + g) - g, h = 3 * (u + g) - g;
+  const keys = KEYMAP.map(([id, x, y, kw]) => `<div class="k ${["Tab", "Shift", "Ctrl"].includes(id) ? "mod" : ""}" data-k="${id}" style="left:${x * (u + g)}px;top:${y * (u + g)}px;width:${kw * (u + g) - g}px">${id.length > 2 ? `<small>${id}</small>` : id}</div>`).join("");
+  const mouse = `<div class="mouse"><svg viewBox="0 0 100 150"><defs><linearGradient id="capG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#faf5ea"/><stop offset="1" stop-color="#ece3d2"/></linearGradient></defs>
+    ${look.style === "caps" ? `<path class="mshadow" d="M4 66 H96 V104 C96 132 76 154 50 154 C24 154 4 132 4 104 Z" transform="translate(0,4)"/>` : ""}
+    <path class="mb" data-k="LMB" d="M47 3 C20 4 4 22 4 50 V60 H47 Z"/><path class="mb" data-k="RMB" d="M53 3 C80 4 96 22 96 50 V60 H53 Z"/>
+    <path class="mbody" d="M4 64 H96 V100 C96 128 76 148 50 148 C24 148 4 128 4 100 Z"/><rect class="wheel" data-k="MMB" x="45.5" y="16" width="9" height="28" rx="4.5"/></svg></div>`;
+  const right = look.corner === "br" || look.corner === "tr";
+  const kb = `<div class="keys" style="width:${w}px;height:${h}px"><span class="kps"><b id="kpsN">0</b> keys/s</span>${keys}</div>`;
+  return right ? mouse + kb : kb + mouse;
+}
+const FACE = { xbox: { Y: ["#f5c518", "Y"], X: ["#4f9dff", "X"], B: ["#ff5c5c", "B"], A: ["#3ecf6e", "A"] },
+  ps: { Y: ["#4fd1a5", "tri"], X: ["#f48fd6", "sq"], B: ["#ff6b6b", "cir"], A: ["#7aa7ff", "crs"] } };
+function buildPad() {
+  const ps = look.pad === "ps", F = FACE[ps ? "ps" : "xbox"];
+  const sym = (kind, cx, cy, c) => ({
+    tri: `<path class="sym" d="M${cx} ${cy - 8} L${cx + 8} ${cy + 6} H${cx - 8} Z" style="stroke:${c}"/>`,
+    cir: `<circle class="sym" cx="${cx}" cy="${cy}" r="7.5" style="stroke:${c}"/>`,
+    crs: `<path class="sym" d="M${cx - 7} ${cy - 7} L${cx + 7} ${cy + 7} M${cx + 7} ${cy - 7} L${cx - 7} ${cy + 7}" style="stroke:${c}"/>`,
+    sq: `<rect class="sym" x="${cx - 7}" y="${cy - 7}" width="14" height="14" rx="1.5" style="stroke:${c}"/>` }[kind]
+    || `<text class="let" x="${cx}" y="${cy + 1}" style="fill:${c}">${kind}</text>`);
+  const fb = (id, cx, cy) => { const [c, k] = F[id]; return `<g data-b="${id}" data-c="${c}"><circle class="fb" cx="${cx}" cy="${cy}" r="19" style="stroke:${c}"/>${sym(k, cx, cy, c)}</g>`; };
+  const stick = (id, cx, cy) => `<circle class="well" cx="${cx}" cy="${cy}" r="34"/><path class="trail" data-t="${id}" d="M${cx} ${cy} L${cx} ${cy}"/><circle class="cap" data-s="${id}" data-x="${cx}" data-y="${cy}" cx="${cx}" cy="${cy}" r="21"/>`;
+  const dp = (cx, cy) => [["Up", `M${cx - 10} ${cy - 36} h20 v18 l-10 10 l-10 -10 z`], ["Down", `M${cx - 10} ${cy + 36} h20 v-18 l-10 -10 l-10 10 z`],
+    ["Left", `M${cx - 36} ${cy - 10} v20 h18 l10 -10 l-10 -10 z`], ["Right", `M${cx + 36} ${cy - 10} v20 h-18 l-10 -10 l10 -10 z`]].map(([id, d]) => `<path class="dp" data-b="${id}" d="${d}"/>`).join("");
+  const gauge = (x, id, lab) => `<rect class="g" x="${x}" y="2" width="92" height="26" rx="13"/><clipPath id="g${id}"><rect x="${x}" y="2" width="92" height="26" rx="13"/></clipPath><rect class="gf" data-g="${id}" clip-path="url(#g${id})" x="${x}" y="2" width="0" height="26"/><text class="gl" data-gl="${id}" data-lab="${lab}" x="${x + 46}" y="15">${lab}</text>`;
+  const sh = (x, id, lab) => `<rect class="sh" data-b="${id}" x="${x}" y="40" width="92" height="20" rx="10"/><text class="gl" data-shl="${id}" x="${x + 46}" y="50">${lab}</text>`;
+  return `<div class="pad"><svg viewBox="0 0 470 340">
+    ${gauge(48, "lt", ps ? "L2" : "LT")}${gauge(330, "rt", ps ? "R2" : "RT")}${sh(48, "LB", ps ? "L1" : "LB")}${sh(330, "RB", ps ? "R1" : "RB")}
+    <path class="body" d="M128 72 C160 62 310 62 342 72 C392 78 420 104 434 156 C450 214 460 270 452 302 C444 334 406 340 386 318 C364 292 348 262 316 252 H154 C122 262 106 292 84 318 C64 340 26 334 18 302 C10 270 20 214 36 156 C50 104 78 78 128 72 Z"/>
+    ${ps ? `<rect class="tp" x="176" y="80" width="118" height="66" rx="14"/>` : `<circle class="tp" cx="235" cy="104" r="20"/>`}
+    <rect class="sm" data-b="Back" x="${ps ? 150 : 196}" y="${ps ? 86 : 138}" width="${ps ? 12 : 22}" height="${ps ? 22 : 14}" rx="7"/>
+    <rect class="sm" data-b="Start" x="${ps ? 308 : 252}" y="${ps ? 86 : 138}" width="${ps ? 12 : 22}" height="${ps ? 22 : 14}" rx="7"/>
+    ${ps ? dp(106, 150) + stick("ls", 174, 214) : stick("ls", 106, 150) + dp(174, 214)}
+    ${fb("Y", 364, 114)}${fb("X", 326, 150)}${fb("B", 402, 150)}${fb("A", 364, 186)}
+    ${stick("rs", 296, 214)}
+  </svg></div>`;
+}
+function build() {
+  const key = [look.style, look.corner, look.pad].join();
+  ov.className = `ov ${look.corner} t-${look.style}${look.kps ? " show-kps" : ""}${PREVIEW ? " preview" : ""}`;
+  ov.style.setProperty("--s", look.size / 100);
+  setColor();
+  if (key === built) return;
+  built = key;
+  ov.innerHTML = look.style === "pad" ? buildPad() : look.style === "pops" ? `<div class="pops" id="pops"></div>` : buildKeys();
+  draw();
+}
+
+// ---------------------------------------------------------------- showing what's pressed
+function draw() {
+  if (look.style === "pad") return drawPad();
+  if (look.style === "pops") return;
+  ov.querySelectorAll("[data-k]").forEach((el) => el.classList.toggle("on", down.has(el.dataset.k)));
+}
+function drawPad() {
+  const p = pad || { buttons: [], lt: 0, rt: 0, ls: [0, 0], rs: [0, 0] }, b = new Set(p.buttons);
+  ov.querySelectorAll("[data-b]").forEach((el) => {
+    const on = b.has(el.dataset.b);
+    el.classList.toggle("on", on);
+    if (el.tagName === "g") {
+      const c = el.dataset.c, circle = el.querySelector(".fb"), mark = el.querySelector(".sym,.let");
+      circle.style.fill = on ? c : ""; circle.style.stroke = on ? c : c;
+      if (mark.classList.contains("let")) mark.style.fill = on ? "#fff" : c; else mark.style.stroke = on ? "#fff" : c;
+    }
+  });
+  ov.querySelectorAll("[data-shl]").forEach((t) => t.classList.toggle("dark", b.has(t.dataset.shl)));
+  for (const id of ["ls", "rs"]) {
+    const cap = ov.querySelector(`[data-s="${id}"]`), trail = ov.querySelector(`[data-t="${id}"]`);
+    if (!cap) continue;
+    const cx = +cap.dataset.x, cy = +cap.dataset.y, x = cx + p[id][0] * 15, y = cy + p[id][1] * 15;
+    cap.setAttribute("cx", x); cap.setAttribute("cy", y);
+    cap.classList.toggle("on", b.has(id === "ls" ? "LS" : "RS"));
+    trail.setAttribute("d", `M${cx} ${cy} L${x} ${y}`);
+    trail.style.display = p[id][0] || p[id][1] ? "" : "none";
+  }
+  for (const id of ["lt", "rt"]) {
+    const v = p[id] || 0, f = ov.querySelector(`[data-g="${id}"]`), t = ov.querySelector(`[data-gl="${id}"]`);
+    if (!f) continue;
+    f.setAttribute("width", 92 * v);
+    t.textContent = t.dataset.lab + (v > .02 ? ` · ${Math.round(v * 100)}%` : "");
+    t.classList.toggle("dark", v > .55);
+  }
+}
+
+// key pops: each press is a chip ("Shift + W"); the same again soon after counts up ("×3")
+const MOUSE_NAMES = { LMB: "Left click", RMB: "Right click", MMB: "Middle click" };
+const typing = { times: [], until: 0 };
+function mouseIcon(k) {
+  const l = k === "LMB" ? "var(--c)" : "#c9c9d1", r = k === "RMB" ? "var(--c)" : "#c9c9d1";
+  return `<svg viewBox="0 0 18 26"><path d="M8.3 1 C4 1.2 1 4 1 8.5 V11 H8.3Z" fill="${l}"/><path d="M9.7 1 C14 1.2 17 4 17 8.5 V11 H9.7Z" fill="${r}"/><path d="M1 12.5 H17 V17 C17 22 13.5 25 9 25 C4.5 25 1 22 1 17Z" fill="#9b9ba6"/></svg>`;
+}
+function chipHtml(parts) {
+  return parts.map((k) => `<span class="kc">${MOUSE_NAMES[k] ? mouseIcon(k) + MOUSE_NAMES[k] : k}</span>`).join(`<span class="plus">+</span>`);
+}
+function addPop(parts) {
+  const box = document.getElementById("pops");
+  if (!box) return;
+  const label = parts.join("+"), now = Date.now(), last = box.lastElementChild;
+  if (last && last.dataset.label === label && now - +last.dataset.at < 1200 && !last.classList.contains("gone")) {
+    const n = +last.dataset.n + 1;
+    last.dataset.n = n; last.dataset.at = now;
+    let x = last.querySelector(".x");
+    if (!x) { x = document.createElement("span"); x.className = "x"; last.append(x); }
+    x.textContent = "×" + n;
+    last.classList.remove("bump"); void last.offsetWidth; last.classList.add("bump");
+    return;
+  }
+  const d = document.createElement("div");
+  d.className = "pop in"; d.dataset.label = label; d.dataset.at = now; d.dataset.n = 1;
+  d.innerHTML = chipHtml(parts);
+  box.append(d);
+  [...box.children].reverse().forEach((el, i) => {
+    el.classList.remove("f1", "f2", "f3");
+    if (i > 0 && i < 4) el.classList.add("f" + i);
+    if (i >= 4) el.remove();
+  });
+}
+// Typing fast (a chat message, a password) shows as "Typing..." instead of the letters.
+function isTyping(k) {
+  const now = Date.now();
+  if (/^[A-Z0-9]$/.test(k) && !"WASD".includes(k)) {
+    typing.times = typing.times.filter((t) => now - t < 1500).concat(now);
+    if (typing.times.length >= 4) typing.until = now + 1800;
+  }
+  return now < typing.until;
+}
+function onDown(k, held) {
+  presses.push(Date.now());
+  if (look.style !== "pops") return;
+  if (MODS.includes(k)) return;  // a modifier shows with the next key (or alone when let go)
+  const mods = MODS.filter((m) => held.has(m));
+  if (!mods.some((m) => m !== "Shift") && isTyping(k)) {
+    const box = document.getElementById("pops"), last = box && box.lastElementChild;
+    if (!last || last.dataset.label !== "Typing...") addPop(["Typing..."]);
+    else last.dataset.at = Date.now();
+    return;
+  }
+  addPop([...mods, k]);
+}
+const soloMod = {};
+function setKeys(keys) {
+  const next = new Set(keys);
+  for (const k of next) if (!down.has(k)) { onDown(k, next); if (MODS.includes(k)) soloMod[k] = true; else for (const m in soloMod) soloMod[m] = false; }
+  for (const k of down) if (!next.has(k) && MODS.includes(k)) { if (soloMod[k] && look.style === "pops") addPop([k]); delete soloMod[k]; }
+  down = next;
+  draw();
+}
+function poke() { lastInput = Date.now(); ov.classList.remove("idle"); }
+
+// keys per second and fading out
+setInterval(() => {
+  const now = Date.now();
+  while (presses.length && now - presses[0] > 1000) presses.shift();
+  const n = document.getElementById("kpsN");
+  if (n) n.textContent = presses.length;
+  const box = document.getElementById("pops");
+  if (box) for (const el of box.children) if (now - +el.dataset.at > 4000) { el.classList.add("gone"); setTimeout(() => el.remove(), 300); }
+  if (look.fade && now - lastInput > 5000 && !down.size) ov.classList.add("idle");
+}, 200);
+
+// ---------------------------------------------------------------- live from VaultHub
+function connect() {
+  const es = new EventSource("/input/stream" + (PREVIEW ? "?preview=1" : ""));
+  es.addEventListener("look", (e) => { try { look = { ...look, ...JSON.parse(e.data) }; build(); poke(); } catch (err) { /* keep the old look */ } });
+  es.onmessage = (e) => {
+    let st; try { st = JSON.parse(e.data); } catch (err) { return; }
+    const busy = (st.keys && st.keys.length) || (st.pad && (st.pad.buttons.length || st.pad.lt || st.pad.rt || st.pad.ls[0] || st.pad.ls[1] || st.pad.rs[0] || st.pad.rs[1]));
+    if (busy) realAt = Date.now();
+    if (demo.on && !busy) return;
+    if (busy) demo.on = false;
+    pad = st.pad; setKeys(st.keys || []); if (look.style === "pad") drawPad();
+    poke();
+  };
+}
+
+// In VaultHub's preview: when you aren't pressing anything, it shows a short pretend game so you can see the look.
+const demo = { on: false, i: 0 };
+const DEMO_KEYS = [[], ["W"], ["W"], ["W", "Shift"], ["W", "Shift"], ["W", "Shift", "Space"], ["W", "Shift"], ["W"], ["W", "D"], ["D"], [], ["LMB"], [], ["LMB"], [], ["LMB"], [], ["A"], ["A", "Space"], ["A"], [], ["E"], [], ["Ctrl", "Z"], [], [], []];
+const DEMO_PAD = [{}, { ls: [0, -1] }, { ls: [.6, -.8] }, { ls: [.6, -.8], A: 1 }, { ls: [.9, -.3] }, { rt: .4 }, { rt: .8 }, { rt: 1, rs: [.4, 0] }, { rt: .6, rs: [.6, .2] }, {}, { X: 1 }, {}, { RB: 1 }, {}, { lt: .7, ls: [-.5, 0] }, { lt: .7, B: 1 }, {}, { Y: 1 }, {}, { Up: 1 }, {}, {}];
+setInterval(() => {
+  if (!PREVIEW) return;
+  if (Date.now() - realAt < 2500) { demo.on = false; return; }
+  demo.on = true;
+  if (look.style === "pad") {
+    const s = DEMO_PAD[demo.i++ % DEMO_PAD.length];
+    pad = { buttons: Object.keys(s).filter((k) => !["ls", "rs", "lt", "rt"].includes(k)), lt: s.lt || 0, rt: s.rt || 0, ls: s.ls || [0, 0], rs: s.rs || [0, 0] };
+    drawPad();
+  } else setKeys(DEMO_KEYS[demo.i++ % DEMO_KEYS.length]);
+  poke();
+}, 160);
+
+build();
+lastInput = Date.now();
+connect();
+</script>
+</body></html>

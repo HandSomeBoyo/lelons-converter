@@ -204,7 +204,56 @@ class State:
             return True
 
 
-queue = jobs.Queue(on_done=history.add_job)
+def convert_to_library(job, path, update):
+    """(3.1.3) A link converted straight into the Library (see /api/convert with "library")."""
+    lib = job["library"]
+    try:
+        sfx.library.add_converted(path, lib["name"], lib["category"], lib.get("genre") or "", update)
+    except sfx.Error:
+        raise
+    except Exception:
+        raise sfx.Error("Couldn't add it to the Library. Try again.")
+
+
+def library_target(data, check=True):
+    """(3.1.3) Checks a "straight into the Library" ask from the Convert page: logged in, allowed
+    to upload, a free name and a real category. Raises sfx.Error."""
+    account = sfx.library.account() if sfx.configured() else None
+    user = (account or {}).get("user")
+    if not user:
+        raise sfx.LoggedOut("Log in to add sounds to the Library.")
+    if not user.get("canUpload"):
+        raise sfx.Error("Only the owner and admins can add sounds to the Library.")
+    category = str(data.get("category") or "")
+    if category not in sfx.CATEGORIES:
+        raise sfx.Error("Pick a category.")
+    name = sfx.library.check_name(str(data.get("name") or "")) if check else str(data.get("name") or "")
+    genre = str(data.get("genre") or "")[:40]
+    return {"name": name, "category": category, "categoryName": sfx.CATEGORIES[category], "genre": genre}
+
+
+def library_too_long(url, trim):
+    """Sounds in the Library are up to 10 MB, so about 27 minutes at the lowest quality."""
+    longest = sfx.MAX_BYTES * 0.95 * 8 / 48000
+    if trim:
+        seconds = trim[1] - trim[0]
+    else:
+        try:
+            seconds = queue.preview(url).get("seconds") or 0
+        except Exception:
+            seconds = 0
+    if seconds > longest:
+        return f"That's too long for the Library (up to about {int(longest // 60)} minutes). Trim it shorter."
+    return ""
+
+
+def library_folder():
+    """Where a link going straight into the Library is converted: the app's own temporary folder."""
+    os.makedirs(sfx.FOLDER, exist_ok=True)
+    return sfx.FOLDER
+
+
+queue = jobs.Queue(on_done=history.add_job, to_library=convert_to_library)
 page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()
 watches = watchfolders.Watches(local_files)
@@ -993,6 +1042,19 @@ class Handler(BaseHTTPRequestHandler):
                 import streamoverlay
                 try:
                     return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "in":  # (3.2) the input overlay: keys, mouse and controller on your stream
+                import inputoverlay
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-set":
+                import inputoverlay
+                inputoverlay.set_prefs(data)
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-obs":
+                import inputoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": inputoverlay.add_to_obs()})
                 except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
             elif action == "pre":  # (3.1) the pre-stream check
@@ -2324,8 +2386,20 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         length = 0
                     trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
+            library = None
+            if isinstance(data.get("library"), dict):  # (3.1.3) straight into the Library, not saved on the PC
+                try:
+                    library = library_target(data["library"])
+                except sfx.Error as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+                fmt, trim = "wav", trim if fmt != "gif" else None  # lossless: the Library makes its own MP3
+                problem = library_too_long(url, trim)
+                if problem:
+                    return self.send_json({"ok": False, "error": problem})
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim, state.normalize)
+            queue.add(url, fmt, quality, "Library" if library else quality_label(fmt, quality),
+                      library_folder() if library else save_folder(data, project.kind_for(fmt)), trim, state.normalize,
+                      library=library)
             state.set(notice=None)
             self.send_json({"ok": True})
         elif self.path == "/api/thumbnail":  # (3.0) the Thumbnail button next to a looked-up video
@@ -2337,12 +2411,21 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/convert-many":
             # Videos picked from a playlist.
             fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
-            quality = state.quality[fmt]
             items = [i for i in (data.get("items") or []) if isinstance(i, dict) and str(i.get("url", "")).startswith("http")]
+            library = None
+            if isinstance(data.get("library"), dict):  # (3.1.3) each video goes into the Library under its own title
+                try:
+                    library = library_target({**data["library"], "name": "-"}, check=False)
+                except sfx.Error as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+                fmt = "wav"
+            quality = state.quality[fmt]
             for item in items:
                 trim = [0, min(media.GIF_DEFAULT_SECONDS, int(item.get("seconds") or 0) or media.GIF_DEFAULT_SECONDS)] if fmt == "gif" else None
-                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
-                          state.normalize, preview=item)
+                each = {**library, "name": sfx._clean_name(str(item.get("title") or "")) or "Sound"} if library else None
+                queue.add(str(item["url"]), fmt, quality, "Library" if library else quality_label(fmt, quality),
+                          library_folder() if library else save_folder(data, project.kind_for(fmt)), trim,
+                          state.normalize, preview=item, library=each)
             state.set(notice=None)
             self.send_json({"ok": True, "added": len(items)})
         elif self.path == "/api/normalize":

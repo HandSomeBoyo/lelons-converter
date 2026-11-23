@@ -9022,6 +9022,9 @@ button.stats-bar { cursor: pointer; }
 .fmt-pop .quality select { flex: 1; }
 .fmt-pop .volume-check { margin: 0; }
 .fmt-pop .volume-check[hidden] { display: none; }
+/* (3.1.3) Save to: This PC or the Library. With the Library picked, the format and quality don't apply */
+.fmt-note { font-size: 12.5px; color: var(--muted); max-width: 260px; line-height: 1.4; }
+.fmt-pop:not(.to-lib) .fmt-note, .fmt-pop.to-lib .fmt-kind { display: none; }
 
 /* Buttons that only show when the mouse is over their row (Trim, Download again) */
 .row-hover { opacity: 0; pointer-events: none; transition: opacity .15s; }
@@ -9593,6 +9596,35 @@ html.side-small #callBox .call-btn:not(:nth-child(-n+2)):not(.red):not(.green) {
 html.side-small #callBox .call-btn.red::after { content: none; }
 html.side-small #callBox .call-btn.red { flex-basis: auto; height: 34px; }
 html.side-small #callBox .call-sharing { display: none; }
+
+/* (3.2) Live > Input overlay */
+.lvi-stage { background: linear-gradient(180deg, #7fb1e3 0%, #b9d6f0 52%, #5d8a3c 52%, #4f7a31 100%); }
+.lvi-hint { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
+.lvi-hint i { width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; display: inline-block; flex: none; }
+.lvi-styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@container page (max-width: 900px) { .lvi-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#lvInput .lva-set > span:first-child { white-space: nowrap; }
+.lvi-st { all: unset; cursor: pointer; border-radius: 14px; background: var(--panel2); padding: 10px; display: grid; gap: 9px;
+  box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s ease, transform .2s ease; }
+.lvi-st:hover { transform: translateY(-1px); }
+.lvi-st:focus-visible { box-shadow: inset 0 0 0 2px var(--muted); }
+.lvi-st.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.lvi-st .art { height: 84px; border-radius: 10px; background: #4f7a31; display: grid; place-items: center; overflow: hidden; padding: 12px 14px; box-sizing: border-box; }
+.lvi-st .art img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; min-height: 0; }
+.lvi-st .t { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; }
+.lvi-st .w { display: grid; gap: 1px; }
+.lvi-st .t b { font: 600 13.5px var(--head); }
+.lvi-st .t small { color: var(--muted); font-size: 12px; }
+.lvi-st .tick { margin-left: auto; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #111; display: grid; place-items: center; font: 800 11px var(--head); flex: none; }
+.lva-colors .lvi-auto { width: auto; padding: 0 8px; border-radius: 99px; background: var(--panel2); color: var(--text); font: 600 11.5px var(--head); display: inline-flex; align-items: center; box-shadow: inset 0 0 0 1px var(--line); }
+.lvi-select { height: 32px; border-radius: 9px; border: 0; background: var(--panel2); color: var(--text); font: 500 13px var(--head); padding: 0 10px; }
+.lvi-dev { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--panel2); }
+.lvi-dev .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--panel); display: grid; place-items: center; flex: none; }
+.lvi-dev .ic svg { width: 18px; height: 18px; }
+.lvi-dev .w { display: grid; gap: 1px; flex: 1; }
+.lvi-dev .w b { font: 600 13.5px var(--head); }
+.lvi-dev .w small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.lvi-note { margin: 0 4px; font-size: 12.5px; line-height: 1.45; }
 
 /* ---- (3.2.0) MyVault: your passwords, locked (myvault.js) ---- */
 .mv-side-btn .mv-side-state { margin-left: auto; font: 600 10.5px/1.5 Inter, sans-serif; font-style: normal; padding: 1px 8px; border-radius: 999px; background: var(--panel2); color: var(--muted); }

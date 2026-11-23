@@ -1215,6 +1215,42 @@ class Library:
     def add_path(self, path):
         return self._register(os.path.basename(path), path, copied=False)
 
+    def check_name(self, name):
+        """(3.1.3) Before a link is converted straight into the Library: is the name free?"""
+        name = _clean_name(name)
+        if not name:
+            raise Error("Give the sound a name.")
+        clash = _rpc("lelons_sound_check", token=self._token(), sound_name=name, sound_hash=None)
+        if clash and clash.get("why") == "same_name":
+            raise Error(f"There's already a sound called \"{clash.get('name')}\". Pick another name.")
+        return name
+
+    def add_converted(self, path, name, category, genre, on_change):
+        """(3.1.3) A link converted on the Convert page, put straight into the Library. The file is
+        the app's own temporary copy (never in Downloads) and is deleted once it's uploaded or fails.
+        Waits until it's done; on_change(message, progress) follows along. Raises Error."""
+        try:
+            item = self._register(os.path.basename(path), path, copied=True)
+        except Exception:
+            if os.path.exists(path):
+                os.remove(path)
+            raise
+        try:
+            self.upload(item["id"], name, category, None, genre)
+        except Exception:
+            self.forget(item["id"])
+            raise
+        while True:
+            time.sleep(0.25)
+            with self.lock:
+                now = dict(self.uploads.get(item["id"]) or {"status": "done"})
+            if now["status"] == "error":
+                self.forget(item["id"])
+                raise Error(now["message"])
+            if now["status"] == "done":
+                return
+            on_change(now.get("message") or "Adding it to the Library...", now.get("progress") or 0)
+
     def _register(self, name, path, copied):
         found = media.probe(path)
         if not found["audio"]:

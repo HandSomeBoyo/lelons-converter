@@ -141,6 +141,7 @@
       <button type="button" role="tab" data-tab="live" title="Console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.3 5.3a9.5 9.5 0 0 0 0 13.4M18.7 5.3a9.5 9.5 0 0 1 0 13.4"/></svg><span>Console</span></button>
       <button type="button" role="tab" data-tab="lvboard" title="Soundboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg><span>Soundboard</span></button>
       <button type="button" role="tab" data-tab="lvalerts" title="Alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span>Alerts</span></button>
+      <button type="button" role="tab" data-tab="lvinput" title="Input overlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="3"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg><span>Input overlay</span></button>
       <button type="button" role="tab" data-tab="lvstats" title="Stream stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/></svg><span>Stream stats</span></button>
 </div>
     </div>
@@ -455,6 +456,11 @@
     <div id="lvAlerts"></div>
   </section>
 
+  <section class="tab-page lv-page" id="lvinputTab" hidden>
+    <div class="lv-head"><h1 class="headline">Input overlay.<br><em>Show your keys, mouse or controller on stream.</em></h1></div>
+    <div id="lvInput"></div>
+  </section>
+
   <section class="tab-page lv-page" id="lvstatsTab" hidden>
     <div id="lvStats"></div>
   </section>
@@ -706,7 +712,16 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <div class="fmt-pop" id="fmtPop" hidden>
-        <div class="fmt-section">
+        <!-- (3.1.3) Save on the PC, or put it straight into the Library (only for people who can upload there) -->
+        <div class="fmt-section" id="saveToBox" hidden>
+          <span class="fmt-label">Save to</span>
+          <div class="toggle" id="saveTo">
+            <button type="button" class="active" data-to="pc">This PC</button>
+            <button type="button" data-to="library">Library</button>
+          </div>
+          <span class="fmt-note" id="saveToNote">Goes right into the Library. Nothing is saved on your PC.</span>
+        </div>
+        <div class="fmt-section fmt-kind">
           <span class="fmt-label">Sound</span>
           <div class="toggle" id="toggle">
             <button type="button" class="active" data-format="mp3">MP3</button>
@@ -715,14 +730,14 @@
             <button type="button" data-format="flac">FLAC</button>
           </div>
         </div>
-        <div class="fmt-section">
+        <div class="fmt-section fmt-kind">
           <span class="fmt-label">Video</span>
           <div class="toggle" id="toggleVideo">
             <button type="button" data-format="mp4">MP4</button>
             <button type="button" data-format="gif">GIF</button>
           </div>
         </div>
-        <div class="fmt-section">
+        <div class="fmt-section fmt-kind">
           <span class="fmt-label">Quality</span>
           <label class="quality">
             <select id="quality" aria-label="Quality"></select>
@@ -1847,6 +1862,34 @@
 </div>
 <audio id="sfxAudio" preload="none"></audio>
 
+<!-- (3.1.3) Convert: a link going straight into the Library -->
+<div class="modal" id="toLibModal" hidden>
+  <div class="dialog sfx-dialog" role="dialog" aria-labelledby="toLibHeading">
+    <h2 id="toLibHeading">Add to the Library</h2>
+    <p class="sub" id="toLibSub">It's converted and uploaded for you. Nothing is saved on your PC.</p>
+    <div class="sfx-form">
+      <div class="opt-row" id="toLibNameRow">
+        <span class="opt-label">Name</span>
+        <label class="input sfx-field"><input id="toLibName" maxlength="80" autocomplete="off" spellcheck="false" placeholder="What is it?"></label>
+      </div>
+      <div class="opt-row">
+        <span class="opt-label">Category</span>
+        <div class="chips" id="toLibCategory"></div>
+      </div>
+      <div class="opt-row genre-row">
+        <span class="opt-label">Genre</span>
+        <div class="chips" id="toLibGenres"></div>
+      </div>
+    </div>
+    <p class="sfx-error" id="toLibError"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="ghost-button" id="toLibCancel">Cancel</button>
+      <button type="button" class="small-button" id="toLibSend">Add to Library</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="trimModal" hidden>
   <div class="dialog trim-dialog" role="dialog" aria-labelledby="trimHeading">
     <h2 id="trimHeading">Trim</h2>
@@ -2785,6 +2828,7 @@
 <script src="files.js"></script>
 <script src="history.js"></script>
 <script src="sfx.js"></script>
+<script src="tolibrary.js"></script>
 <script src="playlists.js"></script>
 <script src="account.js"></script>
 <script src="whatsnew.js"></script>
@@ -2838,6 +2882,7 @@
 <script src="lvads.js"></script>
 <script src="lvrecap.js"></script>
 <script src="lvalerts.js"></script>
+<script src="lvinput.js"></script>
 <script src="lvcostream.js"></script>
 <script src="lvextra.js"></script>
 <script src="lvprecheck.js"></script>
