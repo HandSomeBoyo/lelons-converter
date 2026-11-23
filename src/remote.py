@@ -628,6 +628,20 @@ def input_events(events):
                     flags = 0x8 | (0x1 if sc[1] else 0) | (0x2 if t == "ku" else 0)  # SCANCODE | EXTENDED | KEYUP
                     items.append((1, {"scan": sc[0], "flags": flags}))
                     (_held_keys.add if t == "kd" else _held_keys.discard)(str(e["code"]))
+            elif t == "txt":  # (phone 1.6) typed text from a phone's keyboard, letter by letter (any language)
+                for ch in str(e.get("s", ""))[:200]:
+                    code = ord(ch)
+                    if ch == "\n":
+                        sc = _scan("Enter")
+                        items += [(1, {"scan": sc[0], "flags": 0x8}), (1, {"scan": sc[0], "flags": 0x8 | 0x2})]
+                        continue
+                    if code > 0xFFFF:  # (emoji etc.: two halves)
+                        code -= 0x10000
+                        units = [0xD800 + (code >> 10), 0xDC00 + (code & 0x3FF)]
+                    else:
+                        units = [code]
+                    for u in units:
+                        items += [(1, {"scan": u, "flags": 0x4}), (1, {"scan": u, "flags": 0x4 | 0x2})]  # UNICODE (+ KEYUP)
             elif t == "cad":  # Ctrl+Alt+Del can't be sent by an app (Windows keeps it for itself): lock instead
                 ctypes.windll.user32.LockWorkStation()
         except (KeyError, TypeError, ValueError, OSError):

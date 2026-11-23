@@ -50,6 +50,7 @@ import film  # noqa: E402
 import editprojects  # noqa: E402
 import projectsync  # noqa: E402
 import games  # noqa: E402
+import myvault  # noqa: E402
 import povs  # noqa: E402
 import remote  # noqa: E402
 import project  # noqa: E402
@@ -203,7 +204,56 @@ class State:
             return True
 
 
-queue = jobs.Queue(on_done=history.add_job)
+def convert_to_library(job, path, update):
+    """(3.1.3) A link converted straight into the Library (see /api/convert with "library")."""
+    lib = job["library"]
+    try:
+        sfx.library.add_converted(path, lib["name"], lib["category"], lib.get("genre") or "", update)
+    except sfx.Error:
+        raise
+    except Exception:
+        raise sfx.Error("Couldn't add it to the Library. Try again.")
+
+
+def library_target(data, check=True):
+    """(3.1.3) Checks a "straight into the Library" ask from the Convert page: logged in, allowed
+    to upload, a free name and a real category. Raises sfx.Error."""
+    account = sfx.library.account() if sfx.configured() else None
+    user = (account or {}).get("user")
+    if not user:
+        raise sfx.LoggedOut("Log in to add sounds to the Library.")
+    if not user.get("canUpload"):
+        raise sfx.Error("Only the owner and admins can add sounds to the Library.")
+    category = str(data.get("category") or "")
+    if category not in sfx.CATEGORIES:
+        raise sfx.Error("Pick a category.")
+    name = sfx.library.check_name(str(data.get("name") or "")) if check else str(data.get("name") or "")
+    genre = str(data.get("genre") or "")[:40]
+    return {"name": name, "category": category, "categoryName": sfx.CATEGORIES[category], "genre": genre}
+
+
+def library_too_long(url, trim):
+    """Sounds in the Library are up to 10 MB, so about 27 minutes at the lowest quality."""
+    longest = sfx.MAX_BYTES * 0.95 * 8 / 48000
+    if trim:
+        seconds = trim[1] - trim[0]
+    else:
+        try:
+            seconds = queue.preview(url).get("seconds") or 0
+        except Exception:
+            seconds = 0
+    if seconds > longest:
+        return f"That's too long for the Library (up to about {int(longest // 60)} minutes). Trim it shorter."
+    return ""
+
+
+def library_folder():
+    """Where a link going straight into the Library is converted: the app's own temporary folder."""
+    os.makedirs(sfx.FOLDER, exist_ok=True)
+    return sfx.FOLDER
+
+
+queue = jobs.Queue(on_done=history.add_job, to_library=convert_to_library)
 page_loaded = threading.Event()  # the window has shown the page
 local_files = files.Files()
 watches = watchfolders.Watches(local_files)
@@ -665,6 +715,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
+        if url.path == "/api/mv-screen":  # (3.2.0) MyVault: a picture of your screens, to find a 2FA QR code on them
+            return self.send_mv_screen()
         if url.path == "/api/remote-sound":  # (3.0) this PC's sound, for Remote desktop (see loopback.py)
             return self.send_remote_sound()
         if self.path == "/api/state":
@@ -990,6 +1042,19 @@ class Handler(BaseHTTPRequestHandler):
                 import streamoverlay
                 try:
                     return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "in":  # (3.2) the input overlay: keys, mouse and controller on your stream
+                import inputoverlay
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-set":
+                import inputoverlay
+                inputoverlay.set_prefs(data)
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-obs":
+                import inputoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": inputoverlay.add_to_obs()})
                 except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
             elif action == "pre":  # (3.1) the pre-stream check
@@ -1779,6 +1844,107 @@ class Handler(BaseHTTPRequestHandler):
             sound.close()
         self.close_connection = True
 
+    def send_mv_screen(self):
+        if os.name != "nt" or not myvault.is_open():
+            return self.send_error(404)
+        try:
+            import io
+            from PIL import ImageGrab
+            img = ImageGrab.grab(all_screens=True)
+            out = io.BytesIO()
+            img.save(out, "PNG", compress_level=1)
+        except Exception:  # noqa: BLE001
+            return self.send_error(404)
+        self.send_body(out.getvalue(), "image/png")
+
+    def handle_myvault(self, action, data):
+        """(3.2.0) MyVault: the page (ui/myvault.js) and the login pop-up (ui/myvault-bubble.js)."""
+        mv = myvault
+        try:
+            if action == "state":
+                mv.check_timeout()
+                result = mv.state()
+            elif action == "setup":
+                result = mv.setup(data.get("pin"))
+            elif action == "unlock":
+                result = mv.unlock(data.get("pin"))
+            elif action == "lock":
+                mv.lock()
+                result = mv.state()
+            elif action == "touch":
+                mv.touch()
+                result = {}
+            elif action == "items":
+                result = {"items": mv.items(), "codes": mv.codes()}
+            elif action == "codes":
+                result = {"codes": mv.codes()}
+            elif action == "get":
+                result = {"item": mv.get(str(data.get("id") or ""))}
+            elif action == "save":
+                result = {"item": mv.save(data.get("item"))}
+            elif action == "delete":
+                mv.delete(str(data.get("id") or ""))
+                result = {}
+            elif action == "reveal":
+                result = {"value": mv.reveal(str(data.get("id") or ""), str(data.get("field") or "password"))}
+            elif action == "copy":
+                result = mv.copy(str(data.get("id") or ""), str(data.get("field") or "password"))
+            elif action == "health":
+                result = mv.health()
+            elif action == "otp-parse":
+                result = {"otp": mv.parse_otp(data.get("text"))}
+            elif action == "import-read":
+                found = mv.parse_migration(data.get("link"))
+                found["codes"] = mv.match_codes(found["codes"])
+                result = found
+            elif action == "import-add":
+                result = {"added": mv.add_codes(data.get("codes"))}
+            elif action == "prefs":
+                result = {"prefs": mv.set_prefs(data.get("prefs"))}
+            elif action == "change-pin":
+                result = mv.change_pin(data.get("old"), data.get("new"))
+            elif action == "reset":
+                result = mv.reset()
+            elif action == "backup":
+                folder = pick_folder(os.path.expanduser("~"), "Where should the MyVault backup go?")
+                if not folder:
+                    return self.send_json({"ok": False, "cancelled": True})
+                result = {"path": mv.backup(folder, data.get("password"))}
+            elif action == "restore":
+                path = ""
+                if os.name == "nt":
+                    import folder_picker
+                    picked = folder_picker.pick_files("Pick your MyVault backup", [("MyVault backup", "*.vhvault"), ("All files", "*.*")])
+                    path = picked[0] if picked else ""
+                if not path:
+                    return self.send_json({"ok": False, "cancelled": True})
+                result = mv.restore(path, data.get("password"), data.get("pin"))
+            elif action == "offer":  # the login pop-up asks what to show
+                result = mv.offer()
+            elif action == "fill":
+                result = mv.fill(str(data.get("id") or ""), str(data.get("what") or "login"))
+            elif action == "dismiss":
+                mv.offer_dismiss(bool(data.get("never")))
+                result = {}
+            elif action == "bubble-size":
+                if mv._w.get("offer") and appwindow.is_bubble(appwindow._bubble.hwnd if appwindow._bubble else 0):
+                    appwindow.bubble(None, None, None, True, height=data.get("height"))
+                result = {}
+            elif action == "camera-app":  # (3.2.3) the Windows Camera app instead of the webcam view
+                result = mv.camera_open()
+            elif action == "camera-photo":
+                result = mv.camera_photo()
+            elif action == "open-app":  # the pop-up's "Open MyVault"
+                show_window()
+                result = {}
+            else:
+                return self.send_error(404)
+        except myvault.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't do that. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_remote(self, action, data):
         """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""
         try:
@@ -2224,8 +2390,20 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         length = 0
                     trim = [0, min(media.GIF_DEFAULT_SECONDS, length or media.GIF_DEFAULT_SECONDS)]
+            library = None
+            if isinstance(data.get("library"), dict):  # (3.1.3) straight into the Library, not saved on the PC
+                try:
+                    library = library_target(data["library"])
+                except sfx.Error as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+                fmt, trim = "wav", trim if fmt != "gif" else None  # lossless: the Library makes its own MP3
+                problem = library_too_long(url, trim)
+                if problem:
+                    return self.send_json({"ok": False, "error": problem})
             quality = state.quality[fmt]
-            queue.add(url, fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim, state.normalize)
+            queue.add(url, fmt, quality, "Library" if library else quality_label(fmt, quality),
+                      library_folder() if library else save_folder(data, project.kind_for(fmt)), trim, state.normalize,
+                      library=library)
             state.set(notice=None)
             self.send_json({"ok": True})
         elif self.path == "/api/thumbnail":  # (3.0) the Thumbnail button next to a looked-up video
@@ -2237,12 +2415,21 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/convert-many":
             # Videos picked from a playlist.
             fmt = data.get("format") if data.get("format") in settings.QUALITIES else "mp3"
-            quality = state.quality[fmt]
             items = [i for i in (data.get("items") or []) if isinstance(i, dict) and str(i.get("url", "")).startswith("http")]
+            library = None
+            if isinstance(data.get("library"), dict):  # (3.1.3) each video goes into the Library under its own title
+                try:
+                    library = library_target({**data["library"], "name": "-"}, check=False)
+                except sfx.Error as e:
+                    return self.send_json({"ok": False, "error": str(e), "loggedOut": isinstance(e, sfx.LoggedOut)})
+                fmt = "wav"
+            quality = state.quality[fmt]
             for item in items:
                 trim = [0, min(media.GIF_DEFAULT_SECONDS, int(item.get("seconds") or 0) or media.GIF_DEFAULT_SECONDS)] if fmt == "gif" else None
-                queue.add(str(item["url"]), fmt, quality, quality_label(fmt, quality), save_folder(data, project.kind_for(fmt)), trim,
-                          state.normalize, preview=item)
+                each = {**library, "name": sfx._clean_name(str(item.get("title") or "")) or "Sound"} if library else None
+                queue.add(str(item["url"]), fmt, quality, "Library" if library else quality_label(fmt, quality),
+                          library_folder() if library else save_folder(data, project.kind_for(fmt)), trim,
+                          state.normalize, preview=item, library=each)
             state.set(notice=None)
             self.send_json({"ok": True, "added": len(items)})
         elif self.path == "/api/normalize":
@@ -2366,6 +2553,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_games(self.path[len("/api/games-"):], data)
         elif self.path.startswith("/api/remote-"):
             self.handle_remote(self.path[len("/api/remote-"):], data)
+        elif self.path.startswith("/api/mv-"):
+            self.handle_myvault(self.path[len("/api/mv-"):], data)
         elif self.path.startswith("/api/pov-"):
             self.handle_povs(self.path[len("/api/pov-"):], data)
         elif self.path == "/api/cancel":
@@ -2665,6 +2854,17 @@ def start_remote_engine(screen=None):
         pass
 
 
+def phone_link(url, fmt):
+    """(phone 1.6) A link your phone sent: download it like the Convert page would."""
+    url = str(url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError("That isn't a link.")
+    fmt = fmt if fmt in ("mp4", "mp3") else "mp4"
+    quality = state.quality[fmt]
+    queue.add(url[:2000], fmt, quality, quality_label(fmt, quality), save_folder({}, project.kind_for(fmt)), None, state.normalize)
+    return "Downloading on your PC"
+
+
 def remote_engine_watch():
     """(2.37.1) Starts the hidden sender a little after the window (so it doesn't slow the start), then
     checks every half minute that it's still there while the switch is on, and starts it again if not."""
@@ -2685,6 +2885,17 @@ def show_window():
             appwindow._window.show()
     except Exception:  # noqa: BLE001
         pass
+
+
+def start_myvault_watch(port):
+    """(3.2.0) MyVault's login pop-up: watches for login windows (see myvault.watch_*)."""
+    url = f"http://127.0.0.1:{port}/myvault-bubble.html"
+    folder = os.path.join(settings.DATA_DIR, "webview")
+
+    def bubble(show, near):
+        appwindow.bubble(url, folder, WINDOW_ICON, show, near)
+    myvault._w["bubble"] = bubble
+    myvault.watch_start(appwindow.own_windows)
 
 
 def open_window(url):
@@ -2821,6 +3032,8 @@ def main():
     media.use_gpu(state.hardware)
     import srvwatch
     srvwatch.start()  # auto-posts about your own videos and streams in your servers
+    import phonelink
+    phonelink.start(phone_link)  # (phone 1.6) links, games and OBS from your phone
     # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
     browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
     browser_args += sharepick.browser_args()  # (calls: our own screen share picker picks for the engine)
@@ -2832,6 +3045,7 @@ def main():
     # (2.36.0) While VaultHub passes your stream on to other sites, closing the window asks first.
     appwindow.set_close_guard(lambda: "multistream" if multistream.live() else "")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
+    start_myvault_watch(server.server_port)
     sfx.presence.start()
     home.on_update = sfx.library.log_channel
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in

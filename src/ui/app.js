@@ -1,5 +1,8 @@
 const $ = (id) => document.getElementById(id);
 let format = "mp3";
+// (3.1.3) "Save to: Library" on the Link page: converted straight into the Library, not saved on the PC.
+let toLibrary = false;
+const libraryOn = () => toLibrary && typeof sfxUser === "function" && !!sfxUser() && !!sfxUser().canUpload;
 let shownQuality = "";
 let previewUrl = "";
 let previewTimer = null;
@@ -198,10 +201,11 @@ const picked = new Set(); // playlist videos to convert, by url
 
 // Things under the link box that depend on the format.
 function showFormatExtras() {
-  $("normalizeBox").hidden = !AUDIO_FORMATS.includes(format);
-  $("gifHint").hidden = !(format === "gif" && $("preview").classList.contains("show")
+  $("normalizeBox").hidden = !AUDIO_FORMATS.includes(format) && !libraryOn();
+  $("fmtPop").classList.toggle("to-lib", libraryOn());
+  $("gifHint").hidden = !(format === "gif" && !libraryOn() && $("preview").classList.contains("show")
     && !$("preview").classList.contains("loading") && !$("preview").classList.contains("error") && !trim && !playlist);
-  $("trimToggle").textContent = format === "gif" && !trim ? "Pick part" : "Trim";
+  $("trimToggle").textContent = format === "gif" && !trim && !libraryOn() ? "Pick part" : "Trim";
   updateConvertText();
 }
 
@@ -209,8 +213,8 @@ function showFormatExtras() {
 function fmtButtonText() {
   const q = $("quality").selectedOptions[0];
   const quality = q ? q.textContent.replace(/\s*\(.*\)\s*/, "").trim() : "";
-  const parts = [format.toUpperCase(), quality];
-  if (AUDIO_FORMATS.includes(format) && $("normalize").checked) parts.push("Even volume");
+  const parts = libraryOn() ? ["Library"] : [format.toUpperCase(), quality];
+  if ((AUDIO_FORMATS.includes(format) || libraryOn()) && $("normalize").checked) parts.push("Even volume");
   $("fmtButtonText").textContent = parts.filter(Boolean).join(" · ");
 }
 function openFmt(open) {
@@ -226,7 +230,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("fmtP
 
 function updateConvertText() {
   fmtButtonText();
-  $("convertText").textContent = playlist ? `Convert ${picked.size} video${picked.size === 1 ? "" : "s"}` : "Convert";
+  const verb = libraryOn() ? "Add" : "Convert";
+  $("convertText").textContent = playlist ? `${verb} ${picked.size} video${picked.size === 1 ? "" : "s"}` : libraryOn() ? "Add to Library" : "Convert";
   $("convert").disabled = !!playlist && picked.size === 0;
 }
 
@@ -892,6 +897,22 @@ $("form").addEventListener("submit", async (e) => {
   if (convertBusy) return; // a double click or double Enter starts it once
   convertBusy = true;
   try {
+    if (libraryOn()) {
+      // (3.1.3) Asks for the name and category, then it's downloaded into a temporary file and uploaded.
+      const title = !items && same ? $("previewTitle").textContent : "";
+      const res = await askToLibrary(title, items ? items.length : 0, (library) => items
+        ? api("/api/convert-many", { format: "mp3", items, library })
+        : api("/api/convert", { url, format: "mp3", library, ...part }));
+      if (!res) return; // Cancel
+      linksIn(url).concat(url).forEach((l) => offerSeen.add(l));
+      $("url").value = "";
+      hidePreview();
+      urlBoxChanged();
+      $("url").focus();
+      $("notice").className = "notice";
+      $("notice").textContent = "";
+      return;
+    }
     const folder = await whereToSave();
     if (!folder) return;
     linksIn(url).concat(url).forEach((l) => offerSeen.add(l)); // don't offer it again afterwards
@@ -904,8 +925,8 @@ $("form").addEventListener("submit", async (e) => {
     $("notice").textContent = res.ok ? "" : res.error;
   } finally {
     convertBusy = false;
+    refresh();
   }
-  refresh();
 });
 
 // ---- (3.0) Paste and clear in the link box, "Use the link you copied?", and the Thumbnail button
@@ -1077,13 +1098,14 @@ function renderJob(el, job) {
   if (el.dataset.sig === sig) return el; // unchanged: long lists stay cheap
   el.dataset.sig = sig;
   el.className = "job " + job.status;
-  setDrag(el, job.status === "done" ? { kind: "job", id: job.id } : null);
-  el.title = job.status === "done" ? DRAG_HINT : "";
-  setThumb(el.querySelector(".thumb"), job.thumbnail, job.format);
+  const lib = job.library; // (3.1.3) went straight into the Library: there's no file on the PC
+  setDrag(el, job.status === "done" && !lib ? { kind: "job", id: job.id } : null);
+  el.title = job.status === "done" && !lib ? DRAG_HINT : "";
+  setThumb(el.querySelector(".thumb"), job.thumbnail, lib ? "mp3" : job.format);
   el.querySelector(".title").textContent = job.title;
   el.querySelector(".title").title = job.title;
-  el.querySelector(".badge").textContent = [job.format.toUpperCase(), job.qualityLabel.replace(/ \(.*\)/, ""), job.trimLabel]
-    .filter(Boolean).join(" · ");
+  el.querySelector(".badge").textContent = (lib ? ["Library", lib.categoryName, lib.genre, job.trimLabel]
+    : [job.format.toUpperCase(), job.qualityLabel.replace(/ \(.*\)/, ""), job.trimLabel]).filter(Boolean).join(" · ");
   el.querySelector(".msg").textContent = job.message;
 
   const bar = el.querySelector(".bar");
@@ -1094,7 +1116,8 @@ function renderJob(el, job) {
     job.status === "active" && job.progress && job.progress < 100 ? Math.floor(job.progress) + "%" : "";
 
   const actions = el.querySelector(".actions");
-  const wanted = { queued: ["remove"], active: job.cancel ? [] : ["stop"], done: ["folder", "remove"], error: ["retry", "remove"] }[job.status];
+  const wanted = { queued: ["remove"], active: job.cancel || job.uploading ? [] : ["stop"],
+    done: lib ? ["remove"] : ["folder", "remove"], error: ["retry", "remove"] }[job.status];
   if (actions.dataset.kind !== wanted.join()) {
     actions.dataset.kind = wanted.join();
     actions.innerHTML = "";
@@ -1120,13 +1143,13 @@ function renderQueue(jobs) {
   $("clear").hidden = !jobs.some((j) => j.status === "done" || j.status === "error");
   // (3.0) The drag tip shows for the first few finished downloads, then it's known.
   for (const j of jobs) {
-    if (j.status === "done" && !tipCounted.has(j.id)) {
+    if (j.status === "done" && !j.library && !tipCounted.has(j.id)) {
       tipCounted.add(j.id);
       if ((loadPref("dragTipSeen") || 0) < DRAG_TIP_TIMES) savePref("dragTipSeen", (loadPref("dragTipSeen") || 0) + 1);
       else tipCounted.late = true;
     }
   }
-  $("dragTip").hidden = !jobs.some((j) => j.status === "done") || !!tipCounted.late;
+  $("dragTip").hidden = !jobs.some((j) => j.status === "done" && !j.library) || !!tipCounted.late;
   const list = $("jobs");
   const existing = new Map([...list.children].map((el) => [el.dataset.id, el]));
   const ordered = [...jobs].reverse(); // newest on top

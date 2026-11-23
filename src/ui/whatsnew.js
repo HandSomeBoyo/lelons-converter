@@ -2,6 +2,28 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+<<<<<<< HEAD
+=======
+  { version: "3.2.4", items: [
+    "MyVault: fixed the Google Authenticator import. The webcam now starts right inside VaultHub, so you just hold the QR code up to it.",
+    "MyVault: the page no longer refreshes every few seconds, so buttons don't miss your clicks.",
+  ] },
+  { version: "3.2.3", items: [
+    "MyVault: new Camera app button in the Google Authenticator import. Take the photo in the Windows Camera app and it comes over by itself, then the photo is deleted. The import also stops waiting forever when the webcam won't start.",
+  ] },
+  { version: "3.2.2", items: [
+    "MyVault: you can now pick which webcam to use when bringing codes over from Google Authenticator. The app remembers your pick, and it never gets stuck on \"Starting the webcam\" anymore.",
+  ] },
+  { version: "3.2.1", items: [
+    "MyVault: the Google Authenticator import no longer gets stuck on \"Starting the webcam\". It skips OBS's virtual camera, lets you switch cameras, and tells you what's wrong if the webcam is busy or blocked.",
+  ] },
+  { version: "3.2.0", items: [
+    "New: MyVault, at the top of the side bar. Your passwords, 2FA codes and notes behind a 6-number PIN, kept only on this PC. It can bring codes over from Google Authenticator, tells you about weak passwords, and offers to fill in logins for Steam, Epic and websites.",
+    "Live: new Input overlay. Your keys, mouse or controller light up on stream as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
+    "Convert: new Save to Library option. Paste a link and it goes right into the Library, without saving anything on your PC.",
+    "The phone app can now send links to your PC, add Steam games, control OBS and type on Remote.",
+  ] },
+>>>>>>> origin/main
   { version: "3.1.2", items: [
     "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
     "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",

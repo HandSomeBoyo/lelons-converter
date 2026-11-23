@@ -56,7 +56,7 @@ const qkTabButtons = () => [...document.querySelectorAll("#tabs button[data-tab]
 const qkAllPages = () => [...document.querySelectorAll("#tabs button[data-tab]:not([data-section]), .sub-tabs button[data-tab]")];
 const QK_PAGE_NAMES = { video: "Convert a link", sfx: "Sounds", history: "History" };
 const QK_WORDS = {
-  home: "start channels", video: "youtube tiktok mp3 mp4 download song link convert", files: "convert trim shrink compress",
+  home: "start channels", myvault: "vault passwords password manager 2fa codes authenticator login logins accounts keys", video: "youtube tiktok mp3 mp4 download song link convert", files: "convert trim shrink compress",
   images: "picture photo png jpg resize crop", resolve: "davinci subtitles silence edit", sfx: "library sounds sound effects music songs",
   docs: "script write document notes pdf", boards: "trello plan todo cards", fx: "film assets vfx clips explosions",
   comments: "comment inbox reply answer youtube viewers",

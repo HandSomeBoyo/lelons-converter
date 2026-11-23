@@ -230,12 +230,15 @@ function ago(iso) {
 // ---------------------------------------------------------------- the page
 
 function liveHtml() {
-  const head = `<div class="row between"><h1>Live</h1><div class="row sm" style="gap:6px;background:#2a1d3d;color:#c9a8ff;padding:5px 10px;border-radius:14px;font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:#9146ff"></span>Twitch</div></div>`;
+  return liveTwitchHtml().replace("<!--obs-->", obsHtml());
+}
+
+function liveTwitchHtml() {
+  const head = `<h1>Live</h1><!--obs--><div class="lbl">Twitch</div>`;
   if (!LV.token) {
-    return head + `<div class="card soon"><div style="color:#c9a8ff">${I.live.replace("<svg", '<svg width="44" height="44"')}</div>
-      <div class="big">Your stream, on your phone</div>
-      <div class="muted">See viewers and chat, write in chat, change the title, run ads and make clips.</div>
-      <button class="btn" data-lv="signin" style="margin-top:18px;background:#9146ff;color:#fff">Sign in with Twitch</button></div>`;
+    return head + `<div class="card tw-in"><div class="row"><span class="tw-ic">${I.live}</span>
+      <div class="grow"><b>Your Twitch stream</b><div class="sm muted">Viewers, chat, title, ads and clips.</div></div></div>
+      <button class="btn tw-btn" data-lv="signin">Sign in with Twitch</button></div>`;
   }
   if (!LV.loaded) { liveLoad(); liveTick(); return head + '<div class="spin"></div>'; }
   const s = LV.stream, ch = LV.channel || {};
@@ -277,4 +280,7 @@ document.addEventListener("keydown", (e) => {
 });
 setInterval(() => { const c = document.getElementById("lvClock"); if (c) c.textContent = ago(c.dataset.start); }, 1000);
 // Called by app.js after it draws a page: keep the chat scrolled to the newest line.
-function liveAfterRender() { const box = document.getElementById("lvChat"); if (box) box.scrollTop = box.scrollHeight; }
+function liveAfterRender() {
+  const box = document.getElementById("lvChat"); if (box) box.scrollTop = box.scrollHeight;
+  if (S.tab === "live" && !S.view && typeof obsLoop === "function") obsLoop();
+}
