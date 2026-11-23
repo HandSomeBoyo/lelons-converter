@@ -3,8 +3,9 @@
 
 const CHANGES = [
   { version: "3.2.0", items: [
-    "Live: new Input overlay. Show your keys, mouse or controller on stream, lighting up as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
-    "Works with Xbox controllers right away, with Xbox or PlayStation buttons. Key pops shows \"Typing...\" instead of letters when you type fast, so passwords stay hidden.",
+    "New: MyVault, at the top of the side bar. Your passwords, 2FA codes and notes behind a 6-number PIN, kept only on this PC. It can bring codes over from Google Authenticator, tells you about weak passwords, and offers to fill in logins for Steam, Epic and websites.",
+    "Live: new Input overlay. Your keys, mouse or controller light up on stream as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
+    "Convert: new Save to Library option. Paste a link and it goes right into the Library, without saving anything on your PC.",
     "The phone app can now send links to your PC, add Steam games, control OBS and type on Remote.",
   ] },
   { version: "3.1.2", items: [
