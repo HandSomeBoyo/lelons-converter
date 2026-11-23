@@ -47,8 +47,10 @@ def download_text(got, total, eta):
 
 
 class Queue:
-    def __init__(self, on_done=None):
+    def __init__(self, on_done=None, to_library=None):
         self.on_done = on_done  # called with each finished download
+        # (3.1.3) called with a finished download that goes straight into the Library (job, path, update)
+        self.to_library = to_library
         self.lock = threading.Lock()
         self.wake = threading.Condition(self.lock)
         self.jobs = []
@@ -87,7 +89,7 @@ class Queue:
 
     # ---- changing the queue
 
-    def add(self, url, fmt, quality, quality_label, folder, trim=None, normalize=False, preview=None):
+    def add(self, url, fmt, quality, quality_label, folder, trim=None, normalize=False, preview=None, library=None):
         with self.cache_lock:
             cached = self.info_cache.get(url)
         preview = preview or (cached[2] if cached else None) or {
@@ -99,6 +101,8 @@ class Queue:
             "trimLabel": " to ".join(downloader.format_duration(t) or "0:00" for t in trim) if trim else "",
             "status": "queued", "progress": 0, "message": "Waiting...", **preview,
         }
+        if library:  # (3.1.3) {"name", "category", "categoryName", "genre"}: uploaded, not kept on the PC
+            job["library"] = library
         with self.lock:
             self.jobs.append(job)
             self.wake.notify()
@@ -197,6 +201,16 @@ class Queue:
         except Exception as e:
             self._update(job, status="error", cancel=False,
                          message=STOPPED if job.get("cancel") else downloader.friendly_error(e))
+            return
+        if job.get("library") and self.to_library:
+            # (3.1.3) Straight into the Library: the file was only a temporary one.
+            self._update(job, cancel=False, uploading=True, progress=0, message="Adding it to the Library...")
+            try:
+                self.to_library(dict(job), path, lambda message, progress: self._update(job, message=message, progress=progress))
+            except Exception as e:
+                self._update(job, status="error", uploading=False, message=str(e) or "Couldn't add it to the Library.")
+                return
+            self._update(job, status="done", uploading=False, progress=100, message="In the Library! Everyone can hear it now.")
             return
         if job.get("cancel"):  # stopped right at the end: keep the file anyway, it's finished
             self._update(job, cancel=False)

@@ -9022,6 +9022,9 @@ button.stats-bar { cursor: pointer; }
 .fmt-pop .quality select { flex: 1; }
 .fmt-pop .volume-check { margin: 0; }
 .fmt-pop .volume-check[hidden] { display: none; }
+/* (3.1.3) Save to: This PC or the Library. With the Library picked, the format and quality don't apply */
+.fmt-note { font-size: 12.5px; color: var(--muted); max-width: 260px; line-height: 1.4; }
+.fmt-pop:not(.to-lib) .fmt-note, .fmt-pop.to-lib .fmt-kind { display: none; }
 
 /* Buttons that only show when the mouse is over their row (Trim, Download again) */
 .row-hover { opacity: 0; pointer-events: none; transition: opacity .15s; }
