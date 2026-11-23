@@ -106,6 +106,8 @@
       <span>Search</span><kbd>Ctrl K</kbd>
     </button>
     <nav class="tabs" id="tabs">
+      <button data-tab="myvault" id="mvSideBtn" class="mv-side-btn" title="MyVault: your passwords, locked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg><span>MyVault</span><i class="mv-side-state" id="mvSideState"></i></button>
+      <i class="mv-side-line" aria-hidden="true"></i>
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
       <button data-section="convert" data-tab="video" title="Convert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><span>Convert</span><b class="tab-dot" hidden></b></button>
       <button data-section="library" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span><b class="tab-dot" hidden></b></button>
@@ -812,6 +814,8 @@
 
   <!-- (2.37.0) Remote desktop: your own PCs (only the owner). Drawn by remote.js. -->
   <section class="tab-page" id="remoteTab" hidden></section>
+
+  <section class="tab-page mv-page" id="myvaultTab" hidden></section>
 
   <section class="tab-page" id="resolveTab" hidden>
     <p class="rt-beta"><i class="beta-tag">Beta</i> Early version, still being worked on. Tell us what to fix.</p>
@@ -2882,5 +2886,6 @@
 <script src="lvcostream.js"></script>
 <script src="lvextra.js"></script>
 <script src="lvprecheck.js"></script>
+<script src="myvault.js"></script>
 </body>
 </html>

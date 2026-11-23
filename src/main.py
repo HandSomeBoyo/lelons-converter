@@ -50,6 +50,7 @@ import film  # noqa: E402
 import editprojects  # noqa: E402
 import projectsync  # noqa: E402
 import games  # noqa: E402
+import myvault  # noqa: E402
 import povs  # noqa: E402
 import remote  # noqa: E402
 import project  # noqa: E402
@@ -714,6 +715,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_google_done(*channelstats.finish(urllib.parse.parse_qs(url.query)))
         if not self.allowed():
             return self.refuse()
+        if url.path == "/api/mv-screen":  # (3.2.0) MyVault: a picture of your screens, to find a 2FA QR code on them
+            return self.send_mv_screen()
         if url.path == "/api/remote-sound":  # (3.0) this PC's sound, for Remote desktop (see loopback.py)
             return self.send_remote_sound()
         if self.path == "/api/state":
@@ -1841,6 +1844,103 @@ class Handler(BaseHTTPRequestHandler):
             sound.close()
         self.close_connection = True
 
+    def send_mv_screen(self):
+        if os.name != "nt" or not myvault.is_open():
+            return self.send_error(404)
+        try:
+            import io
+            from PIL import ImageGrab
+            img = ImageGrab.grab(all_screens=True)
+            out = io.BytesIO()
+            img.save(out, "PNG", compress_level=1)
+        except Exception:  # noqa: BLE001
+            return self.send_error(404)
+        self.send_body(out.getvalue(), "image/png")
+
+    def handle_myvault(self, action, data):
+        """(3.2.0) MyVault: the page (ui/myvault.js) and the login pop-up (ui/myvault-bubble.js)."""
+        mv = myvault
+        try:
+            if action == "state":
+                mv.check_timeout()
+                result = mv.state()
+            elif action == "setup":
+                result = mv.setup(data.get("pin"))
+            elif action == "unlock":
+                result = mv.unlock(data.get("pin"))
+            elif action == "lock":
+                mv.lock()
+                result = mv.state()
+            elif action == "touch":
+                mv.touch()
+                result = {}
+            elif action == "items":
+                result = {"items": mv.items(), "codes": mv.codes()}
+            elif action == "codes":
+                result = {"codes": mv.codes()}
+            elif action == "get":
+                result = {"item": mv.get(str(data.get("id") or ""))}
+            elif action == "save":
+                result = {"item": mv.save(data.get("item"))}
+            elif action == "delete":
+                mv.delete(str(data.get("id") or ""))
+                result = {}
+            elif action == "reveal":
+                result = {"value": mv.reveal(str(data.get("id") or ""), str(data.get("field") or "password"))}
+            elif action == "copy":
+                result = mv.copy(str(data.get("id") or ""), str(data.get("field") or "password"))
+            elif action == "health":
+                result = mv.health()
+            elif action == "otp-parse":
+                result = {"otp": mv.parse_otp(data.get("text"))}
+            elif action == "import-read":
+                found = mv.parse_migration(data.get("link"))
+                found["codes"] = mv.match_codes(found["codes"])
+                result = found
+            elif action == "import-add":
+                result = {"added": mv.add_codes(data.get("codes"))}
+            elif action == "prefs":
+                result = {"prefs": mv.set_prefs(data.get("prefs"))}
+            elif action == "change-pin":
+                result = mv.change_pin(data.get("old"), data.get("new"))
+            elif action == "reset":
+                result = mv.reset()
+            elif action == "backup":
+                folder = pick_folder(os.path.expanduser("~"), "Where should the MyVault backup go?")
+                if not folder:
+                    return self.send_json({"ok": False, "cancelled": True})
+                result = {"path": mv.backup(folder, data.get("password"))}
+            elif action == "restore":
+                path = ""
+                if os.name == "nt":
+                    import folder_picker
+                    picked = folder_picker.pick_files("Pick your MyVault backup", [("MyVault backup", "*.vhvault"), ("All files", "*.*")])
+                    path = picked[0] if picked else ""
+                if not path:
+                    return self.send_json({"ok": False, "cancelled": True})
+                result = mv.restore(path, data.get("password"), data.get("pin"))
+            elif action == "offer":  # the login pop-up asks what to show
+                result = mv.offer()
+            elif action == "fill":
+                result = mv.fill(str(data.get("id") or ""), str(data.get("what") or "login"))
+            elif action == "dismiss":
+                mv.offer_dismiss(bool(data.get("never")))
+                result = {}
+            elif action == "bubble-size":
+                if mv._w.get("offer") and appwindow.is_bubble(appwindow._bubble.hwnd if appwindow._bubble else 0):
+                    appwindow.bubble(None, None, None, True, height=data.get("height"))
+                result = {}
+            elif action == "open-app":  # the pop-up's "Open MyVault"
+                show_window()
+                result = {}
+            else:
+                return self.send_error(404)
+        except myvault.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't do that. Try again."})
+        self.send_json({"ok": True, **result})
+
     def handle_remote(self, action, data):
         """(2.37.0) The Remote desktop: the Remote page, and the hidden sender page (ui/remote-host.html)."""
         try:
@@ -2449,6 +2549,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_games(self.path[len("/api/games-"):], data)
         elif self.path.startswith("/api/remote-"):
             self.handle_remote(self.path[len("/api/remote-"):], data)
+        elif self.path.startswith("/api/mv-"):
+            self.handle_myvault(self.path[len("/api/mv-"):], data)
         elif self.path.startswith("/api/pov-"):
             self.handle_povs(self.path[len("/api/pov-"):], data)
         elif self.path == "/api/cancel":
@@ -2781,6 +2883,17 @@ def show_window():
         pass
 
 
+def start_myvault_watch(port):
+    """(3.2.0) MyVault's login pop-up: watches for login windows (see myvault.watch_*)."""
+    url = f"http://127.0.0.1:{port}/myvault-bubble.html"
+    folder = os.path.join(settings.DATA_DIR, "webview")
+
+    def bubble(show, near):
+        appwindow.bubble(url, folder, WINDOW_ICON, show, near)
+    myvault._w["bubble"] = bubble
+    myvault.watch_start(appwindow.own_windows)
+
+
 def open_window(url):
     """Show the app's window (or bring it to the front if it's open)."""
     shown = False
@@ -2928,6 +3041,7 @@ def main():
     # (2.36.0) While VaultHub passes your stream on to other sites, closing the window asks first.
     appwindow.set_close_guard(lambda: "multistream" if multistream.live() else "")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
+    start_myvault_watch(server.server_port)
     sfx.presence.start()
     home.on_update = sfx.library.log_channel
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in
