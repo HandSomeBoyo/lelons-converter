@@ -9836,3 +9836,4 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .mv-cam-pick { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
 .mv-cam-pick[hidden] { display: none; }
 .mv-cam-pick select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2, var(--panel)); color: var(--text); font: inherit; font-size: 12.5px; }
+.mv-acts button, .mv-acts .mv-photo { white-space: nowrap; }

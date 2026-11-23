@@ -559,10 +559,11 @@ async function mvImport(firstLink) {
       <label class="mv-cam-pick" id="mvCamWrap" hidden><span>Camera</span><select id="mvCamPick"></select></label></div>
     </div>
     <div class="mv-err" id="mvErr"></div>
-    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo instead<input type="file" id="mvPhoto" accept="image/*" hidden></label><button type="button" class="ghost-button" id="mvRetry" hidden>Try again</button><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
+    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo<input type="file" id="mvPhoto" accept="image/*" hidden></label><button type="button" class="ghost-button" id="mvCamApp">Camera app</button><button type="button" class="ghost-button" id="mvRetry" hidden>Try again</button><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
   const tag = (t) => { const e = $("mvCamTag"); if (e) e.innerHTML = `<i></i>${mvEsc(t)}`; };
   const stop = () => { clearInterval(timer); timer = 0; if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; };
-  m._close = stop;
+  let appTimer = 0, appMode = false;
+  m._close = () => { stop(); clearInterval(appTimer); };
   $("mvCancel").addEventListener("click", () => mvCloseModal());
   const use = async (link) => {
     link = (link || "").trim();
@@ -601,9 +602,9 @@ async function mvImport(firstLink) {
     tag(why === "busy" ? "The webcam didn't start" : why === "blocked" ? "Webcam blocked" : "No webcam found");
     $("mvCam").classList.add("off");
     $("mvErr").className = "mv-tip";
-    $("mvErr").textContent = why === "busy" ? "Windows didn't hand over the webcam. Close apps that might be using it (OBS, Discord, Teams) and press Try again. Or open the Windows Camera app, take a photo of the QR code there, and press Use a photo instead."
+    $("mvErr").textContent = why === "busy" ? "Windows didn't hand over the webcam. Close apps that might be using it (OBS, Discord, Teams) and press Try again. Or press Camera app to take the photo there."
       : why === "blocked" ? "Windows is blocking the webcam. Open Settings > Privacy & security > Camera and turn on \"Let desktop apps access your camera\", then press Try again."
-      : "Take a photo of the QR code with another phone, then press Use a photo instead.";
+      : "Press Camera app to take the photo there, or take one with another phone and press Use a photo.";
     $("mvRetry").hidden = false;
   };
   const listCams = async () => {  // (3.2.2) the user picks the camera; real ones first, virtual ones (OBS...) last
@@ -615,8 +616,9 @@ async function mvImport(firstLink) {
     $("mvCamWrap").hidden = cams.length < 2;
   };
   const start = async () => {
+    if (appMode) return;  // they went with the Camera app
     const me = ++run;
-    stop();
+    stop(); clearInterval(appTimer);
     $("mvCam").classList.remove("off"); $("mvRetry").hidden = true;
     $("mvErr").className = "mv-err"; $("mvErr").textContent = "";
     // A watchdog: whatever gets stuck, the box never just sits on "Starting".
@@ -656,8 +658,36 @@ async function mvImport(firstLink) {
       fail(n === "NotAllowedError" || n === "SecurityError" ? "blocked" : n === "NotFoundError" || n === "OverconstrainedError" ? "none" : "busy");
     } finally { clearTimeout(dog); }
   };
-  $("mvRetry").addEventListener("click", () => start());
-  pick.addEventListener("change", () => { savePref("mvCamId", pick.value); start(); });
+  $("mvRetry").addEventListener("click", () => { appMode = false; start(); });
+  pick.addEventListener("change", () => { savePref("mvCamId", pick.value); appMode = false; start(); });
+  // (3.2.3) the Windows Camera app: take the photo there, it comes over by itself (and is deleted from Camera Roll)
+  $("mvCamApp").addEventListener("click", async () => {
+    appMode = true; run++; stop(); clearInterval(appTimer);
+    const r = await mvPost("camera-app", {});
+    if (!r.ok) { $("mvErr").className = "mv-err"; return void ($("mvErr").textContent = r.error); }
+    $("mvCam").classList.add("off"); $("mvRetry").hidden = true;
+    tag("Waiting for your photo…");
+    $("mvErr").className = "mv-tip";
+    $("mvErr").textContent = "Take a photo of the QR code in the Camera app. It shows up here by itself, and the photo is deleted from your PC after.";
+    const until = Date.now() + 5 * 60 * 1000;
+    let busy = false;
+    appTimer = setInterval(async () => {
+      if (busy) return;
+      if (!document.body.contains(m) || Date.now() > until) { clearInterval(appTimer); if (document.body.contains(m)) tag("Press Camera app to try again"); return; }
+      busy = true;
+      try {
+        const p = await mvPost("camera-photo", {});
+        if (p.ok && p.found) {
+          tag("Reading the photo…");
+          const blob = await (await fetch(p.image)).blob();
+          const link = await mvScanFile(blob);
+          if (!link) { tag("Waiting for your photo…"); $("mvErr").className = "mv-err"; $("mvErr").textContent = "No QR code found in that photo. Take another one a bit closer, and keep it sharp."; }
+          else { clearInterval(appTimer); use(link); }
+        }
+      } catch {}
+      busy = false;
+    }, 1500);
+  });
   listCams().then(start, start);
 }
 

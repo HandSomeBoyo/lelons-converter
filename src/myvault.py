@@ -1298,3 +1298,78 @@ def _focused_is_password():
         return out.vt == 11 and (out.val & 0xFFFF) != 0  # VT_BOOL
     except Exception:  # noqa: BLE001
         return False
+
+
+# ---- (3.2.3) the Windows Camera app, for when the app's own webcam view can't get the camera
+_camera = {"since": 0.0}
+
+
+def _camera_roll_folders():
+    found = []
+    if os.name == "nt":
+        try:  # FOLDERID_CameraRoll: the right folder whatever the language (Bilder, Pictures...) or OneDrive
+            class GUID(ctypes.Structure):
+                _fields_ = [("a", ctypes.c_uint32), ("b", ctypes.c_uint16), ("c", ctypes.c_uint16), ("d", ctypes.c_ubyte * 8)]
+            fid = GUID(0xAB5FB87B, 0x7CE2, 0x4F83, (ctypes.c_ubyte * 8)(0x91, 0x5D, 0x55, 0x08, 0x46, 0xC9, 0x53, 0x7B))
+            out = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(fid), 0, None, ctypes.byref(out)) == 0:
+                found.append(out.value)
+                ctypes.windll.ole32.CoTaskMemFree(out)
+        except Exception:  # noqa: BLE001
+            pass
+    home = os.path.expanduser("~")
+    for pics in ("Pictures", "Bilder", "Billeder"):
+        found += [os.path.join(home, pics, "Camera Roll"), os.path.join(home, "OneDrive", pics, "Camera Roll")]
+    seen, out = set(), []
+    for f in found:
+        if f and os.path.isdir(f) and os.path.normcase(f) not in seen:
+            seen.add(os.path.normcase(f))
+            out.append(f)
+    return out
+
+
+def camera_open():
+    """Opens the Camera app; photos taken from now on are picked up by camera_photo()."""
+    if not is_open():
+        raise Error("MyVault is locked.")
+    _camera["since"] = time.time() - 2
+    if os.name == "nt":
+        try:
+            os.startfile("microsoft.windows.camera:")
+        except OSError:
+            raise Error("Couldn't open the Camera app.")
+    return {"folders": len(_camera_roll_folders())}
+
+
+def camera_photo():
+    """The newest photo taken since camera_open(), read and then deleted: it holds your 2FA secrets."""
+    if not is_open() or not _camera["since"]:
+        return {"found": False}
+    best = None
+    for folder in _camera_roll_folders():
+        try:
+            for name in os.listdir(folder):
+                if not name.lower().endswith((".jpg", ".jpeg", ".png")):
+                    continue
+                path = os.path.join(folder, name)
+                when = os.path.getmtime(path)
+                if when >= _camera["since"] and (best is None or when > best[0]):
+                    best = (when, path)
+        except OSError:
+            continue
+    if not best:
+        return {"found": False}
+    try:
+        if time.time() - best[0] < 1.0:  # still being written
+            return {"found": False}
+        with open(best[1], "rb") as f:
+            data = f.read()
+    except OSError:
+        return {"found": False}
+    _camera["since"] = time.time()
+    try:
+        os.remove(best[1])
+    except OSError:
+        pass
+    kind = "png" if best[1].lower().endswith(".png") else "jpeg"
+    return {"found": True, "image": f"data:image/{kind};base64," + base64.b64encode(data).decode()}

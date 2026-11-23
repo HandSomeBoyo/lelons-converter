@@ -3,7 +3,7 @@
 
 const CHANGES = [
   { version: "3.2.3", items: [
-    "MyVault: the Google Authenticator import now tells you when Windows won't hand over the webcam, instead of waiting forever.",
+    "MyVault: new Camera app button in the Google Authenticator import. Take the photo in the Windows Camera app and it comes over by itself, then the photo is deleted. The import also stops waiting forever when the webcam won't start.",
   ] },
   { version: "3.2.2", items: [
     "MyVault: you can now pick which webcam to use when bringing codes over from Google Authenticator. The app remembers your pick, and it never gets stuck on \"Starting the webcam\" anymore.",
