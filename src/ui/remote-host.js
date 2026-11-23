@@ -101,10 +101,11 @@ async function rhOffer(s, body, release) {
   await rdGathered(pc);
   const sdp = pc.localDescription.sdp;
   const fpAnswer = rdFingerprint(sdp);
+  sess.bound = `pw|${fpOffer}|${fpAnswer}|${body.nonce}`; // (3.3) what the password stamp is made for
   const sig = await rdSign(rh.keys.priv, `answer|${s.from}|${rh.me.device}|${fpAnswer}|${body.nonce}`);
   await rdPost("/api/remote-signal", {
     to: s.from, kind: "answer",
-    body: JSON.stringify({ sdp, key: rh.keys.pub, pair: !known, pin: !!rh.me.pin, nonce: body.nonce, sig }),
+    body: JSON.stringify({ sdp, key: rh.keys.pub, pair: !known, pin: rh.me.pin ? (rh.me.pinSalt || true) : false, nonce: body.nonce, sig }),
   });
   sess.timer = setInterval(() => rhWatch(sess), 700);
   if (!known) {
@@ -113,8 +114,8 @@ async function rhOffer(s, body, release) {
     rhSay("Asking you to allow " + sess.name);
     const ask = await rdPost("/api/remote-ask", { name: sess.name, device: s.from, key: body.key, code });
     if (!ask.ok) return rhEnd("declined");
-    const until = Date.now() + 120000;
-    while (rh.sess === sess && Date.now() < until) {
+    const until = Date.now() + (rh.me.pin ? 300000 : 120000); // more time when they can type the password
+    while (rh.sess === sess && !sess.approved && Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
       const a = await rdPost("/api/remote-answered", { id: ask.id });
       if (a.answer === true) { sess.approved = true; break; }
@@ -131,8 +132,9 @@ function rhSend(sess, msg) {
 
 function rhReady(sess) {
   if (rh.sess !== sess || !sess.ctl || sess.ctl.readyState !== "open") return;
-  if (!sess.approved) { rhSend(sess, { waiting: true }); return; }
-  if (!sess.pinOk) { rhSend(sess, { needPin: true }); return; }
+  // (3.3) With a password set, a PC that's new here may type it instead of someone pressing Allow.
+  if (!sess.approved && !(rh.me.pin && !sess.pinOk)) { rhSend(sess, { waiting: true }); return; }
+  if (!sess.pinOk) { rhSend(sess, { needPin: true, first: !sess.approved }); return; }
   rhGo(sess);
 }
 
@@ -217,13 +219,19 @@ async function rhMessage(sess, data) {
   if (!msg) return;
   if (msg.ping) return rhSend(sess, { pong: msg.ping });
   if (msg.bye) return rhEnd("left");
-  if (!sess.approved) return;
-  if (!sess.pinOk) {
-    if (typeof msg.pin !== "string") return;
-    const r = await rdPost("/api/remote-pin", { pin: msg.pin });
-    if (r.ok) { sess.pinOk = true; rhReady(sess); } else rhSend(sess, { pinBad: true, left: r.left, wait: r.wait });
+  if (!sess.pinOk && rh.me.pin) {
+    if (sess.checking || (typeof msg.pin !== "string" && typeof msg.proof !== "string")) return;
+    sess.checking = true;
+    const newcomer = sess.approved ? null : { key: sess.key, name: sess.name, device: sess.from };
+    const r = await rdPost("/api/remote-pin", typeof msg.proof === "string"
+      ? { proof: msg.proof, bound: sess.bound, newcomer } : { pin: msg.pin, newcomer });
+    sess.checking = false;
+    if (rh.sess !== sess) return;
+    if (r.ok) { sess.pinOk = true; sess.approved = true; rhReady(sess); }
+    else rhSend(sess, { pinBad: true, left: r.left, wait: r.wait, first: !sess.approved });
     return;
   }
+  if (!sess.approved) return;
   if (!sess.started) return;
   if (Array.isArray(msg.e)) { sess.queue.push(...msg.e.slice(0, 100)); rhFlush(sess); }
   if (msg.mode && RD_MODES[msg.mode]) rhMode(sess, msg.mode);
