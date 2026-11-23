@@ -1023,7 +1023,7 @@ def fill(item_id, what="login"):
         raise Error("This site doesn't match the one you saved, so MyVault won't fill it in.")
     if not _activate(o["hwnd"]):
         raise Error("Couldn't get back to the login window. Click in it and try again.")
-    time.sleep(0.18)
+    time.sleep(0.25)  # let the window put the keyboard back in its text box
     if what == "code":
         _type(code)
     elif what == "password" or (what == "login" and _focused_is_password()):
@@ -1124,6 +1124,8 @@ def _u32():
     u.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     u.IsWindow.argtypes = [wintypes.HWND]
     u.SetForegroundWindow.argtypes = [wintypes.HWND]
+    u.BringWindowToTop.argtypes = [wintypes.HWND]
+    u.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
     u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
     u.IsIconic.argtypes = [wintypes.HWND]
     u.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -1179,11 +1181,24 @@ def _activate(hwnd):
         return False
     if u.IsIconic(hwnd):
         u.ShowWindow(hwnd, 9)
-    # Alt down/up first: Windows lets a program bring another window forward after a key press
-    _key_vk(0x12, up=False)
-    _key_vk(0x12, up=True)
-    u.SetForegroundWindow(hwnd)
-    for _ in range(10):
+    if _foreground() == hwnd:
+        return True  # (3.2.5) already there: touch nothing
+    # Windows lets a program bring another window forward right after it sent a key press. (3.2.5) Not Alt
+    # any more: a lone Alt in Chrome or Edge moves the keyboard to the browser's menu button, so the
+    # login went there instead of into the page. 0xE8 is a key nothing uses.
+    _key_vk(0xE8, up=False)
+    _key_vk(0xE8, up=True)
+    k32 = ctypes.windll.kernel32
+    me = k32.GetCurrentThreadId()
+    there = u.GetWindowThreadProcessId(_foreground(), None)
+    attached = bool(there and there != me and u.AttachThreadInput(me, there, True))
+    try:
+        u.BringWindowToTop(hwnd)
+        u.SetForegroundWindow(hwnd)
+    finally:
+        if attached:
+            u.AttachThreadInput(me, there, False)
+    for _ in range(15):
         if _foreground() == hwnd:
             return True
         time.sleep(0.03)
