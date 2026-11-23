@@ -11,7 +11,7 @@ const FEEL_MS = 340;
 function feelNav(dir) { FEEL.dir = dir; FEEL.at = performance.now(); }
 
 // Wrap the functions that change screens, so we know which way to slide.
-for (const [name, dir] of [["openChat", "in"], ["openServer", "in"], ["openDocs", "in"], ["openDoc", "in"], ["closeView", "out"], ["closeDoc", "out"]]) {
+for (const [name, dir] of [["openChat", "in"], ["openServer", "in"], ["openDocs", "in"], ["openDoc", "in"], ["openGames", "in"], ["openBoards", "in"], ["openRemote", "in"], ["openBoard", "in"], ["closeView", "out"], ["closeDoc", "out"]]) {
   const orig = window[name];
   if (typeof orig !== "function") continue;
   window[name] = function (...args) { feelNav(dir); return orig.apply(this, args); };

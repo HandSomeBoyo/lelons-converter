@@ -3816,7 +3816,7 @@ begin
     end if;
     insert into lelons.remote_devices as r (id, account_id, name, kind, host, ctrl_key, host_key, width, height, busy, seen_at)
     values (device, me.id, left(coalesce(nullif(trim(data->>'name'), ''), 'PC'), 40),
-            case when data->>'kind' = 'laptop' then 'laptop' else 'desktop' end,
+            case when data->>'kind' in ('laptop', 'phone') then data->>'kind' else 'desktop' end,
             coalesce((data->>'host')::boolean, false), left(coalesce(data->>'ctrlKey', ''), 400),
             left(coalesce(data->>'hostKey', ''), 400), (data->>'width')::int, (data->>'height')::int,
             coalesce((data->>'busy')::boolean, false), now())
@@ -5268,6 +5268,112 @@ begin
   raise exception 'what?' using hint = 'bad_input';
 end $$;
 
+-- ---- (phone 1.6) Your phone asks your PC to do things: download a link, add a game from Steam,
+-- press OBS buttons. Only your own PCs (on your account) get them, and only while VaultHub is open there.
+create table if not exists lelons.pc_links (
+  id uuid primary key,  -- made by the app on that PC
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  name text not null default 'PC' check (length(name) between 1 and 40),
+  status jsonb not null default '{}'::jsonb check (length(status::text) <= 30000),
+  watch_at timestamptz,  -- a phone has the Live tab open: send OBS's state
+  seen_at timestamptz not null default now()
+);
+create table if not exists lelons.pc_tasks (
+  id bigint generated always as identity primary key,
+  account_id uuid not null references lelons.accounts (id) on delete cascade,
+  pc uuid not null references lelons.pc_links (id) on delete cascade,
+  kind text not null check (kind in ('link', 'game', 'obs')),
+  data jsonb not null default '{}'::jsonb check (length(data::text) <= 4000),
+  state text not null default 'new' check (state in ('new', 'taken', 'done', 'failed')),
+  result text not null default '' check (length(result) <= 300),
+  created_at timestamptz not null default now(),
+  done_at timestamptz
+);
+create index if not exists pc_links_account on lelons.pc_links (account_id);
+create index if not exists pc_tasks_pc on lelons.pc_tasks (pc, state, id);
+alter table lelons.pc_links enable row level security;
+alter table lelons.pc_tasks enable row level security;
+revoke all on lelons.pc_links, lelons.pc_tasks from anon, authenticated;
+
+-- lelons_pc(token, what, pc, data, task)
+--   PC:    'hello' pc, data {name, status} -> {tasks (new ones, now taken), watch}    (every few seconds)
+--          'done'  pc, task, data {ok, result}
+--   phone: 'list'  data {watch} -> {pcs: [{id, name, online, status}]}
+--          'send'  pc, data {kind, data} -> {id}
+--          'task'  task -> {state, result}
+--          'forget' pc
+create or replace function public.lelons_pc(token text, what text, pc uuid default null, data jsonb default null, task bigint default null)
+returns json language plpgsql security definer set search_path = '' as $$
+declare
+  me lelons.accounts := lelons.who(token);
+  p lelons.pc_links;
+  t lelons.pc_tasks;
+  list json;
+begin
+  delete from lelons.pc_tasks x where x.account_id = me.id and x.created_at < now() - interval '1 day';
+  if pc is not null then
+    select x.* into p from lelons.pc_links x where x.id = lelons_pc.pc;
+  end if;
+
+  if what = 'hello' then
+    if pc is null then raise exception 'no pc' using hint = 'bad_input'; end if;
+    if p.id is not null and p.account_id <> me.id then
+      delete from lelons.pc_links x where x.id = p.id;  -- this PC logged in to another account: start fresh
+      p.id := null;
+    end if;
+    if p.id is null and (select count(*) from lelons.pc_links x where x.account_id = me.id) >= 10 then
+      delete from lelons.pc_links x where x.id = (select y.id from lelons.pc_links y where y.account_id = me.id order by y.seen_at limit 1);
+    end if;
+    insert into lelons.pc_links as x (id, account_id, name, status, seen_at)
+    values (lelons_pc.pc, me.id, left(coalesce(nullif(btrim(lelons_pc.data->>'name'), ''), 'PC'), 40),
+            case when jsonb_typeof(lelons_pc.data->'status') = 'object' and length((lelons_pc.data->'status')::text) <= 30000 then lelons_pc.data->'status' else '{}'::jsonb end, now())
+    on conflict (id) do update set name = excluded.name, status = excluded.status, seen_at = now();
+    select x.* into p from lelons.pc_links x where x.id = lelons_pc.pc;
+    with u as (update lelons.pc_tasks y set state = 'taken' where y.pc = lelons_pc.pc and y.state = 'new'
+                 and y.created_at > now() - interval '10 minutes' returning y.*)
+    select json_agg(json_build_object('id', u.id, 'kind', u.kind, 'data', u.data) order by u.id) into list from u;
+    return json_build_object('watch', coalesce(p.watch_at > now() - interval '60 seconds', false), 'tasks', coalesce(list, '[]'::json));
+  elsif what = 'done' then
+    update lelons.pc_tasks x set state = case when coalesce((lelons_pc.data->>'ok')::boolean, false) then 'done' else 'failed' end,
+      result = left(coalesce(lelons_pc.data->>'result', ''), 300), done_at = now()
+    where x.id = lelons_pc.task and x.pc = lelons_pc.pc and x.account_id = me.id;
+    return '{}'::json;
+  elsif what = 'list' then
+    if coalesce((lelons_pc.data->>'watch')::boolean, false) then
+      update lelons.pc_links x set watch_at = now() where x.account_id = me.id;
+    end if;
+    return json_build_object('pcs', coalesce((select json_agg(json_build_object('id', x.id, 'name', x.name,
+        'online', x.seen_at > now() - interval '20 seconds', 'seen', extract(epoch from x.seen_at),
+        'status', case when x.seen_at > now() - interval '20 seconds' then x.status else '{}'::jsonb end) order by x.seen_at desc)
+      from lelons.pc_links x where x.account_id = me.id), '[]'::json));
+  elsif what = 'task' then
+    select x.* into t from lelons.pc_tasks x where x.id = lelons_pc.task and x.account_id = me.id;
+    return json_build_object('state', coalesce(t.state, 'gone'), 'result', coalesce(t.result, ''));
+  end if;
+
+  if p.id is null or p.account_id <> me.id then
+    raise exception 'not your pc' using hint = 'nopc';
+  end if;
+  if what = 'send' then
+    if coalesce(lelons_pc.data->>'kind', '') not in ('link', 'game', 'obs') or jsonb_typeof(lelons_pc.data->'data') <> 'object' or length((lelons_pc.data->'data')::text) > 4000 then
+      raise exception 'bad task' using hint = 'bad_input';
+    end if;
+    if (select count(*) from lelons.pc_tasks x where x.account_id = me.id and x.created_at > now() - interval '1 minute') >= 40 then
+      raise exception 'slow down' using hint = 'slow';
+    end if;
+    insert into lelons.pc_tasks (account_id, pc, kind, data) values (me.id, p.id, lelons_pc.data->>'kind', lelons_pc.data->'data') returning * into t;
+    return json_build_object('id', t.id);
+  elsif what = 'forget' then
+    delete from lelons.pc_links x where x.id = p.id;
+    return '{}'::json;
+  end if;
+  raise exception 'what?' using hint = 'bad_input';
+end $$;
+
+-- (phone 1.6) A phone can be a remote control too (it never lets others control it).
+alter table lelons.remote_devices drop constraint if exists remote_devices_kind_check;
+alter table lelons.remote_devices add constraint remote_devices_kind_check check (kind in ('desktop', 'laptop', 'phone'));
+
 grant execute on function lelons.ticket_ok(text, text), lelons.listed(text), lelons.hash(text) to anon, authenticated;
 do $$
 declare
@@ -5300,7 +5406,8 @@ begin
     'lelons_board(text, text, uuid, jsonb, bigint, text[])', 'lelons_fx(text, text, uuid, jsonb)',
     'lelons_games(text, text, uuid, jsonb)', 'lelons_pov(text, text, uuid, jsonb, bigint)', 'lelons_feed(text, int)', 'lelons_live_channels(text)', 'lelons_trash(text, text, text, uuid)',
     'lelons_server(text, text, uuid, jsonb)', 'lelons_server_event(text, text, text, jsonb)', 'lelons_remote(text, text, uuid, jsonb, bigint)',
-    'lelons_push_sub(text, text, jsonb)', 'lelons_push_job(text, text, text)', 'lelons_project(text, text, uuid, jsonb)'] loop
+    'lelons_push_sub(text, text, jsonb)', 'lelons_push_job(text, text, text)', 'lelons_project(text, text, uuid, jsonb)',
+    'lelons_pc(text, text, uuid, jsonb, bigint)'] loop
     execute format('revoke execute on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;

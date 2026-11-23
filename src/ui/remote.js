@@ -92,7 +92,7 @@ function rdDraw() {
   // (3.0) Only PCs you can control are shown. A PC with "let my other PCs control this one" off (like a
   // laptop you only use to control) is just named in a quiet line under them.
   const others = rd.devices.filter((d) => !d.me && d.host);
-  const quiet = rd.devices.filter((d) => !d.me && !d.host);
+  const quiet = rd.devices.filter((d) => !d.me && !d.host && d.kind !== "phone"); // (phones only control)
   const card = (d) => {
     const ready = d.online && d.host;
     const status = ready ? (d.busy ? "In use right now" : "Ready") : d.online ? "Controlling is off on it" : `Last seen ${rdAgo(d.seen)}`;

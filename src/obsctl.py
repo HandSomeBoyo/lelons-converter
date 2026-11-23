@@ -24,7 +24,7 @@ _lock = threading.Lock()
 _conn = None
 _thread = None
 _asked = 0
-_state = {"connected": False, "error": "", "scene": "", "scenes": [], "inputs": [], "record": False, "recordPaused": False,
+_state = {"connected": False, "error": "", "scene": "", "scenes": [], "inputs": [], "record": False, "recordPaused": False, "stream": False,
           "replay": None, "vcam": None, "vcamOurs": False, "saved": 0}
 _levels = {}  # input name -> (level 0..1, at)
 _order = []  # audio inputs in the order OBS lists them
@@ -138,6 +138,8 @@ def _event(kind, d):
         elif kind == "RecordStateChanged":
             _state["record"] = bool(d.get("outputActive"))
             _state["recordPaused"] = d.get("outputState") == "OBS_WEBSOCKET_OUTPUT_PAUSED"
+        elif kind == "StreamStateChanged":
+            _state["stream"] = bool(d.get("outputActive"))
         elif kind == "ReplayBufferStateChanged":
             _state["replay"] = bool(d.get("outputActive"))
         elif kind == "ReplayBufferSaved":
@@ -161,6 +163,7 @@ def _load(conn):
     """Everything we show, asked once after connecting (then events keep it fresh)."""
     scenes = _try(conn, "GetSceneList") or {}
     rec = _try(conn, "GetRecordStatus") or {}
+    live = _try(conn, "GetStreamStatus") or {}
     replay = _try(conn, "GetReplayBufferStatus")
     vcam = _try(conn, "GetVirtualCamStatus")
     inputs = []
@@ -177,7 +180,7 @@ def _load(conn):
     with _lock:
         _state.update(connected=True, error="", scene=scenes.get("currentProgramSceneName") or "",
                       scenes=[s.get("sceneName") for s in reversed(scenes.get("scenes") or []) if s.get("sceneName")],
-                      record=bool(rec.get("outputActive")), recordPaused=bool(rec.get("outputPaused")),
+                      record=bool(rec.get("outputActive")), stream=bool(live.get("outputActive")), recordPaused=bool(rec.get("outputPaused")),
                       replay=None if replay is None else bool(replay.get("outputActive")),
                       vcam=None if vcam is None else bool(vcam.get("outputActive")), inputs=inputs)
 
@@ -256,6 +259,10 @@ def do(action, data):
         conn.ask("SetInputMute", {"inputName": str(data.get("input") or ""), "inputMuted": bool(data.get("muted"))})
     elif action == "record":
         conn.ask("StopRecord" if _state["record"] else "StartRecord")
+    elif action == "stream":  # (phone 1.6: go live or stop from the phone; on = what the button meant)
+        want = bool(data.get("on"))
+        if want != bool(_state.get("stream")):
+            conn.ask("StartStream" if want else "StopStream")
     elif action == "pause":
         conn.ask("ResumeRecord" if _state["recordPaused"] else "PauseRecord")
     elif action == "replay-start":
