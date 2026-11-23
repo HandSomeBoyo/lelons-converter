@@ -4,6 +4,7 @@
 const CHANGES = [
   { version: "3.2.5", items: [
     "MyVault: Fill now types your login into websites. Before, Chrome and Edge sent it to their menu button instead.",
+    "Remote: you can now set a password on a PC (letters are fine too). Type it to connect from anywhere, no one has to be home to press Allow.",
   ] },
   { version: "3.2.4", items: [
     "MyVault: fixed the Google Authenticator import. The webcam now starts right inside VaultHub, so you just hold the QR code up to it.",
