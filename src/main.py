@@ -1930,6 +1930,10 @@ class Handler(BaseHTTPRequestHandler):
                 if mv._w.get("offer") and appwindow.is_bubble(appwindow._bubble.hwnd if appwindow._bubble else 0):
                     appwindow.bubble(None, None, None, True, height=data.get("height"))
                 result = {}
+            elif action == "camera-app":  # (3.2.3) the Windows Camera app instead of the webcam view
+                result = mv.camera_open()
+            elif action == "camera-photo":
+                result = mv.camera_photo()
             elif action == "open-app":  # the pop-up's "Open MyVault"
                 show_window()
                 result = {}
