@@ -144,6 +144,7 @@ function drawSfxAccount() {
   const user = a.user;
   if (typeof drawAccountPage === "function") drawAccountPage();
   if (typeof docsAccountChanged === "function") docsAccountChanged();
+  if (typeof toLibAccountChanged === "function") toLibAccountChanged();
   $("sfxNotSetUp").hidden = a.configured;
   $("libMe").hidden = !a.configured;
   $("libMeButton").classList.remove("saving");

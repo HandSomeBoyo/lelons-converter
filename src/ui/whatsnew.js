@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.0", items: [
+    "New: MyVault, at the top of the side bar. Your passwords, 2FA codes and notes behind a 6-number PIN, kept only on this PC. It can bring codes over from Google Authenticator, tells you about weak passwords, and offers to fill in logins for Steam, Epic and websites.",
+    "Live: new Input overlay. Your keys, mouse or controller light up on stream as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
+    "Convert: new Save to Library option. Paste a link and it goes right into the Library, without saving anything on your PC.",
+    "The phone app can now send links to your PC, add Steam games, control OBS and type on Remote.",
+  ] },
   { version: "3.1.2", items: [
     "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
     "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",
