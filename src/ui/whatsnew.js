@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.4", items: [
+    "MyVault: fixed the Google Authenticator import. The webcam now starts right inside VaultHub, so you just hold the QR code up to it.",
+    "MyVault: the page no longer refreshes every few seconds, so buttons don't miss your clicks.",
+  ] },
   { version: "3.2.3", items: [
     "MyVault: new Camera app button in the Google Authenticator import. Take the photo in the Windows Camera app and it comes over by itself, then the photo is deleted. The import also stops waiting forever when the webcam won't start.",
   ] },

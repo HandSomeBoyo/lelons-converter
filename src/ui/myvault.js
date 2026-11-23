@@ -59,15 +59,16 @@ async function mvLoad(fresh) {
   const st = await mvPost("state");
   if (!st.ok) return;
   const changed = !mv.st || mv.st.open !== st.open || mv.st.exists !== st.exists;
+  const waitChanged = !mv.st || (mv.st.wait || 0) !== (st.wait || 0);
   mv.st = st;
   mvSideState();
   if (!mv.open) return;
   if (st.open) {
     if (changed || fresh) await mvRefresh();
-    else mvDraw();
+    else if (!mv.tick) mvStartTick();  // (3.2.4) nothing changed: don't redraw the page (a redraw every 5 s ate clicks)
   } else {
     if (changed || fresh) { mv.pin = ""; mv.items = []; mv.shown = {}; }
-    mvDraw();
+    if (changed || fresh || waitChanged || !$("mvPad")) mvDraw();
   }
 }
 
@@ -261,8 +262,8 @@ function mvDrawList(page) {
   $("mvSetBtn").addEventListener("click", mvSettings);
   if ($("mvHealthBtn")) $("mvHealthBtn").addEventListener("click", mvHealth);
   if ($("mvAddFirst")) $("mvAddFirst").addEventListener("click", () => mvEdit(null));
-  if ($("mvImportFirst")) $("mvImportFirst").addEventListener("click", mvImport);
-  if ($("mvImportBtn")) $("mvImportBtn").addEventListener("click", mvImport);
+  if ($("mvImportFirst")) $("mvImportFirst").addEventListener("click", () => mvImport());
+  if ($("mvImportBtn")) $("mvImportBtn").addEventListener("click", () => mvImport());
   page.querySelectorAll(".mv-row").forEach((row) => row.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     const id = row.dataset.id;
@@ -549,6 +550,7 @@ async function mvScanFile(file) {
 
 // ---- import from Google Authenticator
 async function mvImport(firstLink) {
+  if (typeof firstLink !== "string") firstLink = "";  // (3.2.4) a click passes its event here: that broke the whole import
   const got = { codes: [], batches: new Set(), size: 1 };
   let stream = null, timer = 0, reading = false;
   const m = mvModal(`
