@@ -5,7 +5,7 @@
 const SUPA = "https://hjuoeiouotgaapuevflp.supabase.co";
 const KEY = "sb_publishable_4cNy4W_7OjXUjGaoxXKneg_-YcdccQ2";  // the public (publishable) key, same as the PC app
 const BUCKET = "lelons-sounds";
-const VERSION = "phone 1.5.0";
+const VERSION = "phone 1.6.0";
 
 const FRIENDLY = {
   wrong: "Wrong username or password.",
@@ -22,6 +22,15 @@ const FRIENDLY = {
   doc_long: "That document is too long.",
   doc_big: "That document is too big.",
   doc_many: "You have too many documents. Delete some on your PC first.",
+  nogame: "That game isn't in the list any more.",
+  games_full: "The games list is full. Delete some old games on your PC first.",
+  games_slow: "That's a lot of games for one hour. Try again later.",
+  board_gone: "That board was deleted, or you're not on it any more.",
+  board_big: "That board is too big to save.",
+  board_many: "That board has too much on it.",
+  board_people: "That board has too many people.",
+  nopc: "That PC isn't on your account any more.",
+  bad_input: "That didn't look right. Try again.",
 };
 
 // ---------------------------------------------------------------- small helpers
@@ -184,8 +193,9 @@ async function loadServers() {
 
 async function refreshAll() {
   if (!S.token) return;
-  await Promise.allSettled([loadIndex(), loadServers()]);
-  if (!S.view && S.tab !== "live") render();  // (the Live tab has a chat box: don't wipe what you're typing)
+  await Promise.allSettled([loadIndex(), loadServers(), S.tab === "home" || S.tab === "more" ? pcList() : null]);
+  const typing = document.activeElement && document.activeElement.id === "pcUrl";
+  if (!S.view && S.tab !== "live" && !typing) render();  // (the Live tab has a chat box: don't wipe what you're typing)
   else renderTabsBadge();
 }
 
@@ -293,11 +303,17 @@ function bindTabs() {
 
 function render() {
   if (!S.token) return renderLogin();
-  if (S.view) return S.view.kind === "chat" ? renderChat() : S.view.kind === "server" ? renderServer() : renderDocsView();
+  if (S.view) {
+    const k = S.view.kind;
+    return k === "chat" ? renderChat() : k === "server" ? renderServer() : k === "games" || k === "game" ? renderGamesView()
+      : k === "boards" || k === "board" || k === "card" ? renderBoardsView() : k === "remote" ? renderRemote() : renderDocsView();
+  }
   const body = { home: homeHtml, chat: chatsHtml, lib: libHtml, live: liveHtml, more: moreHtml }[S.tab] || homeHtml;
   const scrollWas = $(".scroll") && $(".scroll").dataset.tab === S.tab ? $(".scroll").scrollTop : 0;
+  const urlWas = $("#pcUrl") ? $("#pcUrl").value : "";
   $("#app").innerHTML = `<div class="screen ${S.tab === "lib" && S.playing ? "has-player" : ""}"><div class="scroll" data-tab="${S.tab}">${body()}</div>${S.tab === "lib" ? playerHtml() : ""}</div>${tabsHtml()}`;
   $(".scroll").scrollTop = scrollWas;
+  if (urlWas && $("#pcUrl")) $("#pcUrl").value = urlWas;
   bindTabs();
   bindPage();
   afterRender();
@@ -329,6 +345,10 @@ function bindPage() {
     if (t.dataset.act === "pl-next") return plStep(1);
     if (t.dataset.act === "np-open") return plOpen();
     if (t.dataset.act === "docs") return openDocs();
+    if (t.dataset.act === "games") return openGames();
+    if (t.dataset.act === "boards") return openBoards();
+    if (t.dataset.act === "remote") return openRemote();
+    if (t.dataset.act === "game") { G.list = G.list || S.games; feelNav("in"); S.view = { kind: "game", id: t.dataset.id }; G.comments = null; renderGamesView(); return loadGameList(); }
   };
 }
 
@@ -375,25 +395,26 @@ function homeHtml() {
   const news = rows.length ? `<div class="lbl">New messages</div><div class="card list">${rows.join("")}</div>`
     : `<div class="caught"><span>✓</span><div><b>All caught up</b><div class="sm muted">No new messages${voice ? "" : " and nobody is in voice"}.</div></div></div>`;
 
-  // Shortcuts
-  const unread = unreadChats().length + S.servers.reduce((n, s) => n + (s.channels || []).filter((c) => c.kind === "text" && c.unread).length, 0);
-  const np = S.playing;
-  const tiles = `<div class="bento">
-    <button class="tile t-chat" data-tab-go="chat"><span class="ti">${I.chat}</span><b>Chat</b><span class="sm">${unread ? `${unread} new` : "Messages and servers"}</span></button>
-    <button class="tile t-lib" data-tab-go="lib"><span class="ti">${I.lib}</span><b>${np ? esc(np.name) : "Library"}</b><span class="sm">${np ? (plAudio().paused ? "Paused" : "Playing now") : "Music and sounds"}</span></button>
-    <button class="tile t-docs" data-act="docs"><span class="ti">${DI.doc}</span><b>Docs</b><span class="sm">Shared documents</span></button>
-    <button class="tile t-live" data-tab-go="live"><span class="ti">${I.live}</span><b>Live</b><span class="sm">Your Twitch stream</span></button></div>`;
+  // Apps: the parts of VaultHub that open on top of the tabs
+  const apps = [["docs", "Docs", "#0a84ff", DI.doc], ["boards", "Boards", "#30b0c7", AI.boards], ["games", "Games", "#34c759", AI.games]];
+  if (me.role === "owner" || me.role === "admin") apps.push(["remote", "Remote", "#5e5ce6", AI.remote]);
+  const appsHtml = `<div class="apps">${apps.map(([k, n, bg, svg]) => `<button data-act="${k}"><span class="app-ic" style="background:${bg}">${svg}</span><span>${n}</span></button>`).join("")}</div>`;
 
   return `<div class="hello">${avatar(me.username, publicUrl(me.avatar), { dot: "#34c759" })}
-      <div class="grow"><div class="sm muted">${hello}</div><b>${esc(me.username || "there")}</b></div>
-      <div class="brand">Vault<span>Hub</span></div></div>
+      <div class="grow"><div class="sm muted">${hello}</div><b>${esc(me.username || "there")}</b></div></div>
     ${voice ? `<div class="lbl">In voice now</div>${voice}` : ""}
     ${news}
+    ${appsHtml}
+    ${pcHomeHtml()}
     ${friends}
-    <div class="lbl">Shortcuts</div>${tiles}
-    <div class="lbl">Games on sale</div>
     ${gamesHtml()}`;
 }
+
+const AI = {
+  boards: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><rect x="7" y="7" width="4" height="9" rx="1" fill="#fff" stroke="none"/><rect x="13" y="7" width="4" height="5.5" rx="1" fill="#fff" stroke="none"/></svg>',
+  games: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a4.5 4.5 0 0 1 4.4 5.4l-.7 3.4a2.3 2.3 0 0 1-4 1L15 16H9l-1.7 1.8a2.3 2.3 0 0 1-4-1l-.7-3.4A4.5 4.5 0 0 1 7 8z"/><path d="M8 11v3M6.5 12.5h3M15.5 12h.01M17.5 13.5h.01"/></svg>',
+  remote: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M10 8.5l4 1.8-1.7.6-.6 1.7z"/></svg>',
+};
 
 function initials(name) {
   const w = String(name || "?").trim().split(/\s+/);
@@ -401,12 +422,12 @@ function initials(name) {
 }
 
 function gamesHtml() {
-  if (!S.games) { loadGames(); return '<div class="spin" style="margin:20px auto"></div>'; }
-  const sale = S.games.filter((g) => g.info && g.info.price && (g.info.price.discount > 0)).sort((a, b) => b.info.price.discount - a.info.price.discount);
-  if (!sale.length) return '<div class="muted sm" style="padding:6px 2px">No games from your list are on sale right now.</div>';
-  return `<div class="games">${sale.slice(0, 12).map((g) => `<div class="game">${g.info.header ? `<img src="${esc(g.info.header)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:${esc(JSON.stringify(initials(g.info.name)))}}))">` : `<div class="ph">${esc(initials(g.info.name))}</div>`}
+  if (!S.games) { loadGames(); return ""; }
+  const sale = S.games.filter((g) => g.status !== "done" && g.info && g.info.price && (g.info.price.discount > 0)).sort((a, b) => b.info.price.discount - a.info.price.discount);
+  if (!sale.length) return "";
+  return `<div class="lbl">On sale from your games list</div><div class="games">${sale.slice(0, 12).map((g) => `<button class="game" data-act="game" data-id="${esc(g.id)}">${g.info.header ? `<img src="${esc(g.info.header)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:${esc(JSON.stringify(initials(g.info.name)))}}))">` : `<div class="ph">${esc(initials(g.info.name))}</div>`}
     <span class="sale">-${g.info.price.discount}%</span>
-    <div class="gi"><b class="one">${esc(g.info.name)}</b><div class="sm muted">${esc(g.info.price.text || "")}</div></div></div>`).join("")}</div>`;
+    <div class="gi"><b class="one">${esc(g.info.name)}</b><div class="sm muted">${esc(g.info.price.text || "")}${g.info.price.was ? ` <s>${esc(g.info.price.was)}</s>` : ""}</div></div></button>`).join("")}</div>`;
 }
 
 async function loadGames() {
@@ -733,21 +754,25 @@ function moreHtml() {
   const ic = (bg, svg) => `<span class="sico" style="background:${bg}">${svg}</span>`;
   const bell = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
   const pc = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
-  const soon = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
   const out = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>';
   return `<h1>More</h1>
     <div class="profile">${avatar(me.username, publicUrl(me.avatar), { big: true, dot: "#34c759" })}
-      <div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")} · this iPhone</div></div></div>
+      <div class="grow"><b>${esc(me.username)}</b><div class="sm muted">${esc({ owner: "Owner", admin: "Admin" }[me.role] || "Member")} · this ${esc(phoneName())}</div></div></div>
     <div class="card list set">
       <div class="srow">${ic("#ff3b30", bell)}${pushRowHtml()}</div></div>
-    <div class="card list set" style="margin-top:14px">
-      <button class="srow" data-act="docs">${ic("#0a84ff", `<span style="color:#fff;display:grid">${DI.doc}</span>`)}<div class="grow">Docs</div><span class="chev">›</span></button>
-      <div class="srow">${ic("#8e8e93", soon)}<div class="grow">Games, Boards, Film assets<div class="sm muted">Coming to the phone later</div></div></div>
-      <div class="srow">${ic("#5e5ce6", pc)}<div class="grow">On your PC<div class="sm muted">Converting, Files, Images, Copyright, Resolve, Remote</div></div></div></div>
-    <div class="card list set" style="margin-top:14px">
+    <div class="lbl">Your PCs</div>
+    <div class="card list set">${pcMoreHtml(ic, pc)}</div>
+    <div class="card list set" style="margin-top:22px">
       <button class="srow" data-act="logout">${ic("#3a3a3c", out)}<div class="grow" style="color:#ff453a">Log out</div></button></div>
     <div class="muted sm" style="text-align:center;margin-top:22px">VaultHub for phone ${esc(VERSION.replace("phone ", ""))}</div>
     <div class="muted" style="text-align:center;margin-top:4px;font-size:11px;opacity:.6">${screenInfo()}</div>`;
+}
+
+// The PCs logged in to your account (they get links, games and OBS buttons from the phone).
+function pcMoreHtml(ic, svg) {
+  if (!PCL.pcs) { pcList().then(() => { if (S.tab === "more" && !S.view) render(); }); return '<div class="srow"><div class="grow sm muted">Looking...</div></div>'; }
+  if (!PCL.pcs.length) return `<div class="srow">${ic("#5e5ce6", svg)}<div class="grow">No PCs yet<div class="sm muted">Log in to VaultHub on your PC and it shows up here.</div></div></div>`;
+  return PCL.pcs.map((p) => `<div class="srow">${ic(p.online ? "#5e5ce6" : "#3a3a3c", svg)}<div class="grow">${esc(p.name)}<div class="sm muted">${p.online ? "On now" : "Off"}${p.status && p.status.app ? ` · VaultHub ${esc(p.status.app)}` : ""}</div></div>${p.online ? '<span class="pc-dot on"></span>' : ""}</div>`).join("");
 }
 
 // Screen sizes, shown small on the More page (helps fix layout problems from a screenshot).

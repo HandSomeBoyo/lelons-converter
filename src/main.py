@@ -2665,6 +2665,17 @@ def start_remote_engine(screen=None):
         pass
 
 
+def phone_link(url, fmt):
+    """(phone 1.6) A link your phone sent: download it like the Convert page would."""
+    url = str(url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError("That isn't a link.")
+    fmt = fmt if fmt in ("mp4", "mp3") else "mp4"
+    quality = state.quality[fmt]
+    queue.add(url[:2000], fmt, quality, quality_label(fmt, quality), save_folder({}, project.kind_for(fmt)), None, state.normalize)
+    return "Downloading on your PC"
+
+
 def remote_engine_watch():
     """(2.37.1) Starts the hidden sender a little after the window (so it doesn't slow the start), then
     checks every half minute that it's still there while the switch is on, and starts it again if not."""
@@ -2821,6 +2832,8 @@ def main():
     media.use_gpu(state.hardware)
     import srvwatch
     srvwatch.start()  # auto-posts about your own videos and streams in your servers
+    import phonelink
+    phonelink.start(phone_link)  # (phone 1.6) links, games and OBS from your phone
     # A hidden or minimized window still checks for calls every few seconds (Edge would slow it to once a minute).
     browser_args = ["--disable-background-timer-throttling", "--disable-features=IntensiveWakeUpThrottling"]
     browser_args += sharepick.browser_args()  # (calls: our own screen share picker picks for the engine)
