@@ -558,16 +558,18 @@ async function mvImport(firstLink) {
       <div class="mv-cam" id="mvCam"><video id="mvVideo" playsinline muted></video><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="mv-cam-tag" id="mvCamTag"><i></i>Starting the webcam…</span></div>
     </div>
     <div class="mv-err" id="mvErr"></div>
-    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo instead<input type="file" id="mvPhoto" accept="image/*" hidden></label><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
+    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo instead<input type="file" id="mvPhoto" accept="image/*" hidden></label><button type="button" class="ghost-button" id="mvSwitch" hidden>Switch camera</button><button type="button" class="ghost-button" id="mvRetry" hidden>Try again</button><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
   const tag = (t) => { const e = $("mvCamTag"); if (e) e.innerHTML = `<i></i>${mvEsc(t)}`; };
   const stop = () => { clearInterval(timer); timer = 0; if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; };
   m._close = stop;
   $("mvCancel").addEventListener("click", () => mvCloseModal());
   const use = async (link) => {
+    link = (link || "").trim();
     if (!link || reading) return;
     if (!/^otpauth-migration:/i.test(link)) {
       if (/^otpauth:/i.test(link)) return void ($("mvErr").textContent = "That's a single 2FA code. Add it with Add > 2FA code instead.");
-      return void ($("mvErr").textContent = "That QR code isn't from Google Authenticator's Export accounts.");
+      $("mvErr").className = "mv-err";
+      return void ($("mvErr").textContent = `That QR code isn't from Google Authenticator's Export accounts (it starts with "${link.slice(0, 40)}"). In Authenticator, use Transfer accounts > Export accounts.`);
     }
     reading = true;
     const r = await mvPost("import-read", { link });
@@ -588,23 +590,59 @@ async function mvImport(firstLink) {
     use(link);
   });
   if (firstLink) return use(firstLink);
-  try {
-    await mvQrLib();
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    if (!document.body.contains(m)) return stop();
-    const v = $("mvVideo"); v.srcObject = stream; await v.play();
-    tag("Looking for a QR code…");
-    timer = setInterval(() => {
-      if (!v.videoWidth || reading) return;
-      const link = mvQrFrom(v, v.videoWidth, v.videoHeight, Math.min(1, 960 / v.videoWidth));
-      if (link) use(link);
-    }, 250);
-  } catch {
-    tag("No webcam found");
+  // (3.2.1) the webcam: never wait forever. Skip virtual cameras (OBS etc.) first, and let the user switch.
+  const VIRTUAL = /obs|virtual|snap camera|xsplit|streamlabs|nvidia broadcast|ndi|mmhmm|manycam/i;
+  const late = (p, ms, why) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(why)), ms))]);
+  let cams = [], camAt = -1;
+  const fail = (why) => {
+    stop();
+    tag(why === "busy" ? "The webcam is busy" : why === "blocked" ? "Webcam blocked" : "No webcam found");
     $("mvCam").classList.add("off");
     $("mvErr").className = "mv-tip";
-    $("mvErr").textContent = "No webcam? Take a photo of the QR code with another phone, then press Use a photo instead.";
-  }
+    $("mvErr").textContent = why === "busy" ? "Another app might be using the webcam (OBS, Discord, Teams). Close it and press Try again, or use a photo instead."
+      : why === "blocked" ? "Windows is blocking the webcam. Open Settings > Privacy & security > Camera and turn on \"Let desktop apps access your camera\", then press Try again."
+      : "Take a photo of the QR code with another phone, then press Use a photo instead.";
+    $("mvRetry").hidden = false;
+  };
+  const start = async (deviceId) => {
+    stop();
+    $("mvCam").classList.remove("off"); $("mvRetry").hidden = true;
+    $("mvErr").className = "mv-err"; $("mvErr").textContent = "";
+    tag("Starting the webcam…");
+    try {
+      await mvQrLib();
+      const video = deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 } };
+      const asking = navigator.mediaDevices.getUserMedia({ video, audio: false });
+      let gaveUp = false;
+      asking.then((got) => { if (gaveUp) got.getTracks().forEach((t) => t.stop()); }, () => {});  // came too late: let go of it
+      stream = await late(asking, 10000, "busy").catch((e) => { gaveUp = true; throw e; });
+      if (!document.body.contains(m)) return stop();
+      if (!cams.length) {  // now that we may see their names, pick a real camera over a virtual one
+        cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+        cams.sort((a, b) => VIRTUAL.test(a.label) - VIRTUAL.test(b.label));
+        const now = stream.getVideoTracks()[0]?.getSettings().deviceId;
+        if (!deviceId && cams.length > 1 && VIRTUAL.test(cams.find((c) => c.deviceId === now)?.label || "")) return start(cams[0].deviceId);
+        camAt = Math.max(0, cams.findIndex((c) => c.deviceId === now));
+      }
+      $("mvSwitch").hidden = cams.length < 2;
+      const v = $("mvVideo"); v.srcObject = stream;
+      await late(v.play(), 6000, "busy");
+      await late(new Promise((ok) => { if (v.videoWidth) ok(); else v.addEventListener("loadeddata", ok, { once: true }); }), 6000, "busy");
+      tag("Looking for a QR code…");
+      timer = setInterval(() => {
+        if (!v.videoWidth || reading) return;
+        const link = mvQrFrom(v, v.videoWidth, v.videoHeight, Math.min(1, 960 / v.videoWidth));
+        if (link) use(link);
+      }, 250);
+    } catch (e) {
+      if (!document.body.contains(m)) return stop();
+      const n = (e && e.name) || "";
+      fail(n === "NotAllowedError" || n === "SecurityError" ? "blocked" : n === "NotFoundError" || n === "OverconstrainedError" ? "none" : "busy");
+    }
+  };
+  $("mvRetry").addEventListener("click", () => start(cams[camAt]?.deviceId));
+  $("mvSwitch").addEventListener("click", () => { if (cams.length > 1) { camAt = (camAt + 1) % cams.length; start(cams[camAt].deviceId); } });
+  start();
 }
 
 function mvImportFound(codes) {
