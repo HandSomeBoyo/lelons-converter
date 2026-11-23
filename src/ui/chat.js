@@ -1168,13 +1168,16 @@ $("groupPicInput").addEventListener("change", () => {
     { method: "POST", body: file, headers: { "X-Group": chatGroup.id } }).then((r) => r.json()));
 });
 $("groupPicRemove").addEventListener("click", () => groupSetPicture(api("/api/sfx-group-picture-remove", { group: chatGroup.id })));
-$("groupLeave").addEventListener("click", async () => {
-  if (!chatGroup || !confirm(`Leave "${chatGroup.name}"? You won't see its messages any more.`)) return;
+$("groupLeave").addEventListener("click", () => {
+  if (chatGroup) recSure($("groupLeave"), "Click again to leave", groupLeaveNow);
+});
+async function groupLeaveNow() {
+  if (!chatGroup) return;
   const res = await groupAction({ what: "leave" });
   if (!res) return;
   closeGroupModal();
   switchChat("");
-});
+}
 $("groupSearch").addEventListener("input", drawGroupModal);
 $("groupSearch").addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
