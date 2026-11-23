@@ -35,6 +35,7 @@ WM_TRAY = WM_APP + 5  # the little icon by the clock (it's there for the notific
 WM_HOTKEYS = WM_APP + 6  # "use these keys", from another thread (the Live soundboard)
 WM_POPSET = WM_APP + 7  # the pop-out chat: on top or not, how see-through
 WM_HIDE = WM_APP + 8  # (2.36.0) "hide to the tray": the window goes, the app keeps running
+WM_BUBBLE = WM_APP + 9  # (3.2.0) MyVault's login pop-up: show (wparam 1) or hide it, from another thread
 WM_HOTKEY = 0x0312
 NIN_BALLOONUSERCLICK = 0x0405
 
@@ -47,6 +48,7 @@ _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
 _engines = {}  # data folder -> hidden window: the Remote desktop's screen sender (2.37.0), a call's extra screen (3.0.1)
 _args_lock = threading.Lock()
+_bubble = None  # (3.2.0) MyVault's login pop-up window (made the first time it's needed, then kept hidden)
 _close_guard = None  # (2.36.0) a function: a reason not to close right away (you're multistreaming), or ""
 
 
@@ -335,6 +337,45 @@ def popout(url, data_folder, icon, on_top=True, see=100, close=False, on_closed=
     return pop.ok
 
 
+def bubble(url, data_folder, icon, show, near=None, height=None):
+    """(3.2.0) MyVault's small login pop-up in the corner of the screen the login window is on. It's on top
+    of everything, has no title bar and isn't in the taskbar. near: the login window's (left, top, right,
+    bottom). height: how tall the page wants it. Returns False when there's no window of our own."""
+    global _bubble
+    if not available():
+        return False
+    with _lock:
+        b = _bubble if _bubble and _bubble.alive else None
+        if not b and not show:
+            return True
+        if not b:
+            b = _bubble = Window(url, data_folder, icon, lambda placement: None, None, popout=True, hidden=True,
+                                 bubble=True)
+            b.thread.start()
+            fresh = True
+        else:
+            fresh = False
+    if fresh and (not b.started.wait(30) or not b.ok):
+        b.cancel()
+        return False
+    if near:
+        b.bubble_near = tuple(int(n) for n in near)
+    if height:
+        b.bubble_h = max(120, min(520, int(height)))
+    b.user32.PostMessageW(b.hwnd, WM_BUBBLE, 1 if show else 0, 0)
+    return True
+
+
+def is_bubble(hwnd):
+    b = _bubble
+    return bool(b and b.hwnd and int(b.hwnd) == int(hwnd))
+
+
+def own_windows():
+    """The app's own windows (the main one, the pop-out chat, the bubble...)."""
+    return {int(h) for h in list(_windows)}
+
+
 _engine_start = threading.Lock()  # (2.37.1) one start or stop of the hidden engine at a time
 
 
@@ -396,11 +437,12 @@ def _window_procedure(hwnd, message, wparam, lparam):
 
 class Window:
     def __init__(self, url, data_folder, icon, on_closed, placement=None, popout=False, on_top=False, see=100,
-                 hidden=False, browser_args=""):
+                 hidden=False, browser_args="", bubble=False):
         self.url, self.data_folder, self.icon, self.on_closed = url, data_folder, icon, on_closed
         self.hidden, self.browser_args = hidden, browser_args  # (2.37.0) the Remote desktop's screen sender
         self.popout, self.pop_on_top, self.pop_see = popout, on_top, max(30, min(100, int(see or 100)))
         self.placement = placement
+        self.bubble, self.bubble_near, self.bubble_h = bubble, None, 230  # (3.2.0) MyVault's login pop-up
         self.cancelled = False
         self.webview = None
         self.hwnd = None
@@ -513,10 +555,15 @@ class Window:
         self.small_icon = small
         user32.RegisterClassExW(ctypes.byref(cls))  # fails harmlessly when already registered
 
-        width, height = (int(n * scale) for n in ((360, 560) if self.popout else SIZE))
+        width, height = (int(n * scale) for n in ((360, 230) if self.bubble else (360, 560) if self.popout else SIZE))
+        self.scale = scale
         self.closed_at = None
-        self.hwnd = user32.CreateWindowExW(0x8 if self.popout and self.pop_on_top else 0,  # WS_EX_TOPMOST
-                                           "LelonsConverterWindow", TITLE + (" chat" if self.popout else ""), 0x00CF0000 | 0x02000000,
+        if self.bubble:  # no title bar, not in the taskbar, on top, and clicking it doesn't take the keyboard
+            ex, style = 0x8 | 0x80 | 0x08000000, 0x80000000 | 0x02000000  # TOPMOST|TOOLWINDOW|NOACTIVATE; POPUP|CLIPCHILDREN
+        else:
+            ex, style = (0x8 if self.popout and self.pop_on_top else 0), 0x00CF0000 | 0x02000000
+        self.hwnd = user32.CreateWindowExW(ex,  # WS_EX_TOPMOST
+                                           "LelonsConverterWindow", TITLE + (" login" if self.bubble else " chat" if self.popout else ""), style,
                                            # WS_OVERLAPPEDWINDOW, and WS_CLIPCHILDREN so the window
                                            # doesn't paint its background over the page
                                            -0x80000000, -0x80000000, width, height,  # CW_USEDEFAULT: Windows picks the spot
@@ -524,6 +571,12 @@ class Window:
         if not self.hwnd:
             raise OSError("no window")
         _windows[self.hwnd] = self
+        if self.bubble:
+            try:  # Windows 11: rounded corners
+                corner = ctypes.c_int(2)  # DWMWCP_ROUND
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(wintypes.HWND(self.hwnd), 33, ctypes.byref(corner), 4)
+            except (AttributeError, OSError):
+                pass
         self._restore_placement()
         for kind, handle in ((1, big), (0, small)):  # ICON_BIG, ICON_SMALL
             if handle:
@@ -625,7 +678,7 @@ class Window:
         _method(controller, 4, wintypes.BOOL)(True)  # put_IsVisible
         _method(controller, 12, ctypes.c_int)(0)  # MoveFocus: typing goes to the page
         self.ok = self.alive = True
-        if self.popout:
+        if self.popout and not self.bubble:
             self._pop_style(self.hwnd)
         elif _hotkeys and not self.hidden:
             self._use_hotkeys(self.hwnd)
@@ -777,6 +830,30 @@ class Window:
         elif style & 0x80000:
             put(hwnd, -20, style & ~0x80000)
 
+    def _place_bubble(self, hwnd, show):
+        user32 = self.user32
+        if not show:
+            user32.ShowWindow(hwnd, 0)  # SW_HIDE
+            return
+        w, h = int(360 * self.scale), int(self.bubble_h * self.scale)
+        near = wintypes.RECT(*(self.bubble_near or (0, 0, 1, 1)))
+        monitor = user32.MonitorFromRect
+        monitor.restype = wintypes.HANDLE
+        monitor.argtypes = [ctypes.POINTER(wintypes.RECT), wintypes.DWORD]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+        info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+        user32.GetMonitorInfoW(monitor(ctypes.byref(near), 2), ctypes.byref(info))  # MONITOR_DEFAULTTONEAREST
+        work = info.rcWork
+        gap = int(16 * self.scale)
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos(hwnd, wintypes.HWND(-1), work.right - w - gap, work.bottom - h - gap, w, h, 0x10 | 0x40)  # TOPMOST; NOACTIVATE|SHOWWINDOW
+        self._fit()
+        if self.webview:
+            _method(self.webview, 33, wintypes.LPCWSTR)("bubble:show")  # PostWebMessageAsString: look again now
+
     def _fit(self):
         if self.controller:
             rect = wintypes.RECT()
@@ -846,6 +923,9 @@ class Window:
             return 0
         elif message == WM_POPSET:
             self._pop_style(hwnd)
+            return 0
+        elif message == WM_BUBBLE:
+            self._place_bubble(hwnd, bool(wparam))
             return 0
         elif message == WM_TRAY:
             event = lparam & 0xFFFF

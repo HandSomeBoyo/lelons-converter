@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.0", items: [
+    "New: MyVault, at the top of the side bar. Your passwords, 2FA codes and notes, locked with a 6-number PIN and kept only on this PC.",
+    "MyVault shows your 2FA codes right next to each account, and can bring them over from Google Authenticator with your webcam.",
+    "Password health tells you which passwords are weak or used on more than one site, and makes strong new ones for you.",
+    "Logging in to Steam, Epic or a website? A small pop-up offers to fill in your username and password for you.",
+  ] },
   { version: "3.1.2", items: [
     "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
     "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",
