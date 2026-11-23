@@ -2,6 +2,9 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.2", items: [
+    "MyVault: you can now pick which webcam to use when bringing codes over from Google Authenticator. The app remembers your pick, and it never gets stuck on \"Starting the webcam\" anymore.",
+  ] },
   { version: "3.2.1", items: [
     "MyVault: the Google Authenticator import no longer gets stuck on \"Starting the webcam\". It skips OBS's virtual camera, lets you switch cameras, and tells you what's wrong if the webcam is busy or blocked.",
   ] },

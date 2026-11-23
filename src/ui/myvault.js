@@ -555,10 +555,11 @@ async function mvImport(firstLink) {
     <h2>Import from Google Authenticator</h2><p>Move your 2FA codes over in about a minute.</p>
     <div class="mv-imp">
       <ol class="mv-ol"><li><span><b>Open Google Authenticator</b> on your phone</span></li><li><span>Tap <b>⋯</b> then <b>Transfer accounts</b> › <b>Export accounts</b></span></li><li><span>Pick your accounts, then hold the QR code up to your webcam</span></li></ol>
-      <div class="mv-cam" id="mvCam"><video id="mvVideo" playsinline muted></video><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="mv-cam-tag" id="mvCamTag"><i></i>Starting the webcam…</span></div>
+      <div class="mv-cam-col"><div class="mv-cam" id="mvCam"><video id="mvVideo" playsinline muted></video><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="mv-cam-tag" id="mvCamTag"><i></i>Starting the webcam…</span></div>
+      <label class="mv-cam-pick" id="mvCamWrap" hidden><span>Camera</span><select id="mvCamPick"></select></label></div>
     </div>
     <div class="mv-err" id="mvErr"></div>
-    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo instead<input type="file" id="mvPhoto" accept="image/*" hidden></label><button type="button" class="ghost-button" id="mvSwitch" hidden>Switch camera</button><button type="button" class="ghost-button" id="mvRetry" hidden>Try again</button><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
+    <div class="mv-acts"><label class="ghost-button mv-photo">Use a photo instead<input type="file" id="mvPhoto" accept="image/*" hidden></label><button type="button" class="ghost-button" id="mvRetry" hidden>Try again</button><span style="flex:1"></span><button type="button" class="ghost-button" id="mvCancel">Cancel</button></div>`, "mv-import");
   const tag = (t) => { const e = $("mvCamTag"); if (e) e.innerHTML = `<i></i>${mvEsc(t)}`; };
   const stop = () => { clearInterval(timer); timer = 0; if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; };
   m._close = stop;
@@ -593,56 +594,71 @@ async function mvImport(firstLink) {
   // (3.2.1) the webcam: never wait forever. Skip virtual cameras (OBS etc.) first, and let the user switch.
   const VIRTUAL = /obs|virtual|snap camera|xsplit|streamlabs|nvidia broadcast|ndi|mmhmm|manycam/i;
   const late = (p, ms, why) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(why)), ms))]);
-  let cams = [], camAt = -1;
+  let cams = [], run = 0;
+  const pick = $("mvCamPick");
   const fail = (why) => {
     stop();
-    tag(why === "busy" ? "The webcam is busy" : why === "blocked" ? "Webcam blocked" : "No webcam found");
+    tag(why === "busy" ? "The webcam didn't start" : why === "blocked" ? "Webcam blocked" : "No webcam found");
     $("mvCam").classList.add("off");
     $("mvErr").className = "mv-tip";
-    $("mvErr").textContent = why === "busy" ? "Another app might be using the webcam (OBS, Discord, Teams). Close it and press Try again, or use a photo instead."
+    $("mvErr").textContent = why === "busy" ? "Pick another camera above, or close apps that might be using it (OBS, Discord, Teams) and press Try again. Or use a photo instead."
       : why === "blocked" ? "Windows is blocking the webcam. Open Settings > Privacy & security > Camera and turn on \"Let desktop apps access your camera\", then press Try again."
       : "Take a photo of the QR code with another phone, then press Use a photo instead.";
     $("mvRetry").hidden = false;
   };
-  const start = async (deviceId) => {
+  const listCams = async () => {  // (3.2.2) the user picks the camera; real ones first, virtual ones (OBS...) last
+    try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput"); } catch { cams = []; }
+    cams.sort((x, y) => VIRTUAL.test(x.label) - VIRTUAL.test(y.label));
+    const was = pick.value || (loadPref("mvCamId") || "");
+    pick.innerHTML = cams.map((c, n) => `<option value="${mvEsc(c.deviceId)}">${mvEsc(c.label || `Camera ${n + 1}`)}</option>`).join("");
+    if (cams.some((c) => c.deviceId === was)) pick.value = was;
+    $("mvCamWrap").hidden = cams.length < 2;
+  };
+  const start = async () => {
+    const me = ++run;
     stop();
     $("mvCam").classList.remove("off"); $("mvRetry").hidden = true;
     $("mvErr").className = "mv-err"; $("mvErr").textContent = "";
-    tag("Starting the webcam…");
+    // A watchdog: whatever gets stuck, the box never just sits on "Starting".
+    const dog = setTimeout(() => { if (me === run && !timer && document.body.contains(m)) { run++; fail("busy"); } }, 15000);
     try {
-      await mvQrLib();
+      tag("Starting the webcam…");
+      const deviceId = pick.value;
       const video = deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 } };
       const asking = navigator.mediaDevices.getUserMedia({ video, audio: false });
       let gaveUp = false;
-      asking.then((got) => { if (gaveUp) got.getTracks().forEach((t) => t.stop()); }, () => {});  // came too late: let go of it
-      stream = await late(asking, 10000, "busy").catch((e) => { gaveUp = true; throw e; });
-      if (!document.body.contains(m)) return stop();
-      if (!cams.length) {  // now that we may see their names, pick a real camera over a virtual one
-        cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
-        cams.sort((a, b) => VIRTUAL.test(a.label) - VIRTUAL.test(b.label));
-        const now = stream.getVideoTracks()[0]?.getSettings().deviceId;
-        if (!deviceId && cams.length > 1 && VIRTUAL.test(cams.find((c) => c.deviceId === now)?.label || "")) return start(cams[0].deviceId);
-        camAt = Math.max(0, cams.findIndex((c) => c.deviceId === now));
+      asking.then((got) => { if (gaveUp || me !== run) got.getTracks().forEach((t) => t.stop()); }, () => {});  // came too late: let go of it
+      const got = await late(asking, 10000, "busy").catch((e) => { gaveUp = true; throw e; });
+      if (me !== run || !document.body.contains(m)) return got.getTracks().forEach((t) => t.stop());
+      stream = got;
+      const now = stream.getVideoTracks()[0]?.getSettings().deviceId || "";
+      await listCams();  // names show up once the camera is allowed
+      if (!deviceId && cams.length > 1 && VIRTUAL.test(cams.find((c) => c.deviceId === now)?.label || "") && !VIRTUAL.test(cams[0].label)) {
+        pick.value = cams[0].deviceId; clearTimeout(dog); return start();  // it gave us OBS's camera: use the real one
       }
-      $("mvSwitch").hidden = cams.length < 2;
+      if (now && cams.some((c) => c.deviceId === now)) pick.value = now;
+      tag("Turning on the camera…");
       const v = $("mvVideo"); v.srcObject = stream;
       await late(v.play(), 6000, "busy");
       await late(new Promise((ok) => { if (v.videoWidth) ok(); else v.addEventListener("loadeddata", ok, { once: true }); }), 6000, "busy");
+      tag("Getting the QR reader…");
+      await late(mvQrLib(), 6000, "busy");
+      if (me !== run) return;
       tag("Looking for a QR code…");
       timer = setInterval(() => {
-        if (!v.videoWidth || reading) return;
+        if (!v.videoWidth || reading || !window.jsQR) return;
         const link = mvQrFrom(v, v.videoWidth, v.videoHeight, Math.min(1, 960 / v.videoWidth));
         if (link) use(link);
       }, 250);
     } catch (e) {
-      if (!document.body.contains(m)) return stop();
+      if (me !== run || !document.body.contains(m)) return;
       const n = (e && e.name) || "";
       fail(n === "NotAllowedError" || n === "SecurityError" ? "blocked" : n === "NotFoundError" || n === "OverconstrainedError" ? "none" : "busy");
-    }
+    } finally { clearTimeout(dog); }
   };
-  $("mvRetry").addEventListener("click", () => start(cams[camAt]?.deviceId));
-  $("mvSwitch").addEventListener("click", () => { if (cams.length > 1) { camAt = (camAt + 1) % cams.length; start(cams[camAt].deviceId); } });
-  start();
+  $("mvRetry").addEventListener("click", () => start());
+  pick.addEventListener("change", () => { savePref("mvCamId", pick.value); start(); });
+  listCams().then(start);
 }
 
 function mvImportFound(codes) {
