@@ -555,7 +555,7 @@ async function mvImport(firstLink) {
     <h2>Import from Google Authenticator</h2><p>Move your 2FA codes over in about a minute.</p>
     <div class="mv-imp">
       <ol class="mv-ol"><li><span><b>Open Google Authenticator</b> on your phone</span></li><li><span>Tap <b>⋯</b> then <b>Transfer accounts</b> › <b>Export accounts</b></span></li><li><span>Pick your accounts, then hold the QR code up to your webcam</span></li></ol>
-      <div class="mv-cam-col"><div class="mv-cam" id="mvCam"><video id="mvVideo" playsinline muted></video><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="mv-cam-tag" id="mvCamTag"><i></i>Starting the webcam…</span></div>
+      <div class="mv-cam-col"><div class="mv-cam" id="mvCam"><video id="mvVideo" playsinline muted></video><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><span class="mv-cam-tag" id="mvCamTag"><i></i>Getting ready…</span></div>
       <label class="mv-cam-pick" id="mvCamWrap" hidden><span>Camera</span><select id="mvCamPick"></select></label></div>
     </div>
     <div class="mv-err" id="mvErr"></div>
@@ -607,7 +607,7 @@ async function mvImport(firstLink) {
     $("mvRetry").hidden = false;
   };
   const listCams = async () => {  // (3.2.2) the user picks the camera; real ones first, virtual ones (OBS...) last
-    try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput"); } catch { cams = []; }
+    try { cams = (await late(navigator.mediaDevices.enumerateDevices(), 4000, "list")).filter((d) => d.kind === "videoinput"); } catch { cams = []; }
     cams.sort((x, y) => VIRTUAL.test(x.label) - VIRTUAL.test(y.label));
     const was = pick.value || (loadPref("mvCamId") || "");
     pick.innerHTML = cams.map((c, n) => `<option value="${mvEsc(c.deviceId)}">${mvEsc(c.label || `Camera ${n + 1}`)}</option>`).join("");
@@ -658,7 +658,7 @@ async function mvImport(firstLink) {
   };
   $("mvRetry").addEventListener("click", () => start());
   pick.addEventListener("change", () => { savePref("mvCamId", pick.value); start(); });
-  listCams().then(start);
+  listCams().then(start, start);
 }
 
 function mvImportFound(codes) {
