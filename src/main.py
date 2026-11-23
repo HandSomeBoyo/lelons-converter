@@ -1994,7 +1994,8 @@ class Handler(BaseHTTPRequestHandler):
                 remote.remember_host(data.get("device"), data.get("key"))
                 result = {}
             elif action == "pin":
-                result = remote.pin_check(data.get("pin"))
+                result = remote.pin_check(data.get("pin"), data.get("proof"), str(data.get("bound") or ""),
+                                          data.get("newcomer") if isinstance(data.get("newcomer"), dict) else None)
             elif action == "start":
                 remote.start(str(data.get("key") or ""), data.get("name"), data.get("screen"))
                 result = {}

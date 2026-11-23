@@ -119,6 +119,7 @@ function rdDraw() {
       : me.host ? `On. Keep VaultHub open here (minimized is fine)${me.keepAwake ? " and it won't go to sleep" : ""}. Don't let Windows lock itself, the lock screen can't be used from far away.`
       : `Let my other PCs control this one${me.windows ? "" : " (Windows only)"}`}</div>
       ${using ? '<button type="button" class="ghost-button rd-small rd-red" id="rdStopHere">Stop</button>' : ""}
+      ${me.host && !using ? `<button type="button" class="ghost-button rd-small rd-pw${me.pin ? " on" : ""}" id="rdPwBtn" title="${me.pin ? "Asked every time someone connects" : "Connect from anywhere by typing a password"}">${RD_ICONS.lock}${me.pin ? "Password on" : "Set a password"}</button>` : ""}
       <button type="button" class="ghost-button rd-small" id="rdManage">Safety settings</button>
       <button type="button" class="rd-sw${me.host ? " on" : ""}" id="rdHostSwitch" role="switch" aria-checked="${me.host}" title="Let my other PCs control this one"></button></div>
     </div>`;
@@ -135,10 +136,11 @@ function rdDraw() {
     if (res.ok) { rd.info = res; rdDraw(); }
   });
   $("rdManage").addEventListener("click", rdManage);
+  if ($("rdPwBtn")) $("rdPwBtn").addEventListener("click", () => { rdManage(); $("rdPin").focus(); });
   if ($("rdAdd")) $("rdAdd").addEventListener("click", () => rdInfoBox(RD_ICONS.plus, "Add a PC", `<p>${RD_ADD_TEXT}</p>`));
   $("rdSafeInfo").addEventListener("click", () => rdInfoBox(RD_ICONS.shield, "How it stays safe", `<div class="rd-safe">
       <div><b>${RD_ICONS.lock}Only your PCs</b>Only PCs logged in to your own account. Nobody else can reach them, not even other admins.</div>
-      <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code.</div>
+      <div><b>${RD_ICONS.shield}Allowed once</b>The first time, you allow it on that PC after checking a 6-digit code. Or set a password there and type it from anywhere.</div>
       <div><b>${RD_ICONS.eye}Straight PC to PC</b>Picture, sound and keys are locked (encrypted) from PC to PC. Nothing goes through our server.</div>
       <div><b>${RD_ICONS.key}Stop any time</b>A yellow bar shows on the PC being used. Ctrl+Alt+End cuts it off.</div></div>`));
 }
@@ -197,7 +199,7 @@ function rdManage() {
       ${row("host", "Let my other PCs control this one", "", me.host)}
       ${row("keepAwake", "Keep this PC awake while it's on", "So you can reach it when you're away", me.keepAwake)}
       ${row("lockOnEnd", "Lock this PC when they disconnect", "Careful: you can't unlock Windows from far away", me.lockOnEnd)}
-      <div class="rd-row"><span>PIN<small>${me.pin ? "Asked every time someone connects" : "An extra lock, asked every time"}</small></span><input id="rdPin" class="rd-pin-in" type="password" autocomplete="off" inputmode="numeric" maxlength="12" placeholder="${me.pin ? "••••" : "Set a PIN"}"><button type="button" class="ghost-button rd-small" id="rdPinSave">${me.pin ? "Change" : "Save"}</button>${me.pin ? '<button type="button" class="ghost-button rd-small" id="rdPinOff">Remove</button>' : ""}</div>
+      <div class="rd-row"><span>Password<small>${me.pin ? "Asked every time. A new PC can type it instead of someone pressing Allow" : "Connect from anywhere by typing it, no one needs to press Allow"}</small></span><input id="rdPin" class="rd-pin-in" type="password" autocomplete="new-password" maxlength="64" spellcheck="false" placeholder="${me.pin ? "••••••" : "Set a password"}"><button type="button" class="ghost-button rd-small" id="rdPinSave">${me.pin ? "Change" : "Save"}</button>${me.pin ? '<button type="button" class="ghost-button rd-small" id="rdPinOff">Remove</button>' : ""}</div>
       <div class="rd-row"><span>Stop key<small>Press it on this PC to cut someone off right away</small></span><span class="rd-keyname"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>End</kbd></span></div>
       <div class="rd-row"><span>Name of this PC</span><input id="rdName" class="rd-pin-in" maxlength="40" value="${rdEsc(me.name)}"><button type="button" class="ghost-button rd-small" id="rdNameSave">Save</button></div>
     </div>
@@ -212,8 +214,8 @@ function rdManage() {
   m.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => save({ forget: b.dataset.remove })));
   // (3.0) An empty box used to save "no PIN", so pressing Change without typing took the PIN off.
   $("rdPinSave").addEventListener("click", () => {
-    const pin = $("rdPin").value.trim();
-    if (!pin) { $("rdManageErr").textContent = "Type the new PIN first (4 to 12 numbers)."; $("rdPin").focus(); return; }
+    const pin = $("rdPin").value;
+    if (!pin.trim()) { $("rdManageErr").textContent = "Type the new password first (at least 4 characters)."; $("rdPin").focus(); return; }
     save({ pin });
   });
   $("rdPin").addEventListener("keydown", (e) => { if (e.key === "Enter") $("rdPinSave").click(); });
@@ -316,6 +318,8 @@ async function rdConnSignal(s) {
   c.phase = "joining";
   clearInterval(c.wait); clearTimeout(c.giveUp);
   c.hostKey = body.key;
+  c.pwSalt = typeof body.pin === "string" ? body.pin : ""; // (3.3) newer PCs: the password never leaves this PC
+  c.bound = `pw|${rdFingerprint(c.offerSdp)}|${fp}|${c.nonce}`;
   await c.pc.setRemoteDescription({ type: "answer", sdp: body.sdp });
   if (!body.pair && !pinned) rdPost("/api/remote-remember-host", { device: c.id, key: body.key });
   if (body.pair) {
@@ -331,6 +335,17 @@ async function rdConnSignal(s) {
   c.giveUp = setTimeout(() => { if (rd.conn === c && c.phase !== "on") rdEnd(c.pairing ? "Nobody pressed Allow in time." : "Couldn't connect. One of the networks may be too strict (a phone hotspot or work Wi-Fi)."); }, c.pairing ? 125000 : 25000);
 }
 
+// (3.3) A stamp made from the password and this exact connection. The other PC checks it against what it
+// keeps (the same slow hash, see remote.pin_check), so the password itself is never sent.
+async function rdPwProof(pw, salt, bound) {
+  const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  const raw = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  const salty = new Uint8Array(salt.match(/../g).map((h) => parseInt(h, 16)));
+  const hash = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salty, iterations: 200000 }, raw, 256);
+  const key = await crypto.subtle.importKey("raw", hash, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(bound)));
+}
+
 function rdSend(c, msg) { if (c.ctl.readyState === "open") c.ctl.send(JSON.stringify(msg)); }
 
 function rdCtl(c, data) {
@@ -341,12 +356,22 @@ function rdCtl(c, data) {
   if (msg.enc && typeof msg.enc === "object") { c.enc = msg.enc; return; }
   if (msg.waiting) return;
   if (msg.needPin || msg.pinBad) {
-    if (c.pairing) { c.pairing = false; rdPost("/api/remote-remember-host", { device: c.id, key: c.hostKey }); }
-    const why = msg.wait ? `Too many wrong tries. Wait ${Math.ceil(msg.wait / 60)} min.` : msg.pinBad ? `Wrong PIN.${msg.left ? ` ${msg.left} tries left.` : ""}` : "";
-    rdPhase("", `<div class="rd-big-ic">${RD_ICONS.lock}</div><h2>PIN for ${rdEsc(c.dev.name)}</h2><p>${rdEsc(c.dev.name)} asks for its PIN.</p>
-      <input id="rdPinIn" class="rd-pin-big" type="password" inputmode="numeric" maxlength="12" autocomplete="off">
+    // (3.3) A first-time PC can type the password instead of someone pressing Allow, so its key is only
+    // remembered once it's really in (see "ready").
+    if (c.pairing && !msg.first) { c.pairing = false; rdPost("/api/remote-remember-host", { device: c.id, key: c.hostKey }); }
+    clearTimeout(c.giveUp); // no rush while you type
+    const why = msg.wait ? `Too many wrong tries. Wait ${Math.ceil(msg.wait / 60)} min.` : msg.pinBad ? `Wrong password.${msg.left ? ` ${msg.left} tries left.` : ""}` : "";
+    const name = rdEsc(c.dev.name);
+    rdPhase("", `<div class="rd-big-ic">${RD_ICONS.lock}</div><h2>Password for ${name}</h2>
+      <p>${msg.first ? `Type ${name}'s password to connect. Someone at ${name} can also press Allow.` : `${name} asks for its password.`}</p>
+      <input id="rdPinIn" class="rd-pin-big" type="password" maxlength="64" autocomplete="off" spellcheck="false">
       <p class="rd-error">${rdEsc(why)}</p>`, '<button type="button" class="convert" id="rdPinGo">Connect</button>');
-    const go = () => rdSend(c, { pin: $("rdPinIn").value });
+    const go = async () => {
+      const pw = $("rdPinIn").value;
+      if (!pw) { $("rdPinIn").focus(); return; }
+      $("rdPinGo").disabled = true;
+      rdSend(c, c.pwSalt ? { proof: await rdPwProof(pw, c.pwSalt, c.bound) } : { pin: pw });
+    };
     $("rdPinGo").addEventListener("click", go);
     $("rdPinIn").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
     $("rdPinIn").focus();

@@ -9837,3 +9837,8 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .mv-cam-pick[hidden] { display: none; }
 .mv-cam-pick select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2, var(--panel)); color: var(--text); font: inherit; font-size: 12.5px; }
 .mv-acts button, .mv-acts .mv-photo { white-space: nowrap; }
+
+/* (3.3) Remote: the "Set a password" button on the This PC row */
+.rd-this .rd-pw { display: inline-flex; align-items: center; gap: 6px; }
+.rd-this .rd-pw svg { width: 15px; height: 15px; }
+.rd-this .rd-pw.on { color: var(--accent, #f5c84c) !important; }

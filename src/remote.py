@@ -17,6 +17,7 @@ This file keeps what this PC allows (remote.json in DATA_DIR), runs the hidden s
 
 import ctypes
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -107,6 +108,7 @@ def info():
     session = _state["session"]
     return {"device": data["device"], "name": data["name"], "kind": data.get("kind", "desktop"),
             "host": bool(data.get("host")), "allowed": allowed, "pin": bool(data.get("pin")),
+            "pinSalt": (data.get("pin") or {}).get("salt", ""),
             "lockOnEnd": bool(data.get("lockOnEnd")), "keepAwake": data.get("keepAwake", True) is not False,
             "hosts": data.get("hosts") or {}, "screens": len(monitors()) or 1,
             "session": dict(session) if session else None, "asking": _asking_public(),
@@ -134,8 +136,8 @@ def set_options(opts):
             pin = str(opts["pin"] or "")
             if not pin:
                 data.pop("pin", None)
-            elif not pin.isdigit() or not 4 <= len(pin) <= 12:
-                raise Error("A PIN is 4 to 12 numbers.")
+            elif not 4 <= len(pin) <= 64:  # (3.3) a real password now: letters, numbers, anything
+                raise Error("A password is 4 to 64 characters.")
             else:
                 salt = secrets.token_hex(16)
                 data["pin"] = {"salt": salt, "hash": _pin_hash(pin, salt)}
@@ -238,8 +240,13 @@ def _pin_hash(pin, salt):
     return hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), 200_000).hex()
 
 
-def pin_check(pin):
-    """True when right. After 5 wrong tries it waits 1 minute, then longer each time."""
+def pin_check(pin=None, proof=None, bound="", newcomer=None):
+    """True when right. After 5 wrong tries it waits 1 minute, then longer each time.
+
+    (3.3) The other PC doesn't send the password itself any more, only `proof`: a stamp made from it and
+    this exact connection (`bound`), so it's useless anywhere else. Older versions still send `pin`.
+    `newcomer` ({"key", "name", "device"}): a PC connecting for the first time. The right password lets
+    it in without anyone pressing Allow here, and it's remembered like after Allow."""
     with _lock:
         data = _this_pc()
         stored = data.get("pin")
@@ -248,9 +255,22 @@ def pin_check(pin):
         wait = data.get("pinWait", 0) - time.time()
         if wait > 0:
             return {"ok": False, "wait": int(wait) + 1}
-        good = secrets.compare_digest(_pin_hash(str(pin or "")[:12], stored["salt"]), stored["hash"])
+        if isinstance(proof, str) and bound:
+            want = hmac.new(bytes.fromhex(stored["hash"]), str(bound).encode(), hashlib.sha256).hexdigest()
+            good = secrets.compare_digest(want, proof.lower()[:64])
+        else:
+            good = secrets.compare_digest(_pin_hash(str(pin or "")[:64], stored["salt"]), stored["hash"])
         if good:
             data.pop("pinFails", None)
+            if newcomer and newcomer.get("key"):
+                key = str(newcomer["key"])[:400]
+                data.setdefault("allowed", {})[key] = {"name": str(newcomer.get("name") or "PC")[:40],
+                                                       "device": str(newcomer.get("device") or "")[:40],
+                                                       "added": time.time(), "last": 0}
+                a = _state["asking"]
+                if a and a["key"] == key:  # close the Allow question: the password answered it
+                    _state["asking"] = None
+                    _state["answer"][a["id"]] = True
             _save(data)
             return {"ok": True}
         fails = data.get("pinFails", 0) + 1

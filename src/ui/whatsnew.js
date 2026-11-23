@@ -2,8 +2,6 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-<<<<<<< HEAD
-=======
   { version: "3.2.4", items: [
     "MyVault: fixed the Google Authenticator import. The webcam now starts right inside VaultHub, so you just hold the QR code up to it.",
     "MyVault: the page no longer refreshes every few seconds, so buttons don't miss your clicks.",
@@ -23,7 +21,6 @@ const CHANGES = [
     "Convert: new Save to Library option. Paste a link and it goes right into the Library, without saving anything on your PC.",
     "The phone app can now send links to your PC, add Steam games, control OBS and type on Remote.",
   ] },
->>>>>>> origin/main
   { version: "3.1.2", items: [
     "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
     "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",
