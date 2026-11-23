@@ -992,6 +992,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"ok": True, "obs": streamoverlay.add_to_obs()})
                 except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
+            elif action == "in":  # (3.2) the input overlay: keys, mouse and controller on your stream
+                import inputoverlay
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-set":
+                import inputoverlay
+                inputoverlay.set_prefs(data)
+                return self.send_json({"ok": True, "input": inputoverlay.status()})
+            elif action == "in-obs":
+                import inputoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": inputoverlay.add_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "pre":  # (3.1) the pre-stream check
                 import precheck
                 return self.send_json({"ok": True, **precheck.run()})

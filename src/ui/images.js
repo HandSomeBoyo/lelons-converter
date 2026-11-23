@@ -20,7 +20,7 @@ function saveImageOptions() {
 // The side bar has 8 places. Some hold a few pages, picked with the bar at the top of the page.
 const TAB_SECTIONS = { convert: ["video", "files", "images", "history"], 
   recording: ["games", "povs"], youtube: ["channel", "comments", "titles", "copyright"],
-  live: ["live", "lvboard", "lvalerts", "lvstats"] };
+  live: ["live", "lvboard", "lvalerts", "lvinput", "lvstats"] };
 const sectionOf = (tab) => Object.keys(TAB_SECTIONS).find((k) => TAB_SECTIONS[k].includes(tab) && document.querySelector(`.sub-tabs button[data-tab="${tab}"]`)) || "";
 // A page that belongs in a place but still sits in the side bar (like Comments) moves into that place's bar.
 for (const [section, tabs] of Object.entries(TAB_SECTIONS)) {
@@ -46,7 +46,7 @@ function showTab(tab) {
     b.classList.toggle("active", b.dataset.tab === (tab === "stats" ? "home" : tab));
     if (b.closest(".sub-tabs")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   });
-  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "account", "live", "lvboard", "lvalerts", "lvstats"]) $(name + "Tab").hidden = tab !== name;
+  for (const name of ["home", "feed", "stats", "video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "fx", "games", "povs", "channel", "comments", "titles", "copyright", "history", "account", "live", "lvboard", "lvalerts", "lvinput", "lvstats"]) $(name + "Tab").hidden = tab !== name;
   if (tab === "home" && typeof openHome === "function") openHome();
   if (tab === "stats" && typeof openStats === "function") openStats();
   if (tab === "history" && typeof loadHistory === "function") loadHistory();
@@ -75,7 +75,7 @@ document.querySelectorAll("#tabs button, .sub-tabs button").forEach((b) => b.add
   showTab(b.dataset.tab);
 }));
 // The app opens on the tab used last; after the update that added Home, on Home once.
-if (["video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
+if (["video", "files", "images", "resolve", "remote", "sfx", "projects", "docs", "boards", "games", "povs", "channel", "comments", "titles", "copyright", "history", "live", "lvboard", "lvalerts", "lvinput", "lvstats"].includes(loadPref("tab")) && loadPref("homeSeen")) showTab(loadPref("tab"));
 if (!loadPref("homeSeen")) savePref("homeSeen", 1);
 
 // A page inside a place has news (like a game on sale): a dot on the place's side bar button too.

@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.2.0", items: [
+    "Live: new Input overlay. Show your keys, mouse or controller on stream, lighting up as you press. Pick Keycaps, Glass, Outline, Controller or Key pops, then press Add to OBS.",
+    "Works with Xbox controllers right away, with Xbox or PlayStation buttons. Key pops shows \"Typing...\" instead of letters when you type fast, so passwords stay hidden.",
+    "The phone app can now send links to your PC, add Steam games, control OBS and type on Remote.",
+  ] },
   { version: "3.1.2", items: [
     "Remote: new Game mode. Your mouse stays locked in the game and every key goes to the other PC. Hold Esc to get your mouse back.",
     "Remote: smoother on laptops. Windows no longer slows it down on battery, and Auto switches to a steady 30 fps when the other PC struggles.",

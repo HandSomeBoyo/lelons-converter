@@ -27,7 +27,7 @@ function lvEsc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function lvNum(n) { return n == null ? "–" : Number(n).toLocaleString("en-US"); }
-function lvOnPage() { const t = loadPref("tab"); return ["live", "lvboard", "lvalerts", "lvstats"].includes(t) && !$(t + "Tab").hidden; }
+function lvOnPage() { const t = loadPref("tab"); return ["live", "lvboard", "lvalerts", "lvinput", "lvstats"].includes(t) && !$(t + "Tab").hidden; }
 function lvAlerts() {
   const saved = loadPref("lvAlerts") || {};
   const out = {};
@@ -1080,6 +1080,7 @@ function liveTabChanged(tab) {
     lvDrawAlerts();
     if (typeof sfxSounds !== "undefined" && !sfxSounds.length && typeof loadSfx === "function") loadSfx({ quiet: true }).then(() => { if (!$("lvalertsTab").hidden) lvDrawAlerts(); }).catch(() => {});
   }
+  if (tab === "lvinput") lvDrawInput();
   if (tab === "lvstats") lvDrawStats();
 }
 
@@ -1087,5 +1088,5 @@ lvLoadConfig().then((c) => {
   if (c && c.set) lvPoll();
   if (lvPads().length || (loadPref("lvClipKey") || {}).vk || lvoKeyList().length) lvSendHotkeys();
   const t = loadPref("tab");
-  if (["live", "lvboard", "lvalerts", "lvstats"].includes(t) && !$(t + "Tab").hidden) liveTabChanged(t);
+  if (["live", "lvboard", "lvalerts", "lvinput", "lvstats"].includes(t) && !$(t + "Tab").hidden) liveTabChanged(t);
 });

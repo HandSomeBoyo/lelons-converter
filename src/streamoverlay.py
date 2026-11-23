@@ -22,6 +22,7 @@ import settings
 PORTS = range(17771, 17781)
 MEDIA_DIR = os.path.join(settings.DATA_DIR, "alerts")
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "overlay.html")
+INPUT_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "inputoverlay.html")
 FONTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "fonts")
 MAX_FILE = 25 * 1024 * 1024
 SOUNDS = ("fanfare", "levelup", "coins", "chime", "ding", "pop", "none")
@@ -352,6 +353,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path, _, query = self.path.partition("?")
+        if path == "/input" or path.startswith("/input/"):
+            return self._input(path, query)
         try:
             if path in ("/alerts", "/alerts/"):
                 with open(PAGE, "rb") as f:
@@ -376,6 +379,39 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(f.read(), "font/woff2", cache=True)
         except OSError:
             pass
+        self.send_error(404)
+
+
+    def _input(self, path, query):
+        """(3.2) The input overlay (inputoverlay.py). Unlike the alerts, no "any website may read this" header:
+        only the page itself (and VaultHub's preview of it) can see your keys."""
+        import inputoverlay
+        if not inputoverlay.local_host(self.headers.get("Host"), _port):
+            return self.send_error(403)
+        try:
+            if path in ("/input", "/input/"):
+                with open(INPUT_PAGE, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return self.wfile.write(body)
+            if path == "/input/stream":
+                return inputoverlay.stream(self, preview=bool(re.search(r"(?:^|&)preview=1", query)))
+            m = re.fullmatch(r"/input/fonts/([a-z0-9-]+\.woff2)", path)
+            if m and os.path.isfile(os.path.join(FONTS, m.group(1))):
+                with open(os.path.join(FONTS, m.group(1)), "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "font/woff2")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=3600")
+                self.end_headers()
+                return self.wfile.write(body)
+        except OSError:
+            return None
         self.send_error(404)
 
 
