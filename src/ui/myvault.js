@@ -601,7 +601,7 @@ async function mvImport(firstLink) {
     tag(why === "busy" ? "The webcam didn't start" : why === "blocked" ? "Webcam blocked" : "No webcam found");
     $("mvCam").classList.add("off");
     $("mvErr").className = "mv-tip";
-    $("mvErr").textContent = why === "busy" ? "Pick another camera above, or close apps that might be using it (OBS, Discord, Teams) and press Try again. Or use a photo instead."
+    $("mvErr").textContent = why === "busy" ? "Windows didn't hand over the webcam. Close apps that might be using it (OBS, Discord, Teams) and press Try again. Or open the Windows Camera app, take a photo of the QR code there, and press Use a photo instead."
       : why === "blocked" ? "Windows is blocking the webcam. Open Settings > Privacy & security > Camera and turn on \"Let desktop apps access your camera\", then press Try again."
       : "Take a photo of the QR code with another phone, then press Use a photo instead.";
     $("mvRetry").hidden = false;
