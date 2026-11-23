@@ -1100,8 +1100,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/rt-cues":
                 item = tools.cues(data.get("id"))
                 trim = (item.get("job") or {}).get("trim")
-                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t,
-                                                             "words": subtitles.word_offsets(a, b, t, item.get("heard"))} for a, b, t in item["cues"]],
+                return self.send_json({"ok": True, "cues": [{"start": c[0], "end": c[1], "text": c[2], "who": c[3] if len(c) > 3 else 0,
+                                                             "words": subtitles.word_offsets(c[0], c[1], c[2], item.get("heard"), c[3] if len(c) > 3 else 0)}
+                                                            for c in item["cues"]],
                                        "offset": trim[0] if trim else 0, "name": item["name"], "sent": item.get("sent"),
                                        "perScreen": (item.get("job") or {}).get("perScreen", "0")})
             elif path == "/api/rt-preview":
@@ -1111,14 +1112,16 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/rt-regroup":
                 cues = tools.regroup(data.get("id"), data.get("perScreen"), data.get("style"))
                 heard = tools.cues(data.get("id")).get("heard")
-                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t, "words": subtitles.word_offsets(a, b, t, heard)}
-                                                            for a, b, t in cues]})
+                return self.send_json({"ok": True, "cues": [{"start": c[0], "end": c[1], "text": c[2], "who": c[3] if len(c) > 3 else 0,
+                                                             "words": subtitles.word_offsets(c[0], c[1], c[2], heard, c[3] if len(c) > 3 else 0)}
+                                                            for c in cues]})
             elif path == "/api/rt-wave":
                 return self.send_json({"ok": True, "peaks": tools.peaks(data.get("id"))})
             elif path == "/api/rt-sofar":
                 item = tools.find(data.get("id"))
                 trim = ((item or {}).get("job") or {}).get("trim")
-                return self.send_json({"ok": True, "cues": [{"start": a, "end": b, "text": t} for a, b, t in tools.heard_so_far(data.get("id"))],
+                return self.send_json({"ok": True, "cues": [{"start": c[0], "end": c[1], "text": c[2], "who": c[3] if len(c) > 3 else 0}
+                                                            for c in tools.heard_so_far(data.get("id"))],
                                        "offset": trim[0] if trim else 0})
             elif path == "/api/rt-learn":
                 pairs = [(str(p.get("heard", "")), str(p.get("text", ""))) for p in (data.get("pairs") or [])[:5000] if isinstance(p, dict)]
@@ -1137,7 +1140,8 @@ class Handler(BaseHTTPRequestHandler):
                         except (TypeError, ValueError):
                             pass
                 return self.send_json({"ok": True, **tools.send(data.get("id"), "fcpxml" if data.get("old") else "drt",
-                                                                {k: str(data[k]) for k in ("textStyle", "fadeOut", "fadeLen", "fadeGap", "punct", "case", "position", "reveal")
+                                                                {k: str(data[k]) for k in ("textStyle", "fadeOut", "fadeLen", "fadeGap", "punct", "case", "position", "reveal",
+                                                                                                "swears", "loud", "friendColor", "loudColor")
                                                                  if k in data}, words)})
             elif path == "/api/rt-styles":
                 return self.send_json({"ok": True, "styles": textstyles.all_styles()})

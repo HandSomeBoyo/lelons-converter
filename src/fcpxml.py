@@ -53,7 +53,7 @@ def make(cues, target, name, clip=None, fps=0, offset=0.0):
 
     # Each subtitle from its first to its last frame, never on top of the next one.
     lines = []
-    for start, end, text in cues:
+    for start, end, text, *_rest in cues:
         a, b = frames(start + offset), frames(end + offset)
         if lines and a < lines[-1][1]:
             lines[-1][1] = a

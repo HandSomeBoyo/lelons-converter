@@ -9768,3 +9768,10 @@ html.side-small #callBox .call-sharing { display: none; }
 .rt-scroll[hidden] { display: none; }
 .rt-scroll div { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: color-mix(in srgb, var(--text) 32%, transparent); transition: background-color .15s; }
 .rt-scroll:hover div { background: color-mix(in srgb, var(--text) 45%, transparent); }
+/* (3.0) colors for the others talking and for loud words */
+.rt-swatches { gap: 5px; }
+.rt-swatches[hidden] { display: none; }
+.rt-look .rt-swatches button { width: 30px; padding: 0; display: grid; place-items: center; }
+.rt-swatch { width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
+.subs-who { font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 99px; margin-left: 6px; color: #111; background: var(--c, #73ccff); }
+.subs-who[hidden] { display: none; }

@@ -316,7 +316,7 @@ def _lua(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "") + '"'
 
 
-def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0, position=""):
+def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0, position="", look=None):
     """The Fusion composition of one Text+ title, as Resolve stores it. own: a text style you made in
     Resolve (textstyles.py) to copy instead of VaultHub's own look; fade_frames: fade out at the end."""
     last = max(0, frames - 1)
@@ -342,11 +342,11 @@ def text_plus(text, frames, fps, width, height, style, own=None, fade_frames=0, 
              "ViewInfo = OperatorInfo { Pos = { 220, 49.5 } }, Version = 1 }, "
              'MediaOut1 = MediaOut { Inputs = { Index = Input { Value = "0", }, Input = Input { SourceOp = "Template", '
              'Source = "Output", } }, ViewInfo = OperatorInfo { Pos = { 440, 49.5 } }, } } ')
-    if own or fade_frames or position:
+    if own or fade_frames or position or look:
         import textstyles
 
         tools = textstyles.line_tools(own or {"tools": tools, "rate": fps}, text, frames, fps, width, height, fade_frames,
-                                      position)
+                                      position, look)
     tools = tools.encode()
     rate = round(fps, 3) if abs(fps - round(fps)) > 0.001 else int(round(fps))
     comp = (f"Composition {{ CurrentTime = 0, RenderRange = {{ 0, {last} }}, GlobalRange = {{ 0, {last} }}, CurrentID = 3, "
@@ -404,7 +404,7 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
         if lines and a < lines[-1][1]:
             lines[-1][1] = a
         if b - a >= 2 and text.strip():
-            lines.append([a, b, text.strip(), more[0] if more else True])
+            lines.append([a, b, text.strip(), more[0] if more else True, more[1] if len(more) > 1 else None])
     lines = [line for line in lines if line[1] - line[0] >= 2]
 
     media_frames = int(round(info["duration"] * (info.get("fps") or fps))) if has_video else 0
@@ -418,7 +418,7 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
     fade = fade or {}
     fade_frames = frame(float(fade.get("seconds") or 0)) if fade.get("when") in ("pause", "all") else 0
     gap_frames = frame(float(fade.get("gap") or 0.5))
-    for i, (a, b, text, line_end) in enumerate(lines):
+    for i, (a, b, text, line_end, look) in enumerate(lines):
         gap = lines[i + 1][0] - b if i + 1 < len(lines) else 10 ** 9
         fades = fade_frames if line_end and (fade.get("when") == "all" or gap >= gap_frames) else 0
         el = title_el
@@ -427,7 +427,7 @@ def make(cues, target, name, clip=None, offset=0.0, style=None, timeline_fps=Non
         el = _tag(el, "Start", origin + a)
         el = _tag(el, "Duration", b - a)
         el = _tag(el, "Name", "Fusion Title")
-        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style, own, fades, position))
+        el = _tag(el, "CompositionBA", text_plus(text, b - a, fps, width, height, style, own, fades, position, look))
         el = _tag(el, "MediaFrameRate", _double_le(fps).hex())
         el = _tag(el, "MediaTimemapBA", _timemap(max(0, b - a - 1) / fps))
         fields = bytes.fromhex(_get(el, "FieldsBlob"))

@@ -39,9 +39,16 @@ OUT_FOLDER = os.path.join(settings.DATA_DIR, "Resolve")
 OPTIONS_FILE = os.path.join(settings.DATA_DIR, "resolve-options.json")
 DEFAULTS = {"fix": "", "style": "normal", "language": "", "model": "best", "level": "normal", "pause": "0.5", "cutAs": "timeline",
             "device": "gpu", "words": "", "perScreen": "0", "textStyle": "", "fadeOut": "off", "fadeLen": "0.3", "fadeGap": "0.5",
-            "punct": "keep", "case": "as", "position": "bottom", "reveal": "word"}
+            "punct": "keep", "case": "as", "position": "bottom", "reveal": "word", "swears": "keep",
+            "loud": "pop", "friendColor": "blue", "loudColor": "yellow"}
+# (3.0) colors for the others talking and for loud words (red, green, blue: 0 to 1)
+COLORS = {"white": (1, 1, 1), "yellow": (1, 0.84, 0.1), "blue": (0.45, 0.8, 1), "green": (0.45, 0.95, 0.45), "pink": (1, 0.5, 0.82),
+          "orange": (1, 0.56, 0.15), "red": (1, 0.32, 0.3)}
+LOUD_SIZE = 1.45  # how much bigger a loud word is
 FADES = {"reveal": ("line", "word"), "fadeOut": ("off", "pause", "all"), "fadeLen": ("0.15", "0.3", "0.5", "1"), "fadeGap": ("0.3", "0.5", "1"),
-         "punct": ("keep", "remove"), "case": ("as", "upper", "lower"), "position": ("bottom", "middle", "top", "style")}
+         "punct": ("keep", "remove"), "case": ("as", "upper", "lower"), "position": ("bottom", "middle", "top", "style"),
+         "swears": ("keep", "bleep"), "loud": ("pop", "off"), "friendColor": tuple(COLORS),
+         "loudColor": tuple(COLORS)}
 PER_SCREEN = ("0", "1", "3", "6")  # (3.0) most words on screen at once ("0": as many as fit)
 
 
@@ -155,16 +162,29 @@ class Tools(files.Files):
         status = item["status"]
         return {"status": status, "message": item["message"], "progress": item["progress"], "out": item["out"]}
 
+    @staticmethod
+    def _line_look(text, rest, o):
+        """(3.0) A line's own color and size: another person talking, or a loud word."""
+        who = rest[0] if rest else 0
+        look = {}
+        if who:
+            look["color"] = COLORS[o["friendColor"]]
+        if o["loud"] == "pop" and text.startswith("*"):
+            look.update(color=COLORS[o["loudColor"]], scale=LOUD_SIZE)
+        return look
+
     def _word_by_word(self, item, o, words=None):
         """(3.0) Each line as a row of titles that build it up word by word: "HEY", "HEY GUYS", ...
         each starting when its last word is said. words: {line start: offsets} from the page (what it
         showed in the preview); otherwise worked out from what it heard."""
         out = []
-        for start, end, text in item["cues"]:
+        for start, end, text, *rest in item["cues"]:
+            look = self._line_look(text, rest, o)
+            text = text.replace("*", "")
             spots = [m.end() for m in re.finditer(r"\S+", text)]
             rel = (words or {}).get(round(start, 3))
             if not isinstance(rel, list) or len(rel) != len(spots):
-                rel = subtitles.word_offsets(start, end, text, item.get("heard"))
+                rel = subtitles.word_offsets(start, end, text, item.get("heard"), rest[0] if rest else 0)
             parts = []
             for k, at in enumerate(rel):
                 begin = start + max(0.0, float(at))
@@ -175,9 +195,9 @@ class Tools(files.Files):
             for n, part in enumerate(parts):
                 part[1] = parts[n + 1][0] if n + 1 < len(parts) else end
             for n, (a, b, k) in enumerate(parts):
-                shown = subtitles.dress(text[:spots[k]], o["punct"], o["case"])
+                shown = subtitles.dress(text[:spots[k]], o["punct"], o["case"], o["swears"])
                 if shown.strip() and b > a:
-                    out.append((a, b, shown, n == len(parts) - 1))
+                    out.append((a, b, shown, n == len(parts) - 1, look))
         return out
 
     def send(self, file_id, kind="drt", look=None, words=None):
@@ -207,10 +227,13 @@ class Tools(files.Files):
                 source = keep
         trim = item["job"].get("trim")
         o = save_options(look or {})
-        cues = [(a, b, subtitles.dress(t, o["punct"], o["case"])) for a, b, t in item["cues"]]
+        cues = [(a, b, subtitles.dress(t, o["punct"], o["case"], o["swears"])) for a, b, t, *_ in item["cues"]]
         cues = [c for c in cues if c[2].strip()]
-        if kind != "fcpxml" and o["reveal"] == "word":
-            cues = self._word_by_word(item, o, words)
+        if kind != "fcpxml":
+            parts = self._word_by_word(item, o, words) if o["reveal"] == "word" else \
+                [(a, b, subtitles.dress(t, o["punct"], o["case"], o["swears"]), True, self._line_look(t, rest, o))
+                 for a, b, t, *rest in item["cues"]]
+            cues = [c for c in parts if c[2].strip()]
         if kind == "fcpxml":
             target = os.path.join(folder, f"{stem} (subtitles).fcpxml")
             fcpxml.make(cues, target, f"{stem} (subtitles)", source, offset=trim[0] if trim else 0)
@@ -405,8 +428,9 @@ class Tools(files.Files):
         clean = []
         for c in cues:
             start, end, text = float(c["start"]), float(c["end"]), str(c.get("text") or "").strip()
+            who = c.get("who") if isinstance(c.get("who"), int) and 0 <= c.get("who") < 16 else 0
             if text and end > start >= 0:
-                clean.append((round(start, 3), round(end, 3), text[:300]))
+                clean.append((round(start, 3), round(end, 3), text[:300], who))
         clean.sort()
         if not clean:
             raise ValueError("There has to be at least one subtitle.")
@@ -450,6 +474,7 @@ class Tools(files.Files):
                 cues = subtitles.make_subtitles(parts, temp, job["model"], job["language"], job["style"], report,
                                                 gpu=job.get("device") != "cpu", words=fixes.words_to_listen_for(job.get("words", "")),
                                                 find_voice=picked == "auto" and tracks > 1,
+                                                speakers=picked == "everyone" and tracks > 1,
                                                 per_screen=int(job.get("perScreen") or 0),
                                                 on_words=lambda heard: item.update(heard=heard),
                                                 on_partial=lambda heard: item.update(sofar=heard))

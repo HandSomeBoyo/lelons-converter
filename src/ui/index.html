@@ -976,7 +976,7 @@
           <div class="rt-subs-head">
             <button type="button" class="link rt-back" id="rtSubsBack">‹ Back</button>
             <h3 class="rt-panel-title">Check the subtitles <span class="rt-count" id="rtSubsCount"></span></h3>
-            <p class="subs-tip">Play and read along. Type to fix a word. <b>◀ ▶</b> moves a line a little, <b>Start here</b> starts it where the video is.</p>
+            <p class="subs-tip">Play and read along. Type to fix a word. <b>◀ ▶</b> moves a line a little, <b>Start here</b> starts it where the video is. A line in <b>*stars*</b> is a loud word: it pops bigger.</p>
             <div class="rt-subs-per"><span>Words on screen</span>
               <div class="chips" id="rtSubsPer">
                 <button data-value="1">One</button>
@@ -1027,6 +1027,43 @@
                   <button data-value="keep" title="Keep . , ! ? and such">With . , ! ?</button>
                   <button data-value="remove" title="Only the words, no . , - ! ? and such">Only the words</button>
                 </div>
+              </div>
+            </div>
+            <div class="rt-look-row">
+              <span class="rt-look-label">Loud words</span>
+              <div class="rt-look-pair">
+                <div class="chips" data-look="loud">
+                  <button data-value="pop" title="Words you yell get a line of their own, bigger and in a color">Pop bigger</button>
+                  <button data-value="off">Like the rest</button>
+                </div>
+                <div class="chips rt-swatches" data-look="loudColor" id="rtLoudColors">
+                <button data-value="yellow" title="Yellow"><i class="rt-swatch" style="--c:#ffd61a"></i></button>
+                <button data-value="blue" title="Blue"><i class="rt-swatch" style="--c:#73ccff"></i></button>
+                <button data-value="green" title="Green"><i class="rt-swatch" style="--c:#73f273"></i></button>
+                <button data-value="pink" title="Pink"><i class="rt-swatch" style="--c:#ff80d1"></i></button>
+                <button data-value="orange" title="Orange"><i class="rt-swatch" style="--c:#ff8f26"></i></button>
+                <button data-value="red" title="Red"><i class="rt-swatch" style="--c:#ff524d"></i></button>
+                <button data-value="white" title="White"><i class="rt-swatch" style="--c:#ffffff"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="rt-look-row" id="rtFriendRow" hidden>
+              <span class="rt-look-label">The others talking</span>
+              <div class="chips rt-swatches" data-look="friendColor">
+                <button data-value="yellow" title="Yellow"><i class="rt-swatch" style="--c:#ffd61a"></i></button>
+                <button data-value="blue" title="Blue"><i class="rt-swatch" style="--c:#73ccff"></i></button>
+                <button data-value="green" title="Green"><i class="rt-swatch" style="--c:#73f273"></i></button>
+                <button data-value="pink" title="Pink"><i class="rt-swatch" style="--c:#ff80d1"></i></button>
+                <button data-value="orange" title="Orange"><i class="rt-swatch" style="--c:#ff8f26"></i></button>
+                <button data-value="red" title="Red"><i class="rt-swatch" style="--c:#ff524d"></i></button>
+                <button data-value="white" title="White"><i class="rt-swatch" style="--c:#ffffff"></i></button>
+              </div>
+            </div>
+            <div class="rt-look-row">
+              <span class="rt-look-label">Swear words</span>
+              <div class="chips" data-look="swears">
+                <button data-value="keep">As said</button>
+                <button data-value="bleep" title="Written as F***">F***</button>
               </div>
             </div>
             <div class="rt-look-row">

@@ -5,7 +5,7 @@
 
 let rtTool = "";
 let rtView = "pick"; // pick | setup | subs | done
-let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5", punct: "keep", case: "as", position: "bottom", reveal: "word" };
+let rtOptions = { fix: "", style: "normal", language: "", model: "best", level: "normal", pause: "0.5", cutAs: "timeline", device: "gpu", words: "", track: "auto", perScreen: "0", textStyle: "", fadeOut: "off", fadeLen: "0.3", fadeGap: "0.5", punct: "keep", case: "as", position: "bottom", reveal: "word", swears: "keep", loud: "pop", friendColor: "blue", loudColor: "yellow" };
 let rtNvidia = false; // an NVIDIA graphics card to listen on
 let rtServer = []; // from the app's state
 let rtId = ""; // the video on the tab
@@ -668,7 +668,7 @@ function drawSetup(item) {
   if (chips.dataset.n !== String(tracks)) {
     chips.dataset.n = tracks;
     chips.innerHTML = "";
-    const choices = [["auto", "Find my voice"], ["all", tracks > 2 ? "All tracks" : "Both"]];
+    const choices = [["auto", "Find my voice"], ["everyone", "Everyone, a color each"], ["all", tracks > 2 ? "All tracks mixed" : "Both mixed"]];
     for (let i = 0; i < tracks; i++) choices.push([String(i), `Track ${i + 1}`]);
     for (const [value, label] of choices) {
       const b = document.createElement("button");
@@ -858,6 +858,7 @@ async function openSubs() {
   drawPerScreen();
   $("subsSaved").textContent = res.sent ? "" : "";
   drawSubsList();
+  drawLook();
   rtVideo.pause();
   seekSubs(subs.cues.length ? cueStart(subs.cues[0]) : 0);
   drawResolve();
@@ -929,6 +930,7 @@ function makeSubsRow(cue, i) {
   row.innerHTML = `
     <div class="subs-row-top">
       <button type="button" class="subs-when" title="Play from here"></button>
+      <span class="subs-who" hidden></span>
       <span class="spacer"></span>
       <button type="button" class="nudge" data-d="-0.1" title="Show it 0.1 second earlier">◀</button>
       <button type="button" class="nudge" data-d="0.1" title="Show it 0.1 second later">▶</button>
@@ -937,6 +939,13 @@ function makeSubsRow(cue, i) {
     </div>
     <textarea rows="2" spellcheck="true"></textarea>`;
   redrawRow(row, cue);
+  if (cue.who) {
+    const who = row.querySelector(".subs-who");
+    who.hidden = false;
+    who.textContent = `Track ${cue.who + 1}`;
+    who.title = "Someone else talking";
+    who.style.setProperty("--c", `rgb(${RT_COLORS[rtOptions.friendColor].map((v) => Math.round(v * 255)).join(",")})`);
+  }
   const text = row.querySelector("textarea");
   text.value = cue.text;
   text.addEventListener("input", () => { cue.text = text.value; subsChanged(); drawCaption(); });
@@ -1056,6 +1065,7 @@ async function rtSend(old) {
   await saveSubsNow();
   const look = { textStyle: rtOptions.textStyle, fadeOut: rtOptions.fadeOut, fadeLen: rtOptions.fadeLen, fadeGap: rtOptions.fadeGap,
     punct: rtOptions.punct, case: rtOptions.case, position: rtOptions.position, reveal: rtOptions.reveal,
+    swears: rtOptions.swears, loud: rtOptions.loud, friendColor: rtOptions.friendColor, loudColor: rtOptions.loudColor,
     words: subs.cues.map((c) => [Math.round(c.start * 1000) / 1000, wordTimes(c)]) };
   const res = await api("/api/rt-send", { id: rtId, old, ...look }).catch(() => ({ ok: false, error: "Couldn't reach the app." }));
   const note = $("subsSaved");
@@ -1197,6 +1207,8 @@ function drawLook() {
   document.querySelectorAll("#rtLook .chips[data-look] button").forEach((b) =>
     b.classList.toggle("active", b.dataset.value === String(rtOptions[b.parentElement.dataset.look])));
   $("rtFadeLenRow").hidden = rtOptions.fadeOut === "off";
+  $("rtLoudColors").hidden = rtOptions.loud !== "pop";
+  $("rtFriendRow").hidden = !subs.cues.some((c) => c.who);
   $("rtFadeGapRow").hidden = rtOptions.fadeOut !== "pause";
 }
 
@@ -1273,7 +1285,14 @@ function splineAt(keys, t) {
 }
 
 // Same rules as the app uses for Resolve (subtitles.dress).
+const RT_COLORS = { white: [1, 1, 1], yellow: [1, 0.84, 0.1], blue: [0.45, 0.8, 1], green: [0.45, 0.95, 0.45], pink: [1, 0.5, 0.82],
+  orange: [1, 0.56, 0.15], red: [1, 0.32, 0.3] };
+const RT_LOUD_SIZE = 1.45;
+// Swear words written as F*** (same list as the app: subtitles.SWEARS)
+const RT_SWEARS = /\b(?:(?:mother)?fuck\w*|f+u+c+k+\w*|shit\w*|bullshit\w*|bitch\w*|cunt\w*|dick(?:head)?s?|cock(?:s|sucker\w*)?|pussy|pussies|bastards?|asshole\w*|whore\w*|slut\w*|wank\w*|twats?|nigg\w*|fag\w*|retard\w*)\b/gi;
 function dressText(text) {
+  text = text.replace(/\*/g, "");
+  if (rtOptions.swears === "bleep") text = text.replace(RT_SWEARS, (w) => w[0] + "\u2217".repeat(Math.min(3, w.length - 1)));
   if (rtOptions.punct === "remove") {
     text = text.replace(/(\d)[.,](?=\d)/g, "$1․").replace(/(\w)['’](?=\w)/g, "$1ʼ")
       .replace(/[^\p{L}\p{N}_\s․ʼ]/gu, " ").replace(/․/g, ".").replace(/ʼ/g, "'")
@@ -1281,13 +1300,13 @@ function dressText(text) {
   }
   if (rtOptions.case === "upper") text = text.toUpperCase();
   else if (rtOptions.case === "lower") text = text.toLowerCase();
-  return text;
+  return text.replace(/\u2217/g, "*");
 }
 
 // (3.0) When each word of a line is said (seconds from the line's start), for lines that build up
 // word by word. Same rules as the app uses for Resolve (subtitles.word_offsets).
 function wordTimes(cue) {
-  const words = cue.text.split(/\s+/).filter(Boolean);
+  const words = cue.text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
   if (Array.isArray(cue.words) && cue.words.length === words.length) return cue.words;
   const total = words.reduce((n, w) => n + w.length + 1, 0);
   const span = Math.max(0, cue.end - cue.start - 0.3);
@@ -1298,16 +1317,17 @@ function wordTimes(cue) {
 function drawCaptionAt(cue, next, t) {
   const cap = $("rtCaption");
   let since = cue ? t - cue.start : 0;
-  let shown = cue ? cue.text : "";
+  const plain = cue ? cue.text.replace(/\*/g, "") : "";
+  let shown = plain;
   if (cue && rtOptions.reveal === "word") {
     // only the words said so far; the animation starts again with each new word
     const times = wordTimes(cue);
-    const ends = [...cue.text.matchAll(/\S+/g)].map((m) => m.index + m[0].length);
+    const ends = [...plain.matchAll(/\S+/g)].map((m) => m.index + m[0].length);
     let k = 0;
     while (k + 1 < times.length && times[k + 1] <= since) k++;
     const began = times[k];
     while (k + 1 < times.length && times[k + 1] - times[k] < 0.09) k++;
-    shown = cue.text.slice(0, ends[k]);
+    shown = plain.slice(0, ends[k]);
     since -= began;
   }
   const text = cue ? dressText(shown) : "";
@@ -1316,7 +1336,11 @@ function drawCaptionAt(cue, next, t) {
   const look = rtLookData;
   const width = $("rtScreen").clientWidth || 640;
   const size = splineAt(look.animated && look.animated.Size, since) ?? look.size;
-  const px = Math.max(1, size * width * 0.7);
+  // (3.0) a loud word pops bigger, in its color; others talking have their own color
+  const loud = rtOptions.loud === "pop" && cue.text.startsWith("*");
+  const px = Math.max(1, size * width * 0.7 * (loud ? RT_LOUD_SIZE : 1));
+  const color = loud ? RT_COLORS[rtOptions.loudColor] : cue.who ? RT_COLORS[rtOptions.friendColor] : look.color;
+  cap.style.color = `rgb(${(color || [1, 1, 1]).map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(",")})`;
   cap.style.fontSize = px.toFixed(2) + "px";
   cap.style.setProperty("--cap-stroke", ((look.outline || 0) * px * 0.7).toFixed(2) + "px");
   const own = !!rtOptions.textStyle;

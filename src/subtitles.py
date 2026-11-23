@@ -449,13 +449,46 @@ def _clock(t):
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
-def dress(text, punct="keep", case="as"):
+def mark_loud(words, audio):
+    """(3.0) Words said a lot louder than the rest (yelling, hype) get marked: (start, end, word, who,
+    loud). Measured against how loud that person usually talks, so a quiet mic works the same."""
+    import numpy as np
+
+    if not words or not len(audio):
+        return [(*w[:4], *([0] * (4 - len(w))), False) for w in words]
+    level = []
+    for w in words:
+        a, b = int(w[0] * SAMPLE_RATE), int(w[1] * SAMPLE_RATE)
+        bit = audio[max(0, a):max(a + 1, min(len(audio), b))]
+        level.append(20 * np.log10(float(np.sqrt(np.mean(bit ** 2))) + 1e-6) if len(bit) else -120.0)
+    usual = float(np.median(level))
+    top = float(np.percentile(level, 93)) if len(level) >= 20 else max(level)
+    out = []
+    for w, db in zip(words, level):
+        letters = len(re.sub(r"\W", "", w[2]))
+        out.append((*w[:3], w[3] if len(w) > 3 else 0, bool(db >= usual + 9 and db >= top and letters >= 2)))
+    return out
+
+
+# (3.0) Swear words, written as F*** when you pick that (first letter kept so it still reads).
+SWEARS = re.compile(r"\b(?:(?:mother)?fuck\w*|f+u+c+k+\w*|shit\w*|bullshit\w*|bitch\w*|cunt\w*|dick(?:head)?s?|cock(?:s|sucker\w*)?|"
+                    r"pussy|pussies|bastards?|asshole\w*|whore\w*|slut\w*|wank\w*|twats?|nigg\w*|fag\w*|retard\w*)\b", re.I)
+
+
+def bleep(text):
+    return SWEARS.sub(lambda m: m[0][0] + "\u2217" * min(3, len(m[0]) - 1), text)  # (stars put back in dress())
+
+
+def dress(text, punct="keep", case="as", swears="keep"):
     """(3.0) How the words are written in Resolve: without . , - ! ? and such (apostrophes inside words
     and decimal points stay), and/or in CAPITALS or small letters."""
+    text = text.replace("*", "")  # (the stars that mark a loud word aren't written)
+    if swears == "bleep":
+        text = bleep(text)
     if punct == "remove":
         text = re.sub(r"(?<=\d)[.,](?=\d)", "\u2024", text)  # 3.5 keeps its point
         text = re.sub(r"(?<=\w)['\u2019](?=\w)", "\u02bc", text)  # don't keeps its '
-        text = re.sub(r"[^\w\s\u2024\u02bc]", " ", text)
+        text = re.sub(r"[^\w\s\u2024\u02bc\u2217]", " ", text)  # (\u2217: F*** keeps its stars)
         text = text.replace("\u2024", ".").replace("\u02bc", "'")
         text = "\n".join(re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n"))
         text = "\n".join(line for line in text.split("\n") if line)
@@ -463,17 +496,17 @@ def dress(text, punct="keep", case="as"):
         text = text.upper()
     elif case == "lower":
         text = text.lower()
-    return text
+    return text.replace("\u2217", "*")
 
 
-def word_offsets(start, end, text, heard=None):
+def word_offsets(start, end, text, heard=None, who=None):
     """(3.0) When each word of a line is said, in seconds from the line's start (for lines that build
     up word by word). From the words it heard when they match the line; otherwise spread by length."""
-    words = text.split()
+    words = text.replace("*", "").split()
     if not words:
         return []
     if heard:
-        found = [w for w in heard if start - 0.15 <= w[0] < end - 0.05]
+        found = [w for w in heard if start - 0.15 <= w[0] < end - 0.05 and (who is None or (w[3] if len(w) > 3 else 0) == who)]
         if len(found) == len(words):
             out, last = [], 0.0
             for k, w in enumerate(found):
@@ -505,12 +538,24 @@ def make_cues(words, style="normal", per_screen=0):
                 tail = current[cut + 1:]
                 del current[cut + 1:]
         if current:
-            cues.append([current[0][0], current[-1][1], _wrap("".join(w[2] for w in current).strip(), width, lines)])
+            text = _wrap("".join(w[2] for w in current).strip(), width, lines)
+            if loud(current[0]):
+                text = "*" + text.replace("*", "") + "*"  # (in stars: it pops bigger)
+            cues.append([current[0][0], current[-1][1], text, who(current[0])])
             current.clear()
         current.extend(tail)
 
+    def who(w):
+        return w[3] if len(w) > 3 else 0
+
+    def loud(w):
+        return len(w) > 4 and w[4]
+
     for word in words:
         if per_screen and len(current) >= per_screen:
+            flush()
+        # (3.0) a new person talking starts a new line, and a loud word gets a line of its own
+        if current and (who(word) != who(current[0]) or loud(word) or loud(current[-1])):
             flush()
         if current:
             text = "".join(w[2] for w in current + [word]).strip()
@@ -528,7 +573,7 @@ def make_cues(words, style="normal", per_screen=0):
     # Keep each subtitle up long enough to read, without running into the next one.
     for i, cue in enumerate(cues):
         nxt = cues[i + 1][0] if i + 1 < len(cues) else cue[1] + 2
-        shortest = 0.3 if per_screen == 1 else 0.6 if style == "short" or per_screen else 1.0
+        shortest = 0.6 if cue[2].startswith("*") else 0.3 if per_screen == 1 else 0.6 if style == "short" or per_screen else 1.0
         cue[1] = min(max(cue[1] + 0.1, cue[0] + shortest), nxt - 0.02)  # (+0.1: not gone the moment the word ends)
         if cue[1] <= cue[0]:
             cue[1] = cue[0] + 0.3
@@ -551,14 +596,15 @@ def _wrap(text, width, lines):
 
 def write_srt(cues, target):
     with open(target, "w", encoding="utf-8", newline="\r\n") as f:
-        for i, (start, end, text) in enumerate(cues, 1):
+        for i, (start, end, text, *_who) in enumerate(cues, 1):
+            text = text.replace("*", "")
             f.write(f"{i}\n{_clock(start)} --> {_clock(end)}\n{text}\n\n")
 
 
 # ---------------------------------------------------------------- the whole thing
 
 def make_subtitles(parts, target, model="quick", language="", style="normal", on_progress=None, sound_copy=None, gpu=True,
-                   words="", find_voice=False, per_screen=0, on_words=None, on_partial=None):
+                   words="", find_voice=False, per_screen=0, on_words=None, on_partial=None, speakers=False):
     """parts: [(path, from_seconds, length_or_None, at_seconds)]: the bits of sound to listen to and
     where they go in the result (a single file is one part at 0; a Resolve timeline is many).
     on_progress(text, percent). Returns the number of subtitles written."""
@@ -576,11 +622,40 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
         total = max(total, at + len(audio) / SAMPLE_RATE)
     if not total:
         raise ValueError("There's no sound to listen to.")
-    if find_voice and len(pieces) > 1:
+    me = None
+    if (find_voice or speakers) and len(pieces) > 1:
         report("Finding your voice", 0)
-        best = _voice_track([audio for _at, audio in pieces])
-        if best is not None:
-            pieces = [pieces[best]]
+        me = _voice_track([audio for _at, audio in pieces])
+        if find_voice and not speakers and me is not None:
+            pieces = [pieces[me]]
+    if speakers and len(pieces) > 1:
+        # (3.0) Everyone: each sound track is listened to on its own, so every line knows who said it
+        # (you are 0, the others 1, 2...).
+        order = ([me] if me is not None else []) + [n for n in range(len(pieces)) if n != me]
+        where = " on the graphics card" if getattr(whisper, "on_gpu", False) else ""
+        heard = []
+        for who, n in enumerate(order):
+            at, audio = pieces[n]
+            track = np.zeros(int(total * SAMPLE_RATE) + 1, dtype=np.float32)
+            begin = max(0, int(at * SAMPLE_RATE))
+            track[begin:begin + len(audio)] = audio[: len(track) - begin]
+            label = "Listening to you" if who == 0 and me is not None else f"Listening to track {n + 1}"
+            done = list(heard)
+            got = listen(whisper, track, language,
+                         lambda p, who=who, label=label: report(label + where, (who * 100 + p) / len(order)), words,
+                         (lambda part, done=done, who=who: on_partial(sorted(done + [(*w, who) for w in part]))) if on_partial else None)
+            got = fit_to_speech([(*w, who) for w in got], track)
+            heard += mark_loud(got, track)
+        heard.sort()
+        if not heard:
+            raise ValueError("Couldn't hear any speech in this.")
+        if on_words:
+            on_words(heard)
+        import fixes
+
+        cues = fixes.apply(make_cues(heard, style, per_screen))
+        write_srt(cues, target)
+        return cues
     mix = np.zeros(int(total * SAMPLE_RATE) + 1, dtype=np.float32)
     for at, audio in pieces:
         begin = max(0, int(at * SAMPLE_RATE))
@@ -596,7 +671,7 @@ def make_subtitles(parts, target, model="quick", language="", style="normal", on
     if not heard:
         raise ValueError("Couldn't hear any speech in this.")
     report("Matching the timing to your voice", 99)
-    heard = fit_to_speech(heard, mix)
+    heard = mark_loud(fit_to_speech(heard, mix), mix)
     if on_words:
         on_words(heard)  # (kept, so "Words on screen" can change later without listening again)
     import fixes
@@ -640,7 +715,7 @@ def _fix_long_words(words):
     - any other long word: it keeps its start and ends after about the time it takes to say it, so it
       doesn't hang on screen until the speech is clear again."""
     out = []
-    for i, (start, end, text) in enumerate(words):
+    for i, (start, end, text, *rest) in enumerate(words):
         letters = len(re.sub(r"\W", "", text))
         usual = min(1.2, 0.3 + 0.08 * max(1, letters))  # about how long saying it takes, with some room
         if end - start > usual + 0.6:
@@ -649,7 +724,7 @@ def _fix_long_words(words):
                 start = end - usual
             else:
                 end = start + usual
-        out.append((start, end, text))
+        out.append((start, end, text, *rest))
     return out
 
 
@@ -674,7 +749,7 @@ def fit_to_speech(words, audio):
 
     starts = [a for a, _b in spans]
     out = []
-    for i, (start, end, text) in enumerate(words):
+    for i, (start, end, text, *rest) in enumerate(words):
         k = max(0, bisect.bisect_right(starts, end) - 1)
         touching = [sp for sp in spans[max(0, k - 3):k + 1] if sp[0] < end and sp[1] > start]
         if touching:
@@ -691,7 +766,7 @@ def fit_to_speech(words, audio):
                 start, end = new_start, new_end
         if out and start < out[-1][1]:
             start = out[-1][1]
-        out.append((round(start, 3), round(max(end, start + 0.05), 3), text))
+        out.append((round(start, 3), round(max(end, start + 0.05), 3), text, *rest))
     return out
 
 

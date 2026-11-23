@@ -92,7 +92,7 @@ def apply(cues, fixes=None):
     pattern = re.compile(r"(?<![\w'])(" + "|".join(re.escape(k).replace(r"\ ", r"\s+")
                                                      for k in sorted(fixes, key=len, reverse=True)) + r")(?![\w'])", re.I)
     lookup = {re.sub(r"\s+", " ", k): v for k, v in fixes.items()}
-    return [(a, b, pattern.sub(lambda m: lookup.get(re.sub(r"\s+", " ", m[1].lower()), m[1]), t)) for a, b, t in cues]
+    return [(a, b, pattern.sub(lambda m: lookup.get(re.sub(r"\s+", " ", m[1].lower()), m[1]), t), *rest) for a, b, t, *rest in cues]
 
 
 def words_to_listen_for(typed=""):

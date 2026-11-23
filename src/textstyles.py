@@ -230,7 +230,7 @@ def _tool_block(tools, kind):
     return m[1], m.end() - 1, _block_end(tools, m.end() - 1)
 
 
-def line_tools(style, text, frames, fps, width, height, fade_frames=0, position=""):
+def line_tools(style, text, frames, fps, width, height, fade_frames=0, position="", look=None):
     """The tools text of one subtitle made from a saved style. position: bottom/middle/top moves it
     there ("" keeps where it is in the style)."""
     tools = _stretch_keyframes(style["tools"], fps / (style.get("rate") or fps))
@@ -251,12 +251,45 @@ def line_tools(style, text, frames, fps, width, height, fade_frames=0, position=
     if position in POSITIONS and not re.search(r"\bCenter = Input \{ SourceOp", inputs):
         inputs = _set_input(inputs, "VerticalJustificationNew", "3")
         inputs = _set_input(inputs, "Center", f"{{ 0.5, {POSITIONS[position]} }}")
+    look = look or {}
+    if look.get("color"):  # (3.0) another person talking, or a loud word
+        for key, value in zip(("Red1", "Green1", "Blue1"), look["color"]):
+            inputs = _set_input(inputs, key, _num(round(float(value), 4)))
+    scale = float(look.get("scale") or 1)
+    size_from = None
+    if scale != 1:
+        size = re.search(r"\bSize = Input \{ Value = (-?[\d.e-]+),", inputs)
+        source = re.search(r'\bSize = Input \{ SourceOp = "(\w+)"', inputs)
+        if source:
+            size_from = source[1]
+        else:
+            inputs = _set_input(inputs, "Size", _num(round((float(size[1]) if size else 0.08) * scale, 5)))
     body = body[:inputs_at] + inputs + body[inputs_end:]
     tools = tools[:body_at] + body + tools[body_end:]
+    if size_from:
+        tools = _scale_spline(tools, size_from, scale)
 
     if fade_frames > 0 and frames > 2:
         tools = _add_fade(tools, last, min(fade_frames, max(1, frames // 2)), width, height)
     return tools
+
+
+def _scale_spline(tools, name, factor):
+    """Every value of an animation curve times factor (a loud word: its whole pop, bigger)."""
+    at = re.search(r"\b" + name + r" = BezierSpline \{", tools)
+    if not at:
+        return tools
+    end = _block_end(tools, at.end() - 1)
+    block = tools[at.start():end]
+    keys = re.search(r"KeyFrames = \{", block)
+    if not keys:
+        return tools
+    k_end = _block_end(block, keys.end() - 1)
+    frames = block[keys.end():k_end]
+    frames = re.sub(r"(\[-?[\d.]+\] = \{ )(-?[\d.e-]+)", lambda m: m[1] + _num(round(float(m[2]) * factor, 6)), frames)
+    frames = re.sub(r"((?:LH|RH) = \{ -?[\d.e-]+, )(-?[\d.e-]+)", lambda m: m[1] + _num(round(float(m[2]) * factor, 6)), frames)
+    block = block[:keys.end()] + frames + block[k_end:]
+    return tools[:at.start()] + block + tools[end:]
 
 
 def _add_fade(tools, last, length, width, height):
