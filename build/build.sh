@@ -22,11 +22,11 @@ rm -rf "$WORK/python"
 unzip -q "$NUPKG" "tools/*" -d "$WORK/python"
 mv "$WORK/python/tools" "$STAGE/runtime"
 
-echo "==> Installing yt-dlp, ffmpeg, deno, Pillow and kokoro-onnx (the Voices page) into it"
+echo "==> Installing yt-dlp, ffmpeg, deno, Pillow, kokoro-onnx and edge-tts (the Voices page) into it"
 "$PY" -m pip install -q --disable-pip-version-check --upgrade \
   --target "$STAGE/runtime/Lib/site-packages" \
   --platform win_amd64 --python-version "${PYTHON_VERSION%.*}" --implementation cp --only-binary=:all: \
-  "yt-dlp[default]" imageio-ffmpeg deno pillow kokoro-onnx
+  "yt-dlp[default]" imageio-ffmpeg deno pillow kokoro-onnx edge-tts
 
 echo "==> Moving ffmpeg to runtime\\ffmpeg\\ffmpeg.exe"
 # yt-dlp looks for a program named exactly "ffmpeg" when downloading part of a video.

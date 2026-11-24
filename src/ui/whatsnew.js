@@ -3,7 +3,7 @@
 
 const CHANGES = [
   { version: "3.4.0", items: [
-    "New Voices page: type anything and a natural sounding voice reads it out. Pick from 8 voices and 8 fun characters like Big Guy, Robot and Announcer, then save it as an MP3, drag it into Resolve or add it to the Library. It all runs on your PC, free.",
+    "New Voices page: type anything and have it read out. Brian (the classic donation voice) and the other streamer voices, Microsoft's natural voices, and 16 more that work offline, including fun characters like Big Guy and Robot. Save it as an MP3, drag it into Resolve or add it to the Library.",
   ] },
   { version: "3.3.2", items: [
     "MyVault: fixed \"Couldn't find Bitwarden's tool\" when connecting. VaultHub now finds Bitwarden's newest tool a more reliable way.",

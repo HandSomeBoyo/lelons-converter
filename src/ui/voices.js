@@ -15,7 +15,7 @@ const voEsc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&
 const VO_SPEEDS = [["slow", "Slow", 0.85], ["normal", "Normal", 1], ["fast", "Fast", 1.2]];
 
 const vo = {
-  st: null, drawn: false, voice: loadPref("voVoice") || "heart", speed: loadPref("voSpeed") || "normal",
+  st: null, drawn: false, voice: loadPref("voVoice") || "se:Brian", speed: loadPref("voSpeed") || "normal",
   text: loadPref("voText") || "", job: null, jobState: null, playing: null, audio: null, poll: 0,
 };
 
@@ -36,25 +36,6 @@ function voDraw() {
   const page = $("voicesTab");
   if (!vo.st) return;
   const head = `<h1 class="headline">Voices.<em> Type it, hear it.</em></h1>`;
-  if (!vo.st.ready) {
-    const d = vo.st.download;
-    const pct = d.total ? Math.floor((d.got / d.total) * 100) : 0;
-    page.innerHTML = `${head}
-      <div class="vo-setup">
-        <span class="vo-setup-ic">${VO_I.wave}</span>
-        <div class="vo-setup-text">
-          <b>Get the voices first</b>
-          <p>A one-time download of about 120 MB. After that it all runs on your PC, free and offline.</p>
-          ${d.busy ? `<div class="vo-bar"><i style="width:${pct}%"></i></div><small>${pct}%</small>` : ""}
-          ${d.error ? `<p class="vo-error">${voEsc(d.error)}</p>` : ""}
-        </div>
-        <button type="button" class="small-button" id="voGet" ${d.busy ? "disabled" : ""}>${d.busy ? "Downloading..." : d.error ? "Try again" : "Download"}</button>
-      </div>`;
-    const btn = $("voGet");
-    if (btn) btn.onclick = async () => { await api("/api/tts-get", {}); voLoad(); };
-    vo.drawn = false;
-    return;
-  }
   if (!vo.drawn) {
     page.innerHTML = `${head}
       <div class="vo-box">
@@ -72,10 +53,7 @@ function voDraw() {
         <h2 class="vo-h">Your clips</h2>
         <div class="vo-clips" id="voClips"></div>
       </div>
-      <h2 class="vo-h">People</h2>
-      <div class="vo-voices" id="voPeople"></div>
-      <h2 class="vo-h">Characters</h2>
-      <div class="vo-voices" id="voChars"></div>`;
+      <div id="voGroups"></div>`;
     vo.drawn = true;
     const ta = $("voText");
     ta.value = vo.text;
@@ -95,8 +73,10 @@ function voDraw() {
       if (!b) return;
       vo.voice = b.dataset.voice; savePref("voVoice", vo.voice); voDrawVoices();
     };
-    $("voPeople").addEventListener("click", pick);
-    $("voChars").addEventListener("click", pick);
+    $("voGroups").addEventListener("click", (e) => {
+      if (e.target.closest("#voGet")) return voGetModel();
+      pick(e);
+    });
   }
   voDrawVoices();
   voDrawSpeed();
@@ -106,12 +86,40 @@ function voDraw() {
 }
 
 function voDrawVoices() {
-  const all = [...vo.st.voices.people, ...vo.st.voices.characters];
-  if (!all.some((v) => v.id === vo.voice)) vo.voice = all[0].id;
+  const groups = vo.st.voices;
+  const usable = groups.filter((g) => g.online || vo.st.ready).flatMap((g) => g.voices);
+  if (!usable.some((v) => v.id === vo.voice)) vo.voice = usable[0].id;
   const card = (v) => `<button type="button" class="vo-voice${v.id === vo.voice ? " on" : ""}" data-voice="${v.id}" aria-pressed="${v.id === vo.voice}">
       <b>${voEsc(v.name)}</b><small>${voEsc(v.about)}</small></button>`;
-  $("voPeople").innerHTML = vo.st.voices.people.map(card).join("");
-  $("voChars").innerHTML = vo.st.voices.characters.map(card).join("");
+  let html = "";
+  for (const g of groups.filter((g) => g.online)) {
+    html += `<h2 class="vo-h">${voEsc(g.title)}</h2><div class="vo-voices">${g.voices.map(card).join("")}</div>`;
+  }
+  const offline = groups.filter((g) => !g.online);
+  if (vo.st.ready) {
+    for (const g of offline) html += `<h2 class="vo-h">${voEsc(g.title)}</h2><div class="vo-voices">${g.voices.map(card).join("")}</div>`;
+  } else {
+    const d = vo.st.download;
+    const pct = d.total ? Math.floor((d.got / d.total) * 100) : 0;
+    const count = offline.reduce((n, g) => n + g.voices.length, 0);
+    html += `<h2 class="vo-h">On your PC</h2>
+      <div class="vo-setup">
+        <span class="vo-setup-ic">${VO_I.wave}</span>
+        <div class="vo-setup-text">
+          <b>${count} more voices that work offline</b>
+          <p>Including fun characters like Big Guy, Robot and Announcer. A one-time download of about 120 MB.</p>
+          ${d.busy ? `<div class="vo-bar"><i style="width:${pct}%"></i></div><small>${pct}%</small>` : ""}
+          ${d.error ? `<p class="vo-error">${voEsc(d.error)}</p>` : ""}
+        </div>
+        <button type="button" class="ghost-button" id="voGet" ${d.busy ? "disabled" : ""}>${d.busy ? "Downloading..." : d.error ? "Try again" : "Download"}</button>
+      </div>`;
+  }
+  $("voGroups").innerHTML = html;
+}
+
+async function voGetModel() {
+  await api("/api/tts-get", {}).catch(() => {});
+  voLoad();
 }
 
 function voDrawSpeed() {
@@ -235,8 +243,8 @@ function voWatchDownload() {
     if (!res || !res.ok) return;
     vo.st = res;
     if (!res.download.busy) clearInterval(vo.dl);
-    if ($("voicesTab").hidden) return;
-    voDraw();
+    if ($("voicesTab").hidden || !$("voGroups")) return;
+    voDrawVoices();
   }, 600);
 }
 

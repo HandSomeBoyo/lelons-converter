@@ -1,9 +1,12 @@
 """(3.4.0) The Voices page: type something and a natural sounding voice reads it out.
 
-The voices are Kokoro (Apache 2.0), a small speech model that runs on this PC, with no
-account and nothing sent anywhere. The model (about 120 MB) is downloaded the first time
-you use the page and kept in the app's data folder. The character voices are our own:
-a Kokoro voice with its pitch, speed and sound changed by ffmpeg.
+Online voices (no download): the streamer voices (Amazon's Brian and friends, through the free
+StreamElements speech link donation alerts use) and Microsoft's voices (edge-tts). Both are free
+services their makers don't officially support, so they can stop working one day.
+
+Voices on your PC: Kokoro (Apache 2.0), a small speech model, nothing sent anywhere. The model
+(about 120 MB) is downloaded the first time you pick one and kept in the app's data folder.
+The character voices are our own: a Kokoro voice with its pitch, speed and sound changed by ffmpeg.
 """
 
 import os
@@ -12,6 +15,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -58,7 +62,34 @@ CHARACTERS = [
     ("ghost", "Ghost", "Spooky whisper", "af_nicole", "en-us", 0.9,
      "asetrate=24000*0.9,aresample=24000,atempo=1.11,aecho=0.8:0.7:300|600:0.4|0.25"),
 ]
-VOICES = {v[0]: v for v in PEOPLE} | {c[0]: c for c in CHARACTERS}
+
+# (3.4.0) Online voices: no download, need internet. The famous streamer ones.
+# Amazon's voices (Brian and friends) come through StreamElements' free speech link, the one
+# Twitch donation alerts use. (id, name, what it sounds like, voice)
+STREAMER = [
+    ("se:Brian", "Brian", "The donation classic", "Brian"),
+    ("se:Amy", "Amy", "British, clear", "Amy"),
+    ("se:Justin", "Justin", "Young kid", "Justin"),
+    ("se:Joey", "Joey", "American guy", "Joey"),
+    ("se:Matthew", "Matthew", "News reader", "Matthew"),
+    ("se:Ivy", "Ivy", "Young girl", "Ivy"),
+    ("se:Russell", "Russell", "Aussie", "Russell"),
+    ("se:Geraint", "Geraint", "Welsh", "Geraint"),
+]
+# Microsoft's voices, the ones in Edge's read aloud (edge-tts). (id, name, what it sounds like, voice)
+MICROSOFT = [
+    ("ms:guy", "Guy", "Friendly American", "en-US-GuyNeural"),
+    ("ms:aria", "Aria", "Bright and clear", "en-US-AriaNeural"),
+    ("ms:davis", "Davis", "Chill and deep", "en-US-DavisNeural"),
+    ("ms:jenny", "Jenny", "Warm assistant", "en-US-JennyNeural"),
+    ("ms:andrew", "Andrew", "Natural storyteller", "en-US-AndrewNeural"),
+    ("ms:ava", "Ava", "Soft and natural", "en-US-AvaNeural"),
+    ("ms:ryan", "Ryan", "British guy", "en-GB-RyanNeural"),
+    ("ms:william", "William", "Aussie guy", "en-AU-WilliamNeural"),
+]
+VOICES = ({v[0]: v for v in PEOPLE} | {c[0]: c for c in CHARACTERS}
+          | {v[0]: v for v in STREAMER} | {v[0]: v for v in MICROSOFT})
+SE_URL = "https://api.streamelements.com/kappa/v2/speech"
 
 
 class Error(Exception):
@@ -66,10 +97,10 @@ class Error(Exception):
 
 
 def voices():
-    return {
-        "people": [{"id": i, "name": n, "about": a} for i, n, a, *_ in PEOPLE],
-        "characters": [{"id": i, "name": n, "about": a} for i, n, a, *_ in CHARACTERS],
-    }
+    def group(title, items, online):
+        return {"title": title, "online": online, "voices": [{"id": i, "name": n, "about": a} for i, n, a, *_ in items]}
+    return [group("Streamer voices", STREAMER, True), group("Microsoft voices", MICROSOFT, True),
+            group("On your PC", PEOPLE, False), group("Characters", CHARACTERS, False)]
 
 
 def _model_ready():
@@ -201,6 +232,89 @@ class Speaker:
             return {"ok": True, **out}
 
     def _make(self, job, text, voice_id, speed):
+        try:
+            if voice_id.startswith(("se:", "ms:")):
+                self._make_online(job, text, voice_id, speed)
+            else:
+                self._make_kokoro(job, text, voice_id, speed)
+        except Error as e:
+            job.update(status="error", error=str(e))
+        except Exception:  # the model or the service choked on something
+            job.update(status="error", error="Couldn't read that out. Try other words.")
+
+    def _make_online(self, job, text, voice_id, speed):
+        v = VOICES[voice_id]
+        os.makedirs(waveform.FOLDER, exist_ok=True)
+        clip_id = uuid.uuid4().hex[:10]
+        parts = []
+        try:
+            if voice_id.startswith("se:"):
+                pieces = _pieces(text, 280)
+                job["total"] = len(pieces)
+                for i, piece in enumerate(pieces):
+                    path = os.path.join(waveform.FOLDER, f"tts-{clip_id}-{i}.mp3")
+                    url = SE_URL + "?" + urllib.parse.urlencode({"voice": v[3], "text": piece})
+                    try:
+                        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "VaultHub"}), timeout=30) as res, \
+                                open(path, "wb") as out:
+                            shutil.copyfileobj(res, out)
+                    except OSError:
+                        raise Error(f"{v[1]} isn't answering right now. Check your internet, or try again in a bit.")
+                    if os.path.getsize(path) < 200:
+                        raise Error(f"{v[1]} couldn't read that. Try other words.")
+                    parts.append(path)
+                    job["done"] = i + 1
+            else:
+                import edge_tts
+                job["total"] = 1
+                path = os.path.join(waveform.FOLDER, f"tts-{clip_id}-0.mp3")
+                try:
+                    edge_tts.Communicate(text, v[3]).save_sync(path)
+                except Exception:
+                    raise Error(f"{v[1]} isn't answering right now. Check your internet, or try again in a bit.")
+                if not os.path.isfile(path) or os.path.getsize(path) < 200:
+                    raise Error(f"{v[1]} couldn't read that. Try other words.")
+                parts.append(path)
+                job["done"] = 1
+            tempo = f"atempo={speed:.3f}" if abs(speed - 1) > 0.01 else ""
+            self._finish(job, clip_id, parts, tempo, text, voice_id, gap=0.12 if len(parts) > 1 else 0)
+        finally:
+            for path in parts:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+    def _finish(self, job, clip_id, inputs, filters, text, voice_id, gap=0.0):
+        """Joins the sound files into one even, loud enough MP3, and adds it to the clips."""
+        v = VOICES[voice_id]
+        name = f"tts-{clip_id}.mp3"
+        mp3 = os.path.join(waveform.FOLDER, name)
+        args = [media.ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-nostdin"]
+        for path in inputs:
+            args += ["-i", path]
+        n = len(inputs)
+        pad = f"apad=pad_dur={gap}," if gap else ""
+        joined = "".join(f"[{i}:a]aformat=sample_rates=24000:channel_layouts=mono,{pad}anull[a{i}];" for i in range(n))
+        joined += "".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[j];"
+        chain = ",".join(x for x in ("highpass=f=50", filters, "loudnorm=I=-16:TP=-1.5", "apad=pad_dur=0.2") if x)
+        args += ["-filter_complex", joined + "[j]" + chain + "[out]", "-map", "[out]",
+                 "-ac", "1", "-ar", "44100", "-b:a", "160k", mp3]
+        result = subprocess.run(args, capture_output=True, timeout=300, creationflags=media.NO_WINDOW)
+        if result.returncode or not os.path.isfile(mp3):
+            raise Error("Couldn't make the sound file.")
+        waveform._files.add(name)
+        seconds = media.probe(mp3)["duration"]
+        clip = {"id": clip_id, "text": text, "voice": voice_id, "voiceName": v[1], "seconds": round(seconds, 1),
+                "file": mp3, "media": name, "made": time.time(), "name": _file_name(text, v[1])}
+        with self._lock:
+            self.clips.insert(0, clip)
+            for old in self.clips[CLIPS_KEPT:]:
+                self._forget(old)
+            del self.clips[CLIPS_KEPT:]
+            job.update(status="done", clip=clip)
+
+    def _make_kokoro(self, job, text, voice_id, speed):
         import numpy
         v = VOICES[voice_id]
         kokoro_voice, lang = v[3], v[4]
@@ -210,43 +324,22 @@ class Speaker:
         filters = v[6] if character else ""
         pieces = _pieces(text)
         job["total"] = len(pieces)
+        model = self._model()
+        rate, audio = 24000, []
+        for i, piece in enumerate(pieces):
+            with self._model_lock:  # one at a time: it uses all the CPU it gets
+                samples, rate = model.create(piece, voice=kokoro_voice, speed=speed, lang=lang)
+            audio.append(samples)
+            audio.append(numpy.zeros(int(rate * 0.18), dtype=samples.dtype))  # a breath between bits
+            job["done"] = i + 1
+        os.makedirs(waveform.FOLDER, exist_ok=True)
+        clip_id = uuid.uuid4().hex[:10]
+        wav = os.path.join(waveform.FOLDER, f"tts-{clip_id}.wav")
+        _write_wav(wav, numpy.concatenate(audio), rate)
         try:
-            model = self._model()
-            rate, audio = 24000, []
-            for i, piece in enumerate(pieces):
-                with self._model_lock:  # one at a time: it uses all the CPU it gets
-                    samples, rate = model.create(piece, voice=kokoro_voice, speed=speed, lang=lang)
-                audio.append(samples)
-                audio.append(numpy.zeros(int(rate * 0.18), dtype=samples.dtype))  # a breath between bits
-                job["done"] = i + 1
-            os.makedirs(waveform.FOLDER, exist_ok=True)
-            clip_id = uuid.uuid4().hex[:10]
-            wav = os.path.join(waveform.FOLDER, f"tts-{clip_id}.wav")
-            _write_wav(wav, numpy.concatenate(audio), rate)
-            name = f"tts-{clip_id}.mp3"
-            mp3 = os.path.join(waveform.FOLDER, name)
-            chain = ",".join(x for x in ("highpass=f=50", filters, "loudnorm=I=-16:TP=-1.5", "apad=pad_dur=0.2") if x)
-            result = subprocess.run([media.ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
-                                     "-i", wav, "-af", chain, "-ac", "1", "-ar", "44100", "-b:a", "160k", mp3],
-                                    capture_output=True, timeout=300, creationflags=media.NO_WINDOW)
+            self._finish(job, clip_id, [wav], filters, text, voice_id)
+        finally:
             os.remove(wav)
-            if result.returncode or not os.path.isfile(mp3):
-                raise Error("Couldn't make the sound file.")
-            waveform._files.add(name)
-            seconds = media.probe(mp3)["duration"]
-            clip = {"id": clip_id, "text": text, "voice": voice_id, "voiceName": v[1], "seconds": round(seconds, 1),
-                    "file": mp3, "media": name, "made": time.time(),
-                    "name": _file_name(text, v[1])}
-            with self._lock:
-                self.clips.insert(0, clip)
-                for old in self.clips[CLIPS_KEPT:]:
-                    self._forget(old)
-                del self.clips[CLIPS_KEPT:]
-                job.update(status="done", clip=clip)
-        except Error as e:
-            job.update(status="error", error=str(e))
-        except Exception:  # the model choked on something
-            job.update(status="error", error="Couldn't read that out. Try other words.")
 
     def _forget(self, clip):
         waveform._files.discard(clip["media"])
