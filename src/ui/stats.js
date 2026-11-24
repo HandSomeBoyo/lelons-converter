@@ -274,7 +274,7 @@ function milestoneOf(subs) {
   const prev = [...STATS_MILESTONES].reverse().find((m) => m <= subs) || 0;
   return { next, prev };
 }
-function whenText(days) {
+function statsWhenText(days) {
   if (days < 1.5) return "about a day";
   if (days < 13) return `about ${Math.round(days)} days`;
   if (days < 60) return `about ${Math.round(days / 7)} weeks`;
@@ -301,7 +301,7 @@ function drawStatsGoals(series) {
     text.className = "stats-bar-text";
     text.append(Object.assign(document.createElement("b"), { textContent: `${r.name} → ${shortNumber(r.next)}` }),
       Object.assign(document.createElement("small"), { textContent: r.days == null ? `${r.left.toLocaleString()} to go`
-        : r.days > 3650 ? `${r.left.toLocaleString()} to go, a long way off` : `${r.left.toLocaleString()} to go, in ${whenText(r.days)}` }));
+        : r.days > 3650 ? `${r.left.toLocaleString()} to go, a long way off` : `${r.left.toLocaleString()} to go, in ${statsWhenText(r.days)}` }));
     const track = document.createElement("span");
     track.className = "stats-bar-track";
     const fill = Object.assign(document.createElement("span"), { className: "stats-bar-fill" });
