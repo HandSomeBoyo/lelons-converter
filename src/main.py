@@ -51,6 +51,8 @@ import editprojects  # noqa: E402
 import projectsync  # noqa: E402
 import games  # noqa: E402
 import myvault  # noqa: E402
+import atexit  # noqa: E402
+atexit.register(lambda: myvault.at_exit())
 import povs  # noqa: E402
 import remote  # noqa: E402
 import project  # noqa: E402
@@ -1863,6 +1865,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if action == "state":
                 mv.check_timeout()
+                mv.sync_if_old()
                 result = mv.state()
             elif action == "setup":
                 result = mv.setup(data.get("pin"))
@@ -1875,7 +1878,7 @@ class Handler(BaseHTTPRequestHandler):
                 mv.touch()
                 result = {}
             elif action == "items":
-                result = {"items": mv.items(), "codes": mv.codes()}
+                result = {"items": mv.items(), "codes": mv.codes(), "folders": mv.folders(), "rev": mv._s["rev"]}
             elif action == "codes":
                 result = {"codes": mv.codes()}
             elif action == "get":
@@ -1934,12 +1937,51 @@ class Handler(BaseHTTPRequestHandler):
                 result = mv.camera_open()
             elif action == "camera-photo":
                 result = mv.camera_photo()
+            # (3.3.0) Bitwarden, folders, favorites, moving the old MyVault over
+            elif action == "bw-connect":
+                result = mv.connect(data.get("email"), data.get("password"), str(data.get("server") or "us"), data.get("custom"))
+            elif action == "bw-more":
+                result = mv.connect_more(str(data.get("what") or ""), data.get("code"), data.get("method"),
+                                         data.get("clientId"), data.get("clientSecret"))
+            elif action == "bw-job":
+                result = mv.job()
+            elif action == "bw-cancel":
+                result = mv.connect_cancel()
+            elif action == "bw-unlock":
+                result = mv.unlock_master(data.get("password"))
+            elif action == "bw-pin-unlock":
+                result = mv.unlock_pin(data.get("pin"))
+            elif action == "bw-pin":
+                result = mv.pin_off() if data.get("off") else mv.pin_set(data.get("pin"))
+            elif action == "bw-sync":
+                result = mv.sync()
+            elif action == "bw-signout":
+                result = mv.sign_out()
+            elif action == "move-preview":
+                result = mv.move_preview(data.get("pin"))
+            elif action == "move":
+                result = mv.move_to_bw(data.get("pin"))
+            elif action == "folder-save":
+                result = {"folder": mv.folder_save(str(data.get("id") or ""), data.get("name"))}
+            elif action == "folder-delete":
+                mv.folder_delete(str(data.get("id") or ""))
+                result = {}
+            elif action == "fav":
+                result = {"item": mv.set_fav(str(data.get("id") or ""), data.get("on"))}
+            elif action == "set-folder":
+                result = {"item": mv.set_folder(str(data.get("id") or ""), str(data.get("folder") or ""))}
+            elif action == "open-link":  # Bitwarden's sign-up and API key pages (only those)
+                url = str(data.get("url") or "")
+                if re.fullmatch(r"https://(vault\.bitwarden\.(com|eu)|bitwarden\.com)/[\w#/?=&.-]*", url) or (
+                        url.startswith(str(settings.load().get("bw_server") or "~") + "/#/")):
+                    webbrowser.open(url)
+                result = {}
             elif action == "open-app":  # the pop-up's "Open MyVault"
                 show_window()
                 result = {}
             else:
                 return self.send_error(404)
-        except myvault.Error as e:
+        except (myvault.Error, myvault.bitwarden.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         except OSError:
             return self.send_json({"ok": False, "error": "Couldn't do that. Try again."})

@@ -29,8 +29,10 @@ function draw() {
   if (!o || !o.show) return;
   const head = `<div class="hd"><span class="v">V</span>VaultHub · MyVault<button class="x" id="x" title="Not now">${I.x}</button></div>`;
   let body = "";
-  if (!o.open) {
-    body = `<h4>Log in to ${esc(o.app)}?</h4><div class="pin"><p>Type your MyVault PIN to fill it in.</p>
+  if (!o.open && o.mode === "bw" && !o.quick) {
+    body = `<h4>Log in to ${esc(o.app)}?</h4><p class="none">MyVault is locked. Open it with your Bitwarden master password first.</p><button class="fill full ghost" id="openApp">Open MyVault</button>`;
+  } else if (!o.open) {
+    body = `<h4>Log in to ${esc(o.app)}?</h4><div class="pin"><p>Type your ${o.mode === "bw" ? "quick" : "MyVault"} PIN to fill it in.</p>
       <div class="dots ${b.err ? "bad" : ""}" id="dots">${Array.from({ length: 6 }, (_, i) => `<i class="${i < b.pin.length ? "on" : ""}"></i>`).join("")}</div>
       <div class="err">${esc(b.err || (o.wait ? `Wait ${o.wait} seconds.` : ""))}</div><input id="pinIn" inputmode="numeric" autocomplete="off"></div>`;
   } else if (o.done) {
@@ -74,7 +76,7 @@ async function fill(id, what, el) {
 async function dismiss(never) { await post("dismiss", { never }); }
 
 document.addEventListener("keydown", async (e) => {
-  if (!b.o || !b.o.show || b.o.open || b.busy) return;
+  if (!b.o || !b.o.show || b.o.open || b.busy || (b.o.mode === "bw" && !b.o.quick)) return;
   if (/^\d$/.test(e.key) && b.pin.length < 6) b.pin += e.key;
   else if (e.key === "Backspace") b.pin = b.pin.slice(0, -1);
   else if (e.key === "Escape") return dismiss(false);
@@ -84,7 +86,7 @@ document.addEventListener("keydown", async (e) => {
   draw();
   if (b.pin.length === 6) {
     b.busy = true;
-    const r = await post("unlock", { pin: b.pin });
+    const r = await post(b.o.mode === "bw" ? "bw-pin-unlock" : "unlock", { pin: b.pin });
     b.busy = false; b.pin = "";
     if (!r.ok) {
       b.err = r.error.replace(/ before it makes you wait\./, ".");
