@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.3.1", items: [
+    "Search (Ctrl+K) got a cleaner look. It starts with the pages you used last, and the highlight slides smoothly between rows.",
+    "Live: alert sounds now play for you too, not just on stream. Add to OBS turns this on, and there's a \"Can't hear the sounds? Fix it\" link if you added alerts before.",
+  ] },
   { version: "3.3.0", items: [
     "MyVault now works with Bitwarden. Connect your account and your passwords sync to your phone and browsers too. Already using MyVault? It moves everything over for you.",
     "MyVault: folders and favorites. Star the ones you use most, and sort the rest into folders like Gaming or Streaming.",

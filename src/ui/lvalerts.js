@@ -119,7 +119,8 @@ function lvDrawAlerts() {
         </div>` : ""}
         <div class="lv-card">
           <h3>In OBS<span class="sp"></span>${ov.watching ? `<span class="lva-ok">Showing</span>` : ""}</h3>
-          ${ov.watching || LVAS.added ? `<p class="lv-muted">${ov.watching ? "OBS shows your alerts in every scene." : "Added to OBS."} Move or resize the <b>VaultHub alerts</b> source in OBS if you like.</p>`
+          ${ov.watching || LVAS.added ? `<p class="lv-muted">${ov.watching ? "OBS shows your alerts in every scene." : "Added to OBS."} Move or resize the <b>VaultHub alerts</b> source in OBS if you like.</p>
+              <button type="button" class="link" id="lvaAdd" ${LVAS.busy ? "disabled" : ""}>${LVAS.busy ? "Fixing..." : "Can't hear the sounds? Fix it"}</button>`
             : `<p class="lv-muted">One click puts the alerts in all your OBS scenes. OBS needs to be open.</p>
               <button type="button" class="small-button" id="lvaAdd" ${LVAS.busy ? "disabled" : ""}>${LVAS.busy ? "Adding..." : "Add to OBS"}</button>`}
           ${LVAS.obsMsg ? `<p class="lva-msg">${lvEsc(LVAS.obsMsg)}</p>` : ""}
@@ -127,7 +128,8 @@ function lvDrawAlerts() {
             <ol class="lv-steps"><li>In OBS, press <b>+</b> under Sources and pick <b>Browser</b>.</li>
               <li>Paste this as the URL, with width <b>1920</b> and height <b>1080</b>:</li></ol>
             <div class="lv-row"><label class="input" style="flex:1"><input readonly value="${lvEsc(ov.url)}" id="lvaUrl"></label><button type="button" class="ghost-button" id="lvaCopy">Copy</button></div>
-            <ol class="lv-steps" start="3"><li>Tick <b>Control audio via OBS</b>, so the sounds reach your stream.</li></ol>
+            <ol class="lv-steps" start="3"><li>Tick <b>Control audio via OBS</b>, so the sounds reach your stream.</li>
+              <li>To hear them yourself: right-click the source in the Audio Mixer, pick <b>Advanced Audio Properties</b> and set <b>Audio Monitoring</b> to <b>Monitor and Output</b>.</li></ol>
           </details>
         </div>
         <div class="lv-card">
