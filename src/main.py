@@ -51,6 +51,7 @@ import editprojects  # noqa: E402
 import projectsync  # noqa: E402
 import games  # noqa: E402
 import myvault  # noqa: E402
+import tts  # noqa: E402
 import atexit  # noqa: E402
 atexit.register(lambda: myvault.at_exit())
 import povs  # noqa: E402
@@ -392,6 +393,9 @@ def drag_path(data):
         return images.was_made(data.get("path")) and data["path"]
     if kind == "clip":
         return clip_maker.path(data.get("key"))
+    if kind == "tts":  # (3.4.0) a clip from the Voices page
+        clip = tts.speaker.find(str(data.get("id") or ""))
+        return clip and clip["file"]
     if kind == "sound":
         return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"), dragged=True)
     return None
@@ -1731,6 +1735,47 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_tts(self, action, data):
+        """(3.4.0) The Voices page: text to speech (see tts.py)."""
+        sp = tts.speaker
+        clip_id = str(data.get("id") or "")
+        try:
+            if action == "state":
+                return self.send_json(sp.state())
+            if action == "get":
+                return self.send_json(sp.get_model())
+            if action == "make":
+                return self.send_json(sp.make(data.get("text"), data.get("voice"), data.get("speed")))
+            if action == "job":
+                return self.send_json(sp.job(data.get("job")))
+            if action == "remove":
+                return self.send_json(sp.remove(clip_id))
+            if action == "save":
+                folder = str(data.get("folder") or "")
+                if not os.path.isdir(folder):
+                    return self.send_json({"ok": False, "error": "That folder isn't there."})
+                return self.send_json({"ok": True, "path": sp.save_to(clip_id, folder)})
+            if action == "show":
+                path = str(data.get("path") or "")
+                if path.lower().endswith(".mp3") and os.path.isfile(path):
+                    show_in_folder(path)
+                return self.send_json({"ok": True})
+            if action == "library":  # into the Library's upload box, like a dropped file
+                clip = sp.find(clip_id)
+                if not clip:
+                    return self.send_json({"ok": False, "error": "That clip is gone. Make it again."})
+                os.makedirs(sfx.FOLDER, exist_ok=True)
+                path = sp.save_to(clip_id, sfx.FOLDER)  # a copy the Library may delete once it's uploaded
+                file = sfx.library._register(os.path.basename(path), path, copied=True)
+                return self.send_json({"ok": True, "file": file})
+        except tts.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except sfx.Error as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        except OSError:
+            return self.send_json({"ok": False, "error": "Couldn't save the file there."})
+        self.send_json({"ok": False, "error": "Unknown action."})
+
     def handle_povs(self, action, data):
         """The POVs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         p = povs.povs
@@ -2602,6 +2647,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_myvault(self.path[len("/api/mv-"):], data)
         elif self.path.startswith("/api/pov-"):
             self.handle_povs(self.path[len("/api/pov-"):], data)
+        elif self.path.startswith("/api/tts-"):
+            self.handle_tts(self.path[len("/api/tts-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})

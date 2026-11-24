@@ -111,6 +111,7 @@
       <button class="active" data-tab="home" title="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg><span>Home</span></button>
       <button data-section="convert" data-tab="video" title="Convert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h13l-3.5-3.5"/><path d="M20 15.5H7l3.5 3.5"/></svg><span>Convert</span><b class="tab-dot" hidden></b></button>
       <button data-section="library" data-tab="sfx" title="Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg><span>Library</span><b class="tab-dot" hidden></b></button>
+      <button data-tab="voices" title="Voices: text to speech"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>Voices</span></button>
       <button data-tab="projects" title="Projects: edit videos together"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M10.5 11.2v4.6l4-2.3z"/></svg><span>Projects</span><i class="beta-tag" title="Still being worked on">Beta</i><b class="tab-badge" id="projectsTabBadge" hidden></b></button>
       <button data-tab="docs" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 12.5h6M9 16h4"/></svg><span>Docs</span><b class="tab-badge" id="docsTabBadge" hidden></b></button>
       <button data-tab="boards" title="Boards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M8 8v7M12 8v4M16 8v9"/></svg><span>Boards</span><b class="tab-badge" id="boardsTabBadge" hidden></b></button>
@@ -1630,6 +1631,8 @@
     </div>
   </section>
 
+  <section class="tab-page vo-page" id="voicesTab" hidden></section>
+
   <section class="tab-page" id="povsTab" hidden>
     <h1 class="headline">Everyone's POV.<br><em>Straight from their PC.</em></h1>
     <p class="fx-status" id="pvStatus" hidden></p>
@@ -2887,5 +2890,6 @@
 <script src="lvextra.js"></script>
 <script src="lvprecheck.js"></script>
 <script src="myvault.js"></script>
+<script src="voices.js"></script>
 </body>
 </html>
