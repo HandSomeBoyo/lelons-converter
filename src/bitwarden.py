@@ -235,26 +235,72 @@ def _ver(v):
     return tuple(int(x) for x in re.findall(r"\d+", str(v or ""))[:4])
 
 
-def latest():
-    """(version, zip url, checksum url) of the newest Windows tool on Bitwarden's GitHub."""
+GH = "https://api.github.com/repos/bitwarden/clients/releases"
+DL = "https://github.com/bitwarden/clients/releases/download"
+NPM = "https://registry.npmjs.org/@bitwarden/cli/latest"
+PLAT = "windows" if IS_WINDOWS else "linux"
+
+
+def _pick(assets, ver):
+    """The tool's zip and its checksum file among a release's files (Bitwarden also ships an "oss" build)."""
+    names = {a.get("name") or "": a.get("browser_download_url") for a in assets or [] if isinstance(a, dict)}
+    zips = [n for n in names if n.endswith(".zip") and f"bw-{PLAT}" in n and "sha" not in n]
+    sums = [n for n in names if n.endswith(".txt") and PLAT in n and "sha256" in n]
+    z = next((n for n in zips if "oss" not in n), zips[0] if zips else None)
+    if not z:
+        return None
+    s = next((n for n in sums if ("oss" in n) == ("oss" in z)), sums[0] if sums else None)
+    if not s:
+        return None
+    return ver, names[z], names[s]
+
+
+def _newest_version():
+    """Bitwarden's newest CLI version, from npm (Bitwarden publishes it there too, and npm has no hourly limit)."""
     try:
-        rel = json.loads(_get(RELEASES, 5_000_000))
-    except (OSError, ValueError):
-        raise Error("Couldn't reach GitHub to get Bitwarden's tool. Check your internet.", "net")
-    best = None
-    for r in rel if isinstance(rel, list) else []:
-        tag = str(r.get("tag_name") or "")
-        if not tag.startswith("cli-v") or r.get("draft") or r.get("prerelease"):
-            continue
-        assets = {a.get("name"): a.get("browser_download_url") for a in r.get("assets") or []}
-        plat = "windows" if IS_WINDOWS else "linux"
-        z = next((u for n, u in assets.items() if n and re.fullmatch(rf"bw-{plat}-[\d.]+\.zip", n)), None)
-        s = next((u for n, u in assets.items() if n and re.fullmatch(rf"bw-{plat}-sha256-[\d.]+\.txt", n)), None)
-        if z and s and (best is None or _ver(tag) > _ver(best[0])):
-            best = (tag[5:], z, s)
-    if not best:
-        raise Error("Couldn't find Bitwarden's tool on GitHub.")
-    return best
+        v = str(json.loads(_get(NPM, 2_000_000)).get("version") or "")
+        return v if re.fullmatch(r"\d+\.\d+\.\d+", v) else ""
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def latest():
+    """(version, zip url, checksum url) of the newest tool on Bitwarden's GitHub."""
+    errors = []
+    ver = _newest_version()
+    if ver:  # 1) the release for that version
+        try:
+            r = json.loads(_get(f"{GH}/tags/cli-v{ver}", 5_000_000))
+            got = _pick(r.get("assets"), ver) if isinstance(r, dict) else None
+            if got:
+                return got
+            errors.append("tag: " + str((r or {}).get("message") or "no matching files")[:120])
+        except (OSError, ValueError) as e:
+            errors.append(f"tag: {e}")
+    for page in (1, 2, 3):  # 2) look through the release list
+        try:
+            rel = json.loads(_get(f"{RELEASES.split('?')[0]}?per_page=100&page={page}", 20_000_000))
+        except (OSError, ValueError) as e:
+            errors.append(f"list: {e}")
+            break
+        if not isinstance(rel, list):
+            errors.append("list: " + str((rel or {}).get("message"))[:120])
+            break
+        best = None
+        for r in rel:
+            tag = str(r.get("tag_name") or "")
+            if tag.startswith("cli-v") and not r.get("draft") and not r.get("prerelease"):
+                got = _pick(r.get("assets"), tag[5:])
+                if got and (best is None or _ver(got[0]) > _ver(best[0])):
+                    best = got
+        if best:
+            return best
+        if len(rel) < 100:
+            break
+    if ver:  # 3) GitHub's API is busy (it allows 60 asks an hour): the usual file names
+        return ver, f"{DL}/cli-v{ver}/bw-{PLAT}-{ver}.zip", f"{DL}/cli-v{ver}/bw-{PLAT}-sha256-{ver}.txt"
+    print("bitwarden: couldn't find the tool:", "; ".join(errors), flush=True)
+    raise Error("Couldn't reach GitHub to get Bitwarden's tool. Check your internet and try again.", "net")
 
 
 def install(want=None):
@@ -262,15 +308,17 @@ def install(want=None):
     ver, zip_url, sum_url = want or latest()
     try:
         sums = _get(sum_url, 100_000).decode("utf-8", "replace")
-    except OSError:
-        raise Error("Couldn't get Bitwarden's checksum file.", "net")
+    except OSError as e:
+        print("bitwarden: checksum file:", sum_url, e, flush=True)
+        raise Error("Couldn't get Bitwarden's checksum file. Try again in a bit.", "net")
     good = {h.lower() for h in re.findall(r"\b[0-9a-fA-F]{64}\b", sums)}
     if not good:
         raise Error("Bitwarden's checksum file looked wrong, so the tool wasn't used.")
     progress.update(got=0, total=0)
     try:
         data = _get(zip_url, step=lambda got, total: progress.update(got=got, total=total))
-    except OSError:
+    except OSError as e:
+        print("bitwarden: download:", zip_url, e, flush=True)
         raise Error("The download stopped. Check your internet and try again.", "net")
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
