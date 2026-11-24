@@ -557,7 +557,7 @@ function drawDocsHome() {
   const here = docsF().folders.find((f) => f.id === docsFolderAt);
   $("docsListTitle").textContent = here && !search ? `In ${here.name}` : collab ? "Shared with you" : "On this computer";
   setChildren($("docsGrid"), list.map(docCard));
-  drawRecent(all, search);
+  docsDrawRecent(all, search);
   $("docsEmpty").hidden = list.length > 0 || (folders.length > 0 && !search);
   $("docsEmpty").textContent = search ? "Nothing with that name."
     : here ? "This folder is empty. Start a document above, or drag documents onto the folder."
@@ -576,7 +576,7 @@ function docsRemember(where, id) {
   try { v = JSON.parse(loadPref(key) || "[]"); } catch (e) { /* start again */ }
   savePref(key, JSON.stringify([id, ...(Array.isArray(v) ? v : []).filter((x) => x !== id)].slice(0, 6)));
 }
-function drawRecent(all, search) {
+function docsDrawRecent(all, search) {
   const box = $("docsRecent");
   const byId = new Map(all.map((d) => [d.id, d]));
   const recent = docsRecent().map((id) => byId.get(id)).filter(Boolean).slice(0, 3);

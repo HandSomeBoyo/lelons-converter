@@ -9,7 +9,7 @@ const LVI_COLORS = ["auto", "#ffcf3f", "#ffffff", "#ff7ab8", "#5ee38f", "#5cc8ff
 const LVI_CORNERS = [["bl", "Bottom left"], ["br", "Bottom right"], ["tl", "Top left"], ["tr", "Top right"]];
 const LVIS = { st: null, busy: false, obsMsg: "", added: false, fitter: null };
 
-async function lviLoad() {
+async function lvisLoad() {
   const res = await api("/api/live-in", {}).catch(() => null);
   if (res && res.ok) LVIS.st = res.input;
   return LVIS.st;
@@ -25,7 +25,7 @@ function lvDrawInput() {
   if (!box) return;
   if (!LVIS.st) {
     box.innerHTML = `<p class="lv-muted">Loading...</p>`;
-    lviLoad().then(() => { if (LVIS.st) lvDrawInput(); });
+    lvisLoad().then(() => { if (LVIS.st) lvDrawInput(); });
     return;
   }
   const st = LVIS.st, p = st.prefs;
@@ -111,7 +111,7 @@ function lviWire() {
     LVIS.busy = false;
     LVIS.added = !!(res && res.ok);
     LVIS.obsMsg = res && res.ok ? `Done! The overlay is in ${res.obs.scenes === 1 ? "your scene" : `all ${res.obs.scenes} scenes`}, in the corner you picked.` : (res && res.error) || "Couldn't reach OBS.";
-    await lviLoad();
+    await lvisLoad();
     lvDrawInput();
   });
 }
@@ -120,6 +120,6 @@ function lviWire() {
 setInterval(async () => {
   if (!$("lvinputTab") || $("lvinputTab").hidden || !LVIS.st || LVIS.busy) return;
   const was = [LVIS.st.watching, LVIS.st.pad].join();
-  await lviLoad();
+  await lvisLoad();
   if (LVIS.st && [LVIS.st.watching, LVIS.st.pad].join() !== was && !$("lvinputTab").hidden && !document.activeElement?.closest?.("#lvInput")) lvDrawInput();
 }, 5000);
