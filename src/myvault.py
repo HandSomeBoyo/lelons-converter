@@ -324,16 +324,16 @@ def set_prefs(changes):
 
 
 def mode():
-    """"bw" (Bitwarden is connected), "local" (the PIN vault only on this PC) or None (nothing yet)."""
+    """"bw" (Bitwarden is connected) or None (not yet: the page shows Connect)."""
     if settings.load().get("bw_email"):
         return "bw"
-    return "local" if exists() else None
+    return None  # (3.3.1) Bitwarden only: an old PIN vault is moved over once Bitwarden is connected
 
 
 def state():
     c = settings.load()
     m = mode()
-    out = {"ok": True, "mode": m, "exists": exists(), "open": is_open() and _s.get("mode") == (m or "local"),
+    out = {"ok": True, "mode": m, "exists": exists(), "open": is_open() and m == "bw" and _s.get("mode") == "bw",
            "wait": _wait_left(), "fails": int(c.get("mv_fails") or 0), "prefs": prefs(), "pinLength": PIN_LEN,
            "rev": _s["rev"]}
     if m == "bw":
@@ -2070,6 +2070,20 @@ def _read_local(pin):
     body = json.loads(unseal(key, _unb64(data["data"]), b"items"))
     return ([i for i in body.get("items") or [] if isinstance(i, dict) and i.get("id")],
             [f for f in body.get("folders") or [] if isinstance(f, dict) and f.get("id")])
+
+
+def old_delete():
+    """Forgot the old MyVault's PIN: it can only be deleted (there's no other way in, on purpose)."""
+    with _lock:
+        _need_open()
+        if _s.get("mode") != "bw":
+            raise Error("Connect Bitwarden first.")
+    try:
+        os.remove(PATH)
+    except FileNotFoundError:
+        pass
+    settings.save(mv_fails=0, mv_wait_until=0)
+    return state()
 
 
 def move_preview(pin):

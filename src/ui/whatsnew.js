@@ -3,6 +3,10 @@
 
 const CHANGES = [
   { version: "3.3.1", items: [
+    "MyVault: fixed \"Couldn't find Bitwarden's tool\" when connecting. VaultHub now finds Bitwarden's newest tool a more reliable way.",
+    "MyVault is Bitwarden only now: it opens on Connect your Bitwarden, and an old MyVault on the PC gets moved over (or deleted if you forgot its PIN).",
+  ] },
+  { version: "3.3.1", items: [
     "Search (Ctrl+K) got a cleaner look. It starts with the pages you used last, and the highlight slides smoothly between rows.",
     "Live: alert sounds now play for you too, not just on stream. Add to OBS turns this on, and there's a \"Can't hear the sounds? Fix it\" link if you added alerts before.",
   ] },

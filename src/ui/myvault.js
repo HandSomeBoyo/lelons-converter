@@ -53,7 +53,7 @@ function mvSideState() {
   const pill = $("mvSideState");
   if (!pill || !mv.st) return;
   const open = !!mv.st.open;
-  pill.textContent = !mv.st.exists && !mv.st.mode ? "New" : open ? "Open" : "Locked";
+  pill.textContent = !mv.st.mode ? "New" : open ? "Open" : "Locked";
   pill.classList.toggle("open", open);
 }
 
@@ -987,7 +987,7 @@ function mvDrawBw(page) {
       ${f.server === "self" ? `<div class="mv-field"><label for="mvBwUrl">Server address</label><div class="mv-in"><input id="mvBwUrl" placeholder="https://vault.example.com" value="${mvEsc(f.custom || "")}" autocomplete="off" spellcheck="false"></div></div>` : ""}
       ${err}<button type="button" class="convert mv-bwgo" id="mvBwGo">Connect</button>
       <div class="mv-bwsmall">No Bitwarden account? <button type="button" class="link-button" id="mvBwNew">Make one free</button><br>VaultHub never saves your master password.<br>
-      ${mv.connecting ? `<button type="button" class="link-button" id="mvBwNo">Back to MyVault</button>` : `<button type="button" class="link-button" id="mvBwLocal">Or keep passwords only on this PC</button>`}</div>`);
+      ${mv.connecting ? `<button type="button" class="link-button" id="mvBwNo">Back to MyVault</button>` : ""}</div>`);
     const grab = () => { f.email = $("mvBwEmail").value.trim(); f.server = $("mvBwServer").value; if ($("mvBwUrl")) f.custom = $("mvBwUrl").value.trim(); };
     $("mvBwServer").addEventListener("change", () => { grab(); mvDrawBw(page); });
     const go = async () => {
@@ -1175,7 +1175,7 @@ function mvFolderDialog(folder) {
 
 // ---- (3.3.0) moving the old MyVault into Bitwarden
 function mvMove() {
-  mvAsk({
+  const ask = mvAsk({
     title: "Move MyVault to Bitwarden", text: "Type the PIN of your old MyVault on this PC, and everything in it goes into your Bitwarden.", button: "Next",
     fields: [{ id: "mvMovePin", label: "Old MyVault PIN", pin: true }],
     onSubmit: async (v) => {
@@ -1199,6 +1199,14 @@ function mvMove() {
       });
       void m;
     },
+  });
+  ask.querySelector(".mv-err").insertAdjacentHTML("afterend", `<div class="mv-bwsmall" style="margin:0 0 6px"><button type="button" class="link-button" id="mvOldDel">Forgot that PIN? Delete the old MyVault</button></div>`);
+  $("mvOldDel").addEventListener("click", async () => {
+    const b = $("mvOldDel");
+    if (!b.classList.contains("sure")) { b.classList.add("sure"); b.textContent = "Press again to delete it for good (Bitwarden isn't touched)"; return; }
+    const r = await mvPost("old-delete");
+    if (!r.ok) return void ($("mvErr").textContent = r.error);
+    mv.st = r; mvCloseModal(); mvToast("The old MyVault is deleted"); mvDrawList($("myvaultTab"));
   });
 }
 

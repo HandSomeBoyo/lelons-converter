@@ -1959,6 +1959,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = mv.sign_out()
             elif action == "move-preview":
                 result = mv.move_preview(data.get("pin"))
+            elif action == "old-delete":
+                result = mv.old_delete()
             elif action == "move":
                 result = mv.move_to_bw(data.get("pin"))
             elif action == "folder-save":
