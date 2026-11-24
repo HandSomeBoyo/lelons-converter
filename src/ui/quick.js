@@ -69,7 +69,7 @@ function qkPages() {
     const t = b.dataset.tab, section = typeof sectionOf === "function" ? sectionOf(t) : "";
     const place = section && document.querySelector(`#tabs button[data-section="${section}"]`);
     const n = side.findIndex((s) => s === b || (place && s === place && TAB_SECTIONS[section][0] === t));
-    return { group: "Pages", label: QK_PAGE_NAMES[t] || b.querySelector("span").textContent.trim(), note: place ? place.querySelector("span").textContent.trim() : "",
+    return { group: "Pages", tab: t, label: QK_PAGE_NAMES[t] || b.querySelector("span").textContent.trim(), note: place ? place.querySelector("span").textContent.trim() : "",
       key: n >= 0 && n < 9 ? `Ctrl+${n + 1}` : "", icon: b.querySelector("svg").outerHTML, words: QK_WORDS[t] || "", run: () => b.click() };
   });
   return [...tabs,
@@ -92,7 +92,7 @@ function qkActions() {
     { label: "What's new", icon: QK_ICONS.spark, words: "changes update news", run: () => $("whatsNewOpen").click() },
     { label: "Send feedback", icon: QK_ICONS.heart, words: "idea bug report", run: () => openFeedback() },
     { label: "Check for updates", icon: QK_ICONS.update, words: "new version", run: () => $("checkNow").click() },
-  ].map((a) => ({ group: "Do something", ...a }));
+  ].map((a) => ({ group: "Quick actions", ...a }));
 }
 
 // A time from the app (seconds) or from the server (a date): seconds either way.
@@ -234,12 +234,26 @@ function qkDraw() {
       { group: "Convert", label: "More options first", note: "Trim, quality, other formats", icon: QK_ICONS.sliders, run: () => homeConvert(all, false) },
     ];
   } else if (!q) {
-    // Nothing typed yet: the pages, a few handy things, and your newest documents, boards and games.
+    // (3.3) Nothing typed yet: kept short. The pages you were on last, the side bar's pages, a few handy
+    // things, and your newest documents, boards and games. Everything else is one word away.
     const things = qkThings();
-    items = [...qkPages(), ...qkActions().slice(0, 3),
-      ...["Documents", "Boards", "Games"].flatMap((g) => things.filter((i) => i.group === g).slice(0, 3))];
+    const pages = qkPages();
+    const here = qkCurrentTab();
+    const recent = [];
+    for (let n = qkTrail.list.length - 1; n >= 0 && recent.length < 3; n--) {
+      const t = qkTrail.list[n];
+      const p = t !== here && !recent.some((r) => r.tab === t) && pages.find((x) => x.tab === t);
+      if (p) recent.push({ ...p, group: "Recent" });
+    }
+    // The side bar's own pages, in its order and with its names and icons (Convert, not "Convert a link").
+    const side = qkTabButtons();
+    const main = side.filter((b) => !b.hidden && !recent.some((r) => r.tab === b.dataset.tab)).slice(0, 7 - recent.length)
+      .map((b) => { const n = side.indexOf(b); return { group: "Pages", tab: b.dataset.tab, label: b.querySelector("span").textContent.trim(),
+        icon: b.querySelector("svg").outerHTML, key: n < 9 ? `Ctrl+${n + 1}` : "", run: () => b.click() }; });
+    items = [...recent, ...main, ...qkActions().slice(0, 3),
+      ...["Documents", "Boards", "Games"].flatMap((g) => things.filter((i) => i.group === g).slice(0, 2))];
   } else {
-    const order = ["Pages", "Documents", "Boards", "Games", "Do something"];
+    const order = ["Pages", "Documents", "Boards", "Games", "Quick actions"];
     items = [...qkPages(), ...qkActions(), ...qkThings()].map((i) => ({ i, s: qkScore(i, q) })).filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s || order.indexOf(a.i.group) - order.indexOf(b.i.group)).slice(0, 16).map((x) => x.i);
     // Each group stays together, the best group first.
@@ -249,7 +263,7 @@ function qkDraw() {
   qk.items = items;
   qk.at = Math.min(qk.at, Math.max(0, items.length - 1));
   const box = $("quickList");
-  box.replaceChildren();
+  box.replaceChildren(Object.assign(document.createElement("i"), { className: "qk-hl", ariaHidden: "true" }));
   let group = "";
   items.forEach((item, n) => {
     if (item.group !== group) {
@@ -267,19 +281,31 @@ function qkDraw() {
     box.append(b);
   });
   if (!items.length) {
-    box.append(Object.assign(document.createElement("p"), { className: "qk-empty", textContent: `Nothing found for "${raw.trim()}".` }));
+    const none = Object.assign(document.createElement("div"), { className: "qk-empty" });
+    none.innerHTML = `${QK_ICON('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/><path d="M8.5 11h5"/>')}<b></b><small>Try another word, or paste a link to convert it.</small>`;
+    none.querySelector("b").textContent = `Nothing found for "${raw.trim()}"`;
+    box.append(none);
   }
+  qkMark(false);
 }
 
-function qkMark() {
+// The picked row: a soft pill slides to it (no jump), and only that row shows its shortcut.
+function qkMark(slide = true) {
   const rows = $("quickList").querySelectorAll(".qk-item");
   rows.forEach((r, n) => r.classList.toggle("on", n === qk.at));
-  if (rows[qk.at]) rows[qk.at].scrollIntoView({ block: "nearest" });
+  const hl = $("quickList").querySelector(".qk-hl");
+  const row = rows[qk.at];
+  if (hl) {
+    hl.classList.toggle("slide", slide);
+    hl.hidden = !row;
+    if (row) { hl.style.transform = `translateY(${row.offsetTop}px)`; hl.style.height = row.offsetHeight + "px"; }
+  }
+  if (row) row.scrollIntoView({ block: "nearest" });
 }
 
 function qkRun(item) {
   closeQuick();
-  if (typeof chatIsOpen === "function" && chatIsOpen() && item.group !== "Do something" && item.label !== "Chat") closeChat();
+  if (typeof chatIsOpen === "function" && chatIsOpen() && item.group !== "Quick actions" && item.label !== "Chat") closeChat();
   setTimeout(() => item.run(), 0);
 }
 
@@ -288,6 +314,11 @@ function openQuick(text = "") {
   $("quickInput").value = text;
   qk.at = 0;
   qk.loaded = false;
+  // The rows come in one after another when it opens (not while typing).
+  const list = $("quickList");
+  list.classList.remove("fresh"); void list.offsetWidth; list.classList.add("fresh");
+  clearTimeout(qk.freshTimer);
+  qk.freshTimer = setTimeout(() => list.classList.remove("fresh"), 700);
   qkDraw();
   qkLoad();
   requestAnimationFrame(() => { $("quickInput").focus(); $("quickInput").select(); });
