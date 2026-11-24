@@ -2,7 +2,7 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-  { version: "3.3.1", items: [
+  { version: "3.3.2", items: [
     "MyVault: fixed \"Couldn't find Bitwarden's tool\" when connecting. VaultHub now finds Bitwarden's newest tool a more reliable way.",
     "MyVault is Bitwarden only now: it opens on Connect your Bitwarden, and an old MyVault on the PC gets moved over (or deleted if you forgot its PIN).",
   ] },
