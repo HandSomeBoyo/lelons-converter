@@ -24,6 +24,13 @@ const MV_I = {
   x: mvIc('<path d="M6 6l12 12M18 6 6 18"/>'),
   download: mvIc('<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>'),
   phone: mvIc('<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>'),
+  star: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg>',
+  starO: mvIc('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>', 1.8),
+  folder: mvIc('<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>', 1.8),
+  dots: mvIc('<circle cx="6" cy="12" r=".9" fill="currentColor"/><circle cx="12" cy="12" r=".9" fill="currentColor"/><circle cx="18" cy="12" r=".9" fill="currentColor"/>'),
+  sync: mvIc('<path d="M19.5 12a7.5 7.5 0 0 1-13 5.1M4.5 12a7.5 7.5 0 0 1 13-5.1"/><path d="M17.5 3.5v3.4h-3.4M6.5 20.5v-3.4h3.4"/>'),
+  // (3.3.0) Bitwarden's shield, on its own blue tile
+  bw: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3H5a1 1 0 0 0-1 1v8c0 5 4.5 8.4 8 9.8 3.5-1.4 8-4.8 8-9.8V4a1 1 0 0 0-1-1Zm-2 9c0 3.3-2.8 5.7-5 6.8V5h5v7Z"/></svg>',
 };
 const mvEsc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const MV_COLORS = ["#e5484d", "#f76b15", "#e2a300", "#30a46c", "#12a594", "#0090ff", "#3e63dd", "#8e4ec6", "#d6409f", "#5d6370"];
@@ -33,6 +40,8 @@ const mv = {
   shown: {}, // id -> {value, until}
   copied: {}, // id+field -> until
   timer: 0, tick: 0, lastTouch: 0, search: "",
+  // (3.3.0) folders, Bitwarden
+  folders: [], folder: "all", rev: -1, view: "", job: null, localSetup: false, connecting: false, liveWas: false, form: {},
 };
 
 async function mvPost(path, body) {
@@ -44,7 +53,7 @@ function mvSideState() {
   const pill = $("mvSideState");
   if (!pill || !mv.st) return;
   const open = !!mv.st.open;
-  pill.textContent = !mv.st.exists ? "New" : open ? "Open" : "Locked";
+  pill.textContent = !mv.st.exists && !mv.st.mode ? "New" : open ? "Open" : "Locked";
   pill.classList.toggle("open", open);
 }
 
@@ -58,17 +67,23 @@ function myvaultTabChanged(tab) {
 async function mvLoad(fresh) {
   const st = await mvPost("state");
   if (!st.ok) return;
-  const changed = !mv.st || mv.st.open !== st.open || mv.st.exists !== st.exists;
+  const changed = !mv.st || mv.st.open !== st.open || mv.st.exists !== st.exists || mv.st.mode !== st.mode
+    || !!(mv.st.bw && mv.st.bw.quick) !== !!(st.bw && st.bw.quick);
   const waitChanged = !mv.st || (mv.st.wait || 0) !== (st.wait || 0);
   mv.st = st;
   mvSideState();
   if (!mv.open) return;
+  if (mv.view) return;  // (3.3.0) in the middle of connecting Bitwarden: leave that screen alone
   if (st.open) {
+    const typing = document.activeElement && document.activeElement.id === "mvSearch";
     if (changed || fresh) await mvRefresh();
+    else if (st.rev !== mv.rev && !document.querySelector(".mv-modal") && !typing) await mvRefresh();  // (3.3.0) synced, or a leak found
     else if (!mv.tick) mvStartTick();  // (3.2.4) nothing changed: don't redraw the page (a redraw every 5 s ate clicks)
+    else if (st.mode === "bw") mvPillUpdate();
   } else {
     if (changed || fresh) { mv.pin = ""; mv.items = []; mv.shown = {}; }
-    if (changed || fresh || waitChanged || !$("mvPad")) mvDraw();
+    const onForm = $("mvMaster") || $("mvBwEmail");
+    if (changed || fresh || waitChanged || (!$("mvPad") && !onForm)) mvDraw();
   }
 }
 
@@ -76,6 +91,8 @@ async function mvRefresh() {
   const r = await mvPost("items");
   if (!r.ok) { if (/locked/i.test(r.error || "")) return mvLoad(true); return mvToast(r.error); }
   mv.items = r.items; mv.codes = r.codes || {}; mv.codesAt = Date.now();
+  mv.folders = r.folders || []; mv.rev = r.rev;
+  if (mv.folder !== "all" && mv.folder !== "fav" && !mv.folders.some((f) => f.id === mv.folder)) mv.folder = "all";
   mvDraw();
 }
 
@@ -83,6 +100,9 @@ async function mvRefresh() {
 function mvDraw() {
   const page = $("myvaultTab");
   if (!page || !mv.st) return;
+  if (mv.view) return mvDrawBw(page);
+  if ((!mv.st.mode && !mv.localSetup) || (mv.connecting && mv.st.mode === "local")) { mv.view = "connect"; return mvDrawBw(page); }
+  if (mv.st.mode === "bw" && !mv.st.open) return mv.st.bw && mv.st.bw.quick ? mvDrawLock(page, "quick") : mvDrawMaster(page);
   if (!mv.st.exists) return mvDrawLock(page, "setup");
   if (!mv.st.open) return mvDrawLock(page, "locked");
   mvDrawList(page);
@@ -100,13 +120,13 @@ function mvDrawLock(page, kind) {
     ? (mv.pinStep === 0
       ? `<div class="mv-steps"><i class="on"></i><i></i></div><div class="mv-lock-ic">${MV_I.shield}</div><h2>Pick a PIN for MyVault</h2><p>6 numbers. You type it each time you open MyVault.</p>`
       : `<div class="mv-steps"><i class="on"></i><i class="on"></i></div><div class="mv-lock-ic">${MV_I.shield}</div><h2>Type it once more</h2><p>Just to be sure you got it right.</p>`)
-    : `<div class="mv-lock-ic">${MV_I.lock}</div><h2>MyVault is locked</h2><p>Type your PIN to open it.</p>`;
+    : `<div class="mv-lock-ic">${MV_I.lock}</div><h2>MyVault is locked</h2><p>Type your ${kind === "quick" ? "quick " : ""}PIN to open it.</p>`;
   const hint = setup
-    ? `<div class="mv-hint">Everything stays on this PC, locked with your PIN. Nothing is uploaded.<br><button type="button" class="link-button" id="mvRestore">Bring in a backup instead</button></div>`
+    ? `<div class="mv-hint">Everything stays on this PC, locked with your PIN. Nothing is uploaded.<br><button type="button" class="link-button" id="mvRestore">Bring in a backup instead</button>${mv.st.mode ? "" : ` · <button type="button" class="link-button" id="mvUseBw">Use Bitwarden</button>`}</div>`
     : `<div class="mv-hint ${mv.lockError ? "bad" : ""}" id="mvHint">${mvEsc(mv.lockError || (wait ? `Too many wrong tries. Wait ${wait} seconds.` : "You can also just type on your keyboard."))}</div>`;
   page.innerHTML = `<div class="mv-lock"><div class="mv-lock-box">${head}${mvDots(mv.pin.length, mv.lockError ? "bad" : "")}
     <div class="mv-pad" id="mvPad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button type="button" data-n="${n}">${n}</button>`).join("")}
-      <button type="button" class="ghost" data-act="${setup ? (mv.pinStep ? "back" : "") : "forgot"}">${setup ? (mv.pinStep ? "Back" : "") : "Forgot?"}</button>
+      <button type="button" class="ghost" data-act="${setup ? (mv.pinStep ? "back" : "") : kind === "quick" ? "master" : "forgot"}">${setup ? (mv.pinStep ? "Back" : "") : kind === "quick" ? "Password" : "Forgot?"}</button>
       <button type="button" data-n="0">0</button><button type="button" class="ghost" data-act="del" title="Delete">${MV_I.back}</button></div>
     ${hint}</div></div>`;
   page.querySelectorAll("#mvPad button").forEach((b) => b.addEventListener("click", () => {
@@ -114,13 +134,15 @@ function mvDrawLock(page, kind) {
     else if (b.dataset.act === "del") mvPinKey("Backspace");
     else if (b.dataset.act === "back") { mv.pinStep = 0; mv.pin = ""; mv.firstPin = ""; mvDraw(); }
     else if (b.dataset.act === "forgot") mvForgot();
+    else if (b.dataset.act === "master") mvDrawMaster(page);
   }));
   const r = $("mvRestore");
   if (r) r.addEventListener("click", mvRestoreDialog);
+  if ($("mvUseBw")) $("mvUseBw").addEventListener("click", () => { mv.localSetup = false; mv.pin = ""; mv.pinStep = 0; mvDraw(); });
 }
 
 function mvPinKey(k) {
-  if (mv.busy || !mv.st || mv.st.open) return;
+  if (mv.busy || !mv.st || mv.st.open || !$("mvPad")) return;
   if (k === "Backspace") mv.pin = mv.pin.slice(0, -1);
   else if (/^\d$/.test(k) && mv.pin.length < 6) mv.pin += k;
   else return;
@@ -154,13 +176,15 @@ async function mvPinDone() {
     return mvRefresh();
   }
   mv.busy = true;
-  const r = await mvPost("unlock", { pin });
+  const quick = mv.st.mode === "bw";
+  const r = await mvPost(quick ? "bw-pin-unlock" : "unlock", { pin });
   mv.busy = false; mv.pin = "";
   if (!r.ok) {
     const st = await mvPost("state");
     if (st.ok) mv.st = st;
+    if (quick && !(st.bw && st.bw.quick)) { mvDraw(); return mvToast(r.error); }
     mv.lockError = r.error;
-    mvDrawLock($("myvaultTab"), "locked");
+    mvDrawLock($("myvaultTab"), quick ? "quick" : "locked");
     return mvShake(r.error, true);
   }
   mv.lockError = ""; mv.st = r; mvSideState();
@@ -210,8 +234,9 @@ function mvCode(id) {
 function mvFmtCode(code) { return code.length === 6 ? code.slice(0, 3) + " " + code.slice(3) : code; }
 
 function mvRow(i) {
-  const tags = (i.tags || []).map((t) => `<i class="mv-tag ${t === "weak" ? "red" : ""}">${t === "weak" ? "Weak" : "Used twice"}</i>`).join("");
-  const sub = i.kind === "codes" ? `${i.count} code${i.count === 1 ? "" : "s"}` : i.kind === "note" ? "Note" : (i.user || i.site || "");
+  const tags = (i.tags || []).slice(0, 1).map((t) => `<i class="mv-tag ${t === "reused" ? "" : "red"}">${{ weak: "Weak", reused: "Used twice", leaked: "Leaked" }[t] || t}</i>`).join("");
+  const folder = mv.folder === "all" && i.folder ? (mv.folders.find((f) => f.id === i.folder) || {}).name : "";
+  const sub = (i.kind === "codes" ? `${i.count} code${i.count === 1 ? "" : "s"}` : i.kind === "note" ? "Note" : (i.user || i.site || "")) + (folder ? ` · ${folder}` : "");
   const shown = mv.shown[i.id];
   const field = i.kind === "account" ? "password" : "text";
   const copiedPw = mv.copied[i.id + field] > Date.now();
@@ -221,7 +246,7 @@ function mvRow(i) {
   const canShow = i.kind !== "account" || i.hasPass;
   return `<div class="mv-row ${shown ? "hl" : ""}" data-id="${i.id}">
     ${mvIconHtml(i)}
-    <div class="mv-txt"><b>${mvEsc(i.name)}${tags}</b><span>${mvEsc(sub)}</span>${shown ? `<span class="shown">${mvEsc(shown.value)}</span>` : ""}</div>
+    <div class="mv-txt"><b>${mvEsc(i.name)}${i.fav ? `<i class="mv-star">${MV_I.star}</i>` : ""}${tags}</b><span>${mvEsc(sub)}</span>${shown ? `<span class="shown">${mvEsc(shown.value)}</span>` : ""}</div>
     ${shown ? `<span class="mv-timer">Hides in ${left}s</span>` : ""}
     ${code ? `<button type="button" class="mv-otp ${mv.copied[i.id + "otp"] > Date.now() ? "done" : ""}" data-act="otp" title="Copy 2FA code">${mvRing(code.left / code.period)}<b>${mvFmtCode(code.code)}</b></button>` : ""}
     <div class="mv-btns">
@@ -233,25 +258,39 @@ function mvRow(i) {
 
 function mvDrawList(page) {
   const q = mv.search.trim().toLowerCase();
-  const list = q ? mv.items.filter((i) => [i.name, i.user, i.site].some((t) => (t || "").toLowerCase().includes(q))) : mv.items;
-  const acc = list.filter((i) => i.kind === "account"), other = list.filter((i) => i.kind !== "account");
+  const inChip = (i) => mv.folder === "all" || (mv.folder === "fav" ? i.fav : i.folder === mv.folder);
+  const list = mv.items.filter((i) => inChip(i) && (!q || [i.name, i.user, i.site].some((t) => (t || "").toLowerCase().includes(q))));
+  const favs = mv.folder === "all" ? list.filter((i) => i.fav) : [];
+  const rest = list.filter((i) => !favs.includes(i));
+  const acc = rest.filter((i) => i.kind === "account"), other = rest.filter((i) => i.kind !== "account");
   const weak = mv.items.filter((i) => (i.tags || []).includes("weak")).length;
   const reused = mv.items.filter((i) => (i.tags || []).includes("reused")).length;
+  const leaked = mv.items.filter((i) => (i.tags || []).includes("leaked")).length;
   const bad = mv.items.filter((i) => (i.tags || []).length).length;
   const p = mv.st.prefs || {};
+  const bw = mv.st.mode === "bw";
   const keepSearch = document.activeElement && document.activeElement.id === "mvSearch";
-  const health = bad ? `<div class="mv-health"><div class="mv-health-ic">${MV_I.shield}</div><div><b>${bad} password${bad === 1 ? " needs" : "s need"} a look</b><span>${[weak ? `${weak} weak` : "", reused ? `${reused} used on more than one site` : ""].filter(Boolean).join(" · ")}</span></div><button type="button" id="mvHealthBtn">Fix them</button></div>` : "";
+  const health = bad ? `<div class="mv-health ${leaked ? "red" : ""}"><div class="mv-health-ic">${MV_I.shield}</div><div><b>${bad} password${bad === 1 ? " needs" : "s need"} a look</b><span>${[leaked ? `${leaked} leaked` : "", weak ? `${weak} weak` : "", reused ? `${reused} used on more than one site` : ""].filter(Boolean).join(" · ")}</span></div><button type="button" id="mvHealthBtn">Fix them</button></div>` : "";
+  const old = bw && mv.st.oldVault ? `<div class="mv-health blue"><div class="mv-health-ic bw">${MV_I.bw}</div><div><b>Your old MyVault is still on this PC</b><span>Move what's in it into Bitwarden</span></div><button type="button" id="mvMoveBtn">Move it</button></div>` : "";
+  const chip = (id, label, n, icon = "") => `<button type="button" class="mv-chip ${mv.folder === id ? "on" : ""}" data-f="${mvEsc(id)}">${icon}${mvEsc(label)}<small>${n}</small>${mv.folder === id && id !== "all" && id !== "fav" ? `<span class="mv-chip-more" data-more="1" title="Rename or remove">${MV_I.dots}</span>` : ""}</button>`;
+  const favN = mv.items.filter((i) => i.fav).length;
+  const chips = `<div class="mv-chips" id="mvChips">${chip("all", "All", mv.items.length)}${favN || mv.folder === "fav" ? chip("fav", "Favorites", favN, MV_I.star) : ""}${mv.folders.map((f) => chip(f.id, f.name, f.count)).join("")}<button type="button" class="mv-chip add" id="mvNewFolder">${MV_I.plus}New folder</button></div>`;
+  const label = mv.folder === "all" ? "" : mv.folder === "fav" ? "Favorites" : (mv.folders.find((f) => f.id === mv.folder) || {}).name || "";
+  const group = (title, rows) => rows.length ? `<div class="mv-label">${mvEsc(title)}</div><div class="mv-group">${rows.map(mvRow).join("")}</div>` : "";
+  const body = mv.folder !== "all" ? group(label, [...acc, ...other])
+    : favs.length ? group("Favorites", favs) + group("Everything else", [...acc, ...other])
+      : group("Accounts", acc) + group("Codes & notes", other);
   const empty = !mv.items.length;
   page.innerHTML = `<div class="mv-top"><h1 class="headline">MyVault.<em> Your passwords, locked.</em></h1>
       <div class="mv-actions"><button type="button" class="mv-icon-btn" id="mvSetBtn" title="MyVault settings">${MV_I.sliders}</button><button type="button" class="mv-icon-btn" id="mvLockBtn" title="Lock now">${MV_I.lock}</button><button type="button" class="convert" id="mvAddBtn">${MV_I.plus}Add</button></div></div>
+    ${bw ? `<div class="mv-bwpill" id="mvPill">${mvPillHtml()}</div>` : ""}${old}
     ${empty ? `<div class="mv-empty"><div class="mv-lock-ic">${MV_I.shield}</div><h2>Nothing saved yet</h2><p>Add your first account, or bring your 2FA codes over from Google Authenticator.</p>
       <div class="mv-empty-acts"><button type="button" class="convert" id="mvAddFirst">${MV_I.plus}Add an account</button><button type="button" class="ghost-button" id="mvImportFirst">${MV_I.phone}Import from Google Authenticator</button></div></div>` : `
     ${health}
     <label class="mv-search">${MV_I.search}<input id="mvSearch" placeholder="Search your accounts" value="${mvEsc(mv.search)}" autocomplete="off" spellcheck="false"></label>
-    ${acc.length ? `<div class="mv-label">Accounts</div><div class="mv-group">${acc.map(mvRow).join("")}</div>` : ""}
-    ${other.length ? `<div class="mv-label">Codes &amp; notes</div><div class="mv-group">${other.map(mvRow).join("")}</div>` : ""}
-    ${!acc.length && !other.length ? `<p class="mv-none">Nothing matches "${mvEsc(mv.search)}".</p>` : ""}
-    <div class="mv-foot">${MV_I.clock}${mv.items.length} saved, only on this PC · locks by itself after ${p.lockAfter || 5} minute${p.lockAfter === 1 ? "" : "s"} away<span style="flex:1"></span><button type="button" class="link-button" id="mvImportBtn">Import 2FA codes</button></div>`}`;
+    ${chips}${body}
+    ${!list.length ? `<p class="mv-none">${q ? `Nothing matches "${mvEsc(mv.search)}".` : mv.folder === "fav" ? "No favorites yet. Open one and press the star." : "Nothing in this folder yet. Open something and pick this folder."}</p>` : ""}
+    <div class="mv-foot">${MV_I.clock}${mv.items.length} saved${bw ? " in Bitwarden" : ", only on this PC"}${bw && mv.st.bw.hidden ? ` (+${mv.st.bw.hidden} card${mv.st.bw.hidden === 1 ? "" : "s"} or ID${mv.st.bw.hidden === 1 ? "" : "s"})` : ""} · locks by itself after ${p.lockAfter || 5} minute${p.lockAfter === 1 ? "" : "s"} away<span style="flex:1"></span><button type="button" class="link-button" id="mvImportBtn">Import 2FA codes</button></div>`}`;
   const s = $("mvSearch");
   if (s) {
     s.addEventListener("input", () => { mv.search = s.value; mvDrawList(page); });
@@ -261,6 +300,13 @@ function mvDrawList(page) {
   $("mvLockBtn").addEventListener("click", mvLockNow);
   $("mvSetBtn").addEventListener("click", mvSettings);
   if ($("mvHealthBtn")) $("mvHealthBtn").addEventListener("click", mvHealth);
+  if ($("mvMoveBtn")) $("mvMoveBtn").addEventListener("click", mvMove);
+  mvPillBind();
+  if ($("mvNewFolder")) $("mvNewFolder").addEventListener("click", () => mvFolderDialog(null));
+  page.querySelectorAll(".mv-chip[data-f]").forEach((c) => c.addEventListener("click", (e) => {
+    if (e.target.closest("[data-more]")) return mvFolderDialog(mv.folders.find((f) => f.id === c.dataset.f));
+    mv.folder = c.dataset.f; mvDrawList(page);
+  }));
   if ($("mvAddFirst")) $("mvAddFirst").addEventListener("click", () => mvEdit(null));
   if ($("mvImportFirst")) $("mvImportFirst").addEventListener("click", () => mvImport());
   if ($("mvImportBtn")) $("mvImportBtn").addEventListener("click", () => mvImport());
@@ -395,7 +441,8 @@ function mvMakePassword() {
 
 // ---- add / edit
 async function mvEdit(id) {
-  let item = { kind: "account", name: "", site: "", user: "", password: "", text: "", otp: null };
+  let item = { kind: "account", name: "", site: "", user: "", password: "", text: "", otp: null,
+    folder: mv.folder !== "all" && mv.folder !== "fav" ? mv.folder : "", fav: mv.folder === "fav" };
   if (id) {
     const r = await mvPost("get", { id });
     if (!r.ok) return mvToast(r.error);
@@ -409,16 +456,21 @@ async function mvEdit(id) {
     const otpBox = ed.otp
       ? `<div class="mv-in mv-otp-set"><span class="mv-otp-now" id="mvEdCode">${ed.otpCode ? mvFmtCode(ed.otpCode) : "2FA code saved"}</span><em class="ph">${mvEsc(ed.otp.issuer || "")}</em><button type="button" id="mvOtpRemove">${MV_I.trash}Remove</button></div>`
       : `<div class="mv-in"><input id="mvOtpIn" placeholder="Paste the setup key" autocomplete="off" spellcheck="false"><button type="button" id="mvOtpScan">${MV_I.qr}Scan QR on screen</button></div>`;
+    const bw = mv.st.mode === "bw";
+    const folderField = `<div class="mv-field"><label>Folder</label><div class="mv-chips small" id="mvEdFolders">${mv.folders.map((f) => `<button type="button" class="mv-chip ${ed.folder === f.id ? "on" : ""}" data-f="${mvEsc(f.id)}">${mvEsc(f.name)}</button>`).join("")}${ed.newFolder ? `<span class="mv-chip-in"><input id="mvNewFolderIn" placeholder="Folder name" maxlength="60" autocomplete="off"></span>` : `<button type="button" class="mv-chip add" id="mvEdNewFolder">${MV_I.plus}New</button>`}</div></div>`;
     m.querySelector(".mv-dlg").innerHTML = `
-      <h2>${id ? "Edit" : "Add to MyVault"}</h2><p>Only you can see it, and only after your PIN.</p>
+      <div class="mv-dlg-head"><h2>${id ? "Edit" : bw ? "Add to Bitwarden" : "Add to MyVault"}</h2><button type="button" class="mv-fav ${ed.fav ? "on" : ""}" id="mvFav" title="${ed.fav ? "Remove from favorites" : "Add to favorites"}">${ed.fav ? MV_I.star : MV_I.starO}</button></div>
+      <p>${bw ? "Saved in your Bitwarden, and synced to your phone." : "Only you can see it, and only after your PIN."}</p>
       ${id ? "" : `<div class="mv-types">${[["account", MV_I.user, "Account"], ["codes", MV_I.codes, "Codes"], ["note", MV_I.note, "Note"]].map(([v, ic, label]) => `<button type="button" class="${k === v ? "on" : ""}" data-kind="${v}">${ic}${label}</button>`).join("")}</div>`}
       ${k === "account" ? `
         <div class="mv-field"><label for="mvSite">Website or app</label><div class="mv-in">${ed.icon ? `<img class="mv-in-ic" src="${mvEsc(ed.icon)}" alt="">` : ""}<input id="mvSite" placeholder="twitch.tv" value="${mvEsc(ed.site || ed.name)}" autocomplete="off" spellcheck="false"></div></div>
+        ${folderField}
         <div class="mv-field"><label for="mvUser">Username or email</label><div class="mv-in"><input id="mvUser" value="${mvEsc(ed.user)}" autocomplete="off" spellcheck="false"></div></div>
         <div class="mv-field"><label for="mvPw">Password</label><div class="mv-in"><input id="mvPw" class="mono" type="${ed.showPw ? "text" : "password"}" value="${mvEsc(ed.password)}" autocomplete="new-password" spellcheck="false"><button type="button" id="mvPwShow" title="${ed.showPw ? "Hide" : "Show"}">${ed.showPw ? MV_I.eyeoff : MV_I.eye}</button><button type="button" id="mvPwMake">${MV_I.dice}Make one</button></div>
           <div class="mv-strength s${st}" id="mvStrength">${[0, 1, 2, 3].map((n) => `<i class="${ed.password && n < Math.max(1, st) ? "on" : ""}"></i>`).join("")}<span>${ed.password ? ["Very weak", "Weak", "Okay", "Good", "Strong"][st] : ""}</span></div></div>
         <div class="mv-field"><label>2FA code (optional)</label>${otpBox}</div>`
       : `<div class="mv-field"><label for="mvName">Name</label><div class="mv-in"><input id="mvName" value="${mvEsc(ed.name)}" placeholder="${k === "codes" ? "Google backup codes" : "Wi-Fi at home"}" autocomplete="off"></div></div>
+        ${folderField}
         <div class="mv-field"><label for="mvText">${k === "codes" ? "Codes, one on each line" : "Note"}</label><textarea id="mvText" class="mv-area ${k === "codes" ? "mono" : ""}" rows="${k === "codes" ? 8 : 6}" spellcheck="false">${mvEsc(ed.text)}</textarea></div>`}
       <div class="mv-err" id="mvErr"></div>
       <div class="mv-acts">${id ? `<button type="button" class="ghost-button mv-del" id="mvDel">${MV_I.trash}Delete</button><span style="flex:1"></span>` : ""}<button type="button" class="ghost-button" id="mvCancel">Cancel</button><button type="button" class="convert" id="mvSave">Save</button></div>`;
@@ -437,12 +489,29 @@ async function mvEdit(id) {
       if (/^otpauth-migration:/i.test(link)) { mvCloseModal(true); return mvImport(link); }
       await useOtp(link);
     });
+    $("mvFav").addEventListener("click", () => { grab(); ed.fav = !ed.fav; draw(); });
+    dlg.querySelectorAll("#mvEdFolders .mv-chip[data-f]").forEach((c) => c.addEventListener("click", () => { grab(); ed.folder = ed.folder === c.dataset.f ? "" : c.dataset.f; draw(); }));
+    if ($("mvEdNewFolder")) $("mvEdNewFolder").addEventListener("click", () => { grab(); ed.newFolder = true; draw(); $("mvNewFolderIn").focus(); });
+    const nf = $("mvNewFolderIn");
+    if (nf) {
+      const make = async () => {
+        const name = nf.value.trim();
+        if (!name) { ed.newFolder = false; return draw(); }
+        nf.disabled = true;
+        const r = await mvPost("folder-save", { name });
+        if (!r.ok) { nf.disabled = false; return err(r.error); }
+        mv.folders.push({ ...r.folder, count: 0 });
+        grab(); ed.folder = r.folder.id; ed.newFolder = false; draw();
+      };
+      nf.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); make(); } else if (e.key === "Escape") { e.stopPropagation(); ed.newFolder = false; draw(); } });
+      nf.addEventListener("blur", () => { if (!nf.disabled && ed.newFolder) make(); });
+    }
     $("mvCancel").addEventListener("click", () => mvCloseModal());
     $("mvSave").addEventListener("click", save);
     if ($("mvDel")) $("mvDel").addEventListener("click", del);
-    dlg.querySelectorAll("input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); }));
+    dlg.querySelectorAll("input:not(#mvNewFolderIn)").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); }));
     const first = dlg.querySelector(k === "account" ? (id ? "#mvPw" : "#mvSite") : "#mvName");
-    if (first) first.focus();
+    if (first && !ed.newFolder) first.focus();
   };
   const grab = () => {
     for (const [elId, key] of [["mvSite", "site"], ["mvUser", "user"], ["mvPw", "password"], ["mvName", "name"], ["mvText", "text"], ["mvOtpIn", "otpText"]]) { const el = $(elId); if (el) ed[key] = el.value; }
@@ -469,7 +538,7 @@ async function mvEdit(id) {
     if (ed.kind === "account" && ed.otpText && ed.otpText.trim() && !ed.otp) { if (!(await useOtp(ed.otpText))) return; }
     const input = (ed.site || "").trim();
     const looksSite = /\.[a-z]{2,}(\/|$)/i.test(input);
-    const body = { id: id || undefined, kind: ed.kind, text: ed.text || "" };
+    const body = { id: id || undefined, kind: ed.kind, text: ed.text || "", folder: ed.folder || "", fav: !!ed.fav };
     if (ed.kind === "account") {
       if (!input) return err("Type the website or app, like twitch.tv or Steam.");
       let name, site;
@@ -477,18 +546,21 @@ async function mvEdit(id) {
       else { name = input; site = mvGuessSite(input) || (id && input === item.name ? item.site : ""); }
       Object.assign(body, { name, site, user: ed.user || "", password: ed.password || "", otp: ed.otp || null });
     } else body.name = ed.name || "";
+    const sb = $("mvSave");
+    sb.disabled = true; sb.textContent = "Saving…";
     const r = await mvPost("save", { item: body });
-    if (!r.ok) return err(r.error);
+    if (!r.ok) { sb.disabled = false; sb.textContent = "Save"; return err(r.error); }
     mvCloseModal();
-    mvToast(id ? "Saved" : "Added to MyVault");
+    mvToast(id ? "Saved" : mv.st.mode === "bw" ? "Added to Bitwarden" : "Added to MyVault");
     mvRefresh();
   };
   const del = async () => {
     const b = $("mvDel");
     if (!b.classList.contains("sure")) { b.classList.add("sure"); b.innerHTML = `${MV_I.trash}Delete for good?`; return; }
+    b.disabled = true;
     const r = await mvPost("delete", { id });
-    if (!r.ok) return err(r.error);
-    mvCloseModal(); mvToast("Deleted"); mvRefresh();
+    if (!r.ok) { b.disabled = false; return err(r.error); }
+    mvCloseModal(); mvToast("Deleted", mv.st.mode === "bw" ? "It's in Bitwarden's trash for 30 days" : ""); mvRefresh();
   };
   ed.otpCode = id && mv.codes[id] ? mv.codes[id].code : "";
   draw();
@@ -723,15 +795,17 @@ function mvImportFound(codes) {
 async function mvHealth() {
   const r = await mvPost("health");
   if (!r.ok) return mvToast(r.error);
-  const bad = new Set([...r.weak, ...r.reused].map((i) => i.id)).size;
+  const bad = new Set([...r.leaked, ...r.weak, ...r.reused].map((i) => i.id)).size;
   const frac = r.total ? r.good / r.total : 1;
   const row = (i) => `<div class="mv-row" data-id="${i.id}">${mvIconHtml(i)}<div class="mv-txt"><b>${mvEsc(i.name)}</b><span>${mvEsc(i.why)}</span></div><div class="mv-btns"><button type="button" class="wide" data-act="new">Make a new one</button></div></div>`;
   const m = mvModal(`
     <div class="mv-score"><div class="mv-score-ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" class="bg"/><circle cx="32" cy="32" r="27" class="fg" stroke-dasharray="${(169.6 * frac).toFixed(1)} 169.6" transform="rotate(-90 32 32)"/></svg><b>${r.good}/${r.total}</b></div>
       <div><h2>Password health</h2><p>${bad ? `Fix ${bad === 1 ? "this one" : `these ${bad}`} and you're all good.` : "All your passwords look good."}</p></div></div>
+    ${r.leaked.length ? `<div class="mv-label">Found in data leaks</div><div class="mv-group">${r.leaked.map(row).join("")}</div>` : ""}
     ${r.weak.length ? `<div class="mv-label">Weak</div><div class="mv-group">${r.weak.map(row).join("")}</div>` : ""}
     ${r.reused.length ? `<div class="mv-label">Used on more than one site</div><div class="mv-group">${r.reused.map(row).join("")}</div>` : ""}
     ${bad ? `<div class="mv-note">${MV_I.check}<span>Make a new one makes a strong password for you. Change it on the site too, then press Save.</span></div>` : ""}
+    ${r.checking ? `<div class="mv-note">${MV_I.clock}<span>Still checking your passwords against known data leaks…</span></div>` : r.leakCheck ? `<div class="mv-note">${MV_I.shield}<span>Checked against known data leaks (Have I Been Pwned). Only the first 5 letters of a scrambled copy of each password left this PC.</span></div>` : ""}
     <div class="mv-acts"><button type="button" class="convert" id="mvDone">Done</button></div>`, "mv-wide");
   $("mvDone").addEventListener("click", () => mvCloseModal());
   m.querySelectorAll("[data-act=new]").forEach((b) => b.addEventListener("click", async () => {
@@ -747,18 +821,25 @@ function mvSettings() {
   const p = { ...(mv.st.prefs || {}) };
   const sel = (key, opts) => `<span class="mv-sel"><select data-k="${key}">${opts.map(([v, t]) => `<option value="${v}" ${p[key] === v ? "selected" : ""}>${t}</option>`).join("")}</select>${MV_I.down}</span>`;
   const sw = (key) => `<button type="button" class="mv-sw ${p[key] ? "on" : ""}" data-k="${key}" role="switch" aria-checked="${!!p[key]}"></button>`;
+  const bw = mv.st.mode === "bw", b = mv.st.bw || {};
+  const host = (b.server || "").replace(/^https:\/\//, "");
   const m = mvModal(`
-    <h2>MyVault settings</h2><p>How MyVault locks and opens.</p>
+    <h2>MyVault settings</h2><p>How MyVault locks${bw ? ", opens and syncs" : " and opens"}.</p>
+    ${bw ? `<div class="mv-bwacc"><div class="mv-bwlogo sm">${MV_I.bw}</div><div class="t"><b>Bitwarden</b><small>${mvEsc(b.email)} · ${mvEsc(host)}${b.tool ? ` · tool ${mvEsc(b.tool)}` : ""}</small></div><button type="button" class="btn" id="mvSyncBtn">Sync now</button><button type="button" class="btn" id="mvSignOut">Sign out</button></div>` : ""}
     <div class="mv-set">
       <div class="r"><div><b>Lock by itself</b><small>When you leave MyVault alone</small></div>${sel("lockAfter", [[1, "After 1 minute"], [5, "After 5 minutes"], [15, "After 15 minutes"], [30, "After 30 minutes"], [60, "After 1 hour"]])}</div>
       <div class="r"><div><b>Offer to fill in logins</b><small>A small pop-up when Steam, Epic or a login page opens</small></div>${sw("offerFill")}</div>
       <div class="r"><div><b>Lock when I minimize</b><small>Or when the PC goes to sleep</small></div>${sw("lockMinimize")}</div>
+      <div class="r"><div><b>Lock when I go live</b><small>So nobody can open it while you stream</small></div>${sw("lockLive")}</div>
       <div class="r"><div><b>Hide passwords while I'm live</b><small>So nothing shows up on stream by accident</small></div>${sw("hideLive")}</div>
+      <div class="r"><div><b>Check for leaked passwords</b><small>Only the first 5 letters of a scrambled copy leave the PC</small></div>${sw("leakCheck")}</div>
       <div class="r"><div><b>Clear copied passwords</b><small>Removes them from the clipboard</small></div>${sel("clearAfter", [[10, "After 10 seconds"], [30, "After 30 seconds"], [60, "After 1 minute"], [0, "Never"]])}</div>
       ${p.never && p.never.length ? `<div class="r"><div><b>Never offer for</b><small>${mvEsc(p.never.map((n) => n.replace(/\.exe$/, "")).join(", "))}</small></div><button type="button" class="btn" id="mvNeverClear">Offer again</button></div>` : ""}
+      ${bw ? `<div class="r"><div><b>Quick unlock with a PIN</b><small>While VaultHub stays open. Master password after a restart.</small></div><button type="button" class="mv-sw ${b.pin ? "on" : ""}" id="mvQuickPin" role="switch" aria-checked="${!!b.pin}"></button></div>` : `
       <div class="r"><div><b>Change PIN</b></div><button type="button" class="btn" id="mvPinBtn">Change</button></div>
+      <div class="r"><div><b>Use Bitwarden instead</b><small>Syncs to your phone and browsers. Brings these over.</small></div><button type="button" class="btn" id="mvToBw">Connect</button></div>
       <div class="r"><div><b>Back up MyVault</b><small>A locked file you can move to a new PC</small></div><button type="button" class="btn" id="mvBackupBtn">Save file</button></div>
-      <div class="r"><div><b>Forgot your PIN?</b><small>Wipes MyVault so you can start over</small></div><button type="button" class="btn red" id="mvResetBtn">Reset</button></div>
+      <div class="r"><div><b>Forgot your PIN?</b><small>Wipes MyVault so you can start over</small></div><button type="button" class="btn red" id="mvResetBtn">Reset</button></div>`}
     </div>
     <div class="mv-acts"><button type="button" class="convert" id="mvDone">Done</button></div>`, "mv-wide");
   const put = async (changes) => {
@@ -766,13 +847,17 @@ function mvSettings() {
     if (r.ok) { mv.st.prefs = r.prefs; Object.assign(p, r.prefs); }
   };
   m.querySelectorAll("select[data-k]").forEach((s) => s.addEventListener("change", () => put({ [s.dataset.k]: +s.value })));
-  m.querySelectorAll(".mv-sw").forEach((b) => b.addEventListener("click", () => {
+  m.querySelectorAll(".mv-sw[data-k]").forEach((b) => b.addEventListener("click", () => {
     const on = !b.classList.contains("on"); b.classList.toggle("on", on); b.setAttribute("aria-checked", on); put({ [b.dataset.k]: on });
   }));
   if ($("mvNeverClear")) $("mvNeverClear").addEventListener("click", () => { put({ never: [] }); $("mvNeverClear").closest(".r").remove(); });
-  $("mvPinBtn").addEventListener("click", mvChangePin);
-  $("mvBackupBtn").addEventListener("click", mvBackup);
-  $("mvResetBtn").addEventListener("click", () => mvForgot(true));
+  if ($("mvPinBtn")) $("mvPinBtn").addEventListener("click", mvChangePin);
+  if ($("mvBackupBtn")) $("mvBackupBtn").addEventListener("click", mvBackup);
+  if ($("mvResetBtn")) $("mvResetBtn").addEventListener("click", () => mvForgot(true));
+  if ($("mvToBw")) $("mvToBw").addEventListener("click", async () => { mvCloseModal(true); await mvPost("lock"); mv.connecting = true; mv.view = "connect"; await mvLoad(true); mvDraw(); });
+  if ($("mvSyncBtn")) $("mvSyncBtn").addEventListener("click", () => { mvSync(); $("mvSyncBtn").textContent = "Syncing…"; });
+  if ($("mvSignOut")) $("mvSignOut").addEventListener("click", mvSignOut);
+  if ($("mvQuickPin")) $("mvQuickPin").addEventListener("click", () => (b.pin ? mvQuickPinOff() : mvQuickPinOn()));
   $("mvDone").addEventListener("click", () => { mvCloseModal(); mvDrawList($("myvaultTab")); });
 }
 
@@ -849,6 +934,282 @@ function mvForgot(fromSettings) {
     },
   });
 }
+
+// ---- (3.3.0) Bitwarden: connecting, unlocking with the master password, syncing
+function mvAgo(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
+}
+
+function mvPillHtml() {
+  const b = mv.st.bw || {};
+  const when = b.syncing ? "syncing…" : b.offline ? "offline, showing the copy on this PC" : b.synced ? `synced ${mvAgo(b.synced)}` : "opened";
+  return `<span class="dot">${MV_I.bw}</span><span>From <b>Bitwarden</b> · ${mvEsc(b.email)} · ${when}</span>${b.syncing ? "" : `<button type="button" id="mvPillSync">Sync now</button>`}`;
+}
+function mvPillUpdate() { const p = $("mvPill"); if (p) { p.innerHTML = mvPillHtml(); mvPillBind(); } }
+function mvPillBind() { const b = $("mvPillSync"); if (b) b.addEventListener("click", mvSync); }
+
+async function mvSync() {
+  const r = await mvPost("bw-sync");
+  if (!r.ok) return mvToast(r.error);
+  if (mv.st.bw) mv.st.bw.syncing = true;
+  mvPillUpdate();
+  for (let n = 0; n < 60; n++) {
+    await new Promise((ok) => setTimeout(ok, 1000));
+    const st = await mvPost("state");
+    if (!st.ok) return;
+    mv.st = st;
+    if (!st.bw || !st.bw.syncing) break;
+  }
+  if (mv.st.open) { await mvRefresh(); mvToast(mv.st.bw && mv.st.bw.offline ? "Couldn't reach Bitwarden" : "Synced with Bitwarden"); }
+}
+
+function mvOpenLink(url) { mvPost("open-link", { url }); }
+function mvServer() { return (mv.st && mv.st.bw && mv.st.bw.server) || (mv.form.server === "eu" ? "https://vault.bitwarden.eu" : "https://vault.bitwarden.com"); }
+
+function mvBwBox(page, html) {
+  mvStopTick();
+  page.innerHTML = `<div class="mv-lock"><div class="mv-lock-box mv-bwbox">${html}</div></div>`;
+  const f = page.querySelector("input:not([type=hidden])");
+  if (f && !f.value) f.focus();
+}
+
+function mvDrawBw(page) {
+  const v = mv.view, f = mv.form, j = mv.job || {};
+  const logo = `<div class="mv-bwlogo">${MV_I.bw}</div>`;
+  const err = `<div class="mv-err" id="mvErr">${mvEsc(mv.bwError || "")}</div>`;
+  const back = `<button type="button" class="link-button" id="mvBwBack">Start over</button>`;
+  if (v === "connect") {
+    mvBwBox(page, `${logo}<h2>Connect your Bitwarden</h2><p>MyVault keeps your passwords in your Bitwarden account, so they sync to your phone and browsers too.</p>
+      <div class="mv-field"><label for="mvBwEmail">Email</label><div class="mv-in"><input id="mvBwEmail" type="email" value="${mvEsc(f.email || "")}" autocomplete="off" spellcheck="false"></div></div>
+      <div class="mv-field"><label for="mvBwPw">Master password</label><div class="mv-in"><input id="mvBwPw" type="password" autocomplete="off" spellcheck="false"></div></div>
+      <div class="mv-field"><label for="mvBwServer">Where your account is</label><span class="mv-sel wide"><select id="mvBwServer"><option value="us" ${f.server !== "eu" && f.server !== "self" ? "selected" : ""}>bitwarden.com (US)</option><option value="eu" ${f.server === "eu" ? "selected" : ""}>bitwarden.eu (Europe)</option><option value="self" ${f.server === "self" ? "selected" : ""}>My own server</option></select>${MV_I.down}</span></div>
+      ${f.server === "self" ? `<div class="mv-field"><label for="mvBwUrl">Server address</label><div class="mv-in"><input id="mvBwUrl" placeholder="https://vault.example.com" value="${mvEsc(f.custom || "")}" autocomplete="off" spellcheck="false"></div></div>` : ""}
+      ${err}<button type="button" class="convert mv-bwgo" id="mvBwGo">Connect</button>
+      <div class="mv-bwsmall">No Bitwarden account? <button type="button" class="link-button" id="mvBwNew">Make one free</button><br>VaultHub never saves your master password.<br>
+      ${mv.connecting ? `<button type="button" class="link-button" id="mvBwNo">Back to MyVault</button>` : `<button type="button" class="link-button" id="mvBwLocal">Or keep passwords only on this PC</button>`}</div>`);
+    const grab = () => { f.email = $("mvBwEmail").value.trim(); f.server = $("mvBwServer").value; if ($("mvBwUrl")) f.custom = $("mvBwUrl").value.trim(); };
+    $("mvBwServer").addEventListener("change", () => { grab(); mvDrawBw(page); });
+    const go = async () => {
+      grab();
+      const pw = $("mvBwPw").value;
+      $("mvBwGo").disabled = true;
+      const r = await mvPost("bw-connect", { email: f.email, password: pw, server: f.server, custom: f.custom });
+      if (!r.ok) { $("mvBwGo").disabled = false; return void ($("mvErr").textContent = r.error); }
+      mvJobGo(r);
+    };
+    $("mvBwGo").addEventListener("click", go);
+    page.querySelectorAll("input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); }));
+    $("mvBwNew").addEventListener("click", () => mvOpenLink((f.server === "eu" ? "https://vault.bitwarden.eu" : "https://vault.bitwarden.com") + "/#/register"));
+    if ($("mvBwLocal")) $("mvBwLocal").addEventListener("click", () => { mv.view = ""; mv.localSetup = true; mv.bwError = ""; mvDraw(); });
+    if ($("mvBwNo")) $("mvBwNo").addEventListener("click", () => { mv.view = ""; mv.connecting = false; mv.bwError = ""; mvLoad(true); });
+    return;
+  }
+  if (v === "busy") {
+    const dl = j.step === "download";
+    const frac = dl && j.total ? Math.min(1, j.got / j.total) : 0;
+    const title = dl ? "Getting Bitwarden ready" : j.step === "open" ? "Opening your vault" : "Signing in to Bitwarden";
+    const text = dl ? "VaultHub is downloading Bitwarden's official tool and checking it. This only happens once." : "This takes a few seconds.";
+    const small = dl && j.total ? `${Math.round(j.got / 1048576)} MB of ${Math.round(j.total / 1048576)} MB` : "";
+    if ($("mvBwBar") && page.querySelector("h2").textContent === title) {
+      $("mvBwBar").className = `mv-bwbar ${dl && j.total ? "" : "busy"}`;
+      $("mvBwBar").firstChild.style.width = `${Math.round(frac * 100)}%`;
+      $("mvBwBarText").textContent = small;
+      return;
+    }
+    return mvBwBox(page, `${logo}<h2>${title}</h2><p>${text}</p><div class="mv-bwbar ${dl && j.total ? "" : "busy"}" id="mvBwBar"><i style="width:${Math.round(frac * 100)}%"></i></div><div class="mv-bwsmall" id="mvBwBarText">${small}</div>`);
+  }
+  if (v === "code") {
+    const email = j.method === "email";
+    mvBwBox(page, `${logo}<h2>${email ? "Check your email" : "Two-step login"}</h2><p>${email ? `Bitwarden sent a code to ${mvEsc(f.email)}.` : "Type the code from your authenticator app."}</p>
+      <div class="mv-field"><div class="mv-in"><input id="mvBwCode" class="mono mv-bwcode" inputmode="numeric" maxlength="12" autocomplete="one-time-code"></div></div>
+      ${err}<button type="button" class="convert mv-bwgo" id="mvBwGo">Continue</button>
+      <div class="mv-bwsmall">${email ? `<button type="button" class="link-button" id="mvBwMail">Send a new code</button>` : `<button type="button" class="link-button" id="mvBwMail">Email me a code instead</button>`} · ${back}</div>`);
+    const go = async () => {
+      $("mvBwGo").disabled = true;
+      const r = await mvPost("bw-more", { what: "code", code: $("mvBwCode").value, method: email ? "email" : "app" });
+      if (!r.ok) { $("mvBwGo").disabled = false; return void ($("mvErr").textContent = r.error); }
+      mvJobGo(r);
+    };
+    $("mvBwGo").addEventListener("click", go);
+    $("mvBwCode").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    $("mvBwMail").addEventListener("click", async () => { const r = await mvPost("bw-more", { what: "send-email" }); if (!r.ok) return void ($("mvErr").textContent = r.error); mvJobGo(r, "email"); });
+  } else if (v === "device") {
+    mvBwBox(page, `${logo}<h2>Check your email</h2><p>Bitwarden sent a code to ${mvEsc(f.email)}, because this is a new PC for your account.</p>
+      <div class="mv-field"><div class="mv-in"><input id="mvBwCode" class="mono mv-bwcode" inputmode="numeric" maxlength="12" autocomplete="one-time-code"></div></div>
+      ${err}<button type="button" class="convert mv-bwgo" id="mvBwGo">Continue</button>
+      <div class="mv-bwsmall"><button type="button" class="link-button" id="mvBwKey">No email? Use an API key instead</button> · ${back}</div>`);
+    const go = async () => {
+      $("mvBwGo").disabled = true;
+      const r = await mvPost("bw-more", { what: "device", code: $("mvBwCode").value });
+      if (!r.ok) { $("mvBwGo").disabled = false; return void ($("mvErr").textContent = r.error); }
+      mvJobGo(r);
+    };
+    $("mvBwGo").addEventListener("click", go);
+    $("mvBwCode").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    $("mvBwKey").addEventListener("click", () => { mv.view = "apikey"; mv.bwError = ""; mvDrawBw(page); });
+  } else if (v === "apikey") {
+    mvBwBox(page, `${logo}<h2>One more step</h2><p>Bitwarden wants to be sure this PC is yours. On Bitwarden's website, go to <b>Settings › Security › Keys</b>, press <b>View API key</b>, and paste both here.</p>
+      <div class="mv-field"><label for="mvBwId">client_id</label><div class="mv-in"><input id="mvBwId" class="mono" placeholder="user.…" autocomplete="off" spellcheck="false"></div></div>
+      <div class="mv-field"><label for="mvBwSecret">client_secret</label><div class="mv-in"><input id="mvBwSecret" class="mono" type="password" autocomplete="off" spellcheck="false"></div></div>
+      ${err}<button type="button" class="convert mv-bwgo" id="mvBwGo">Continue</button>
+      <div class="mv-bwsmall"><button type="button" class="link-button" id="mvBwSite">Open Bitwarden's website</button> · ${back}<br>The API key is only used once to sign in, and isn't saved.</div>`);
+    const go = async () => {
+      $("mvBwGo").disabled = true;
+      const r = await mvPost("bw-more", { what: "apikey", clientId: $("mvBwId").value, clientSecret: $("mvBwSecret").value });
+      if (!r.ok) { $("mvBwGo").disabled = false; return void ($("mvErr").textContent = r.error); }
+      mvJobGo(r);
+    };
+    $("mvBwGo").addEventListener("click", go);
+    page.querySelectorAll("input").forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); }));
+    $("mvBwSite").addEventListener("click", () => mvOpenLink(mvServer() + "/#/settings/security/security-keys"));
+  }
+  if ($("mvBwBack")) $("mvBwBack").addEventListener("click", async () => { await mvPost("bw-cancel"); mv.view = "connect"; mv.bwError = ""; mvDrawBw(page); });
+}
+
+async function mvJobGo(first, method) {
+  mv.bwError = "";
+  let j = first;
+  for (;;) {
+    mv.job = { ...j, method: method || j.method };
+    if (j.done) break;
+    if (mv.view !== "busy" || $("mvBwBar")) { mv.view = "busy"; mvDrawBw($("myvaultTab")); }
+    await new Promise((ok) => setTimeout(ok, 400));
+    const r = await mvPost("bw-job");
+    if (!r.ok) { j = { done: true, error: r.error }; break; }
+    j = r;
+  }
+  mv.job = { ...j, method: method || j.method };
+  const page = $("myvaultTab");
+  if (j.need) { mv.view = j.need; mv.bwError = j.error || ""; return mvDrawBw(page); }
+  if (j.error) { mv.view = "connect"; mv.bwError = j.error; return mvDrawBw(page); }
+  mv.view = ""; mv.connecting = false; mv.localSetup = false;
+  mv.st = j.state; mvSideState();
+  await mvRefresh();
+  mvToast("Connected to Bitwarden", `${mv.items.length} thing${mv.items.length === 1 ? "" : "s"} in your vault`);
+  if (mv.st.oldVault) setTimeout(mvMove, 600);
+}
+
+function mvDrawMaster(page) {
+  const b = mv.st.bw || {};
+  mvBwBox(page, `<div class="mv-lock-ic">${MV_I.lock}</div><h2>MyVault is locked</h2><p>Type your Bitwarden master password to open it.</p>
+    <div class="mv-field"><div class="mv-in"><input id="mvMaster" type="password" autocomplete="off" spellcheck="false" style="text-align:center"></div></div>
+    <div class="mv-err" id="mvErr"></div><button type="button" class="convert mv-bwgo" id="mvBwGo">Unlock</button>
+    <div class="mv-bwsmall">Signed in as ${mvEsc(b.email)} · <button type="button" class="link-button" id="mvBwOut">Sign out</button></div>`);
+  $("mvMaster").focus();
+  const go = async () => {
+    const btn = $("mvBwGo");
+    btn.disabled = true; btn.textContent = "Opening…";
+    const r = await mvPost("bw-unlock", { password: $("mvMaster").value });
+    if (!r.ok) {
+      if ($("mvBwGo")) { btn.disabled = false; btn.textContent = "Unlock"; $("mvErr").textContent = r.error; $("mvMaster").select(); }
+      if (/signed out/i.test(r.error)) setTimeout(() => mvLoad(true), 1500);
+      return;
+    }
+    mv.st = r; mvSideState();
+    await mvRefresh();
+    if (r.bw && !r.bw.pin && !mv.askedPin) { mv.askedPin = true; }
+  };
+  $("mvBwGo").addEventListener("click", go);
+  $("mvMaster").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  $("mvBwOut").addEventListener("click", mvSignOut);
+}
+
+function mvSignOut() {
+  mvAsk({
+    title: "Sign out of Bitwarden?", text: "Your passwords stay safe in your Bitwarden account. You can connect again any time.", button: "Sign out", fields: [],
+    onSubmit: async () => {
+      const r = await mvPost("bw-signout");
+      if (!r.ok) return r.error;
+      mvCloseModal(); mv.st = r; mv.items = []; mv.view = ""; mvSideState(); mvDraw(); mvToast("Signed out of Bitwarden");
+    },
+  });
+}
+
+function mvQuickPinOn() {
+  mvAsk({
+    title: "Quick unlock with a PIN", text: "While VaultHub stays open, this PIN opens MyVault instead of your master password. After a restart it's the master password again.", button: "Turn on",
+    fields: [{ id: "mvQp", label: "Pick a PIN (6 numbers)", pin: true }, { id: "mvQp2", label: "PIN again", pin: true }],
+    onSubmit: async (v) => {
+      if (!/^\d{6}$/.test(v.mvQp)) return "Your PIN is 6 numbers.";
+      if (v.mvQp !== v.mvQp2) return "The PINs don't match.";
+      const r = await mvPost("bw-pin", { pin: v.mvQp });
+      if (!r.ok) return r.error;
+      mv.st = r; mvCloseModal(); mvToast("Quick PIN is on", "Next time MyVault locks, your PIN opens it");
+    },
+  });
+}
+
+async function mvQuickPinOff() {
+  const r = await mvPost("bw-pin", { off: true });
+  if (r.ok) { mv.st = r; mvToast("Quick PIN is off"); const s = $("mvQuickPin"); if (s) { s.classList.remove("on"); s.setAttribute("aria-checked", "false"); } }
+}
+
+// ---- (3.3.0) folders
+function mvFolderDialog(folder) {
+  const m = mvAsk({
+    title: folder ? "Folder" : "New folder", text: mv.st.mode === "bw" ? "Folders sync to Bitwarden on your phone too." : "Keep things sorted.", button: folder ? "Save" : "Make folder",
+    fields: [{ id: "mvFolderName", label: "Name", type: "text" }],
+    onSubmit: async (v) => {
+      const r = await mvPost("folder-save", { id: folder ? folder.id : "", name: v.mvFolderName });
+      if (!r.ok) return r.error;
+      mvCloseModal(); if (!folder) mv.folder = r.folder.id;
+      mvToast(folder ? "Folder renamed" : "Folder made", folder ? "" : "Open something and pick it to put it here");
+      mvRefresh();
+    },
+  });
+  if (folder) {
+    $("mvFolderName").value = folder.name;
+    const acts = m.querySelector(".mv-acts");
+    acts.insertAdjacentHTML("afterbegin", `<button type="button" class="ghost-button mv-del" id="mvFolderDel">${MV_I.trash}Remove</button><span style="flex:1"></span>`);
+    $("mvFolderDel").addEventListener("click", async () => {
+      const b = $("mvFolderDel");
+      if (!b.classList.contains("sure")) { b.classList.add("sure"); b.innerHTML = `${MV_I.trash}Remove folder?`; $("mvErr").textContent = "What's in it stays, just without a folder."; return; }
+      b.disabled = true;
+      const r = await mvPost("folder-delete", { id: folder.id });
+      if (!r.ok) { b.disabled = false; return void ($("mvErr").textContent = r.error); }
+      mvCloseModal(); mv.folder = "all"; mvToast("Folder removed"); mvRefresh();
+    });
+  }
+}
+
+// ---- (3.3.0) moving the old MyVault into Bitwarden
+function mvMove() {
+  mvAsk({
+    title: "Move MyVault to Bitwarden", text: "Type the PIN of your old MyVault on this PC, and everything in it goes into your Bitwarden.", button: "Next",
+    fields: [{ id: "mvMovePin", label: "Old MyVault PIN", pin: true }],
+    onSubmit: async (v) => {
+      const pin = v.mvMovePin;
+      const r = await mvPost("move-preview", { pin });
+      if (!r.ok) return r.error;
+      const n = r.items.length;
+      const m = mvModal(`<div class="mv-score"><div class="mv-bwlogo sm">${MV_I.bw}</div><div><h2>Move MyVault to Bitwarden</h2><p>You have ${n} thing${n === 1 ? "" : "s"} saved in the old MyVault on this PC.</p></div></div>
+        ${n ? `<div class="mv-group mv-moving">${r.items.map((i) => `<div class="mv-row">${mvIconHtml(i)}<div class="mv-txt"><b>${mvEsc(i.name)}</b><span>${mvEsc(i.kind === "account" ? i.user || i.site : i.kind === "codes" ? "Codes" : "Note")}</span></div><i class="mv-cb on">${MV_I.check}</i></div>`).join("")}</div>` : ""}
+        <div class="mv-note">${MV_I.shield}<span>2FA codes come along too, and MyVault keeps showing them. When it's done, the old MyVault is deleted from this PC.</span></div>
+        <div class="mv-err" id="mvErr"></div>
+        <div class="mv-acts"><button type="button" class="ghost-button" id="mvCancel">Not now</button><button type="button" class="convert" id="mvMoveGo">Move ${n} to Bitwarden</button></div>`, "mv-wide");
+      $("mvCancel").addEventListener("click", () => mvCloseModal());
+      $("mvMoveGo").addEventListener("click", async () => {
+        const b = $("mvMoveGo"); b.disabled = true; b.textContent = "Moving…";
+        const res = await mvPost("move", { pin });
+        if (!res.ok) { b.disabled = false; b.textContent = `Move ${n} to Bitwarden`; return void ($("mvErr").textContent = res.error); }
+        mv.st = res.state;
+        if (res.failed.length) { b.disabled = false; b.textContent = "Try again"; return void ($("mvErr").textContent = `Couldn't move ${res.failed.join(", ")}. The old MyVault was kept.`); }
+        mvCloseModal(); mvToast(`Moved ${res.moved} to Bitwarden`, "The old MyVault is gone from this PC"); mvRefresh();
+      });
+      void m;
+    },
+  });
+}
+
+// ---- (3.3.0) lock when you go live
+setInterval(() => {
+  const live = mvLive();
+  if (live && !mv.liveWas && mv.st && mv.st.open && (mv.st.prefs || {}).lockLive) {
+    mvLockNow().then(() => mvToast("MyVault locked", "Because you went live"));
+  }
+  mv.liveWas = live;
+}, 1500);
 
 // ---- staying open only while you use it
 ["mousemove", "keydown", "mousedown", "wheel"].forEach((ev) => document.addEventListener(ev, () => {

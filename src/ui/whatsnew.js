@@ -2,6 +2,12 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.3.0", items: [
+    "MyVault now works with Bitwarden. Connect your account and your passwords sync to your phone and browsers too. Already using MyVault? It moves everything over for you.",
+    "MyVault: folders and favorites. Star the ones you use most, and sort the rest into folders like Gaming or Streaming.",
+    "MyVault: checks if any of your passwords showed up in a data leak, without sending your passwords anywhere.",
+    "MyVault locks itself when you go live, and a quick PIN can open it again while VaultHub stays open.",
+  ] },
   { version: "3.2.6", items: [
     "Bug sweep: we clicked through every page and button. The old gray Windows pop-up boxes are gone. Errors now show as a small message at the bottom instead.",
     "Chat: leaving a group asks with a second click on the button, like deleting does elsewhere.",

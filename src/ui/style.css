@@ -9838,6 +9838,63 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .mv-cam-pick[hidden] { display: none; }
 .mv-cam-pick select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2, var(--panel)); color: var(--text); font: inherit; font-size: 12.5px; }
 .mv-acts button, .mv-acts .mv-photo { white-space: nowrap; }
+/* (3.3.0) MyVault: folders, favorites, Bitwarden */
+.mv-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
+.mv-chips.small { margin: 0; }
+.mv-chip { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: 500 13.5px Inter, sans-serif; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: background .18s, color .18s, border-color .18s; }
+.mv-chips.small .mv-chip { height: 34px; }
+.mv-chip:hover { border-color: var(--line2); }
+.mv-chip small { color: var(--muted); font-size: 12px; }
+.mv-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.mv-chip.on small { color: var(--bg); opacity: .6; }
+.mv-chip svg { width: 15px; height: 15px; }
+.mv-chip.add { border-style: dashed; color: var(--muted); }
+.mv-chip-more { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: -8px; border-radius: 999px; }
+.mv-chip-more:hover { background: color-mix(in srgb, var(--bg) 18%, transparent); }
+.mv-chip-in input { height: 34px; width: 150px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--accent); background: var(--panel2); color: var(--text); font: 500 13.5px Inter, sans-serif; outline: none; }
+.mv-star { display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--accent); }
+.mv-star svg { width: 14px; height: 14px; }
+.mv-dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mv-fav { width: 38px; height: 38px; border-radius: 12px; border: 0; background: var(--panel2); color: var(--muted); display: grid; place-items: center; cursor: pointer; flex: none; transition: color .18s, transform .18s; }
+.mv-fav:hover { color: var(--text); }
+.mv-fav.on { color: var(--accent); }
+.mv-fav:active { transform: scale(.92); }
+.mv-fav svg { width: 18px; height: 18px; }
+.mv-health.red .mv-health-ic { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.mv-health-ic.bw, .mv-bwlogo { background: #175DDC; color: #fff; }
+.mv-health-ic.bw svg { width: 17px; height: 17px; }
+.mv-bwbox { width: 360px; }
+.mv-bwbox .mv-field { text-align: left; }
+.mv-bwbox .mv-in input { width: 100%; }
+.mv-bwbox .mv-err { min-height: 0; margin: 4px 0 0; text-align: left; }
+.mv-bwbox p b { color: var(--text); font-weight: 600; }
+.mv-bwlogo { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin: 0 auto 16px; flex: none; }
+.mv-bwlogo svg { width: 28px; height: 28px; }
+.mv-bwlogo.sm { width: 44px; height: 44px; border-radius: 13px; margin: 0; }
+.mv-bwlogo.sm svg { width: 22px; height: 22px; }
+.mv-sel.wide { display: flex; }
+.mv-sel.wide select { width: 100%; height: 44px; border-radius: 12px; padding: 0 34px 0 14px; font-size: 14px; }
+.mv-bwgo { box-sizing: border-box; width: 100%; height: 46px; border-radius: 14px; margin-top: 10px; justify-content: center; }
+.mv-bwsmall { color: var(--muted); font-size: 12.5px; margin-top: 14px; line-height: 1.7; }
+.mv-bwsmall .link-button { color: var(--accent); font-size: inherit; }
+.mv-bwbar { height: 8px; border-radius: 999px; background: var(--panel2); overflow: hidden; margin: 22px 0 10px; }
+.mv-bwbar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width .3s var(--ease-out, ease); }
+.mv-bwbar.busy i { width: 35% !important; animation: mv-bwbusy 1.2s ease-in-out infinite; }
+@keyframes mv-bwbusy { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.mv-bwcode { letter-spacing: .4em; text-align: center; font-size: 22px; }
+.mv-bwpill { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 12px 0 8px; border-radius: 999px; background: var(--panel2); color: var(--muted); font-size: 12.5px; margin: -8px 0 18px; }
+.mv-bwpill b { color: var(--text); font-weight: 600; }
+.mv-bwpill .dot { width: 20px; height: 20px; border-radius: 7px; background: #175DDC; display: grid; place-items: center; color: #fff; flex: none; }
+.mv-bwpill .dot svg { width: 12px; height: 12px; }
+.mv-bwpill button { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0 0 0 4px; }
+.mv-bwacc { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: var(--panel2); margin-bottom: 14px; text-align: left; }
+.mv-bwacc .btn { height: 34px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--line2); color: var(--text); font: 500 13px Inter, sans-serif; cursor: pointer; flex: none; }
+.mv-bwacc .t { flex: 1; min-width: 0; }
+.mv-bwacc b { display: block; }
+.mv-bwacc small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-moving { max-height: 300px; overflow: auto; }
+.mv-moving .mv-row { cursor: default; }
+
 
 /* (3.3) Remote: the "Set a password" button on the This PC row */
 .rd-this .rd-pw { display: inline-flex; align-items: center; gap: 6px; }
