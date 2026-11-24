@@ -470,6 +470,11 @@ def add_to_obs():
         first = scenes[0]
         obsctl.ask_once("CreateInput", {"sceneName": first, "inputName": SOURCE, "inputKind": "browser_source",
                                         "inputSettings": look, "sceneItemEnabled": True})
+    # "Control audio via OBS" sends the sounds to your stream only. Monitor them too, so you hear them yourself.
+    try:
+        obsctl.ask_once("SetInputAudioMonitorType", {"inputName": SOURCE, "monitorType": "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"})
+    except obsctl.Error:
+        pass
     added = 0
     for scene in scenes:
         if scene == first:
