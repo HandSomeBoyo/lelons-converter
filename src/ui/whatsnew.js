@@ -2,6 +2,11 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.3.3", items: [
+    "Live: fixed your Twitch title being stuck on \"Loading your title...\" on the Console.",
+    "Live: the ad timer settings save properly again, and the Answer, Timeout and Ban buttons in chat look right again.",
+    "Fixed the recent list on Home and the dates in your conversion history.",
+  ] },
   { version: "3.3.2", items: [
     "MyVault: fixed \"Couldn't find Bitwarden's tool\" when connecting. VaultHub now finds Bitwarden's newest tool a more reliable way.",
     "MyVault is Bitwarden only now: it opens on Connect your Bitwarden, and an old MyVault on the PC gets moved over (or deleted if you forgot its PIN).",
