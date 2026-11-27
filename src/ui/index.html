@@ -130,6 +130,7 @@
 <div class="sub-tabs" data-section="recording" role="tablist">
       <button type="button" role="tab" data-tab="games" title="Games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.4 2.4 0 0 1-4.1 1.1L13.6 15.5h-3.2l-2.3 2.4a2.4 2.4 0 0 1-4.1-1.1l-.9-4.4A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><circle cx="15.5" cy="10.6" r=".6" fill="currentColor"/><circle cx="17" cy="12.6" r=".6" fill="currentColor"/></svg><span>Games</span><b class="tab-badge" id="gamesTabBadge" hidden></b></button>
       <button type="button" role="tab" data-tab="povs" title="POVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>POVs</span><b class="tab-badge" id="povsTabBadge" hidden></b><i class="tab-bar" id="povsTabBar" hidden><span></span></i></button>
+      <button type="button" role="tab" data-tab="clips" title="Clips"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg><span>Clips</span></button>
 </div>
 <div class="sub-tabs" data-section="youtube" role="tablist">
       <button type="button" role="tab" data-tab="channel" title="Channel stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><path d="M7 16v-4M11.5 16V8.5M16 16v-6"/><path d="M5.5 8.5 10 5l3 2.5 5.5-4"/></svg><span>Channel stats</span></button>
@@ -1630,6 +1631,8 @@
     </div>
   </section>
 
+  <section class="tab-page cl-page" id="clipsTab" hidden></section>
+
   <section class="tab-page" id="povsTab" hidden>
     <h1 class="headline">Everyone's POV.<br><em>Straight from their PC.</em></h1>
     <p class="fx-status" id="pvStatus" hidden></p>
@@ -2887,5 +2890,6 @@
 <script src="lvextra.js"></script>
 <script src="lvprecheck.js"></script>
 <script src="myvault.js"></script>
+<script src="clips.js"></script>
 </body>
 </html>

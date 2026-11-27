@@ -500,6 +500,17 @@ def forget(sid):
 
 # ---------------------------------------------------------------- what the page asks for
 
+def chat_since(since=0, limit=40):
+    """(3.4.0) Your chat for the chat overlay in OBS: messages after since (no friends' chats), and removals."""
+    _start()  # (the chat connects even when the Live page wasn't opened)
+    with _lock:
+        fresh = [dict(i) for s, i in _items if s > since and i.get("type") == "msg" and not i.get("guest") and not i.get("old")][-limit:]
+        removed = [{"by": k, "value": v} for k, v in _removed[-50:]]
+        seq = _seq
+    keep = ("id", "p", "user", "login", "color", "badges", "parts", "text", "me", "announce", "seq", "at")
+    return {"seq": seq, "msgs": [{k: m.get(k) for k in keep} for m in fresh], "removed": removed}
+
+
 def state(since=0):
     _start()
     tw, yt = dict(_twitch.status), dict(_youtube.status)

@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>VaultHub chat</title>
+<!-- (3.4.0) Your chat on stream. OBS shows this page as a Browser Source (420 x 640). Served by streamoverlay.py.
+     New messages come in at the bottom. ?demo=1 shows pretend messages (the preview on the Alerts page). -->
+<style>
+  @font-face { font-family: "Inter"; src: url("/alerts/fonts/intervariable.woff2") format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font-family: "Inter", "Segoe UI", system-ui, sans-serif; color: #fff; --fs: 19px; }
+  body.s { --fs: 16px; } body.l { --fs: 24px; }
+  #list { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 10px; }
+  .m { align-self: flex-start; max-width: 100%; box-sizing: border-box; font-size: var(--fs); line-height: 1.35; font-weight: 550; overflow-wrap: anywhere; padding: 6px 11px; border-radius: 12px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 6px rgba(0, 0, 0, .6); animation: in .35s cubic-bezier(.2, 1.2, .4, 1) both; }
+  body.box .m { background: rgba(14, 14, 18, .72); text-shadow: none; }
+  .m.out { animation: out .5s ease-in both; }
+  .m b { font-weight: 800; }
+  .m .tag { display: inline-block; font-size: .62em; font-weight: 800; letter-spacing: .04em; padding: 2px 5px; border-radius: 5px; margin-right: 5px;
+    vertical-align: .15em; background: rgba(255, 255, 255, .16); text-shadow: none; }
+  .tag.host { background: #e5484d; } .tag.mod { background: #30a46c; } .tag.vip { background: #d6409f; } .tag.sub { background: #8e4ec6; }
+  .m img { height: 1.5em; vertical-align: -.4em; margin: 0 1px; }
+  .m.me .t { font-style: italic; }
+  @keyframes in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+  @keyframes out { to { opacity: 0; transform: translateY(-6px); } }
+</style>
+</head>
+<body class="box">
+<div id="list"></div>
+<script>
+const demo = /[?&]demo=1/.test(location.search);
+const list = document.getElementById("list");
+let since = -1, look = {};
+const TAGS = { host: "HOST", mod: "MOD", vip: "VIP", sub: "SUB" };
+const COLORS = ["#ff7ab8", "#5cc8ff", "#5ee38f", "#ffcf3f", "#b495ff", "#ff9b5c"];
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function colorOf(m) {
+  if (m.color) return m.color;
+  let h = 0;
+  for (const ch of m.login || m.user || "") h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return COLORS[h % COLORS.length];
+}
+
+function setLook(l) {
+  look = l || look;
+  document.body.className = (look.size || "m") + (look.box !== false ? " box" : "");
+}
+
+function add(m) {
+  const el = document.createElement("div");
+  el.className = "m" + (m.me ? " me" : "");
+  el.dataset.id = m.id || "";
+  el.dataset.login = (m.login || "").toLowerCase();
+  const tags = (m.badges || []).filter((b) => TAGS[b]).slice(0, 2).map((b) => `<span class="tag ${b}">${TAGS[b]}</span>`).join("");
+  const text = (m.parts && m.parts.length ? m.parts : [{ t: m.text }])
+    .map((p) => p.e ? `<img src="${esc(p.e)}" alt="${esc(p.t)}">` : esc(p.t)).join("");
+  el.innerHTML = `${tags}<b style="color:${esc(colorOf(m))}">${esc(m.user)}</b>${m.me ? " " : ": "}<span class="t">${text}</span>`;
+  list.append(el);
+  while (list.children.length > 30) list.firstElementChild.remove();
+  // Old ones go once they've scrolled off the top
+  requestAnimationFrame(() => {
+    for (const x of [...list.children]) if (x.getBoundingClientRect().bottom < 0) x.remove();
+  });
+  if (look.fade) setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 500); }, look.fade * 1000);
+}
+
+function removeGone(removed) {
+  for (const r of removed || []) {
+    const sel = r.by === "id" ? `[data-id="${CSS.escape(r.value)}"]` : r.by === "login" ? `[data-login="${CSS.escape(String(r.value).toLowerCase())}"]` : "";
+    if (sel) list.querySelectorAll(sel).forEach((x) => x.remove());
+  }
+}
+
+async function poll() {
+  try {
+    const res = await (await fetch("/chat/feed?since=" + Math.max(0, since), { cache: "no-store" })).json();
+    setLook(res.look);
+    if (res.seq < since) since = 0;  // VaultHub was opened again
+    if (since >= 0) for (const m of res.msgs || []) add(m);
+    else for (const m of (res.msgs || []).slice(-8)) add(m);  // the first look: the last few, so it isn't empty
+    removeGone(res.removed);
+    since = res.seq;
+  } catch (e) { /* VaultHub is closed: try again in a bit */ }
+  setTimeout(poll, 700);
+}
+
+if (demo) {
+  const lines = [["frostbyte_", ["vip"], "build a bridge first"], ["samwise", ["mod"], "welcome in everyone!"], ["pixelpete", ["sub"], "the river base would look so good"],
+    ["nightowl_k", [], "gg"], ["Kari", [], "Hi from Bergen!"], ["lowkey_lars", ["sub"], "what mods are you using?"], ["ingrid_b", [], "LETS GOOO"]];
+  let i = 0;
+  const next = () => { const [user, badges, text] = lines[i++ % lines.length]; add({ user, login: user, badges, text }); };
+  for (let k = 0; k < 5; k++) next();
+  setInterval(next, 1800);
+  addEventListener("message", (e) => { if (e.data && e.data.type === "vh-chat-look") setLook(e.data.look); });
+} else {
+  poll();
+}
+</script>
+</body>
+</html>

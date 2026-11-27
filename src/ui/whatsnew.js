@@ -2,6 +2,13 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.4.0", items: [
+    "New Clips page (Recording > Clips): pick a key, and pressing it saves the last 30 seconds or so as a clip, even in a game. A small \"Clipped!\" pop-up shows at the top of your screen.",
+    "All your clips live in one place on your PC, named after the game. Watch them, star the best ones, sort by game, or drag one straight into Resolve or Discord.",
+    "Live: put your chat on stream. Alerts page > Chat on your stream > Add to OBS.",
+    "Live: smoother while you stream (lighter on OBS, fewer pop-ups when chat says your name), and a Test in OBS button on every alert.",
+    "Live: Stream health is one calm line when all is good, and the Console is simpler when you're offline.",
+  ] },
   { version: "3.3.3", items: [
     "Live: fixed your Twitch title being stuck on \"Loading your title...\" on the Console.",
     "Live: the ad timer settings save properly again, and the Answer, Timeout and Ban buttons in chat look right again.",
