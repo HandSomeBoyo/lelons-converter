@@ -801,6 +801,8 @@ function lvSendHotkeys() {
   const clip = loadPref("lvClipKey");
   if (clip && clip.vk) keys.push({ id: 100, mods: clip.mods || 0, vk: clip.vk });  // (the Clip key, lvtwitch.js)
   if (typeof lvoKeyList === "function") lvoKeyList().forEach(([, k], n) => keys.push({ id: 200 + n, mods: k.mods || 0, vk: k.vk }));  // (OBS scenes, lvobs.js)
+  const saveClip = typeof CL !== "undefined" && CL.prefs.key;
+  if (saveClip && saveClip.vk) keys.push({ id: 300, mods: saveClip.mods || 0, vk: saveClip.vk });  // (3.4.0) the Clips page's key, clips.js
   api("/api/live-hotkeys", { keys }).then((res) => { LV.taken = new Set((res && res.taken) || []); if (!$("lvboardTab").hidden) lvDrawBoard(); }).catch(() => {});
 }
 function lvPlayPad(i) {
@@ -967,7 +969,8 @@ function lvVk(e) {
 if (window.chrome && window.chrome.webview) {
   window.chrome.webview.addEventListener("message", (e) => {
     const m = /^hotkey:(\d+)$/.exec(String(e.data || ""));
-    if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
+    if (m && +m[1] === 300) { if (typeof clHotkey === "function") clHotkey(); }
+    else if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
     else if (m && +m[1] === 100) lvClipNow();
     else if (m) lvPlayPad(+m[1] - 1);
   });
@@ -978,6 +981,8 @@ if (window.chrome && window.chrome.webview) {
     const vk = lvVk(e), mods = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.shiftKey ? 4 : 0);
     const clip = loadPref("lvClipKey");
     if (clip && clip.vk === vk && (clip.mods || 0) === mods) { e.preventDefault(); return lvClipNow(); }
+    const saveClip = typeof CL !== "undefined" && !CL.catching && CL.prefs.key;
+    if (saveClip && saveClip.vk && saveClip.vk === vk && (saveClip.mods || 0) === mods) { e.preventDefault(); return clHotkey(); }
     const scene = lvoKeyList().findIndex(([, k]) => k.vk === vk && (k.mods || 0) === mods);
     if (scene >= 0) { e.preventDefault(); return lvoSceneKey(200 + scene); }
     const i = lvPads().findIndex((p) => p.vk && p.vk === vk && (p.mods || 0) === mods);

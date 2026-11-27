@@ -48,6 +48,7 @@ _zoom = 1.0  # how big the page is drawn (the Size setting)
 _dark = True  # a dark title bar (the theme)
 _engines = {}  # data folder -> hidden window: the Remote desktop's screen sender (2.37.0), a call's extra screen (3.0.1)
 _args_lock = threading.Lock()
+_popup = None  # (3.4.0) the Clips page's "Clipped!" pop-up (on top of everything, even a game)
 _bubble = None  # (3.2.0) MyVault's login pop-up window (made the first time it's needed, then kept hidden)
 _close_guard = None  # (2.36.0) a function: a reason not to close right away (you're multistreaming), or ""
 
@@ -366,6 +367,32 @@ def bubble(url, data_folder, icon, show, near=None, height=None):
     return True
 
 
+def clip_popup(url, data_folder, icon, show):
+    """(3.4.0) The small "Clipped!" pop-up at the top of the screen you're playing on. Like MyVault's
+    bubble: on top of everything, no title bar, not in the taskbar, and it never takes the keyboard from
+    your game. Returns False when there's no window of our own (then the page shows its own toast)."""
+    global _popup
+    if not available():
+        return False
+    with _lock:
+        p = _popup if _popup and _popup.alive else None
+        if not p and not show:
+            return True
+        if not p:
+            p = _popup = Window(url, data_folder, icon, lambda placement: None, None, popout=True, hidden=True,
+                                bubble=True)
+            p.popup = True
+            p.thread.start()
+            fresh = True
+        else:
+            fresh = False
+    if fresh and (not p.started.wait(30) or not p.ok):
+        p.cancel()
+        return False
+    p.user32.PostMessageW(p.hwnd, WM_BUBBLE, 1 if show else 0, 0)
+    return True
+
+
 def is_bubble(hwnd):
     b = _bubble
     return bool(b and b.hwnd and int(b.hwnd) == int(hwnd))
@@ -443,6 +470,7 @@ class Window:
         self.popout, self.pop_on_top, self.pop_see = popout, on_top, max(30, min(100, int(see or 100)))
         self.placement = placement
         self.bubble, self.bubble_near, self.bubble_h = bubble, None, 230  # (3.2.0) MyVault's login pop-up
+        self.popup = False  # (3.4.0) a bubble that's the Clips page's "Clipped!" pop-up instead
         self.cancelled = False
         self.webview = None
         self.hwnd = None
@@ -563,7 +591,7 @@ class Window:
         else:
             ex, style = (0x8 if self.popout and self.pop_on_top else 0), 0x00CF0000 | 0x02000000
         self.hwnd = user32.CreateWindowExW(ex,  # WS_EX_TOPMOST
-                                           "LelonsConverterWindow", TITLE + (" login" if self.bubble else " chat" if self.popout else ""), style,
+                                           "LelonsConverterWindow", TITLE + (" clipped" if self.popup else " login" if self.bubble else " chat" if self.popout else ""), style,
                                            # WS_OVERLAPPEDWINDOW, and WS_CLIPCHILDREN so the window
                                            # doesn't paint its background over the page
                                            -0x80000000, -0x80000000, width, height,  # CW_USEDEFAULT: Windows picks the spot
@@ -835,6 +863,8 @@ class Window:
         if not show:
             user32.ShowWindow(hwnd, 0)  # SW_HIDE
             return
+        if self.popup:
+            return self._place_popup(hwnd)
         w, h = int(360 * self.scale), int(self.bubble_h * self.scale)
         near = wintypes.RECT(*(self.bubble_near or (0, 0, 1, 1)))
         monitor = user32.MonitorFromRect
@@ -853,6 +883,28 @@ class Window:
         self._fit()
         if self.webview:
             _method(self.webview, 33, wintypes.LPCWSTR)("bubble:show")  # PostWebMessageAsString: look again now
+
+    def _place_popup(self, hwnd):
+        """(3.4.0) At the top middle of the screen the window in front is on (your game), above the taskbar
+        and everything else."""
+        user32 = self.user32
+        w, h = int(300 * self.scale), int(72 * self.scale)
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+        info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+        user32.GetMonitorInfoW(user32.MonitorFromWindow(user32.GetForegroundWindow(), 2), ctypes.byref(info))  # NEAREST
+        screen = info.rcMonitor
+        x = screen.left + (screen.right - screen.left - w) // 2
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user32.SetWindowPos(hwnd, wintypes.HWND(-1), x, screen.top + int(20 * self.scale), w, h, 0x10 | 0x40)  # TOPMOST; NOACTIVATE|SHOWWINDOW
+        self._fit()
+        if self.webview:
+            _method(self.webview, 33, wintypes.LPCWSTR)("bubble:show")  # PostWebMessageAsString
 
     def _fit(self):
         if self.controller:

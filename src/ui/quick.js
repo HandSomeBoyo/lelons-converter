@@ -60,7 +60,7 @@ const QK_WORDS = {
   images: "picture photo png jpg resize crop", resolve: "davinci subtitles silence edit", sfx: "library sounds sound effects music songs",
   docs: "script write document notes pdf", boards: "trello plan todo cards", fx: "film assets vfx clips explosions",
   comments: "comment inbox reply answer youtube viewers",
-  feed: "friends activity feed today what new uploads", games: "steam record", povs: "recordings share friends", copyright: "music check song claim", titles: "title tags hashtags seo score ideas clickbait", history: "downloads recent",
+  feed: "friends activity feed today what new uploads", games: "steam record", povs: "recordings share friends", clips: "clip replay buffer obs hotkey moments highlights", copyright: "music check song claim", titles: "title tags hashtags seo score ideas clickbait", history: "downloads recent",
 };
 
 function qkPages() {

@@ -2,6 +2,10 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+  { version: "3.4.0", items: [
+    "New Clips page (Recording > Clips): pick a key, and pressing it saves the last 30 seconds or so as a clip, even in a game. A small \"Clipped!\" pop-up shows at the top of your screen.",
+    "All your clips live in one place on your PC, named after the game. Watch them, star the best ones, sort by game, or drag one straight into Resolve or Discord.",
+  ] },
   { version: "3.3.0", items: [
     "MyVault now works with Bitwarden. Connect your account and your passwords sync to your phone and browsers too. Already using MyVault? It moves everything over for you.",
     "MyVault: folders and favorites. Star the ones you use most, and sort the rest into folders like Gaming or Streaming.",
