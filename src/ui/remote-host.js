@@ -242,6 +242,12 @@ async function rhMessage(sess, data) {
     rdPost("/api/remote-screen", { screen: msg.screen }); // the hidden window starts again on that screen
   }
   if (msg.keys) rhKeys(sess, msg.keys);
+  // (3.4.1) Screen size: the sizes this screen can use, or change it for now (back at the end).
+  if (msg.res === "list") { const r = await rdPost("/api/remote-resolutions"); if (r.ok) rhSend(sess, { resList: r }); }
+  if (Array.isArray(msg.setRes) && msg.setRes.length === 2) {
+    const r = await rdPost("/api/remote-resolution", { w: Number(msg.setRes[0]), h: Number(msg.setRes[1]) });
+    rhSend(sess, r.ok ? { resList: r } : { resErr: r.error || "it didn't work" });
+  }
   if ((msg.cursor === "local" || msg.cursor === "picture") && msg.cursor !== sess.cursor) {
     sess.cursor = msg.cursor; sess.cur = "";
     const r = await rdPost("/api/remote-cursor", { hide: msg.cursor === "local" });

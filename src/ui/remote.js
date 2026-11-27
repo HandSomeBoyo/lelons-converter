@@ -19,6 +19,7 @@ const RD_ICONS = {
   full: rdIc('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   x: rdIc('<path d="M6 6l12 12M18 6 6 18"/>'),
   back: rdIc('<path d="M15 5l-7 7 7 7"/>'),
+  size: rdIc('<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>'),
   mons: rdIc('<rect x="2.5" y="5" width="11" height="8" rx="1.5"/><rect x="10.5" y="9" width="11" height="8" rx="1.5"/>'),
   remote: rdIc('<rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8.5 20h7M12 16v4"/><path d="m10 8.5 4 1.5-1.7.7-.7 1.7z" fill="currentColor"/>'),
 };
@@ -387,9 +388,18 @@ function rdCtl(c, data) {
     rdHint(true);
     rdSendView();
     rdCursorMode();
+    rdSend(c, { res: "list" });
     return;
   }
   if (typeof msg.cur === "string") { c.cur = msg.cur; rdCursorShow(); return; }
+  if (msg.resList) {
+    const open = $("rdResPop") && !$("rdResPop").hidden;
+    c.res = msg.resList; c.resBusy = false;
+    rdToolbar();
+    if (open && $("rdResPop")) { $("rdResPop").hidden = false; rdResPop(); }
+    return;
+  }
+  if (msg.resErr) { c.resBusy = false; rdResPop(); rdGameHint(`Couldn't change the size: ${msg.resErr}`); return; }
   if (msg.error === "screen") return rdEnd(`${c.dev.name} couldn't share its screen.`);
   if (Number.isInteger(msg.switching)) {
     const id = c.id, screen = msg.switching, mode = c.mode;
@@ -491,6 +501,8 @@ function rdToolbar() {
     <span class="sp"></span>
     <div class="rd-vol-wrap"><button type="button" class="rd-tb${c.muted ? "" : " on"}" id="rdMute" title="Sound">${c.muted || !c.volume ? RD_ICONS.mute : RD_ICONS.sound}</button>
       <div class="rd-vol-pop" id="rdVolPop" hidden><input type="range" id="rdVol" min="0" max="100" value="${c.volume}" title="Volume"><button type="button" class="rd-link" id="rdMuteBtn">${c.muted ? "Turn sound on" : "Mute"}</button></div></div>
+    ${c.res && c.res.list && c.res.list.length > 1 ? `<div class="rd-vol-wrap rd-res-wrap"><button type="button" class="rd-tb" id="rdResBtn" title="Screen size on ${rdEsc(c.dev.name)}">${RD_ICONS.size}${c.res.now[0]}×${c.res.now[1]}</button>
+      <div class="rd-vol-pop rd-res-pop" id="rdResPop" hidden></div></div>` : ""}
     ${c.screens > 1 ? `<button type="button" class="rd-tb" id="rdScreens">${RD_ICONS.mons}Screen ${c.screen + 1}</button>` : ""}
     <button type="button" class="rd-tb" id="rdMenuBtn">${RD_ICONS.gear}Picture &amp; keys</button>
     <button type="button" class="rd-tb${c.game ? " on" : ""}" id="rdGame" title="Game mode: full screen, your mouse stays in the game">${RD_ICONS.game}Game mode</button>
@@ -501,6 +513,7 @@ function rdToolbar() {
   $("rdGame").onclick = () => rdGame(!c.game);
   $("rdMenuBtn").onclick = () => rdMenu();
   if ($("rdScreens")) $("rdScreens").onclick = () => rdMenu();
+  if ($("rdResBtn")) $("rdResBtn").onclick = (e) => { e.stopPropagation(); const p = $("rdResPop"); p.hidden = !p.hidden; if (!p.hidden) rdResPop(); };
   $("rdMute").onclick = (e) => { e.stopPropagation(); $("rdVolPop").hidden = !$("rdVolPop").hidden; };
   $("rdMuteBtn").onclick = () => { c.muted = !c.muted; rdApplyVolume(); rdToolbar(); $("rdVolPop").hidden = false; };
   $("rdVol").oninput = (e) => {
@@ -508,6 +521,36 @@ function rdToolbar() {
     $("rdMute").innerHTML = c.volume ? RD_ICONS.sound : RD_ICONS.mute; $("rdMuteBtn").textContent = "Mute";
   };
   rdApplyVolume();
+}
+
+// (3.4.1) Screen size: a big screen (4K, ultrawide) looks tiny here. Pick a smaller size for it while
+// you're connected: everything there gets bigger, and the picture smoother (fewer pixels). Windows puts
+// its own size back when you disconnect.
+function rdResChoices(res) {
+  const [nw, nh] = res.native || res.now, ratio = nw / nh;
+  const same = res.list.filter(([w, h]) => Math.abs(w / h - ratio) < 0.03);
+  const pool = same.length >= 3 ? same : res.list;
+  const dpr = window.devicePixelRatio || 1, tw = screen.width * dpr, th = screen.height * dpr;
+  const fit = pool.find(([w, h]) => w <= tw && h <= th) || pool[pool.length - 1];
+  const list = pool.slice(0, 8);
+  if (fit && !list.some(([w, h]) => w === fit[0] && h === fit[1])) list.push(fit);
+  return { list, fit, native: [nw, nh] };
+}
+function rdResPop() {
+  const c = rd.conn, p = $("rdResPop");
+  if (!c || !p || !c.res) return;
+  const { list, fit, native } = rdResChoices(c.res);
+  const is = (a, b) => a && b && a[0] === b[0] && a[1] === b[1];
+  p.innerHTML = `<div class="rd-res-head">Screen size on ${rdEsc(c.dev.name)}<small>Smaller = bigger text and smoother</small></div>
+    ${list.map((r) => `<button type="button" class="rd-res-opt${is(r, c.res.now) ? " on" : ""}" data-res="${r[0]}x${r[1]}"><b>${r[0]} × ${r[1]}</b>${
+      is(r, native) ? "<small>Normal</small>" : is(r, fit) ? "<small>Fits this screen</small>" : ""}</button>`).join("")}
+    ${c.resBusy ? '<p class="rd-used">Changing…</p>' : ""}`;
+  p.querySelectorAll("[data-res]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [w, h] = b.dataset.res.split("x").map(Number);
+    if (is([w, h], c.res.now)) return;
+    c.resBusy = true; rdSend(c, { setRes: [w, h] }); rdResPop();
+  }));
 }
 
 // (3.0) Tell the other PC how big the picture is here, so it never sends more pixels than you can see.
@@ -761,11 +804,11 @@ function rdEnd(why, quiet) {
 }
 
 document.addEventListener("click", (e) => { // a click anywhere else closes the volume pop-up
-  const pop = $("rdVolPop");
-  if (pop && !pop.hidden && !e.target.closest(".rd-vol-wrap")) pop.hidden = true;
+  for (const pop of [$("rdVolPop"), $("rdResPop")]) if (pop && !pop.hidden && !e.target.closest(".rd-vol-wrap")) pop.hidden = true;
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && $("rdVolPop") && !$("rdVolPop").hidden) $("rdVolPop").hidden = true;
+  if (e.key === "Escape" && $("rdResPop") && !$("rdResPop").hidden) $("rdResPop").hidden = true;
+  else if (e.key === "Escape" && $("rdVolPop") && !$("rdVolPop").hidden) $("rdVolPop").hidden = true;
   else if (e.key === "Escape" && $("rdPop")) $("rdPop").remove();
   else if (e.key === "Escape" && $("rdModal") && !$("rdModal").querySelector("#rdYes")) rdModalClose();
 });

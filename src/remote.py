@@ -307,6 +307,8 @@ def end(reason=""):
     _let_go()
     _overlay_hide()
     cursor_hide(False)
+    if reason != "screen":
+        resolution_back()
     if was and _this_pc().get("lockOnEnd") and os.name == "nt":
         try:
             ctypes.windll.user32.LockWorkStation()
@@ -323,6 +325,7 @@ def stop_now():
     _let_go()
     _overlay_hide()
     cursor_hide(False)
+    resolution_back()
 
 
 def host_state():
@@ -372,10 +375,16 @@ def cursor_hide(on):
 
 
 def cursor_restore_on_start():
-    """If VaultHub was closed in the middle of a session, give Windows its arrows back."""
+    """If VaultHub was closed in the middle of a session, give Windows its arrows (and screen size) back."""
     if os.name == "nt":
         try:
             ctypes.windll.user32.SystemParametersInfoW(0x57, 0, None, 0)
+            if _this_pc().get("resChanged"):
+                ctypes.windll.user32.ChangeDisplaySettingsExW(None, None, None, 0, None)  # every screen as set in Windows
+                with _lock:
+                    data = _this_pc()
+                    data.pop("resChanged", None)
+                    _save(data)
         except OSError:
             pass
 
@@ -591,6 +600,143 @@ def monitors():
         return []
     found.sort(key=lambda m: not m[1])  # the main screen first
     return [m[0] for m in found]
+
+
+# ---- (3.4.1) the screen's resolution while you control it
+# A big screen (4K, ultrawide) looks tiny on a laptop. You can pick a smaller resolution for that screen
+# while you're connected: everything gets bigger and the picture gets smoother (fewer pixels to send).
+# Only for now: Windows puts its own resolution back when you disconnect (or when VaultHub starts again).
+
+class _DEVMODEW(ctypes.Structure):
+    _fields_ = [("dmDeviceName", ctypes.c_wchar * 32), ("dmSpecVersion", ctypes.c_ushort),
+                ("dmDriverVersion", ctypes.c_ushort), ("dmSize", ctypes.c_ushort), ("dmDriverExtra", ctypes.c_ushort),
+                ("dmFields", ctypes.c_uint32), ("dmPositionX", ctypes.c_long), ("dmPositionY", ctypes.c_long),
+                ("dmDisplayOrientation", ctypes.c_uint32), ("dmDisplayFixedOutput", ctypes.c_uint32),
+                ("dmColor", ctypes.c_short), ("dmDuplex", ctypes.c_short), ("dmYResolution", ctypes.c_short),
+                ("dmTTOption", ctypes.c_short), ("dmCollate", ctypes.c_short), ("dmFormName", ctypes.c_wchar * 32),
+                ("dmLogPixels", ctypes.c_ushort), ("dmBitsPerPel", ctypes.c_uint32), ("dmPelsWidth", ctypes.c_uint32),
+                ("dmPelsHeight", ctypes.c_uint32), ("dmDisplayFlags", ctypes.c_uint32),
+                ("dmDisplayFrequency", ctypes.c_uint32), ("dmICMMethod", ctypes.c_uint32),
+                ("dmICMIntent", ctypes.c_uint32), ("dmMediaType", ctypes.c_uint32), ("dmDitherType", ctypes.c_uint32),
+                ("dmReserved1", ctypes.c_uint32), ("dmReserved2", ctypes.c_uint32),
+                ("dmPanningWidth", ctypes.c_uint32), ("dmPanningHeight", ctypes.c_uint32)]
+
+
+_res = {"changed": set()}  # the screens (Windows' device names) we changed
+
+
+def _screen_device(screen):
+    """Windows' name for screen N (\\\\.\\DISPLAY1...), counted like monitors()."""
+    if os.name != "nt":
+        return ""
+    from ctypes import wintypes
+    found = []
+
+    class MONITORINFOEXW(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                    ("dwFlags", wintypes.DWORD), ("szDevice", ctypes.c_wchar * 32)]
+
+    proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT),
+                                   wintypes.LPARAM)
+
+    def each(handle, dc, rect, data):
+        mi = MONITORINFOEXW(cbSize=ctypes.sizeof(MONITORINFOEXW))
+        ctypes.windll.user32.GetMonitorInfoW(handle, ctypes.byref(mi))
+        found.append((mi.szDevice, bool(mi.dwFlags & 1)))
+        return True
+
+    try:
+        ctypes.windll.user32.EnumDisplayMonitors(None, None, proc_type(each), 0)
+    except OSError:
+        return ""
+    found.sort(key=lambda m: not m[1])  # the main screen first
+    return found[screen][0] if 0 <= screen < len(found) else ""
+
+
+def _mode(device, i):
+    dm = _DEVMODEW(dmSize=ctypes.sizeof(_DEVMODEW))
+    user32 = ctypes.windll.user32
+    user32.EnumDisplaySettingsW.argtypes = (ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_void_p)
+    return dm if user32.EnumDisplaySettingsW(device, i & 0xFFFFFFFF, ctypes.byref(dm)) else None
+
+
+def resolutions():
+    """For the controlling PC: the screen's sizes, biggest first, and which one is on now.
+    {"now": [w, h], "native": [w, h], "list": [[w, h], ...]}"""
+    if os.name != "nt" or not _state["session"]:
+        return {"list": []}
+    device = _screen_device(_state["session"].get("screen", 0))
+    if not device:
+        return {"list": []}
+    cur = _mode(device, -1)  # ENUM_CURRENT_SETTINGS
+    reg = _mode(device, -2)  # ENUM_REGISTRY_SETTINGS: what Windows is set to (comes back at the end)
+    if not cur:
+        return {"list": []}
+    wide = cur.dmPelsWidth >= cur.dmPelsHeight
+    sizes, i = set(), 0
+    while i < 1000:
+        dm = _mode(device, i)
+        if not dm:
+            break
+        i += 1
+        # Same way round as now, normal colors, and not tiny
+        if dm.dmBitsPerPel == 32 and min(dm.dmPelsWidth, dm.dmPelsHeight) >= 600 and (dm.dmPelsWidth >= dm.dmPelsHeight) == wide:
+            sizes.add((dm.dmPelsWidth, dm.dmPelsHeight))
+    native = reg or cur
+    return {"now": [cur.dmPelsWidth, cur.dmPelsHeight], "native": [native.dmPelsWidth, native.dmPelsHeight],
+            "list": [list(x) for x in sorted(sizes, reverse=True)]}
+
+
+def set_resolution(w, h):
+    """Change the screen being controlled to w x h for now (CDS_FULLSCREEN: not saved in Windows)."""
+    if os.name != "nt" or not _state["session"]:
+        raise Error("Not connected")
+    device = _screen_device(_state["session"].get("screen", 0))
+    best, i = None, 0
+    while device and i < 1000:
+        dm = _mode(device, i)
+        if not dm:
+            break
+        i += 1
+        if dm.dmPelsWidth == int(w) and dm.dmPelsHeight == int(h) and dm.dmBitsPerPel == 32:
+            if not best or dm.dmDisplayFrequency > best.dmDisplayFrequency:  # the smoothest refresh rate
+                best = dm
+    if not best:
+        raise Error("That screen can't use that size")
+    best.dmFields = 0x80000 | 0x100000 | 0x400000  # DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY
+    user32 = ctypes.windll.user32
+    user32.ChangeDisplaySettingsExW.argtypes = (ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+                                                ctypes.c_void_p)
+    user32.ChangeDisplaySettingsExW.restype = ctypes.c_long
+    r = user32.ChangeDisplaySettingsExW(device, ctypes.byref(best), None, 0x4, None)  # CDS_FULLSCREEN
+    if r != 0:
+        raise Error(f"Windows said no ({r})")
+    _res["changed"].add(device)
+    with _lock:
+        data = _this_pc()
+        data["resChanged"] = True  # so a crash can't leave the screen like this (see cursor_restore_on_start)
+        _save(data)
+    return resolutions()
+
+
+def resolution_back():
+    """Windows' own resolution again on every screen we changed."""
+    if os.name != "nt":
+        return
+    user32 = ctypes.windll.user32
+    user32.ChangeDisplaySettingsExW.argtypes = (ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32,
+                                                ctypes.c_void_p)
+    for device in list(_res["changed"]):
+        try:
+            user32.ChangeDisplaySettingsExW(device, None, None, 0, None)
+        except OSError:
+            pass
+        _res["changed"].discard(device)
+    if _this_pc().get("resChanged"):
+        with _lock:
+            data = _this_pc()
+            data.pop("resChanged", None)
+            _save(data)
 
 
 def _has_battery():

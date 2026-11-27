@@ -2135,6 +2135,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = {}
             elif action == "host-state":
                 result = remote.host_state()
+            elif action == "resolutions":  # (3.4.1) sizes the controlled screen can use
+                result = remote.resolutions()
+            elif action == "resolution":
+                result = remote.set_resolution(int(data.get("w") or 0), int(data.get("h") or 0))
             elif action == "cursor":  # (3.4.1) instant mouse on/off (off in Game mode: games want their own)
                 remote.cursor_hide(bool(data.get("hide")) and bool(remote.info().get("session")))
                 result = {"cur": remote.cursor_shape()}

@@ -10066,3 +10066,13 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .cl-drag:hover { background: var(--panel2, rgba(255, 255, 255, .05)); color: var(--text); }
 @keyframes cl-in { from { opacity: 0; transform: translateY(6px); } }
 @container page (max-width: 640px) { .cl-key > span { display: none; } }
+
+/* (3.4.1) Remote: screen size pop-up */
+.rd-res-pop { flex-direction: column; align-items: stretch; gap: 4px; padding: 10px; min-width: 230px; }
+.rd-res-head { font-weight: 600; font-size: 13px; padding: 2px 6px 6px; }
+.rd-res-head small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.rd-res-opt { all: unset; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+.rd-res-opt:hover { background: var(--panel2); }
+.rd-res-opt.on { background: rgba(var(--accent-rgb), .14); color: var(--accent); }
+.rd-res-opt small { color: var(--muted); font-size: 12px; }
+.rd-res-pop .rd-used { margin: 4px 6px 0; }
