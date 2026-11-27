@@ -359,6 +359,12 @@ class _Handler(BaseHTTPRequestHandler):
             if path in ("/alerts", "/alerts/"):
                 with open(PAGE, "rb") as f:
                     return self._send(f.read(), "text/html; charset=utf-8")
+            if path in ("/chat", "/chat/"):
+                with open(CHAT_PAGE, "rb") as f:
+                    return self._send(f.read(), "text/html; charset=utf-8")
+            if path == "/chat/feed":
+                m = re.search(r"(?:^|&)since=(\d+)", query)
+                return self._send(json.dumps(chat_feed(int(m.group(1)) if m else 0)).encode(), "application/json")
             if path == "/alerts/feed":
                 m = re.search(r"(?:^|&)since=(\d+)", query)
                 return self._send(json.dumps(feed(int(m.group(1)) if m else 0)).encode(), "application/json")
@@ -439,6 +445,76 @@ def start():
 def url():
     port = start()
     return f"http://127.0.0.1:{port}/alerts" if port else ""
+
+
+# ---------------------------------------------------------------- (3.3.4) your chat on stream
+
+CHAT_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "chatoverlay.html")
+CHAT_SOURCE = "VaultHub chat"
+CHAT_DEFAULTS = {"size": "m", "fade": 0, "box": True}
+_chat_seen = 0
+
+
+def chat_prefs():
+    saved = settings.load().get("lv_chatov")
+    saved = saved if isinstance(saved, dict) else {}
+    out = {k: saved.get(k, v) for k, v in CHAT_DEFAULTS.items()}
+    if out["size"] not in ("s", "m", "l"):
+        out["size"] = "m"
+    out["fade"] = out["fade"] if out["fade"] in (0, 30, 60) else 0
+    out["box"] = bool(out["box"])
+    return out
+
+
+def set_chat_prefs(data):
+    p = chat_prefs()
+    if data.get("size") in ("s", "m", "l"):
+        p["size"] = data["size"]
+    if "fade" in data:
+        try:
+            f = int(data["fade"])
+            p["fade"] = f if f in (0, 30, 60) else p["fade"]
+        except (TypeError, ValueError):
+            pass
+    if "box" in data:
+        p["box"] = bool(data["box"])
+    settings.save(lv_chatov=p)
+    return p
+
+
+def chat_feed(since):
+    global _chat_seen
+    _chat_seen = time.time()
+    import streamlive
+    return {"ok": True, **streamlive.chat_since(since), "look": chat_prefs()}
+
+
+def chat_status():
+    port = start()
+    return {"url": f"http://127.0.0.1:{port}/chat" if port else "", "look": chat_prefs(), "watching": time.time() - _chat_seen < 10}
+
+
+def add_chat_to_obs():
+    """Puts your chat in the scene OBS shows now, at the left side (move it where you like in OBS)."""
+    import obsctl
+    port = start()
+    if not port:
+        raise obsctl.Error("VaultHub couldn't open the chat page. Close other programs using ports 17771-17780.")
+    look = {"url": f"http://127.0.0.1:{port}/chat", "width": 420, "height": 640, "shutdown": False, "restart_when_active": False,
+            "css": "body { background-color: rgba(0, 0, 0, 0); margin: 0; overflow: hidden; }"}
+    scene = (obsctl.ask_once("GetCurrentProgramScene") or {}).get("currentProgramSceneName") or ""
+    if not scene:
+        raise obsctl.Error("OBS has no scene yet. Make one in OBS first.")
+    inputs = [i.get("inputName") for i in (obsctl.ask_once("GetInputList").get("inputs") or [])]
+    if CHAT_SOURCE in inputs:
+        obsctl.ask_once("SetInputSettings", {"inputName": CHAT_SOURCE, "inputSettings": look, "overlay": True})
+        items = obsctl.ask_once("GetSceneItemList", {"sceneName": scene}).get("sceneItems") or []
+        if not any(i.get("sourceName") == CHAT_SOURCE for i in items):
+            obsctl.ask_once("CreateSceneItem", {"sceneName": scene, "sourceName": CHAT_SOURCE, "sceneItemEnabled": True})
+    else:
+        obsctl.ask_once("CreateInput", {"sceneName": scene, "inputName": CHAT_SOURCE, "inputKind": "browser_source",
+                                        "inputSettings": look, "sceneItemEnabled": True})
+    return {"scene": scene}
 
 
 def status():

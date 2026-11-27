@@ -235,7 +235,22 @@ function lvDrawNumbers() {
   const t = (s.session && s.session.totals) || {};
   const now = (tw.viewers || 0) + (yt.viewers || 0);
   const box = (label, value, sub) => `<div class="lv-num"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
-  $("lvNums").innerHTML = [
+  // (3.3.4) Offline: one calm strip instead of five boxes of dashes.
+  const live = !!(s.session || tw.live || yt.live || (s.obs && s.obs.streaming));
+  $("lvNums").classList.toggle("offline", !live);
+  if (!live) {
+    const html = `<div class="lv-offline"><i class="lv-off-dot"></i><div><b>You're offline</b>
+      <small>Viewers, chat speed, followers and subs show up here when you go live.${tw.followers != null ? ` ${lvNum(tw.followers)} followers so far.` : ""}</small></div>
+      <span class="sp"></span><button type="button" class="small-button" data-pre>Pre-stream check</button></div>`;
+    if ($("lvNums").dataset.html !== html) {
+      $("lvNums").dataset.html = html;
+      $("lvNums").innerHTML = html;
+      $("lvNums").querySelector("[data-pre]").onclick = () => (typeof preOpen === "function" ? preOpen() : $("lvPreOpen")?.click());
+    }
+  } else {
+    $("lvNums").dataset.html = "";
+  }
+  if (live) $("lvNums").innerHTML = [
     box("Watching now", s.session || tw.live || yt.live ? lvNum(now) : "–", tw.live && yt.live ? `${lvNum(tw.viewers)} Twitch · ${lvNum(yt.viewers)} YouTube` : ""),
     box("Most this stream", s.session ? lvNum(t.peak) : "–", ""),
     box("Chat per minute", lvNum(s.speed || 0), s.session ? `${lvNum(t.chatters)} people chatted` : ""),
@@ -327,6 +342,16 @@ function lvDrawHealth() {
   const spark = b.length > 1 ? `<svg viewBox="0 0 120 30" class="lv-spark"><path d="${b.map((v, i) => `${i ? "L" : "M"}${(i / (b.length - 1) * 120).toFixed(1)},${(28 - v / top * 26).toFixed(1)}`).join("")}"/></svg>` : "";
   const level = (v, w, d) => (v == null ? "" : v >= d ? "bad" : v >= w ? "warn" : "");
   const cell = (label, value, cls, sub) => `<div class="lv-h ${cls || ""}"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
+  // (3.3.4) All good (or not live yet): one calm line. The boxes open by themselves when something needs you.
+  const hot = bad || warn || level(obs.droppedPct, 1, 5) || level(obs.cpu, 70, 90) || level(obs.gpu, 90, 97) || obs.reconnecting || (obs.congestion || 0) > 0.15;
+  if (!hot && !LV.healthOpen) {
+    const html = obs.streaming
+      ? `<div class="lv-hline"><span><b>${lvNum(obs.bitrate)}</b> kbps</span><span><b>${(obs.droppedPct || 0).toFixed(1)}%</b> dropped</span><span><b>${lvNum(obs.fps)}</b> FPS</span>${spark}<span class="sp"></span><button type="button" class="link" data-more>Details</button></div>`
+      : `<div class="lv-hline"><span class="lv-muted">OBS is ready. Upload speed and dropped frames show here when you go live.</span><span class="sp"></span><button type="button" class="link" data-more>Details</button></div>`;
+    $("lvHealth").innerHTML = html;
+    $("lvHealth").querySelector("[data-more]").onclick = () => { LV.healthOpen = true; lvDrawHealth(); };
+    return;
+  }
   $("lvHealth").innerHTML = `
     <div class="lv-hgrid">
       ${cell("Upload speed", obs.streaming ? `${lvNum(obs.bitrate)}<em> kbps</em>` : "–", "", spark)}
@@ -336,7 +361,10 @@ function lvDrawHealth() {
       ${cell("Graphics card", obs.gpu == null ? "–" : obs.gpu + "%", level(obs.gpu, 90, 97), obs.gpuTemp ? obs.gpuTemp + "°C" : obs.gpu == null ? "NVIDIA only" : "")}
       ${cell("Network", !obs.streaming ? "–" : obs.reconnecting ? "Lost" : (obs.congestion || 0) > 0.5 ? "Busy" : (obs.congestion || 0) > 0.15 ? "A bit busy" : "Steady", obs.reconnecting || (obs.congestion || 0) > 0.5 ? "bad" : (obs.congestion || 0) > 0.15 ? "warn" : "", "")}
     </div>
-    ${(obs.warnings || []).filter((w) => w.key !== "norec").map((w) => `<div class="lv-warn ${w.level}">${lvEsc(w.text)}</div>`).join("")}`;
+    ${(obs.warnings || []).filter((w) => w.key !== "norec").map((w) => `<div class="lv-warn ${w.level}">${lvEsc(w.text)}</div>`).join("")}
+    ${LV.healthOpen && !hot ? `<div class="lv-row"><span class="sp"></span><button type="button" class="link" data-less>Less</button></div>` : ""}`;
+  const less = $("lvHealth").querySelector("[data-less]");
+  if (less) less.onclick = () => { LV.healthOpen = false; lvDrawHealth(); };
 }
 
 function lvRecordingHtml(obs) {

@@ -1040,6 +1040,19 @@ class Handler(BaseHTTPRequestHandler):
                     streamoverlay.test(str(data.get("kind") or ""))
                 except ValueError as e:
                     return self.send_json({"ok": False, "error": str(e)})
+            elif action == "chat-ov":  # (3.3.4) your chat as a source in OBS
+                import streamoverlay
+                return self.send_json({"ok": True, "chat": streamoverlay.chat_status()})
+            elif action == "chat-ov-set":
+                import streamoverlay
+                streamoverlay.set_chat_prefs(data)
+                return self.send_json({"ok": True, "chat": streamoverlay.chat_status()})
+            elif action == "chat-ov-obs":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": streamoverlay.add_chat_to_obs()})
+                except obsctl.Error as e:
+                    return self.send_json({"ok": False, "error": str(e)})
             elif action == "ov-obs":
                 import streamoverlay
                 try:

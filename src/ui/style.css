@@ -9282,6 +9282,9 @@ body.bd-dragging .bd-card:hover { transform: none; }
 .lva-row .words small { color: var(--muted); font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lva-row.off .lva-pic, .lva-row.off .words { opacity: .5; }
 .lva-try { width: 30px; height: 30px; flex: none; }
+.lva-obs { all: unset; cursor: pointer; flex: none; white-space: nowrap; font: 600 12px var(--head); padding: 6px 10px; border-radius: 8px; background: var(--panel2); color: var(--muted); }
+.lva-obs:hover { color: var(--text); }
+.lva-obs.bad { color: var(--red); }
 .lva-try svg { width: 14px; height: 14px; }
 .lva-edit { flex: none; }
 .lva-edit-box { padding: 4px 12px 12px; display: grid; gap: 12px; animation: rise-in .25s var(--ease-out) both; }
@@ -9947,3 +9950,19 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
   .qk-hl.slide, .qk-item kbd { transition: none; }
   .quick-list.fresh .qk-group, .quick-list.fresh .qk-item, .quick-list.fresh .qk-hl, .qk-empty { animation: none; }
 }
+
+/* (3.3.4) Stream health in one calm line when all is good */
+.lv-hline { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); min-height: 32px; }
+.lv-hline b { color: var(--text); font: 650 15px var(--head); }
+.lv-hline .lv-spark { width: 90px; height: 22px; }
+.lv-hline .sp { flex: 1; }
+.lv-nums.offline { display: block; }
+.lv-offline { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: var(--r); background: var(--panel); }
+.lv-offline b { display: block; font: 650 15px var(--head); }
+.lv-offline small { color: var(--muted); font-size: 13px; }
+.lv-offline .sp { flex: 1; }
+.lv-off-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; opacity: .6; }
+/* (3.3.4) Chat on your stream (Alerts page) */
+.lva-chat-prev { height: 190px; border-radius: 10px; overflow: hidden; margin: 10px 0 6px; position: relative;
+  background: linear-gradient(160deg, #2b4d6e, #1d3a2a 60%, #3c2f1c); }
+.lva-chat-prev iframe { position: absolute; left: 0; bottom: 0; width: 420px; height: 640px; border: 0; transform: scale(.62); transform-origin: left bottom; color-scheme: normal; pointer-events: none; }
