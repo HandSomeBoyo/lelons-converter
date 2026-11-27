@@ -94,10 +94,10 @@ function lvaBuild(box, a) {
       <div class="ad-opt"><span>Switch OBS to BRB during ads<small>${scenes.length ? `<select id="lvaScene"><option value="">A scene called BRB</option>${scenes.map((s) => `<option ${s === p.brbScene ? "selected" : ""}>${lvEsc(s)}</option>`).join("")}</select>` : `Uses ${lvEsc(brbName)}, back to your scene after. <button type="button" class="link" data-ad="scenes">Pick scene</button>`}</small></span>${lvmSwitch(p.brb, 'data-pref="brb"')}</div>
       <div class="ad-opt"><span>Beep for me 1 minute before<small>Only you hear it, not your stream</small></span>${lvmSwitch(p.beep, 'data-pref="beep"')}</div>
     </div>`;
-  box.querySelectorAll("[data-pref]").forEach((b) => { b.onclick = () => lvaSet({ [b.dataset.pref]: !b.classList.contains("on") }); });
+  box.querySelectorAll("[data-pref]").forEach((b) => { b.onclick = () => lvadSet({ [b.dataset.pref]: !b.classList.contains("on") }); });
   box.querySelectorAll("[data-ad]").forEach((b) => { b.onclick = () => lvaDo(b.dataset.ad); });
   const sel = $("lvaScene");
-  if (sel) sel.onchange = () => lvaSet({ brbScene: sel.value });
+  if (sel) sel.onchange = () => lvadSet({ brbScene: sel.value });
   const len = $("lvaLen");
   if (len) len.onclick = (e) => e.stopPropagation();
 }
@@ -126,7 +126,7 @@ function lvaTick() {
   }
 }
 
-async function lvaSet(change) {
+async function lvadSet(change) {
   const res = await api("/api/live-ads-set", { prefs: change }).catch(() => null);
   if (!res || !res.ok) return lvToast({ emoji: "⚠️", title: "Couldn't save", text: (res && res.error) || "Try again." });
   if (LV.state && LV.state.ads) LV.state.ads.prefs = res.prefs;
@@ -136,7 +136,7 @@ async function lvaSet(change) {
 async function lvaDo(what) {
   if (what === "setup") return lvOpenSetup();
   if (what === "edit") { LVA.editing = true; lvDrawAds(); const t = $("lvaText"); if (t) { t.focus(); t.select(); } return; }
-  if (what === "save") { LVA.editing = false; return lvaSet({ chatText: $("lvaText").value.trim() || "Ad break in 1 minute!" }); }
+  if (what === "save") { LVA.editing = false; return lvadSet({ chatText: $("lvaText").value.trim() || "Ad break in 1 minute!" }); }
   if (what === "scenes") {
     const res = await api("/api/live-ads-scenes", {}).catch(() => null);
     LVA.scenes = (res && res.scenes) || [];
@@ -144,7 +144,7 @@ async function lvaDo(what) {
     return lvDrawAds();
   }
   const body = what === "run" ? { length: +$("lvaLen").value } : {};
-  if (what === "run") lvaSet({ length: body.length });
+  if (what === "run") lvadSet({ length: body.length });
   const res = await api("/api/live-ads-" + what, body).catch(() => null);
   if (!res || !res.ok) return lvToast({ emoji: "⚠️", title: what === "run" ? "Couldn't run the ad" : what === "snooze" ? "Couldn't snooze" : "Couldn't switch back", text: (res && res.error) || "Try again." });
   if (LV.state) LV.state.ads = res.ads;

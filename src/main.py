@@ -51,7 +51,10 @@ import editprojects  # noqa: E402
 import projectsync  # noqa: E402
 import games  # noqa: E402
 import myvault  # noqa: E402
+import atexit  # noqa: E402
+atexit.register(lambda: myvault.at_exit())
 import povs  # noqa: E402
+import replays  # noqa: E402
 import remote  # noqa: E402
 import project  # noqa: E402
 import resolvetools  # noqa: E402
@@ -390,6 +393,8 @@ def drag_path(data):
         return images.was_made(data.get("path")) and data["path"]
     if kind == "clip":
         return clip_maker.path(data.get("key"))
+    if kind == "replay":  # (3.4.0) a clip on the Clips page
+        return replays.path_of(str(data.get("id") or ""))
     if kind == "sound":
         return sfx.library.drag_copy(str(data.get("url") or ""), data.get("name"), dragged=True)
     return None
@@ -743,6 +748,15 @@ class Handler(BaseHTTPRequestHandler):
             kind = ("video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm" if ext in (".webm", ".mkv")
                     else "audio/mp4" if ext == ".m4a" else None)
             return self.send_media(path, kind)
+        if self.path.startswith("/clip-video/"):  # (3.4.0) a clip on the Clips page, played right from its folder
+            path = replays.path_of(self.path[len("/clip-video/"):].split("?")[0])
+            if not path:
+                return self.send_error(404)
+            ext = os.path.splitext(path)[1].lower()
+            return self.send_media(path, "video/mp4" if ext in (".mp4", ".m4v", ".mov") else "video/webm")
+        if self.path.startswith("/clip-thumb/"):
+            path = replays.thumb(self.path[len("/clip-thumb/"):].split("?")[0])
+            return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
         if self.path.startswith("/board-bg/"):  # a board's own background picture
             path = boards.background_path(self.path[len("/board-bg/"):])
             return self.send_file(path) if path and os.path.isfile(path) else self.send_error(404)
@@ -1037,6 +1051,19 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     streamoverlay.test(str(data.get("kind") or ""))
                 except ValueError as e:
+                    return self.send_json({"ok": False, "error": str(e)})
+            elif action == "chat-ov":  # (3.4.0) your chat as a source in OBS
+                import streamoverlay
+                return self.send_json({"ok": True, "chat": streamoverlay.chat_status()})
+            elif action == "chat-ov-set":
+                import streamoverlay
+                streamoverlay.set_chat_prefs(data)
+                return self.send_json({"ok": True, "chat": streamoverlay.chat_status()})
+            elif action == "chat-ov-obs":
+                import streamoverlay
+                try:
+                    return self.send_json({"ok": True, "obs": streamoverlay.add_chat_to_obs()})
+                except obsctl.Error as e:
                     return self.send_json({"ok": False, "error": str(e)})
             elif action == "ov-obs":
                 import streamoverlay
@@ -1729,6 +1756,58 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Something about that wasn't right. Try again."})
         self.send_json({"ok": True, **result})
 
+    def handle_clips(self, action, data):
+        """(3.4.0) The Clips page (ui/clips.js) and its "Clipped!" pop-up (ui/clip-popup.js), see replays.py."""
+        cid = str(data.get("id") or "")
+        try:
+            if action == "list":
+                result = {"clips": replays.clips(), "prefs": replays.prefs()}
+            elif action == "obs":
+                result = replays.obs_state()
+            elif action == "turn-on":
+                result = replays.turn_on()
+            elif action == "now":  # the key (or the button): saving takes a moment, the pop-up shows how it went
+                threading.Thread(target=replays.clip_now, daemon=True).start()
+                result = {}
+            elif action == "last":
+                accent = state.accent
+                result = {"last": {**replays.last(), "accent": accent if accent.startswith("#") else CLIP_ACCENTS.get(accent, "#ffcf3f")}}
+            elif action == "popup-hide":
+                appwindow.clip_popup(None, None, None, False)
+                result = {}
+            elif action == "prefs":
+                if "key" in data:  # (the key itself is one of the window's hotkeys, sent by the page)
+                    k = data.get("key") or {}
+                    settings.save(clips_key={"vk": int(k.get("vk") or 0), "mods": int(k.get("mods") or 0)})
+                result = {"prefs": replays.set_prefs(data)}
+            elif action == "pick-folder":
+                picked = pick_folder(replays.folder(), "Where should your clips go?")
+                result = {"prefs": replays.set_prefs({"folder": picked}) if picked else replays.prefs()}
+            elif action == "open-folder":
+                where = replays.folder()
+                os.makedirs(where, exist_ok=True)
+                open_folder(where)
+                result = {}
+            elif action == "show":
+                path = replays.path_of(cid)
+                if path:
+                    show_in_folder(path)
+                result = {}
+            elif action == "rename":
+                replays.rename(cid, data.get("name"))
+                result = {}
+            elif action == "fav":
+                replays.set_fav(cid, data.get("on"))
+                result = {}
+            elif action == "delete":
+                replays.delete(cid)
+                result = {}
+            else:
+                return self.send_error(404)
+        except (replays.Error, OSError, ValueError) as e:
+            return self.send_json({"ok": False, "error": str(e)})
+        self.send_json({"ok": True, **result})
+
     def handle_povs(self, action, data):
         """The POVs tab. Every answer is {"ok": true, ...} or {"ok": false, "error": "..."}."""
         p = povs.povs
@@ -1863,6 +1942,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if action == "state":
                 mv.check_timeout()
+                mv.sync_if_old()
                 result = mv.state()
             elif action == "setup":
                 result = mv.setup(data.get("pin"))
@@ -1875,7 +1955,7 @@ class Handler(BaseHTTPRequestHandler):
                 mv.touch()
                 result = {}
             elif action == "items":
-                result = {"items": mv.items(), "codes": mv.codes()}
+                result = {"items": mv.items(), "codes": mv.codes(), "folders": mv.folders(), "rev": mv._s["rev"]}
             elif action == "codes":
                 result = {"codes": mv.codes()}
             elif action == "get":
@@ -1934,12 +2014,53 @@ class Handler(BaseHTTPRequestHandler):
                 result = mv.camera_open()
             elif action == "camera-photo":
                 result = mv.camera_photo()
+            # (3.3.0) Bitwarden, folders, favorites, moving the old MyVault over
+            elif action == "bw-connect":
+                result = mv.connect(data.get("email"), data.get("password"), str(data.get("server") or "us"), data.get("custom"))
+            elif action == "bw-more":
+                result = mv.connect_more(str(data.get("what") or ""), data.get("code"), data.get("method"),
+                                         data.get("clientId"), data.get("clientSecret"))
+            elif action == "bw-job":
+                result = mv.job()
+            elif action == "bw-cancel":
+                result = mv.connect_cancel()
+            elif action == "bw-unlock":
+                result = mv.unlock_master(data.get("password"))
+            elif action == "bw-pin-unlock":
+                result = mv.unlock_pin(data.get("pin"))
+            elif action == "bw-pin":
+                result = mv.pin_off() if data.get("off") else mv.pin_set(data.get("pin"))
+            elif action == "bw-sync":
+                result = mv.sync()
+            elif action == "bw-signout":
+                result = mv.sign_out()
+            elif action == "move-preview":
+                result = mv.move_preview(data.get("pin"))
+            elif action == "old-delete":
+                result = mv.old_delete()
+            elif action == "move":
+                result = mv.move_to_bw(data.get("pin"))
+            elif action == "folder-save":
+                result = {"folder": mv.folder_save(str(data.get("id") or ""), data.get("name"))}
+            elif action == "folder-delete":
+                mv.folder_delete(str(data.get("id") or ""))
+                result = {}
+            elif action == "fav":
+                result = {"item": mv.set_fav(str(data.get("id") or ""), data.get("on"))}
+            elif action == "set-folder":
+                result = {"item": mv.set_folder(str(data.get("id") or ""), str(data.get("folder") or ""))}
+            elif action == "open-link":  # Bitwarden's sign-up and API key pages (only those)
+                url = str(data.get("url") or "")
+                if re.fullmatch(r"https://(vault\.bitwarden\.(com|eu)|bitwarden\.com)/[\w#/?=&.-]*", url) or (
+                        url.startswith(str(settings.load().get("bw_server") or "~") + "/#/")):
+                    webbrowser.open(url)
+                result = {}
             elif action == "open-app":  # the pop-up's "Open MyVault"
                 show_window()
                 result = {}
             else:
                 return self.send_error(404)
-        except myvault.Error as e:
+        except (myvault.Error, myvault.bitwarden.Error) as e:
             return self.send_json({"ok": False, "error": str(e)})
         except OSError:
             return self.send_json({"ok": False, "error": "Couldn't do that. Try again."})
@@ -2558,6 +2679,8 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_myvault(self.path[len("/api/mv-"):], data)
         elif self.path.startswith("/api/pov-"):
             self.handle_povs(self.path[len("/api/pov-"):], data)
+        elif self.path.startswith("/api/clips-"):
+            self.handle_clips(self.path[len("/api/clips-"):], data)
         elif self.path == "/api/cancel":
             queue.cancel(data.get("id"))
             self.send_json({"ok": True})
@@ -2888,6 +3011,18 @@ def show_window():
         pass
 
 
+CLIP_ACCENTS = {"yellow": "#ffcf3f", "orange": "#ff9a4d", "red": "#ff6b5e", "pink": "#ff7ab8", "purple": "#b495ff",
+                "blue": "#62adff", "teal": "#45dccb", "green": "#8fdc6a"}  # (the same as ui/theme.js)
+
+
+def start_clip_popup(port):
+    """(3.4.0) The Clips page: its "Clipped!" pop-up window, and keeping OBS's replay buffer on."""
+    url = f"http://127.0.0.1:{port}/clip-popup.html"
+    folder = os.path.join(settings.DATA_DIR, "webview")
+    replays.popup = lambda show: appwindow.clip_popup(url, folder, WINDOW_ICON, show)
+    replays.watch_start()
+
+
 def start_myvault_watch(port):
     """(3.2.0) MyVault's login pop-up: watches for login windows (see myvault.watch_*)."""
     url = f"http://127.0.0.1:{port}/myvault-bubble.html"
@@ -3047,6 +3182,7 @@ def main():
     appwindow.set_close_guard(lambda: "multistream" if multistream.live() else "")
     open_window(f"http://127.0.0.1:{server.server_port}/?t={TOKEN}")
     start_myvault_watch(server.server_port)
+    start_clip_popup(server.server_port)
     sfx.presence.start()
     home.on_update = sfx.library.log_channel
     state.set(last_ping=time.time())  # the window has 3 minutes to start checking in

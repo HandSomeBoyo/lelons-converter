@@ -128,7 +128,7 @@ function lvLayoutEdit(on) {
   if (on) $("lvCbar").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-function lvToolButton(icon, title, onclick, cls = "") {
+function lvlToolButton(icon, title, onclick, cls = "") {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "lv-tool " + cls;
@@ -149,15 +149,15 @@ function lvDrawLayoutTools(l) {
       el.prepend(tools);
     }
     const w = lvWidth(l, c.id), i = LV_WIDTHS.indexOf(w);
-    const grip = lvToolButton(LVL_ICONS.grip, "Drag to move", null, "grip");
+    const grip = lvlToolButton(LVL_ICONS.grip, "Drag to move", null, "grip");
     grip.addEventListener("pointerdown", (e) => lvDragStart(e, el));
     const name = document.createElement("span");
     name.className = "lv-tool-name";
     name.textContent = c.name;
     const parts = [grip, name, document.createElement("i")];
     parts[2].className = "sp";
-    const less = lvToolButton(LVL_ICONS.less, "Narrower", () => lvLayoutChange((x) => { x.w[c.id] = LV_WIDTHS[Math.max(0, i - 1)]; }));
-    const more = lvToolButton(LVL_ICONS.more, "Wider", () => lvLayoutChange((x) => { x.w[c.id] = LV_WIDTHS[Math.min(LV_WIDTHS.length - 1, i + 1)]; }));
+    const less = lvlToolButton(LVL_ICONS.less, "Narrower", () => lvLayoutChange((x) => { x.w[c.id] = LV_WIDTHS[Math.max(0, i - 1)]; }));
+    const more = lvlToolButton(LVL_ICONS.more, "Wider", () => lvLayoutChange((x) => { x.w[c.id] = LV_WIDTHS[Math.min(LV_WIDTHS.length - 1, i + 1)]; }));
     less.disabled = i <= 0;
     more.disabled = i >= LV_WIDTHS.length - 1;
     const size = document.createElement("span");
@@ -166,10 +166,10 @@ function lvDrawLayoutTools(l) {
     parts.push(less, size, more);
     if (c.id === "chat") {
       const keys = Object.keys(LV_CHAT_HEIGHTS);
-      parts.push(lvToolButton(LVL_ICONS.height, `Height: ${LV_CHAT_HEIGHTS[l.chatH]} (click to change)`,
+      parts.push(lvlToolButton(LVL_ICONS.height, `Height: ${LV_CHAT_HEIGHTS[l.chatH]} (click to change)`,
         () => lvLayoutChange((x) => { x.chatH = keys[(keys.indexOf(x.chatH) + 1) % keys.length]; }), "tall"));
     }
-    parts.push(lvToolButton(LVL_ICONS.x, "Take it off", () => lvLayoutChange((x) => { x.order = x.order.filter((id) => id !== c.id); x.off.push(c.id); }), "x"));
+    parts.push(lvlToolButton(LVL_ICONS.x, "Take it off", () => lvLayoutChange((x) => { x.order = x.order.filter((id) => id !== c.id); x.off.push(c.id); }), "x"));
     tools.replaceChildren(...parts);
   }
   // The tray: cards you took off, to add back.

@@ -299,9 +299,20 @@ def picture(width=640):
 def ask_once(kind, data=None):
     """One request to OBS, also when the console's connection isn't open (multistreaming, the ad timer).
     Uses the open connection when there is one, or opens one just for this."""
+    conn, own = connect_once()
+    try:
+        return conn.ask(kind, data)
+    finally:
+        if own:
+            conn.close()
+
+
+def connect_once():
+    """(3.4.0) (connection, opened just now): the console's open connection, or a new one that the caller
+    closes when it's done (a few requests in a row, like saving a clip)."""
     conn = _conn
     if conn and conn.alive:
-        return conn.ask(kind, data)
+        return conn, False
     s = settings.load()
     if not s.get("lv_obs_on", True):
         raise Error("OBS is turned off in the Live console's Set up.")
@@ -311,10 +322,7 @@ def ask_once(kind, data=None):
         raise Error("OBS isn't open, or its WebSocket server is off.")
     reader = threading.Thread(target=conn.read_forever, daemon=True)
     reader.start()
-    try:
-        return conn.ask(kind, data)
-    finally:
-        conn.close()
+    return conn, True
 
 
 # ---------------------------------------------------------------- one-click mic sound (2.43.0)

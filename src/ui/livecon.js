@@ -235,7 +235,22 @@ function lvDrawNumbers() {
   const t = (s.session && s.session.totals) || {};
   const now = (tw.viewers || 0) + (yt.viewers || 0);
   const box = (label, value, sub) => `<div class="lv-num"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
-  $("lvNums").innerHTML = [
+  // (3.4.0) Offline: one calm strip instead of five boxes of dashes.
+  const live = !!(s.session || tw.live || yt.live || (s.obs && s.obs.streaming));
+  $("lvNums").classList.toggle("offline", !live);
+  if (!live) {
+    const html = `<div class="lv-offline"><i class="lv-off-dot"></i><div><b>You're offline</b>
+      <small>Viewers, chat speed, followers and subs show up here when you go live.${tw.followers != null ? ` ${lvNum(tw.followers)} followers so far.` : ""}</small></div>
+      <span class="sp"></span><button type="button" class="small-button" data-pre>Pre-stream check</button></div>`;
+    if ($("lvNums").dataset.html !== html) {
+      $("lvNums").dataset.html = html;
+      $("lvNums").innerHTML = html;
+      $("lvNums").querySelector("[data-pre]").onclick = () => (typeof preOpen === "function" ? preOpen() : $("lvPreOpen")?.click());
+    }
+  } else {
+    $("lvNums").dataset.html = "";
+  }
+  if (live) $("lvNums").innerHTML = [
     box("Watching now", s.session || tw.live || yt.live ? lvNum(now) : "–", tw.live && yt.live ? `${lvNum(tw.viewers)} Twitch · ${lvNum(yt.viewers)} YouTube` : ""),
     box("Most this stream", s.session ? lvNum(t.peak) : "–", ""),
     box("Chat per minute", lvNum(s.speed || 0), s.session ? `${lvNum(t.chatters)} people chatted` : ""),
@@ -327,6 +342,16 @@ function lvDrawHealth() {
   const spark = b.length > 1 ? `<svg viewBox="0 0 120 30" class="lv-spark"><path d="${b.map((v, i) => `${i ? "L" : "M"}${(i / (b.length - 1) * 120).toFixed(1)},${(28 - v / top * 26).toFixed(1)}`).join("")}"/></svg>` : "";
   const level = (v, w, d) => (v == null ? "" : v >= d ? "bad" : v >= w ? "warn" : "");
   const cell = (label, value, cls, sub) => `<div class="lv-h ${cls || ""}"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
+  // (3.4.0) All good (or not live yet): one calm line. The boxes open by themselves when something needs you.
+  const hot = bad || warn || level(obs.droppedPct, 1, 5) || level(obs.cpu, 70, 90) || level(obs.gpu, 90, 97) || obs.reconnecting || (obs.congestion || 0) > 0.15;
+  if (!hot && !LV.healthOpen) {
+    const html = obs.streaming
+      ? `<div class="lv-hline"><span><b>${lvNum(obs.bitrate)}</b> kbps</span><span><b>${(obs.droppedPct || 0).toFixed(1)}%</b> dropped</span><span><b>${lvNum(obs.fps)}</b> FPS</span>${spark}<span class="sp"></span><button type="button" class="link" data-more>Details</button></div>`
+      : `<div class="lv-hline"><span class="lv-muted">OBS is ready. Upload speed and dropped frames show here when you go live.</span><span class="sp"></span><button type="button" class="link" data-more>Details</button></div>`;
+    $("lvHealth").innerHTML = html;
+    $("lvHealth").querySelector("[data-more]").onclick = () => { LV.healthOpen = true; lvDrawHealth(); };
+    return;
+  }
   $("lvHealth").innerHTML = `
     <div class="lv-hgrid">
       ${cell("Upload speed", obs.streaming ? `${lvNum(obs.bitrate)}<em> kbps</em>` : "–", "", spark)}
@@ -336,7 +361,10 @@ function lvDrawHealth() {
       ${cell("Graphics card", obs.gpu == null ? "–" : obs.gpu + "%", level(obs.gpu, 90, 97), obs.gpuTemp ? obs.gpuTemp + "°C" : obs.gpu == null ? "NVIDIA only" : "")}
       ${cell("Network", !obs.streaming ? "–" : obs.reconnecting ? "Lost" : (obs.congestion || 0) > 0.5 ? "Busy" : (obs.congestion || 0) > 0.15 ? "A bit busy" : "Steady", obs.reconnecting || (obs.congestion || 0) > 0.5 ? "bad" : (obs.congestion || 0) > 0.15 ? "warn" : "", "")}
     </div>
-    ${(obs.warnings || []).filter((w) => w.key !== "norec").map((w) => `<div class="lv-warn ${w.level}">${lvEsc(w.text)}</div>`).join("")}`;
+    ${(obs.warnings || []).filter((w) => w.key !== "norec").map((w) => `<div class="lv-warn ${w.level}">${lvEsc(w.text)}</div>`).join("")}
+    ${LV.healthOpen && !hot ? `<div class="lv-row"><span class="sp"></span><button type="button" class="link" data-less>Less</button></div>` : ""}`;
+  const less = $("lvHealth").querySelector("[data-less]");
+  if (less) less.onclick = () => { LV.healthOpen = false; lvDrawHealth(); };
 }
 
 function lvRecordingHtml(obs) {
@@ -749,11 +777,23 @@ function lvAlertFor(items) {
       text = i.text;
     }
     if (!rule) continue;
+    // (3.4.0) Chat says your name a lot on a busy stream. One ding every 8 seconds at most, and no card
+    // when you can already see the chat on the Console (the line is highlighted there).
+    if (i.type === "msg") {
+      if (Date.now() - (LV.chatDingAt || 0) < 8000) continue;
+      LV.chatDingAt = Date.now();
+      if (lvChatOnScreen()) { n++; lvSound(rule.sound, a.volume); continue; }
+    }
     n++;
     // (3.0) An alert on your stream plays its own sound there (through OBS): VaultHub only shows its card then.
     if (!(i.type === "event" && typeof lvaOnStream === "function" && lvaOnStream(i.kind))) lvSound(rule.sound, a.volume);
     lvToast({ title, text, p: i.p, emoji: i.type === "event" ? LV_EVENT_EMOJI[i.kind] : i.first ? "👋" : "🔔" });
   }
+}
+
+function lvChatOnScreen() {
+  const chat = document.querySelector('#lvGrid > [data-c="chat"]');
+  return !document.hidden && !!(chat && !chat.hidden && $("liveTab") && !$("liveTab").hidden && chat.getClientRects().length);
 }
 
 function lvToast(t) {
@@ -801,6 +841,8 @@ function lvSendHotkeys() {
   const clip = loadPref("lvClipKey");
   if (clip && clip.vk) keys.push({ id: 100, mods: clip.mods || 0, vk: clip.vk });  // (the Clip key, lvtwitch.js)
   if (typeof lvoKeyList === "function") lvoKeyList().forEach(([, k], n) => keys.push({ id: 200 + n, mods: k.mods || 0, vk: k.vk }));  // (OBS scenes, lvobs.js)
+  const saveClip = typeof CL !== "undefined" && CL.prefs.key;
+  if (saveClip && saveClip.vk) keys.push({ id: 300, mods: saveClip.mods || 0, vk: saveClip.vk });  // (3.4.0) the Clips page's key, clips.js
   api("/api/live-hotkeys", { keys }).then((res) => { LV.taken = new Set((res && res.taken) || []); if (!$("lvboardTab").hidden) lvDrawBoard(); }).catch(() => {});
 }
 function lvPlayPad(i) {
@@ -967,7 +1009,8 @@ function lvVk(e) {
 if (window.chrome && window.chrome.webview) {
   window.chrome.webview.addEventListener("message", (e) => {
     const m = /^hotkey:(\d+)$/.exec(String(e.data || ""));
-    if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
+    if (m && +m[1] === 300) { if (typeof clHotkey === "function") clHotkey(); }
+    else if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
     else if (m && +m[1] === 100) lvClipNow();
     else if (m) lvPlayPad(+m[1] - 1);
   });
@@ -978,6 +1021,8 @@ if (window.chrome && window.chrome.webview) {
     const vk = lvVk(e), mods = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.shiftKey ? 4 : 0);
     const clip = loadPref("lvClipKey");
     if (clip && clip.vk === vk && (clip.mods || 0) === mods) { e.preventDefault(); return lvClipNow(); }
+    const saveClip = typeof CL !== "undefined" && !CL.catching && CL.prefs.key;
+    if (saveClip && saveClip.vk && saveClip.vk === vk && (saveClip.mods || 0) === mods) { e.preventDefault(); return clHotkey(); }
     const scene = lvoKeyList().findIndex(([, k]) => k.vk === vk && (k.mods || 0) === mods);
     if (scene >= 0) { e.preventDefault(); return lvoSceneKey(200 + scene); }
     const i = lvPads().findIndex((p) => p.vk && p.vk === vk && (p.mods || 0) === mods);

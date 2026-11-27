@@ -2,6 +2,39 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
+<<<<<<< HEAD
+=======
+  { version: "3.4.0", items: [
+    "New Clips page (Recording > Clips): pick a key, and pressing it saves the last 30 seconds or so as a clip, even in a game. A small \"Clipped!\" pop-up shows at the top of your screen.",
+    "All your clips live in one place on your PC, named after the game. Watch them, star the best ones, sort by game, or drag one straight into Resolve or Discord.",
+    "Live: put your chat on stream. Alerts page > Chat on your stream > Add to OBS.",
+    "Live: smoother while you stream (lighter on OBS, fewer pop-ups when chat says your name), and a Test in OBS button on every alert.",
+    "Live: Stream health is one calm line when all is good, and the Console is simpler when you're offline.",
+  ] },
+  { version: "3.3.3", items: [
+    "Live: fixed your Twitch title being stuck on \"Loading your title...\" on the Console.",
+    "Live: the ad timer settings save properly again, and the Answer, Timeout and Ban buttons in chat look right again.",
+    "Fixed the recent list on Home and the dates in your conversion history.",
+  ] },
+  { version: "3.3.2", items: [
+    "MyVault: fixed \"Couldn't find Bitwarden's tool\" when connecting. VaultHub now finds Bitwarden's newest tool a more reliable way.",
+    "MyVault is Bitwarden only now: it opens on Connect your Bitwarden, and an old MyVault on the PC gets moved over (or deleted if you forgot its PIN).",
+  ] },
+  { version: "3.3.1", items: [
+    "Search (Ctrl+K) got a cleaner look. It starts with the pages you used last, and the highlight slides smoothly between rows.",
+    "Live: alert sounds now play for you too, not just on stream. Add to OBS turns this on, and there's a \"Can't hear the sounds? Fix it\" link if you added alerts before.",
+  ] },
+  { version: "3.3.0", items: [
+    "MyVault now works with Bitwarden. Connect your account and your passwords sync to your phone and browsers too. Already using MyVault? It moves everything over for you.",
+    "MyVault: folders and favorites. Star the ones you use most, and sort the rest into folders like Gaming or Streaming.",
+    "MyVault: checks if any of your passwords showed up in a data leak, without sending your passwords anywhere.",
+    "MyVault locks itself when you go live, and a quick PIN can open it again while VaultHub stays open.",
+  ] },
+  { version: "3.2.6", items: [
+    "Bug sweep: we clicked through every page and button. The old gray Windows pop-up boxes are gone. Errors now show as a small message at the bottom instead.",
+    "Chat: leaving a group asks with a second click on the button, like deleting does elsewhere.",
+  ] },
+>>>>>>> origin/main
   { version: "3.2.5", items: [
     "MyVault: Fill now types your login into websites. Before, Chrome and Edge sent it to their menu button instead.",
     "Remote: you can now set a password on a PC (letters are fine too). Type it to connect from anywhere, no one has to be home to press Allow.",

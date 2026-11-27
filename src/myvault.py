@@ -35,6 +35,7 @@ import time
 import urllib.parse
 import urllib.request
 
+import bitwarden
 import settings
 
 IS_WINDOWS = os.name == "nt"
@@ -45,7 +46,10 @@ MAX_ITEMS = 2000
 KINDS = ("account", "codes", "note")
 
 _lock = threading.RLock()
-_s = {"key": None, "items": None, "salt": None, "kdf": None, "wrap": None, "last": 0.0}
+_s = {"key": None, "items": None, "salt": None, "kdf": None, "wrap": None, "last": 0.0, "folders": [],
+      # (3.3.0) Bitwarden: the tool's session key, the items as Bitwarden has them, the quick PIN key...
+      "session": None, "raw": {}, "W": None, "sealed": None, "pinfails": 0, "hidden": 0, "synced": 0.0,
+      "rev": 0, "leaked": {}, "syncing": False, "offline": False}
 _clip = {"value": None, "timer": None}
 
 
@@ -138,9 +142,11 @@ def exists():
 
 
 def _save():
-    """Write the open vault (call with _lock held)."""
+    """Write the open vault (call with _lock held). With Bitwarden, only the site icons are kept here."""
+    if _s.get("mode") == "bw":
+        return _save_icons()
     key = _s["key"]
-    plain = json.dumps({"items": _s["items"]}, separators=(",", ":")).encode()
+    plain = json.dumps({"items": _s["items"], "folders": _s["folders"]}, separators=(",", ":")).encode()
     _write_file({"v": 1, "salt": _b64(_s["salt"]), "kdf": _s["kdf"], "wrap": _s["wrap"],
                  "data": _b64(seal(key, plain, b"items"))})
 
@@ -179,7 +185,8 @@ def setup(pin):
     with _lock:
         if exists():
             raise Error("MyVault is already set up.")
-        _s.update(key=secrets.token_bytes(32), items=[], salt=secrets.token_bytes(16), kdf=dict(KDF), last=time.time())
+        _s.update(key=secrets.token_bytes(32), items=[], salt=secrets.token_bytes(16), kdf=dict(KDF), last=time.time(),
+                  mode="local", folders=[], leaked={})
         _s["wrap"] = _b64(seal(_derive(pin, _s["salt"], _s["kdf"]), _s["key"], b"wrap"))
         _save()
     _right_try()
@@ -203,10 +210,13 @@ def unlock(pin):
             if wait:
                 raise Error(f"Wrong PIN. Wait {_nice_wait(wait)} before you try again.")
             raise Error(f"Wrong PIN. {5 - fails} {'try' if 5 - fails == 1 else 'tries'} left before it makes you wait.")
-        items = json.loads(unseal(key, _unb64(data["data"]), b"items")).get("items") or []
+        body = json.loads(unseal(key, _unb64(data["data"]), b"items"))
+        items = body.get("items") or []
         _s.update(key=key, items=[i for i in items if isinstance(i, dict)], salt=salt, kdf=data["kdf"],
-                  wrap=data["wrap"], last=time.time())
+                  wrap=data["wrap"], last=time.time(), mode="local", leaked={},
+                  folders=[f for f in body.get("folders") or [] if isinstance(f, dict) and f.get("id")])
     _right_try()
+    _leak_check_soon()
     return state()
 
 
@@ -216,7 +226,14 @@ def _nice_wait(s):
 
 def lock():
     with _lock:
-        _s.update(key=None, items=None, last=0.0)
+        was_bw = _s.get("mode") == "bw" and _s["session"]
+        sealed = None
+        if was_bw and _s["W"] and _pin_saved():
+            sealed = seal(_s["W"], _s["session"].encode(), b"bwsession")  # quick PIN opens it again
+        _s.update(key=None, items=None, last=0.0, session=None, raw={}, W=None, leaked={}, folders=[],
+                  sealed=sealed if was_bw else _s["sealed"], pinfails=0 if sealed else _s["pinfails"])
+    if was_bw and not sealed:
+        threading.Thread(target=bitwarden.lock, daemon=True).start()
     _clear_clipboard_now()
     watch_dismiss_all()
 
@@ -274,7 +291,8 @@ def check_timeout():
 
 # ---------------------------------------------------------------- settings
 
-PREF_DEFAULTS = {"lockAfter": 5, "lockMinimize": True, "hideLive": True, "clearAfter": 30, "offerFill": True, "never": []}
+PREF_DEFAULTS = {"lockAfter": 5, "lockMinimize": True, "hideLive": True, "clearAfter": 30, "offerFill": True, "never": [],
+                 "lockLive": True, "leakCheck": True}
 
 
 def prefs():
@@ -292,7 +310,7 @@ def prefs():
 def set_prefs(changes):
     p = prefs()
     for k, v in (changes or {}).items():
-        if k in ("lockMinimize", "hideLive", "offerFill"):
+        if k in ("lockMinimize", "hideLive", "offerFill", "lockLive", "leakCheck"):
             p[k] = bool(v)
         elif k in ("lockAfter", "clearAfter"):
             try:
@@ -305,10 +323,27 @@ def set_prefs(changes):
     return prefs()
 
 
+def mode():
+    """"bw" (Bitwarden is connected) or None (not yet: the page shows Connect)."""
+    if settings.load().get("bw_email"):
+        return "bw"
+    return None  # (3.3.1) Bitwarden only: an old PIN vault is moved over once Bitwarden is connected
+
+
 def state():
     c = settings.load()
-    return {"ok": True, "exists": exists(), "open": is_open(), "wait": _wait_left(),
-            "fails": int(c.get("mv_fails") or 0), "prefs": prefs(), "pinLength": PIN_LEN}
+    m = mode()
+    out = {"ok": True, "mode": m, "exists": exists(), "open": is_open() and m == "bw" and _s.get("mode") == "bw",
+           "wait": _wait_left(), "fails": int(c.get("mv_fails") or 0), "prefs": prefs(), "pinLength": PIN_LEN,
+           "rev": _s["rev"]}
+    if m == "bw":
+        out["exists"] = True
+        out["oldVault"] = exists()
+        out["bw"] = {"email": c.get("bw_email"), "server": c.get("bw_server") or bitwarden.SERVERS["us"],
+                     "quick": bool(_s["sealed"]) and _pin_saved(), "pin": _pin_saved(), "synced": _s["synced"],
+                     "syncing": _s["syncing"], "offline": _s["offline"], "hidden": _s["hidden"],
+                     "tool": bitwarden.tool_version()}
+    return out
 
 
 # ---------------------------------------------------------------- items
@@ -341,7 +376,8 @@ def public(i):
     tags = []
     return {"id": i["id"], "kind": i.get("kind", "account"), "name": i.get("name", ""), "site": i.get("site", ""),
             "user": i.get("user", ""), "hasPass": bool(i.get("password")), "otp": bool(i.get("otp")),
-            "icon": i.get("icon", ""), "count": _code_count(i), "changed": i.get("changed", 0), "tags": tags}
+            "icon": i.get("icon", ""), "count": _code_count(i), "changed": i.get("changed", 0), "tags": tags,
+            "folder": i.get("folder") or "", "fav": bool(i.get("fav"))}
 
 
 def _code_count(i):
@@ -388,19 +424,20 @@ def save(data):
             old = _find(data["id"])
         elif len(_s["items"]) >= MAX_ITEMS:
             raise Error("MyVault is full.")
-        item = old if old is not None else {"id": secrets.token_hex(8), "created": int(time.time())}
-        if old is not None and "password" not in data:
-            data["password"] = old.get("password", "")
-        if old is not None and "otp" not in data:
-            data["otp"] = old.get("otp")
+        item = dict(old) if old is not None else {"id": secrets.token_hex(8), "created": int(time.time())}
+        for k in ("password", "otp", "text", "folder", "fav"):
+            if old is not None and k not in data:
+                data[k] = old.get(k)
         new_pass = _text(data.get("password"), 500)
-        if old is not None and old.get("password") and new_pass != old.get("password"):
-            item.setdefault("history", []).insert(0, {"password": old["password"], "until": int(time.time())})
-            item["history"] = item["history"][:5]
+        if old is not None and old.get("password") and new_pass != old.get("password") and _s.get("mode") != "bw":
+            item["history"] = ([{"password": old["password"], "until": int(time.time())}] + list(old.get("history") or []))[:5]
+        folder = str(data.get("folder") or "")
+        if folder and not any(f["id"] == folder for f in _s["folders"]):
+            folder = ""
         item.update(kind=kind, name=name, site=site, user=_text(data.get("user"), 200).strip(),
                     password=new_pass if kind == "account" else "",
                     text=_text(data.get("text"), 20000) if kind != "account" else _text(data.get("text"), 4000),
-                    changed=int(time.time()))
+                    changed=int(time.time()), folder=folder, fav=bool(data.get("fav")))
         otp = data.get("otp")
         if isinstance(otp, str):
             otp = parse_otp(otp) if otp.strip() else None
@@ -409,22 +446,57 @@ def save(data):
         if otp:
             otp = _clean_otp(otp)
         item["otp"] = otp if kind == "account" else None
-        if old is None:
-            _s["items"].append(item)
         if old is not None and old.get("site") != site:
-            item["icon"] = ""
-        _save()
+            item["icon"] = _icon_cache().get(site, "") if _s.get("mode") == "bw" else ""
+        item = _put(item, old)
         result = public(item)
     if site and not item.get("icon"):
         threading.Thread(target=_fetch_icon_for, args=(item["id"], site), daemon=True).start()
+    if item.get("password") and (old is None or old.get("password") != item["password"]):
+        _leak_check_soon([item["id"]])
     return result
+
+
+def _put(item, old):
+    """Keeps a new or changed item (call with _lock held). With Bitwarden it goes there first, and only
+    then into the list here, so nothing changes if Bitwarden says no."""
+    if _s.get("mode") == "bw":
+        raw = _s["raw"].get(item["id"]) if old is not None else None
+        try:
+            if raw is not None:
+                got = bitwarden.edit_item(_s["session"], item["id"], _to_bw(item, raw))
+            else:
+                got = bitwarden.create_item(_s["session"], _to_bw(item, None))
+        except bitwarden.Error as e:
+            raise Error(_bw_said(e))
+        new = _from_bw(got) if isinstance(got, dict) else None
+        if not new:
+            raise Error("Bitwarden didn't save it. Try again.")
+        new["icon"] = item.get("icon") or _icon_cache().get(new.get("site"), "")
+        _s["raw"][new["id"]] = got
+        item = new
+    if old is not None:
+        _s["items"][_s["items"].index(old)] = item
+    else:
+        _s["items"].append(item)
+    _save()
+    _s["rev"] += 1
+    return item
 
 
 def delete(item_id):
     with _lock:
         _need_open()
-        _s["items"].remove(_find(item_id))
+        i = _find(item_id)
+        if _s.get("mode") == "bw" and item_id in _s["raw"]:
+            try:
+                bitwarden.delete_item(_s["session"], item_id)
+            except bitwarden.Error as e:
+                raise Error(_bw_said(e))
+            _s["raw"].pop(item_id, None)
+        _s["items"].remove(i)
         _save()
+        _s["rev"] += 1
 
 
 def reveal(item_id, field="password"):
@@ -629,9 +701,7 @@ def add_codes(chosen):
                 except Error:
                     target = None
             if target is not None:
-                target["otp"] = otp
-                target["changed"] = int(time.time())
-                _save()
+                _put({**target, "otp": otp, "changed": int(time.time())}, target)
                 added += 1
                 continue
         issuer = str(c.get("issuer") or "").strip() or "2FA code"
@@ -717,6 +787,9 @@ def _health_map():
         if len(group) > 1:
             for i in group:
                 out.setdefault(i["id"], []).append("reused")
+    for i in _s["items"]:
+        if _leaked_count(i):
+            out.setdefault(i["id"], []).insert(0, "leaked")
     return out
 
 
@@ -735,8 +808,15 @@ def health():
                 for i in group:
                     others = [g.get("name") for g in group if g is not i]
                     reused.append({**public(i), "why": "Same password as " + _and(others)})
-        bad = {w["id"] for w in weak} | {r["id"] for r in reused}
-        return {"total": len(accounts), "good": len(accounts) - len(bad), "weak": weak, "reused": reused}
+        leaked = []
+        for i in accounts:
+            n = _leaked_count(i)
+            if n:
+                leaked.append({**public(i), "why": f"Showed up in data leaks {n:,} time{'' if n == 1 else 's'}".replace(",", " ")})
+        bad = {w["id"] for w in weak} | {r["id"] for r in reused} | {x["id"] for x in leaked}
+        checking = bool(prefs()["leakCheck"] and _leak["busy"])
+        return {"total": len(accounts), "good": len(accounts) - len(bad), "weak": weak, "reused": reused,
+                "leaked": leaked, "checking": checking, "leakCheck": prefs()["leakCheck"]}
 
 
 def _and(names):
@@ -806,6 +886,7 @@ def _fetch_icon_for(item_id, site):
             if i.get("id") == item_id and i.get("site") == site:
                 i["icon"] = icon
                 _save()
+                _s["rev"] += 1
 
 
 # ---------------------------------------------------------------- backup file
@@ -817,7 +898,7 @@ def backup(folder, password):
     with _lock:
         _need_open()
         salt = secrets.token_bytes(16)
-        plain = json.dumps({"items": _s["items"]}, separators=(",", ":")).encode()
+        plain = json.dumps({"items": _s["items"], "folders": _s["folders"]}, separators=(",", ":")).encode()
         body = {"myvaultBackup": 1, "made": int(time.time()), "salt": _b64(salt), "kdf": dict(KDF),
                 "data": _b64(seal(_derive(password, salt, KDF), plain, b"backup"))}
     name = time.strftime("MyVault backup %Y-%m-%d.vhvault")
@@ -837,7 +918,9 @@ def restore(path, password, pin):
             body = json.load(f)
         salt = _unb64(body["salt"])
         plain = unseal(_derive(str(password or ""), salt, body["kdf"]), _unb64(body["data"]), b"backup")
-        got = json.loads(plain).get("items") or []
+        whole = json.loads(plain)
+        got = whole.get("items") or []
+        got_folders = [f for f in whole.get("folders") or [] if isinstance(f, dict) and f.get("id")]
     except Error:
         raise Error("Wrong backup password.")
     except (OSError, ValueError, KeyError, TypeError):
@@ -845,6 +928,7 @@ def restore(path, password, pin):
     setup(pin)
     with _lock:
         _s["items"] = [i for i in got if isinstance(i, dict) and i.get("id")][:MAX_ITEMS]
+        _s["folders"] = got_folders
         _save()
     return state()
 
@@ -994,7 +1078,7 @@ def offer():
             pass
     return {"ok": True, "show": True, "app": o["app"], "site": o.get("site", ""), "open": is_open(),
             "accounts": accounts, "browser": o["browser"], "done": bool(filled and filled.get("key") == o["key"]),
-            "code": code, "wait": _wait_left()}
+            "code": code, "wait": _wait_left(), "mode": mode(), "quick": bool(_s["sealed"]) and _pin_saved()}
 
 
 def offer_dismiss(never=False):
@@ -1388,3 +1472,667 @@ def camera_photo():
         pass
     kind = "png" if best[1].lower().endswith(".png") else "jpeg"
     return {"found": True, "image": f"data:image/{kind};base64," + base64.b64encode(data).decode()}
+
+
+# ---------------------------------------------------------------- (3.3.0) folders
+
+def folders():
+    with _lock:
+        _need_open()
+        count = {}
+        for i in _s["items"]:
+            count[i.get("folder") or ""] = count.get(i.get("folder") or "", 0) + 1
+        return sorted(({"id": f["id"], "name": f["name"], "count": count.get(f["id"], 0)} for f in _s["folders"]),
+                      key=lambda f: f["name"].lower())
+
+
+def folder_save(folder_id, name):
+    name = _text(name, 60).strip().strip("/")
+    if not name:
+        raise Error("Give the folder a name.")
+    with _lock:
+        _need_open()
+        if any(f["name"].lower() == name.lower() and f["id"] != folder_id for f in _s["folders"]):
+            raise Error("You already have a folder with that name.")
+        f = next((f for f in _s["folders"] if f["id"] == folder_id), None) if folder_id else None
+        if folder_id and f is None:
+            raise Error("That folder isn't there anymore.")
+        if f is None and len(_s["folders"]) >= 100:
+            raise Error("That's a lot of folders. Remove one first.")
+        try:
+            if _s.get("mode") == "bw":
+                if f is None:
+                    f = bitwarden.create_folder(_s["session"], name)
+                    _s["folders"].append(f)
+                else:
+                    bitwarden.edit_folder(_s["session"], f["id"], name)
+            elif f is None:
+                f = {"id": secrets.token_hex(6), "name": name}
+                _s["folders"].append(f)
+        except bitwarden.Error as e:
+            raise Error(_bw_said(e))
+        f["name"] = name
+        _save()
+        _s["rev"] += 1
+        return dict(f)
+
+
+def folder_delete(folder_id):
+    """The folder goes; what was in it stays, just without a folder."""
+    with _lock:
+        _need_open()
+        f = next((f for f in _s["folders"] if f["id"] == folder_id), None)
+        if f is None:
+            return
+        if _s.get("mode") == "bw":
+            try:
+                bitwarden.delete_folder(_s["session"], folder_id)
+            except bitwarden.Error as e:
+                raise Error(_bw_said(e))
+            for raw in _s["raw"].values():
+                if raw.get("folderId") == folder_id:
+                    raw["folderId"] = None
+        _s["folders"].remove(f)
+        for i in _s["items"]:
+            if i.get("folder") == folder_id:
+                i["folder"] = ""
+        _save()
+        _s["rev"] += 1
+
+
+def set_fav(item_id, on):
+    with _lock:
+        _need_open()
+        old = _find(item_id)
+        return public(_put({**old, "fav": bool(on)}, old))
+
+
+def set_folder(item_id, folder_id):
+    with _lock:
+        _need_open()
+        old = _find(item_id)
+        if folder_id and not any(f["id"] == folder_id for f in _s["folders"]):
+            raise Error("That folder isn't there anymore.")
+        return public(_put({**old, "folder": folder_id or ""}, old))
+
+
+# ---------------------------------------------------------------- (3.3.0) leaked password check
+
+# Have I Been Pwned's "range" check: only the first 5 letters of the password's SHA-1 go out, and the
+# answer is every leaked password starting with them (padded, so even the answer's size says nothing).
+# Your password, or even its whole SHA-1, never leaves the PC.
+LEAK_URL = os.environ.get("VH_LEAK_URL") or "https://api.pwnedpasswords.com/range/"
+_leak = {"busy": False, "cache": {}, "want": set()}
+
+
+def _sha1(pw):
+    return hashlib.sha1(pw.encode("utf-8")).hexdigest().upper()
+
+
+def _leaked_count(i):
+    pw = i.get("password") or ""
+    hit = _s["leaked"].get(i.get("id"))
+    return hit[1] if pw and hit and hit[0] == _sha1(pw) else 0
+
+
+def _range(prefix):
+    if prefix in _leak["cache"]:
+        return _leak["cache"][prefix]
+    req = urllib.request.Request(LEAK_URL + prefix, headers={"User-Agent": "VaultHub", "Add-Padding": "true"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        text = r.read(2_000_000).decode("ascii", "replace")
+    found = {}
+    for ln in text.splitlines():
+        suffix, _, n = ln.strip().partition(":")
+        if n.strip().isdigit() and int(n) > 0:
+            found[suffix.upper()] = int(n)
+    _leak["cache"][prefix] = found
+    return found
+
+
+def _leak_check_soon(ids=None):
+    if not prefs()["leakCheck"]:
+        return
+    with _lock:
+        if not is_open():
+            return
+        _leak["want"].update(ids or [i["id"] for i in _s["items"] if i.get("password")])
+        if _leak["busy"]:
+            return
+        _leak["busy"] = True
+    threading.Thread(target=_leak_loop, daemon=True).start()
+
+
+def _leak_loop():
+    try:
+        while True:
+            with _lock:
+                if not is_open() or not _leak["want"]:
+                    _leak["want"].clear()
+                    return
+                item_id = _leak["want"].pop()
+                i = next((x for x in _s["items"] if x.get("id") == item_id), None)
+                pw = (i or {}).get("password") or ""
+            if not pw:
+                continue
+            h = _sha1(pw)
+            try:
+                n = _range(h[:5]).get(h[5:], 0)
+            except (OSError, ValueError):
+                continue  # offline: try again next time it opens
+            with _lock:
+                if not is_open():
+                    return
+                before = _s["leaked"].get(item_id)
+                if n:
+                    _s["leaked"][item_id] = (h, n)
+                else:
+                    _s["leaked"].pop(item_id, None)
+                if before != _s["leaked"].get(item_id):
+                    _s["rev"] += 1
+    finally:
+        _leak["busy"] = False
+
+
+# ---------------------------------------------------------------- (3.3.0) Bitwarden
+
+BW_KIND = "VaultHub"  # a hidden field that says "backup codes" on a Bitwarden note
+_bwjob = {"step": "", "done": True, "error": "", "need": "", "method": None, "pending": None, "at": 0.0}
+ICONS = os.path.join(settings.DATA_DIR, "myvault-icons.json")
+
+
+def _bw_said(e):
+    if getattr(e, "kind", "") == "login":
+        return "You're signed out of Bitwarden. Lock MyVault and sign in again."
+    return str(e)
+
+
+def _icon_cache():
+    if "_icons" not in _s:
+        try:
+            with open(ICONS, encoding="utf-8") as f:
+                text = f.read()
+            if text.startswith(settings.LOCKED):
+                text = settings.open_secret(text) or "{}"
+            _s["_icons"] = {k: v for k, v in json.loads(text).items() if isinstance(v, str)}
+        except (OSError, ValueError, AttributeError):
+            _s["_icons"] = {}
+    return _s["_icons"]
+
+
+def _save_icons():
+    cache = _icon_cache()
+    for i in _s["items"] or []:
+        if i.get("site") and i.get("icon"):
+            cache[i["site"]] = i["icon"]
+    text = json.dumps(cache, separators=(",", ":"))
+    text = settings.lock_secret(text) if IS_WINDOWS else text
+    try:
+        os.makedirs(os.path.dirname(ICONS), exist_ok=True)
+        with open(ICONS + ".tmp", "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(ICONS + ".tmp", ICONS)
+    except OSError:
+        pass
+
+
+def _when(t):
+    try:
+        import datetime
+        return int(datetime.datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp())
+    except (ValueError, TypeError):
+        return 0
+
+
+def _otp_safe(text):
+    try:
+        return parse_otp(text) if text else None
+    except Error:
+        return None
+
+
+def _otp_text(o):
+    if not o:
+        return None
+    if (o.get("algo") or "SHA1") == "SHA1" and int(o.get("digits") or 6) == 6 and int(o.get("period") or 30) == 30 \
+            and not o.get("issuer"):
+        return o["secret"]
+    label = urllib.parse.quote(((o.get("issuer") + ":") if o.get("issuer") else "") + (o.get("account") or ""))
+    q = {"secret": o["secret"], "algorithm": o.get("algo") or "SHA1", "digits": o.get("digits") or 6, "period": o.get("period") or 30}
+    if o.get("issuer"):
+        q["issuer"] = o["issuer"]
+    return f"otpauth://totp/{label}?{urllib.parse.urlencode(q)}"
+
+
+def _from_bw(r):
+    """A Bitwarden item as MyVault keeps it, or None for kinds MyVault doesn't show (cards, identities...)."""
+    t = r.get("type")
+    fields = r.get("fields") or []
+    marked = any(isinstance(f, dict) and f.get("name") == BW_KIND and f.get("value") == "backup-codes" for f in fields)
+    base = {"id": r.get("id"), "name": str(r.get("name") or "")[:200], "folder": r.get("folderId") or "",
+            "fav": bool(r.get("favorite")), "changed": _when(r.get("revisionDate")), "created": _when(r.get("creationDate")),
+            "text": str(r.get("notes") or ""), "user": "", "password": "", "otp": None, "site": "", "icon": ""}
+    if not base["id"]:
+        return None
+    if t == 1:
+        lg = r.get("login") or {}
+        for u in lg.get("uris") or []:
+            site = _clean_site((u or {}).get("uri"))
+            if site:
+                base["site"] = site
+                break
+        base.update(kind="account", user=str(lg.get("username") or ""), password=str(lg.get("password") or ""),
+                    otp=_otp_safe(lg.get("totp")))
+    elif t == 2:
+        base["kind"] = "codes" if marked else "note"
+    else:
+        return None
+    base["icon"] = _icon_cache().get(base["site"], "") if base["site"] else ""
+    return base
+
+
+def _to_bw(item, raw):
+    """MyVault's item as Bitwarden's, keeping everything MyVault doesn't show (other links, fields, notes...)."""
+    r = json.loads(json.dumps(raw)) if raw else {
+        "organizationId": None, "collectionIds": None, "folderId": None, "type": 1, "name": "", "notes": None,
+        "favorite": False, "fields": [], "login": None, "secureNote": None, "card": None, "identity": None, "reprompt": 0}
+    r["name"] = item["name"]
+    r["folderId"] = item.get("folder") or None
+    r["favorite"] = bool(item.get("fav"))
+    if item["kind"] == "account":
+        r["type"] = 1
+        lg = r.get("login") or {"uris": [], "username": None, "password": None, "totp": None}
+        lg["username"] = item.get("user") or None
+        lg["password"] = item.get("password") or None
+        if item.get("otp") != _otp_safe(lg.get("totp")):  # only when it changed (keeps e.g. Steam's own kind)
+            lg["totp"] = _otp_text(item.get("otp"))
+        uris = [u for u in lg.get("uris") or [] if isinstance(u, dict)]
+        site = item.get("site") or ""
+        if site and not any(_clean_site(u.get("uri")) == site for u in uris):
+            uris.insert(0, {"match": None, "uri": "https://" + site})
+        elif not site and uris and not raw:
+            uris = []
+        lg["uris"] = uris
+        r["login"] = lg
+        if not raw:
+            r["notes"] = item.get("text") or None
+    else:
+        r["type"] = 2
+        r["secureNote"] = r.get("secureNote") or {"type": 0}
+        r["notes"] = item.get("text") or None
+        fields = [f for f in r.get("fields") or [] if not (isinstance(f, dict) and f.get("name") == BW_KIND)]
+        if item["kind"] == "codes":
+            fields.append({"name": BW_KIND, "value": "backup-codes", "type": 0, "linkedId": None})
+        r["fields"] = fields
+    return r
+
+
+def _load_bw(session, do_sync):
+    """Reads everything from the tool into memory (the tool's copy; do_sync first asks Bitwarden for news)."""
+    offline = False
+    if do_sync:
+        try:
+            bitwarden.sync(session)
+        except bitwarden.Error as e:
+            if e.kind == "login":
+                raise
+            offline = True
+    raws = bitwarden.items(session)
+    fl = bitwarden.folders(session)
+    got, raw, hidden = [], {}, 0
+    for r in raws:
+        i = _from_bw(r)
+        if i:
+            got.append(i)
+            raw[i["id"]] = r
+        else:
+            hidden += 1
+    return got, raw, fl, hidden, offline
+
+
+def _open_bw(session, W):
+    got, raw, fl, hidden, offline = _load_bw(session, False)
+    with _lock:
+        _s.update(key=b"bw", mode="bw", session=session, items=got, raw=raw, folders=fl, hidden=hidden,
+                  W=W, sealed=None, pinfails=0, last=time.time(), leaked={}, offline=offline)
+        _s["rev"] += 1
+    threading.Thread(target=_sync_now, daemon=True).start()
+    threading.Thread(target=bitwarden.update_if_old, daemon=True).start()
+    _leak_check_soon()
+
+
+def _sync_now():
+    with _lock:
+        if _s.get("mode") != "bw" or not _s["session"] or _s["syncing"]:
+            return
+        _s["syncing"] = True
+        session = _s["session"]
+    try:
+        got, raw, fl, hidden, offline = _load_bw(session, True)
+    except bitwarden.Error:
+        with _lock:
+            _s.update(syncing=False, offline=True)
+        return
+    with _lock:
+        _s["syncing"] = False
+        if _s["session"] != session:
+            return
+        before = {i["id"]: i.get("password") for i in _s["items"]}
+        _s.update(items=got, raw=raw, folders=fl, hidden=hidden, offline=offline)
+        if not offline:
+            _s["synced"] = time.time()
+        _s["rev"] += 1
+    changed = [i["id"] for i in got if i.get("password") and before.get(i["id"]) != i["password"]]
+    if changed:
+        _leak_check_soon(changed)
+
+
+def sync():
+    with _lock:
+        _need_open()
+        if _s.get("mode") != "bw":
+            raise Error("Only with Bitwarden.")
+    threading.Thread(target=_sync_now, daemon=True).start()
+    return {"ok": True}
+
+
+def sync_if_old():
+    """Every 10 minutes while it's open, Bitwarden is asked what changed (on your phone, say)."""
+    if _s.get("mode") == "bw" and _s["session"] and not _s["syncing"] and time.time() - _s["synced"] > 600:
+        threading.Thread(target=_sync_now, daemon=True).start()
+
+
+# -- the quick PIN: while VaultHub stays open, a PIN opens it again instead of the master password.
+# The PIN unlocks a key W (made from the master password), and W unlocks the session key, which is only
+# ever kept in memory. After a restart there's no session key anymore, so it's the master password again.
+
+def _pin_saved():
+    p = settings.load().get("bw_pin")
+    return isinstance(p, dict) and bool(p.get("wrap"))
+
+
+def _master_key(password):
+    c = settings.load()
+    salt = c.get("bw_msalt")
+    if not salt:
+        salt = _b64(secrets.token_bytes(16))
+        settings.save(bw_msalt=salt)
+    return _derive(password, _unb64(salt), KDF)
+
+
+def pin_set(pin):
+    pin = _check_pin(pin)
+    with _lock:
+        _need_open()
+        if _s.get("mode") != "bw" or not _s["W"]:
+            raise Error("Lock MyVault and open it with your master password first.")
+        salt = secrets.token_bytes(16)
+        W = _s["W"]
+    wrap = seal(_derive(pin, salt, KDF), W, b"bwpin")
+    settings.save(bw_pin={"salt": _b64(salt), "kdf": dict(KDF), "wrap": _b64(wrap),
+                          "check": hmac.new(W, b"vaulthub-quick-pin", hashlib.sha256).hexdigest()})
+    return state()
+
+
+def pin_off():
+    settings.save(bw_pin=None)
+    _s["sealed"] = None
+    return state()
+
+
+def unlock_pin(pin):
+    pin = _check_pin(pin)
+    p = settings.load().get("bw_pin") or {}
+    sealed = _s["sealed"]
+    if not sealed or not p.get("wrap"):
+        raise Error("Type your master password.")
+    try:
+        W = unseal(_derive(pin, _unb64(p["salt"]), p["kdf"]), _unb64(p["wrap"]), b"bwpin")
+        session = unseal(W, sealed, b"bwsession").decode()
+    except Error:
+        _s["pinfails"] += 1
+        left = 5 - _s["pinfails"]
+        if left <= 0:
+            _s["sealed"] = None
+            threading.Thread(target=bitwarden.lock, daemon=True).start()
+            raise Error("Wrong PIN 5 times. Type your master password now.")
+        raise Error(f"Wrong PIN. {left} {'try' if left == 1 else 'tries'} left.")
+    try:
+        _open_bw(session, W)
+    except bitwarden.Error as e:
+        _s["sealed"] = None
+        raise Error(_bw_said(e))
+    return state()
+
+
+def unlock_master(password):
+    password = str(password or "")
+    if not password:
+        raise Error("Type your master password.")
+    try:
+        session = bitwarden.unlock(password)
+    except bitwarden.Error as e:
+        if e.kind == "login":
+            settings.save(bw_email=None)
+            raise Error("You're signed out of Bitwarden. Sign in again.")
+        raise Error(str(e))
+    W = _master_key(password)
+    p = settings.load().get("bw_pin") or {}
+    if p.get("check") and p["check"] != hmac.new(W, b"vaulthub-quick-pin", hashlib.sha256).hexdigest():
+        settings.save(bw_pin=None)  # the master password changed: set the quick PIN up again
+    try:
+        _open_bw(session, W)
+    except bitwarden.Error as e:
+        raise Error(_bw_said(e))
+    return state()
+
+
+# -- connecting (a job in the background: the first time it downloads Bitwarden's tool)
+
+def connect(email, password, server="us", custom=""):
+    email = str(email or "").strip().lower()
+    password = str(password or "")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise Error("Type the email of your Bitwarden account.")
+    if not password:
+        raise Error("Type your master password.")
+    url = bitwarden.server_url(server, custom)
+    if not _bwjob["done"]:
+        raise Error("Hang on, it's still connecting.")
+    _bwjob.update(step="start", done=False, error="", need="", method=None, at=time.time(),
+                  pending={"email": email, "password": password, "url": url})
+    threading.Thread(target=_connect_job, daemon=True).start()
+    return job()
+
+
+def connect_more(what, code="", method=None, client_id="", client_secret=""):
+    """The next step after Bitwarden asked for something: a two-step code, an email code, or an API key."""
+    p = _bwjob.get("pending")
+    if not p or time.time() - _bwjob["at"] > 900:
+        _bwjob["pending"] = None
+        raise Error("That took a while, so start again.")
+    if not _bwjob["done"]:
+        raise Error("Hang on, it's still connecting.")
+    code = re.sub(r"\s", "", str(code or ""))
+    kw = {}
+    if what == "code":
+        if not code:
+            raise Error("Type the code.")
+        kw = {"method": 1 if method == "email" else 3 if method == "key" else 0, "code": code}
+    elif what == "send-email":
+        kw = {"method": 1}
+    elif what == "device":
+        if not code:
+            raise Error("Type the code from the email.")
+        kw = {"device_code": code}
+    elif what == "apikey":
+        client_id, client_secret = str(client_id or "").strip(), str(client_secret or "").strip()
+        if not client_id.startswith("user.") or len(client_secret) < 10:
+            raise Error("Paste both: client_id (starts with user.) and client_secret.")
+        kw = {"apikey": (client_id, client_secret)}
+    else:
+        raise Error("Something about that wasn't right.")
+    _bwjob.update(step="login", done=False, error="", need="", at=time.time())
+    threading.Thread(target=_connect_job, kwargs=kw, daemon=True).start()
+    return job()
+
+
+def connect_cancel():
+    _bwjob.update(pending=None, need="", error="", step="")
+    return state()
+
+
+def job():
+    j = _bwjob
+    out = {"step": j["step"], "done": j["done"], "error": j["error"], "need": j["need"], "method": j["method"]}
+    if j["step"] == "download":
+        out.update(got=bitwarden.progress["got"], total=bitwarden.progress["total"])
+    if j["done"] and not j["error"] and not j["need"]:
+        out["state"] = state()
+    return out
+
+
+def _connect_job(method=None, code=None, device_code=None, apikey=None):
+    p = _bwjob["pending"]
+    try:
+        if not bitwarden.have_tool():
+            _bwjob["step"] = "download"
+            bitwarden.install()
+        _bwjob["step"] = "login"
+        st = bitwarden.status()
+        if st.get("status") in ("locked", "unlocked") and (str(st.get("userEmail") or "").lower() != p["email"]
+                                                          or str(st.get("serverUrl") or bitwarden.SERVERS["us"]).rstrip("/") != p["url"]):
+            bitwarden.logout()
+            st = {"status": "unauthenticated"}
+        if st.get("status") in (None, "", "unauthenticated"):
+            bitwarden.set_server(p["url"])
+            if apikey:
+                bitwarden.login_apikey(*apikey)
+                session = bitwarden.unlock(p["password"])
+            else:
+                session = bitwarden.login(p["email"], p["password"], method=method, code=code, device_code=device_code)
+        else:
+            session = bitwarden.unlock(p["password"])
+        _bwjob["step"] = "open"
+        W = _master_key(p["password"])
+        settings.save(bw_email=p["email"], bw_server=p["url"], bw_pin=None)
+        with _lock:
+            if _s.get("mode") == "local" and is_open():
+                _s.update(key=None, items=None)
+        _open_bw(session, W)
+        _bwjob.update(pending=None, step="done")
+    except bitwarden.Error as e:
+        if e.kind == "2fa":
+            _bwjob.update(need="code", method="email" if method == 1 else _bwjob["method"])
+            if code:
+                _bwjob["error"] = "That code didn't work. Try again."
+        elif e.kind == "device":
+            _bwjob["need"] = "device"
+            if device_code:
+                _bwjob["error"] = "That code didn't work. Try again."
+        elif e.kind == "option" and device_code:
+            _bwjob["need"] = "apikey"
+        else:
+            _bwjob.update(error=str(e), pending=None)
+    except Error as e:
+        _bwjob.update(error=str(e), pending=None)
+    except OSError:
+        _bwjob.update(error="Couldn't save Bitwarden's tool on this PC.", pending=None)
+    finally:
+        _bwjob["done"] = True
+
+
+def sign_out():
+    with _lock:
+        lock()
+        _s["sealed"] = None
+    bitwarden.logout()
+    settings.save(bw_email=None, bw_pin=None)
+    return state()
+
+
+# -- moving the old MyVault (PIN, only on this PC) into Bitwarden
+
+def _read_local(pin):
+    pin = _check_pin(pin)
+    left = _wait_left()
+    if left:
+        raise Error(f"Too many wrong tries. Wait {_nice_wait(left)}.")
+    data = _read_file()
+    if data is None:
+        raise Error("There's no old MyVault on this PC.")
+    try:
+        key = unseal(_derive(pin, _unb64(data["salt"]), data["kdf"]), _unb64(data["wrap"]), b"wrap")
+    except Error:
+        _wrong_try()
+        raise Error("That isn't your old MyVault PIN.")
+    _right_try()
+    body = json.loads(unseal(key, _unb64(data["data"]), b"items"))
+    return ([i for i in body.get("items") or [] if isinstance(i, dict) and i.get("id")],
+            [f for f in body.get("folders") or [] if isinstance(f, dict) and f.get("id")])
+
+
+def old_delete():
+    """Forgot the old MyVault's PIN: it can only be deleted (there's no other way in, on purpose)."""
+    with _lock:
+        _need_open()
+        if _s.get("mode") != "bw":
+            raise Error("Connect Bitwarden first.")
+    try:
+        os.remove(PATH)
+    except FileNotFoundError:
+        pass
+    settings.save(mv_fails=0, mv_wait_until=0)
+    return state()
+
+
+def move_preview(pin):
+    with _lock:
+        _need_open()
+    got, fl = _read_local(pin)
+    return {"items": [public(i) for i in got], "folders": len(fl)}
+
+
+def move_to_bw(pin):
+    """Everything in the old MyVault goes into Bitwarden; then the old file is deleted."""
+    with _lock:
+        _need_open()
+        if _s.get("mode") != "bw":
+            raise Error("Connect Bitwarden first.")
+    got, fl = _read_local(pin)
+    moved, failed = 0, []
+    with _lock:
+        _need_open()
+        ids = {}
+        for f in fl:
+            same = next((x for x in _s["folders"] if x["name"].lower() == str(f.get("name") or "").lower()), None)
+            if same:
+                ids[f["id"]] = same["id"]
+                continue
+            try:
+                new = bitwarden.create_folder(_s["session"], str(f.get("name") or "Folder")[:60])
+                _s["folders"].append(new)
+                ids[f["id"]] = new["id"]
+            except bitwarden.Error:
+                pass
+        for i in got:
+            i = {**i, "folder": ids.get(i.get("folder") or "", ""), "id": "new-" + secrets.token_hex(6)}
+            try:
+                _put(i, None)
+                moved += 1
+            except Error:
+                failed.append(i.get("name") or "?")
+    if not failed:
+        try:
+            os.remove(PATH)
+        except OSError:
+            pass
+    _leak_check_soon()
+    return {"moved": moved, "failed": failed, "state": state()}
+
+
+def at_exit():
+    """VaultHub is closing: Bitwarden's tool is locked again too (the session key is gone with us anyway)."""
+    if _s.get("mode") == "bw" and (_s["session"] or _s["sealed"]):
+        _s.update(session=None, sealed=None)
+        bitwarden.lock()

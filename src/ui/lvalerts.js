@@ -15,8 +15,9 @@ const LVA_SAMPLE = {
 const LVAS = { ov: null, open: "", busy: false, error: "", obsMsg: "", peek: false };
 
 async function lvaLoad() {
-  const res = await api("/api/live-ov", {}).catch(() => null);
+  const [res, chat] = await Promise.all([api("/api/live-ov", {}).catch(() => null), api("/api/live-chat-ov", {}).catch(() => null)]);
   if (res && res.ok) LVAS.ov = res.ov;
+  if (chat && chat.ok) LVAS.chat = chat.chat;
   return LVAS.ov;
 }
 async function lvaSet(change) {
@@ -70,6 +71,7 @@ function lvDrawAlerts() {
         <span class="lva-pic">${pk.picture ? /\.(webm|mp4)$/i.test(pk.picture) ? `<video src="${lvEsc(base)}/alerts/media/${lvEsc(pk.picture)}" muted></video>` : `<img alt="" src="${lvEsc(base)}/alerts/media/${lvEsc(pk.picture)}">` : info.emoji}</span>
         <div class="words"><b>${lvEsc(info.name)} <span class="lv-tiny ${plat}">${LV_ICONS[plat]}</span></b><small>${lvEsc(pk.text)}</small></div>
         <span class="sp"></span>
+        <button type="button" class="lva-obs" title="Show this alert in OBS now (on stream too, if you're live)">Test in OBS</button>
         <button type="button" class="icon-button lva-try" title="Show it in the preview"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
         <button type="button" class="link lva-edit">${open ? "Done" : "Edit"}</button>
         <label class="check"><input type="checkbox" class="lva-on" ${pk.on ? "checked" : ""}></label>
@@ -88,8 +90,7 @@ function lvDrawAlerts() {
         </div>
         <form class="lva-link"><span class="input"><input class="lva-link-in" placeholder="Or paste a link to a GIF or sound (Giphy, Tenor...)" spellcheck="false"></span>
           <button type="submit" class="ghost-button" ${LVAS.linking ? "disabled" : ""}>${LVAS.linking ? "Getting it..." : "Use it"}</button></form>
-        <div class="lva-row-actions"><button type="button" class="link lva-reset">Use the standard text</button><span class="sp"></span>
-          <button type="button" class="ghost-button lva-obs-test">Send a test to OBS</button></div>
+        <div class="lva-row-actions"><button type="button" class="link lva-reset">Use the standard text</button></div>
       </div>` : ""}
     </div>`;
   };
@@ -119,7 +120,8 @@ function lvDrawAlerts() {
         </div>` : ""}
         <div class="lv-card">
           <h3>In OBS<span class="sp"></span>${ov.watching ? `<span class="lva-ok">Showing</span>` : ""}</h3>
-          ${ov.watching || LVAS.added ? `<p class="lv-muted">${ov.watching ? "OBS shows your alerts in every scene." : "Added to OBS."} Move or resize the <b>VaultHub alerts</b> source in OBS if you like.</p>`
+          ${ov.watching || LVAS.added ? `<p class="lv-muted">${ov.watching ? "OBS shows your alerts in every scene." : "Added to OBS."} Move or resize the <b>VaultHub alerts</b> source in OBS if you like.</p>
+              <button type="button" class="link" id="lvaAdd" ${LVAS.busy ? "disabled" : ""}>${LVAS.busy ? "Fixing..." : "Can't hear the sounds? Fix it"}</button>`
             : `<p class="lv-muted">One click puts the alerts in all your OBS scenes. OBS needs to be open.</p>
               <button type="button" class="small-button" id="lvaAdd" ${LVAS.busy ? "disabled" : ""}>${LVAS.busy ? "Adding..." : "Add to OBS"}</button>`}
           ${LVAS.obsMsg ? `<p class="lva-msg">${lvEsc(LVAS.obsMsg)}</p>` : ""}
@@ -127,7 +129,8 @@ function lvDrawAlerts() {
             <ol class="lv-steps"><li>In OBS, press <b>+</b> under Sources and pick <b>Browser</b>.</li>
               <li>Paste this as the URL, with width <b>1920</b> and height <b>1080</b>:</li></ol>
             <div class="lv-row"><label class="input" style="flex:1"><input readonly value="${lvEsc(ov.url)}" id="lvaUrl"></label><button type="button" class="ghost-button" id="lvaCopy">Copy</button></div>
-            <ol class="lv-steps" start="3"><li>Tick <b>Control audio via OBS</b>, so the sounds reach your stream.</li></ol>
+            <ol class="lv-steps" start="3"><li>Tick <b>Control audio via OBS</b>, so the sounds reach your stream.</li>
+              <li>To hear them yourself: right-click the source in the Audio Mixer, pick <b>Advanced Audio Properties</b> and set <b>Audio Monitoring</b> to <b>Monitor and Output</b>.</li></ol>
           </details>
         </div>
         <div class="lv-card">
@@ -138,6 +141,7 @@ function lvDrawAlerts() {
           <div class="lva-set"><span class="words"><b>Read messages out loud</b><small>Messages with subs, bits and Super Chats</small></span><span class="sp"></span>
             <label class="check"><input type="checkbox" id="lvaTts" ${p.tts ? "checked" : ""}></label></div>
         </div>
+        ${lvaChatCard()}
       </div>
     </div>
     <input type="file" id="lvaFile" hidden>`;
@@ -158,6 +162,7 @@ function lvaWire() {
     const k = r.dataset.k;
     r.querySelector(".lva-on").onchange = async (e) => { r.classList.toggle("off", !e.target.checked); await lvaSet({ kinds: { [k]: { on: e.target.checked } } }); };
     r.querySelector(".lva-try").onclick = () => lvaPreview(k, true);
+    r.querySelector(".lva-obs").onclick = (e) => lvaTestObs(k, e.currentTarget);
     r.querySelector(".lva-edit").onclick = () => { LVAS.open = LVAS.open === k ? "" : k; lvDrawAlerts(); };
     const text = r.querySelector(".lva-text");
     if (!text) return;
@@ -183,10 +188,6 @@ function lvaWire() {
       if (res && res.ok) lvaPreview(k);
     };
     r.querySelector(".lva-unpic")?.addEventListener("click", async () => { await lvaSet({ kinds: { [k]: { picture: "" } } }); lvDrawAlerts(); lvaPreview(k); });
-    r.querySelector(".lva-obs-test").onclick = async (e) => {
-      const res = await api("/api/live-ov-test", { kind: k }).catch(() => null);
-      e.target.textContent = res && res.ok ? (LVAS.ov.watching ? "Sent! Look in OBS" : "Sent (OBS isn't showing alerts yet)") : "Couldn't send it";
-    };
   });
   // Just for you
   box.querySelectorAll(".lv-rule").forEach((row) => {
@@ -218,11 +219,12 @@ function lvaWire() {
     const res = await api("/api/live-ov-obs", {}).catch(() => null);
     LVAS.busy = false;
     LVAS.added = !!(res && res.ok);
-    LVAS.obsMsg = res && res.ok ? `Done! The alerts are in ${res.obs.scenes === 1 ? "your scene" : `all ${res.obs.scenes} scenes`}. To see one in OBS, press Edit on an alert, then Send a test to OBS.` : (res && res.error) || "Couldn't reach OBS.";
+    LVAS.obsMsg = res && res.ok ? `Done! The alerts are in ${res.obs.scenes === 1 ? "your scene" : `all ${res.obs.scenes} scenes`}. To see one, press Test in OBS next to an alert.` : (res && res.error) || "Couldn't reach OBS.";
     await lvaLoad();
     lvDrawAlerts();
     setTimeout(async () => { await lvaLoad(); if (!$("lvalertsTab").hidden && !LVAS.open) lvDrawAlerts(); }, 4000);
   });
+  lvaChatWire();
   $("lvaHide")?.addEventListener("click", () => { LVAS.peek = false; lvDrawAlerts(); });
   $("lvaTts").onchange = async (e) => { await lvaSet({ tts: e.target.checked }); if (e.target.checked) lvaPreview("sub"); };
   $("lvaCopy").onclick = () => { navigator.clipboard.writeText($("lvaUrl").value).catch(() => {}); $("lvaCopy").textContent = "Copied"; };
@@ -232,6 +234,67 @@ function lvaWire() {
   $("lvaSecs").onchange = async (e) => { await lvaSet({ seconds: +e.target.value }); lvaPreview(LVAS.open || "follow"); };
   $("lvaVol").oninput = (e) => { $("lvaVolN").textContent = e.target.value + "%"; };
   $("lvaVol").onchange = async (e) => { await lvaSet({ volume: +e.target.value }); lvaPreview(LVAS.open || "follow"); };
+}
+
+// (3.4.0) Your chat on stream: its own Browser Source ("VaultHub chat"), put in the scene OBS shows now
+function lvaChatCard() {
+  const ch = LVAS.chat;
+  if (!ch) return "";
+  const l = ch.look;
+  const seg = (id, opts, cur) => `<span class="lv-seg" id="${id}">${opts.map(([v, n]) => `<button type="button" data-v="${v}" class="${String(cur) === String(v) ? "on" : ""}">${n}</button>`).join("")}</span>`;
+  return `<div class="lv-card" id="lvaChat">
+    <h3>Chat on your stream<span class="sp"></span>${ch.watching ? `<span class="lva-ok">Showing</span>` : ""}</h3>
+    <p class="lv-muted">Your Twitch and YouTube chat as a box in OBS. New messages slide in at the bottom.</p>
+    <div class="lva-chat-prev"><iframe title="Chat preview" src="${lvEsc(ch.url)}?demo=1" tabindex="-1"></iframe></div>
+    <div class="lva-set"><span>Text size</span><span class="sp"></span>${seg("lvaChatSize", [["s", "Small"], ["m", "Medium"], ["l", "Big"]], l.size)}</div>
+    <div class="lva-set"><span>Old messages</span><span class="sp"></span>${seg("lvaChatFade", [[0, "Stay"], [30, "Go after 30 s"], [60, "60 s"]], l.fade)}</div>
+    <div class="lva-set"><span>Dark box behind each message</span><span class="sp"></span><label class="check"><input type="checkbox" id="lvaChatBox" ${l.box ? "checked" : ""}></label></div>
+    <div class="lva-row-actions" style="margin-top:8px">
+      <button type="button" class="${ch.watching ? "ghost-button" : "small-button"}" id="lvaChatAdd">${ch.watching ? "Add to this scene too" : "Add to OBS"}</button>
+      <span class="sp"></span><button type="button" class="link" id="lvaChatCopy" title="${lvEsc(ch.url)}">Copy its link</button></div>
+    ${LVAS.chatMsg ? `<p class="lva-msg">${lvEsc(LVAS.chatMsg)}</p>` : ""}
+  </div>`;
+}
+
+function lvaChatWire() {
+  if (!$("lvaChat")) return;
+  const look = (change) => {
+    const f = document.querySelector(".lva-chat-prev iframe");
+    api("/api/live-chat-ov-set", change).then((res) => {
+      if (!res || !res.ok) return;
+      LVAS.chat = res.chat;
+      if (f && f.contentWindow) f.contentWindow.postMessage({ type: "vh-chat-look", look: res.chat.look }, "*");
+    }).catch(() => {});
+  };
+  for (const [id, key] of [["lvaChatSize", "size"], ["lvaChatFade", "fade"]]) {
+    $(id).onclick = (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      look({ [key]: key === "fade" ? +b.dataset.v : b.dataset.v });
+    };
+  }
+  $("lvaChatBox").onchange = (e) => look({ box: e.target.checked });
+  $("lvaChatCopy").onclick = () => { navigator.clipboard.writeText(LVAS.chat.url).catch(() => {}); $("lvaChatCopy").textContent = "Copied"; };
+  $("lvaChatAdd").onclick = async () => {
+    $("lvaChatAdd").disabled = true;
+    $("lvaChatAdd").textContent = "Adding...";
+    const res = await api("/api/live-chat-ov-obs", {}).catch(() => null);
+    LVAS.chatMsg = res && res.ok ? `Added to "${res.obs.scene}". Drag and resize it in OBS. To add it to another scene, switch to it in OBS and press this again.`
+      : (res && res.error) || "Couldn't reach OBS.";
+    await lvaLoad();
+    lvDrawAlerts();
+  };
+}
+
+// (3.4.0) "Test in OBS" on each alert: sends a pretend one to the alerts page in OBS
+async function lvaTestObs(kind, btn) {
+  const res = await api("/api/live-ov-test", { kind }).catch(() => null);
+  const ok = res && res.ok;
+  btn.textContent = !ok ? "Couldn't send" : LVAS.ov && LVAS.ov.watching ? "Sent ✓" : "OBS isn't showing alerts";
+  btn.classList.toggle("bad", !(ok && LVAS.ov && LVAS.ov.watching));
+  clearTimeout(btn._t);
+  btn._t = setTimeout(() => { btn.textContent = "Test in OBS"; btn.classList.remove("bad"); }, 2500);
 }
 
 function lvaPick(kind, what) {

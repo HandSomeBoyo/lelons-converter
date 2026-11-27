@@ -1072,7 +1072,7 @@ function callFaceOf(username) {
 function callSay(text) {
   const note = $("chatNote");
   if (note && chatIsOpen()) note.textContent = text;
-  else alert(text);
+  else callToast(text);
 }
 
 function callOthersIn() {
