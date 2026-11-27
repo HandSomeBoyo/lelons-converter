@@ -242,6 +242,11 @@ async function rhMessage(sess, data) {
     rdPost("/api/remote-screen", { screen: msg.screen }); // the hidden window starts again on that screen
   }
   if (msg.keys) rhKeys(sess, msg.keys);
+  if ((msg.cursor === "local" || msg.cursor === "picture") && msg.cursor !== sess.cursor) {
+    sess.cursor = msg.cursor; sess.cur = "";
+    const r = await rdPost("/api/remote-cursor", { hide: msg.cursor === "local" });
+    rhCursor(sess, r.cur || "default");
+  }
 }
 
 // The mouse and keys go to remote.py one batch at a time (the next batch waits for the last one).
@@ -259,7 +264,18 @@ async function rhFlush(sess) {
   const r = await rdPost("/api/remote-input", { e: list });
   sess.sending = false;
   if (r && r.stop) return rhEnd("stopped");
+  rhCursor(sess, r && r.cur);
+  // The app under the mouse picks its arrow a moment after the move: look again shortly after.
+  clearTimeout(sess.curTimer);
+  sess.curTimer = setTimeout(async () => { if (rh.sess === sess) rhCursor(sess, (await rdPost("/api/remote-host-state")).cur); }, 60);
   if (sess.queue.length) rhFlush(sess);
+}
+
+// (3.4.1) Tell the other PC which arrow to show (the instant mouse), only when it changed.
+function rhCursor(sess, cur) {
+  if (sess.cursor !== "local" || typeof cur !== "string" || !cur || cur === sess.cur) return;
+  sess.cur = cur;
+  rhSend(sess, { cur });
 }
 
 function rhKeys(sess, what) {
@@ -290,7 +306,7 @@ async function rhWatch(sess) {
     } catch (e) { /* closed */ }
   }
   const st = await rdPost("/api/remote-host-state");
-  if (st.ok) sess.battery = st.battery;
+  if (st.ok) { sess.battery = st.battery; rhCursor(sess, st.cur); }
   if (st.ok && st.stop) rhEnd("stopped");
 }
 

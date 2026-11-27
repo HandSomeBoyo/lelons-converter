@@ -386,8 +386,10 @@ function rdCtl(c, data) {
     rdToolbar();
     rdHint(true);
     rdSendView();
+    rdCursorMode();
     return;
   }
+  if (typeof msg.cur === "string") { c.cur = msg.cur; rdCursorShow(); return; }
   if (msg.error === "screen") return rdEnd(`${c.dev.name} couldn't share its screen.`);
   if (Number.isInteger(msg.switching)) {
     const id = c.id, screen = msg.switching, mode = c.mode;
@@ -542,6 +544,23 @@ async function rdGame(on) {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
   rdToolbar();
+  rdCursorMode();
+}
+
+// (3.4.1) Instant mouse: the arrow in the picture always trails a little (it's filmed, sent and shown),
+// so the other PC hides its arrow and this one shows its own, the same kind (text, hand...), with no
+// delay at all. Not in Game mode (games show their own, and the mouse is locked there).
+const rdInstant = () => loadPref("rdInstantMouse") !== false;
+function rdCursorMode() {
+  const c = rd.conn;
+  if (!c || c.phase !== "on") return;
+  rdSend(c, { cursor: rdInstant() && !c.game ? "local" : "picture" });
+  rdCursorShow();
+}
+function rdCursorShow() {
+  const c = rd.conn, area = $("rdInput");
+  if (!c || !area) return;
+  area.style.cursor = rdInstant() && !c.game ? (c.cur || "default") : "";
 }
 function rdGameLock() {
   const area = $("rdInput");
@@ -591,7 +610,8 @@ function rdMenu() {
    c.enc.eased ? "<br>Auto: steady 30 fps for now, so it doesn't stutter" : ""}${c.enc.battery ? `<br>${rdEsc(c.dev.name)} is on battery. Plug it in for a smoother picture.` : ""}` : ""}</p>
       <p class="rd-used">${c.sound === "none" ? `No sound from ${rdEsc(c.dev.name)}${c.soundWhy ? ` (${rdEsc(c.soundWhy)})` : ""}` : `Sound: on (${c.sound === "screen" ? "from the screen" : "from its speakers"})`}</p></div>
     ${c.screens > 1 ? `<div><h4>Screen</h4><div class="rd-mons">${Array.from({ length: c.screens }, (_, i) => `<button type="button" class="${i === c.screen ? "on" : ""}" data-screen="${i}">${i + 1}${i === 0 ? " · Main" : ""}</button>`).join("")}</div></div>` : ""}
-    <div><h4>Keyboard</h4>
+    <div><h4>Mouse and keys</h4>
+      <div class="rd-row"><span>Instant mouse<small>Your own arrow, with no delay. Off: the arrow from the picture</small></span><button type="button" class="rd-sw${rdInstant() ? " on" : ""}" id="rdInstantSw"></button></div>
       <div class="rd-row"><span>Send Alt+Tab and the Windows key<small>In full screen. Off: they stay on this PC</small></span><button type="button" class="rd-sw${loadPref("rdSystemKeys") ? " on" : ""}" id="rdSysKeys"></button></div>
       <div class="rd-keys"><button type="button" data-keys="win">Windows key</button><button type="button" data-keys="alttab">Alt Tab</button><button type="button" data-keys="altf4">Alt F4</button><button type="button" data-keys="taskmgr">Task Manager</button><button type="button" data-keys="lock">Lock that PC</button></div></div>`;
   $("rdSession").appendChild(p);
@@ -603,6 +623,7 @@ function rdMenu() {
   }));
   p.querySelectorAll("[data-screen]").forEach((b) => b.addEventListener("click", () => { p.remove(); rdSend(c, { screen: Number(b.dataset.screen) }); }));
   p.querySelectorAll("[data-keys]").forEach((b) => b.addEventListener("click", () => rdSend(c, { keys: b.dataset.keys })));
+  $("rdInstantSw").addEventListener("click", () => { savePref("rdInstantMouse", !rdInstant()); rdCursorMode(); p.remove(); rdMenu(); });
   $("rdSysKeys").addEventListener("click", () => { savePref("rdSystemKeys", !loadPref("rdSystemKeys")); p.remove(); rdMenu(); });
 }
 
@@ -640,7 +661,11 @@ function rdInputs() {
       return;
     }
     pending = at(e);
-    if (!rdInputs.frame) rdInputs.frame = requestAnimationFrame(flushMove);
+    // (3.4.1) Sent right away (it used to wait for the next screen refresh, up to 16 ms), at most
+    // every 4 ms so a fast gaming mouse doesn't flood the line.
+    const now = performance.now();
+    if (now - (rdInputs.sent || 0) >= 4) { rdInputs.sent = now; if (rdInputs.frame) { cancelAnimationFrame(rdInputs.frame); rdInputs.frame = 0; } flushMove(); }
+    else if (!rdInputs.frame) rdInputs.frame = requestAnimationFrame(flushMove);
   });
   const btn = (e) => (e.button === 2 ? 2 : e.button === 1 ? 1 : 0);
   area.addEventListener("pointerdown", (e) => {

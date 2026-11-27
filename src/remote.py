@@ -294,6 +294,7 @@ def start(peer_key, peer_name, screen=0):
         _state["stop"] = False
     _overlay_show(_state["session"]["peer"])
     threading.Thread(target=_full_speed_while_used, daemon=True).start()
+    cursor_hide(True)
     return True
 
 
@@ -305,6 +306,7 @@ def end(reason=""):
         _state["stop"] = False
     _let_go()
     _overlay_hide()
+    cursor_hide(False)
     if was and _this_pc().get("lockOnEnd") and os.name == "nt":
         try:
             ctypes.windll.user32.LockWorkStation()
@@ -320,11 +322,82 @@ def stop_now():
             _state["stop"] = True
     _let_go()
     _overlay_hide()
+    cursor_hide(False)
 
 
 def host_state():
     """For the sender page, a few times a second while connected."""
-    return {"stop": _state["stop"], "session": bool(_state["session"]), "battery": on_battery()}
+    return {"stop": _state["stop"], "session": bool(_state["session"]), "battery": on_battery(), "cur": cursor_shape()}
+
+
+# ---- (3.4.1) the instant mouse
+# The mouse in the picture is always a bit behind (it has to be filmed, squeezed, sent and unpacked).
+# So while someone controls this PC, its own mouse arrow is made see-through (it's left out of the
+# picture), and the other PC shows its own arrow instead, which moves the moment you move. This PC
+# tells it which arrow to show (normal, text, hand...). Windows' own arrows come back at the end.
+
+OCR = {32512: "default", 32513: "text", 32514: "wait", 32515: "crosshair", 32516: "default", 32642: "nwse-resize",
+       32643: "nesw-resize", 32644: "ew-resize", 32645: "ns-resize", 32646: "move", 32648: "not-allowed",
+       32649: "pointer", 32650: "progress", 32651: "help"}
+_cursor = {"hidden": False, "shapes": None}
+
+
+def cursor_hide(on):
+    """See-through arrows on (while controlled, not in Game mode) or Windows' own arrows back."""
+    if os.name != "nt" or bool(on) == _cursor["hidden"]:
+        return
+    user32 = ctypes.windll.user32
+    try:
+        if on:
+            if _cursor["shapes"] is None:  # the shared handles of Windows' arrows, before they're swapped
+                user32.LoadCursorW.restype = ctypes.c_void_p
+                user32.LoadCursorW.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+                _cursor["shapes"] = {user32.LoadCursorW(None, i): name for i, name in OCR.items()}
+            user32.CreateCursor.restype = ctypes.c_void_p
+            user32.CreateCursor.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                            ctypes.c_void_p, ctypes.c_void_p)
+            user32.SetSystemCursor.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+            and_mask = (ctypes.c_ubyte * 128)(*([0xFF] * 128))  # 32x32: keep what's under it...
+            xor_mask = (ctypes.c_ubyte * 128)()  # ...and draw nothing
+            for i in OCR:
+                blank = user32.CreateCursor(None, 0, 0, 32, 32, and_mask, xor_mask)
+                if blank:
+                    user32.SetSystemCursor(blank, i)  # Windows owns (and frees) the blank one now
+            _cursor["hidden"] = True
+        else:
+            _cursor["hidden"] = False
+            user32.SystemParametersInfoW(0x57, 0, None, 0)  # SPI_SETCURSORS: Windows' own arrows again
+    except (OSError, AttributeError):
+        pass
+
+
+def cursor_restore_on_start():
+    """If VaultHub was closed in the middle of a session, give Windows its arrows back."""
+    if os.name == "nt":
+        try:
+            ctypes.windll.user32.SystemParametersInfoW(0x57, 0, None, 0)
+        except OSError:
+            pass
+
+
+def cursor_shape():
+    """Which arrow this PC shows now, as a CSS cursor name ("none" when the app hid it, e.g. a video)."""
+    if os.name != "nt" or not _state["session"]:
+        return ""
+
+    class CURSORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint32), ("flags", ctypes.c_uint32), ("hCursor", ctypes.c_void_p),
+                    ("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    ci = CURSORINFO(cbSize=ctypes.sizeof(CURSORINFO))
+    try:
+        if not ctypes.windll.user32.GetCursorInfo(ctypes.byref(ci)):
+            return ""
+    except OSError:
+        return ""
+    if not ci.flags:  # hidden by the app (CURSOR_SUPPRESSED = touch, still counts as there)
+        return "none"
+    return (_cursor["shapes"] or {}).get(ci.hCursor, "default")
 
 
 def on_battery():

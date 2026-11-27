@@ -56,6 +56,8 @@ atexit.register(lambda: myvault.at_exit())
 import povs  # noqa: E402
 import replays  # noqa: E402
 import remote  # noqa: E402
+remote.cursor_restore_on_start()  # (3.4.1) arrows back if the app closed during a session
+atexit.register(lambda: remote.cursor_hide(False))
 import project  # noqa: E402
 import resolvetools  # noqa: E402
 import subtitles  # noqa: E402
@@ -2133,6 +2135,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = {}
             elif action == "host-state":
                 result = remote.host_state()
+            elif action == "cursor":  # (3.4.1) instant mouse on/off (off in Game mode: games want their own)
+                remote.cursor_hide(bool(data.get("hide")) and bool(remote.info().get("session")))
+                result = {"cur": remote.cursor_shape()}
             elif action == "screen":  # show another screen: the sender starts again on it
                 remote.end("screen")
                 threading.Thread(target=start_remote_engine, args=(int(data.get("screen") or 0),), daemon=True).start()
