@@ -34,7 +34,7 @@ async function lvoTick() {
   clearTimeout(LVO.timer);
   LVO.timer = 0;
   if (!lvoShown()) return lvStopObs();
-  if (document.hidden) { LVO.timer = setTimeout(lvoTick, 1000); return; }  // (3.3.4) minimized: nothing to draw
+  if (document.hidden) { LVO.timer = setTimeout(lvoTick, 1000); return; }  // (3.4.0) minimized: nothing to draw
   const res = await api("/api/live-obs", {}).catch(() => null);
   if (res && res.ok) LVO.s = res.obs;
   lvoDraw();
@@ -224,7 +224,7 @@ async function lvoShot() {
   clearTimeout(LVO.shotTimer);
   if (LVO.mode !== "shots" || !$("lvoImg")) return;
   if (document.hidden) { LVO.shotTimer = setTimeout(lvoShot, 1000); return; }  // minimized: don't ask OBS
-  // (3.3.4) Each picture makes OBS copy the whole scene, so keep them small and few: 2 a second, 1 while
+  // (3.4.0) Each picture makes OBS copy the whole scene, so keep them small and few: 2 a second, 1 while
   // you're live (so OBS has all it needs for your stream).
   const live = !!(LV.state && (LV.state.session || (LV.state.twitch || {}).live || (LV.state.youtube || {}).live));
   const w = Math.min(live ? 854 : 1280, Math.round(($("lvoPic").clientWidth || 640) * (devicePixelRatio || 1)));

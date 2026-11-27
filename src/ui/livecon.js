@@ -235,7 +235,7 @@ function lvDrawNumbers() {
   const t = (s.session && s.session.totals) || {};
   const now = (tw.viewers || 0) + (yt.viewers || 0);
   const box = (label, value, sub) => `<div class="lv-num"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
-  // (3.3.4) Offline: one calm strip instead of five boxes of dashes.
+  // (3.4.0) Offline: one calm strip instead of five boxes of dashes.
   const live = !!(s.session || tw.live || yt.live || (s.obs && s.obs.streaming));
   $("lvNums").classList.toggle("offline", !live);
   if (!live) {
@@ -342,7 +342,7 @@ function lvDrawHealth() {
   const spark = b.length > 1 ? `<svg viewBox="0 0 120 30" class="lv-spark"><path d="${b.map((v, i) => `${i ? "L" : "M"}${(i / (b.length - 1) * 120).toFixed(1)},${(28 - v / top * 26).toFixed(1)}`).join("")}"/></svg>` : "";
   const level = (v, w, d) => (v == null ? "" : v >= d ? "bad" : v >= w ? "warn" : "");
   const cell = (label, value, cls, sub) => `<div class="lv-h ${cls || ""}"><small>${label}</small><b>${value}</b>${sub ? `<i>${sub}</i>` : ""}</div>`;
-  // (3.3.4) All good (or not live yet): one calm line. The boxes open by themselves when something needs you.
+  // (3.4.0) All good (or not live yet): one calm line. The boxes open by themselves when something needs you.
   const hot = bad || warn || level(obs.droppedPct, 1, 5) || level(obs.cpu, 70, 90) || level(obs.gpu, 90, 97) || obs.reconnecting || (obs.congestion || 0) > 0.15;
   if (!hot && !LV.healthOpen) {
     const html = obs.streaming
@@ -777,7 +777,7 @@ function lvAlertFor(items) {
       text = i.text;
     }
     if (!rule) continue;
-    // (3.3.4) Chat says your name a lot on a busy stream. One ding every 8 seconds at most, and no card
+    // (3.4.0) Chat says your name a lot on a busy stream. One ding every 8 seconds at most, and no card
     // when you can already see the chat on the Console (the line is highlighted there).
     if (i.type === "msg") {
       if (Date.now() - (LV.chatDingAt || 0) < 8000) continue;
@@ -841,6 +841,8 @@ function lvSendHotkeys() {
   const clip = loadPref("lvClipKey");
   if (clip && clip.vk) keys.push({ id: 100, mods: clip.mods || 0, vk: clip.vk });  // (the Clip key, lvtwitch.js)
   if (typeof lvoKeyList === "function") lvoKeyList().forEach(([, k], n) => keys.push({ id: 200 + n, mods: k.mods || 0, vk: k.vk }));  // (OBS scenes, lvobs.js)
+  const saveClip = typeof CL !== "undefined" && CL.prefs.key;
+  if (saveClip && saveClip.vk) keys.push({ id: 300, mods: saveClip.mods || 0, vk: saveClip.vk });  // (3.4.0) the Clips page's key, clips.js
   api("/api/live-hotkeys", { keys }).then((res) => { LV.taken = new Set((res && res.taken) || []); if (!$("lvboardTab").hidden) lvDrawBoard(); }).catch(() => {});
 }
 function lvPlayPad(i) {
@@ -1007,7 +1009,8 @@ function lvVk(e) {
 if (window.chrome && window.chrome.webview) {
   window.chrome.webview.addEventListener("message", (e) => {
     const m = /^hotkey:(\d+)$/.exec(String(e.data || ""));
-    if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
+    if (m && +m[1] === 300) { if (typeof clHotkey === "function") clHotkey(); }
+    else if (m && +m[1] >= 200) lvoSceneKey(+m[1]);
     else if (m && +m[1] === 100) lvClipNow();
     else if (m) lvPlayPad(+m[1] - 1);
   });
@@ -1018,6 +1021,8 @@ if (window.chrome && window.chrome.webview) {
     const vk = lvVk(e), mods = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.shiftKey ? 4 : 0);
     const clip = loadPref("lvClipKey");
     if (clip && clip.vk === vk && (clip.mods || 0) === mods) { e.preventDefault(); return lvClipNow(); }
+    const saveClip = typeof CL !== "undefined" && !CL.catching && CL.prefs.key;
+    if (saveClip && saveClip.vk && saveClip.vk === vk && (saveClip.mods || 0) === mods) { e.preventDefault(); return clHotkey(); }
     const scene = lvoKeyList().findIndex(([, k]) => k.vk === vk && (k.mods || 0) === mods);
     if (scene >= 0) { e.preventDefault(); return lvoSceneKey(200 + scene); }
     const i = lvPads().findIndex((p) => p.vk && p.vk === vk && (p.mods || 0) === mods);

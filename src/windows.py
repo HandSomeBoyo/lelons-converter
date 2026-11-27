@@ -30,7 +30,16 @@ def single_instance():
 
 def downloads_folder():
     """The user's real Downloads folder, also when it was moved to another drive or OneDrive."""
-    fallback = os.path.join(os.path.expanduser("~"), "Downloads")
+    return _known_folder("{374DE290-123F-4565-9164-39C4925E467B}", "Downloads")
+
+
+def videos_folder():
+    """(3.4.0) The user's real Videos folder (the Clips page keeps its clips in there)."""
+    return _known_folder("{18989B1D-99B5-455B-841C-AB7C74E4DDFC}", "Videos")
+
+
+def _known_folder(guid, name):
+    fallback = os.path.join(os.path.expanduser("~"), name)
     if not IS_WINDOWS:
         return fallback
 
@@ -39,7 +48,7 @@ def downloads_folder():
                     ("data4", ctypes.c_ubyte * 8)]
 
     folder_id = GUID()
-    ctypes.windll.ole32.CLSIDFromString("{374DE290-123F-4565-9164-39C4925E467B}", ctypes.byref(folder_id))
+    ctypes.windll.ole32.CLSIDFromString(guid, ctypes.byref(folder_id))
     path = ctypes.c_wchar_p()
     try:
         if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(folder_id), 0, None, ctypes.byref(path)) != 0:

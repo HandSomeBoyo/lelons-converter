@@ -447,7 +447,7 @@ def url():
     return f"http://127.0.0.1:{port}/alerts" if port else ""
 
 
-# ---------------------------------------------------------------- (3.3.4) your chat on stream
+# ---------------------------------------------------------------- (3.4.0) your chat on stream
 
 CHAT_PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "chatoverlay.html")
 CHAT_SOURCE = "VaultHub chat"

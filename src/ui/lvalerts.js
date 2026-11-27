@@ -236,7 +236,7 @@ function lvaWire() {
   $("lvaVol").onchange = async (e) => { await lvaSet({ volume: +e.target.value }); lvaPreview(LVAS.open || "follow"); };
 }
 
-// (3.3.4) Your chat on stream: its own Browser Source ("VaultHub chat"), put in the scene OBS shows now
+// (3.4.0) Your chat on stream: its own Browser Source ("VaultHub chat"), put in the scene OBS shows now
 function lvaChatCard() {
   const ch = LVAS.chat;
   if (!ch) return "";
@@ -287,7 +287,7 @@ function lvaChatWire() {
   };
 }
 
-// (3.3.4) "Test in OBS" on each alert: sends a pretend one to the alerts page in OBS
+// (3.4.0) "Test in OBS" on each alert: sends a pretend one to the alerts page in OBS
 async function lvaTestObs(kind, btn) {
   const res = await api("/api/live-ov-test", { kind }).catch(() => null);
   const ok = res && res.ok;
