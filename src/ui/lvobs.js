@@ -34,6 +34,7 @@ async function lvoTick() {
   clearTimeout(LVO.timer);
   LVO.timer = 0;
   if (!lvoShown()) return lvStopObs();
+  if (document.hidden) { LVO.timer = setTimeout(lvoTick, 1000); return; }  // (3.3.4) minimized: nothing to draw
   const res = await api("/api/live-obs", {}).catch(() => null);
   if (res && res.ok) LVO.s = res.obs;
   lvoDraw();
@@ -68,7 +69,7 @@ function lvoDraw() {
   // The parts that change all the time.
   for (const i of s.inputs) {
     const bar = box.querySelector(`.lvo-meter[data-n="${CSS.escape(i.name)}"] i`);
-    if (bar) bar.style.width = (100 - (i.muted ? 0 : lvoMeter(i.level))) + "%";  // (the bar covers what's quiet)
+    if (bar) bar.style.transform = `scaleX(${(100 - (i.muted ? 0 : lvoMeter(i.level))) / 100})`;  // (the bar covers what's quiet)
   }
   const t = $("lvoRecTime");
   if (t) t.textContent = s.record && obs.recording ? lvoClock(obs.recording.ms) : "";
@@ -222,7 +223,11 @@ async function lvoStartPicture() {
 async function lvoShot() {
   clearTimeout(LVO.shotTimer);
   if (LVO.mode !== "shots" || !$("lvoImg")) return;
-  const w = Math.min(1280, Math.round(($("lvoPic").clientWidth || 640) * (devicePixelRatio || 1)));
+  if (document.hidden) { LVO.shotTimer = setTimeout(lvoShot, 1000); return; }  // minimized: don't ask OBS
+  // (3.3.4) Each picture makes OBS copy the whole scene, so keep them small and few: 2 a second, 1 while
+  // you're live (so OBS has all it needs for your stream).
+  const live = !!(LV.state && (LV.state.session || (LV.state.twitch || {}).live || (LV.state.youtube || {}).live));
+  const w = Math.min(live ? 854 : 1280, Math.round(($("lvoPic").clientWidth || 640) * (devicePixelRatio || 1)));
   const res = await api("/api/live-obs-shot", { width: w }).catch(() => null);
   if (LVO.mode !== "shots" || !$("lvoImg")) return;
   if (res && res.ok && res.image) {
@@ -230,7 +235,7 @@ async function lvoShot() {
     $("lvoImg").hidden = false;
     $("lvoVideo").hidden = true;
   }
-  LVO.shotTimer = setTimeout(lvoShot, 250);
+  LVO.shotTimer = setTimeout(lvoShot, live ? 1000 : 500);
 }
 
 function lvoStopPicture() {
@@ -240,3 +245,4 @@ function lvoStopPicture() {
   if (LVO.stream) { LVO.stream.getTracks().forEach((t) => t.stop()); LVO.stream = null; }
   if (was === "video" || was === "starting") api("/api/live-obs-do", { what: "vcam", on: false }).catch(() => {});
 }
+

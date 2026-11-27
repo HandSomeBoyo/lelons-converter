@@ -7762,7 +7762,7 @@ body.lv-popbody { margin: 0; padding: 0 !important; min-height: 0; height: 100vh
 .lvo-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lvo-input.muted .lvo-name { color: var(--muted); text-decoration: line-through; }
 .lvo-meter { position: relative; height: 8px; border-radius: 99px; overflow: hidden; background: linear-gradient(90deg, #3ecf6e 0 62%, #f5c518 78%, #ff4d4d 94%); }
-.lvo-meter i { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: var(--panel2); transition: width .1s linear; }
+.lvo-meter i { position: absolute; inset: 0; background: var(--panel2); transform-origin: right; transition: transform .1s linear; will-change: transform; }
 .lvo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .lvo-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; background: var(--panel2); font: 600 13px var(--head); }
 .lvo-btn svg { width: 15px; height: 15px; }

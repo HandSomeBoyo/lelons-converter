@@ -749,11 +749,23 @@ function lvAlertFor(items) {
       text = i.text;
     }
     if (!rule) continue;
+    // (3.3.4) Chat says your name a lot on a busy stream. One ding every 8 seconds at most, and no card
+    // when you can already see the chat on the Console (the line is highlighted there).
+    if (i.type === "msg") {
+      if (Date.now() - (LV.chatDingAt || 0) < 8000) continue;
+      LV.chatDingAt = Date.now();
+      if (lvChatOnScreen()) { n++; lvSound(rule.sound, a.volume); continue; }
+    }
     n++;
     // (3.0) An alert on your stream plays its own sound there (through OBS): VaultHub only shows its card then.
     if (!(i.type === "event" && typeof lvaOnStream === "function" && lvaOnStream(i.kind))) lvSound(rule.sound, a.volume);
     lvToast({ title, text, p: i.p, emoji: i.type === "event" ? LV_EVENT_EMOJI[i.kind] : i.first ? "👋" : "🔔" });
   }
+}
+
+function lvChatOnScreen() {
+  const chat = document.querySelector('#lvGrid > [data-c="chat"]');
+  return !document.hidden && !!(chat && !chat.hidden && $("liveTab") && !$("liveTab").hidden && chat.getClientRects().length);
 }
 
 function lvToast(t) {
