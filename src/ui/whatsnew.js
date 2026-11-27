@@ -2,8 +2,6 @@
 // Add the new version at the top of CHANGES with each release.
 
 const CHANGES = [
-<<<<<<< HEAD
-=======
   { version: "3.4.0", items: [
     "New Clips page (Recording > Clips): pick a key, and pressing it saves the last 30 seconds or so as a clip, even in a game. A small \"Clipped!\" pop-up shows at the top of your screen.",
     "All your clips live in one place on your PC, named after the game. Watch them, star the best ones, sort by game, or drag one straight into Resolve or Discord.",
@@ -34,7 +32,6 @@ const CHANGES = [
     "Bug sweep: we clicked through every page and button. The old gray Windows pop-up boxes are gone. Errors now show as a small message at the bottom instead.",
     "Chat: leaving a group asks with a second click on the button, like deleting does elsewhere.",
   ] },
->>>>>>> origin/main
   { version: "3.2.5", items: [
     "MyVault: Fill now types your login into websites. Before, Chrome and Edge sent it to their menu button instead.",
     "Remote: you can now set a password on a PC (letters are fine too). Type it to connect from anywhere, no one has to be home to press Allow.",

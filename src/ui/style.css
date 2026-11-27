@@ -9841,8 +9841,6 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .mv-cam-pick[hidden] { display: none; }
 .mv-cam-pick select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2, var(--panel)); color: var(--text); font: inherit; font-size: 12.5px; }
 .mv-acts button, .mv-acts .mv-photo { white-space: nowrap; }
-<<<<<<< HEAD
-=======
 /* (3.3.0) MyVault: folders, favorites, Bitwarden */
 .mv-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
 .mv-chips.small { margin: 0; }
@@ -9900,14 +9898,11 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .mv-moving { max-height: 300px; overflow: auto; }
 .mv-moving .mv-row { cursor: default; }
 
->>>>>>> origin/main
 
 /* (3.3) Remote: the "Set a password" button on the This PC row */
 .rd-this .rd-pw { display: inline-flex; align-items: center; gap: 6px; }
 .rd-this .rd-pw svg { width: 15px; height: 15px; }
 .rd-this .rd-pw.on { color: var(--accent, #f5c84c) !important; }
-<<<<<<< HEAD
-=======
 
 /* ================================================================ 3.3: a calmer Search (Ctrl+K), like the 3.0 pages */
 .quick-box { max-width: 600px; border-radius: 20px; background: var(--panel); box-shadow: 0 24px 60px rgba(0, 0, 0, .32), 0 0 0 1px var(--line);
@@ -10071,4 +10066,3 @@ html.side-small .mv-side-btn .mv-side-state { display: none; }
 .cl-drag:hover { background: var(--panel2, rgba(255, 255, 255, .05)); color: var(--text); }
 @keyframes cl-in { from { opacity: 0; transform: translateY(6px); } }
 @container page (max-width: 640px) { .cl-key > span { display: none; } }
->>>>>>> origin/main
